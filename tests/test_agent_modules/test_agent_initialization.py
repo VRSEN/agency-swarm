@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock
 
+import pytest
 from agents import FunctionTool, ModelSettings, StopAtTools
 from pydantic import BaseModel, Field
 
@@ -18,6 +19,16 @@ class SimpleOutput(BaseModel):
 
 
 # --- Initialization Tests ---
+
+
+def test_agent_initialization_with_voice():
+    agent = Agent(name="Voicey", instructions="Talk", voice="ash")
+    assert agent.voice == "ash"
+
+
+def test_agent_initialization_invalid_voice():
+    with pytest.raises(ValueError, match="Invalid voice 'invalid'"):
+        Agent(name="Voicey", instructions="Talk", voice="invalid")
 
 
 def test_agent_initialization_minimal():

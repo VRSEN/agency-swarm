@@ -42,6 +42,8 @@ Optionally, you can specify following parameters:
 - enable_agui (default: `False`) - Enable AG-UI protocol compatibility for streaming endpoints
 - enable_logging (default: `False`) - Enable request tracking and expose `/get_logs` endpoint
 - logs_dir (default: `"activity-logs"`) - Directory for log files when logging is enabled
+- enable_realtime (default: `False`) - Mount `/your_agency/realtime` websocket routes in addition to the REST endpoints
+- realtime_options (default: `{}`) - Optional overrides for the realtime bridge (`model`, `turn_detection`, `input_audio_format`, etc.)
 
 This will create 4 endpoints for the agency:
 - `/test_agency/get_response`
@@ -112,6 +114,8 @@ run_fastapi(
         "test_agency_2": create_agency_2,
     },
     tools=[example_tool, test_tool],
+    enable_realtime=True,
+    realtime_options={"model": "gpt-realtime-mini"},
 )
 ```
 
@@ -126,6 +130,7 @@ This will create the following endpoints:
 - `/test_agency_2/get_metadata`
 - `/tool/ExampleTool` (for BaseTools) or `/tool/example_tool` (for function tools)
 - `/tool/TestTool` (for BaseTools) or `/tool/test_tool` (for function tools)
+- `/test_agency_1/realtime` and `/test_agency_2/realtime` websocket routes when `enable_realtime=True`
 
 If `enable_logging=True`, a `/get_logs` endpoint is also added.
 
@@ -184,6 +189,10 @@ print("Response:", tool_response.json())
 - **Logging Endpoint:**
   When `enable_logging=True`:
   - `/get_logs` (POST)
+
+- **Realtime Websocket Endpoint:**
+  When `enable_realtime=True`:
+  - `/your_agency_name/realtime` (WebSocket)
 
 - **AG-UI Protocol:**
   When `enable_agui=True`, only the streaming endpoint is exposed and follows the AG-UI protocol for enhanced frontend integration. The cancel endpoint is not registered in AG-UI mode.

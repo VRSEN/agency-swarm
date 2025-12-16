@@ -132,6 +132,8 @@ def run_fastapi(
     app_token_env: str = "APP_TOKEN",
     cors_origins: list[str] | None = None,
     enable_agui: bool = False,
+    enable_realtime: bool = False,
+    realtime_options: dict[str, Any] | None = None,
 ) -> None:
     """Serve this agency via the FastAPI integration.
 
@@ -170,6 +172,8 @@ def run_fastapi(
         app_token_env=app_token_env,
         cors_origins=cors_origins,
         enable_agui=enable_agui,
+        enable_realtime=enable_realtime,
+        realtime_options=realtime_options,
     )
 
 
