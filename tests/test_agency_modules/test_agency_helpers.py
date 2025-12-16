@@ -1,6 +1,47 @@
+import importlib.abc
+import importlib.util
+import sys
+from pathlib import Path
+
+import agency_swarm
 from agency_swarm import Agency, Agent
 from agency_swarm.agency.helpers import run_fastapi as helpers_run_fastapi
 from agency_swarm.tools import SendMessage
+
+
+class _BlockOptionalDepsFinder(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname: str, path, target=None):  # noqa: ANN001, ANN201
+        if fullname in {"fastapi", "uvicorn"}:
+            raise ModuleNotFoundError(fullname)
+        if fullname.startswith("fastapi.") or fullname.startswith("uvicorn."):
+            raise ModuleNotFoundError(fullname)
+        return None
+
+
+def test_integrations_fastapi_imports_without_optional_dependencies(caplog):
+    """`agency_swarm.integrations.fastapi` must import without the fastapi extra installed."""
+    fastapi_module_path = Path(agency_swarm.__file__).resolve().parent / "integrations" / "fastapi.py"
+    spec = importlib.util.spec_from_file_location("agency_swarm_test_fastapi_no_deps", fastapi_module_path)
+    assert spec is not None
+    assert spec.loader is not None
+
+    module = importlib.util.module_from_spec(spec)
+    blocker = _BlockOptionalDepsFinder()
+    saved_fastapi = sys.modules.pop("fastapi", None)
+    saved_uvicorn = sys.modules.pop("uvicorn", None)
+    sys.meta_path.insert(0, blocker)
+    try:
+        spec.loader.exec_module(module)
+        caplog.set_level("ERROR")
+        module.run_fastapi(agencies={"test": lambda **_: None})
+    finally:
+        sys.meta_path.remove(blocker)
+        if saved_fastapi is not None:
+            sys.modules["fastapi"] = saved_fastapi
+        if saved_uvicorn is not None:
+            sys.modules["uvicorn"] = saved_uvicorn
+
+    assert "FastAPI deployment dependencies are missing" in caplog.text
 
 
 def test_run_fastapi_creates_new_agency_instance(mocker):

@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import warnings
@@ -150,9 +151,7 @@ class Agent(BaseAgent[MasterContext]):
             examples = kwargs.pop("examples")
             if examples and isinstance(examples, list):
                 try:
-                    import json as _json
-
-                    examples_str = "\n\nExamples:\n" + "\n".join(f"- {_json.dumps(ex)}" for ex in examples)
+                    examples_str = "\n\nExamples:\n" + "\n".join(f"- {json.dumps(ex)}" for ex in examples)
                     current_instructions = kwargs.get("instructions", "")
                     kwargs["instructions"] = current_instructions + examples_str
                 except Exception:

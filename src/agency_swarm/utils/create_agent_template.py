@@ -6,26 +6,6 @@ from pathlib import Path
 from .model_utils import is_reasoning_model
 
 
-def _validate_agent_name(name: str) -> None:
-    """Validate agent name for invalid characters and patterns."""
-    if not name or not name.strip():
-        raise ValueError("Agent name cannot be empty")
-
-    # Check for invalid characters that would cause file system issues
-    invalid_chars = r'[<>:"/\\|?*\x00-\x1f]'
-    if re.search(invalid_chars, name):
-        raise ValueError(f"Agent name contains invalid characters: {name}")
-
-
-def _validate_temperature(temperature: float | None) -> None:
-    """Validate temperature parameter range."""
-    if temperature is not None:
-        if not isinstance(temperature, int | float):
-            raise ValueError("Temperature must be a number")
-        if temperature < 0.0 or temperature > 2.0:
-            raise ValueError("Temperature must be between 0.0 and 2.0")
-
-
 def create_agent_template(
     agent_name=None,
     agent_description=None,
@@ -187,6 +167,26 @@ You are {role_description}
     print(f"Import it with: from {folder_name} import {folder_name}")
 
     return True
+
+
+def _validate_agent_name(name: str) -> None:
+    """Validate agent name for invalid characters and patterns."""
+    if not name or not name.strip():
+        raise ValueError("Agent name cannot be empty")
+
+    # Check for invalid characters that would cause file system issues
+    invalid_chars = r'[<>:"/\\|?*\x00-\x1f]'
+    if re.search(invalid_chars, name):
+        raise ValueError(f"Agent name contains invalid characters: {name}")
+
+
+def _validate_temperature(temperature: float | None) -> None:
+    """Validate temperature parameter range."""
+    if temperature is not None:
+        if not isinstance(temperature, int | float):
+            raise ValueError("Temperature must be a number")
+        if temperature < 0.0 or temperature > 2.0:
+            raise ValueError("Temperature must be between 0.0 and 2.0")
 
 
 agent_template = """from agency_swarm import Agent, ModelSettings{reasoning_import}

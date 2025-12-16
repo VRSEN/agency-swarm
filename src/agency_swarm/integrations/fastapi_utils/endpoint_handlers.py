@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import time
+import traceback
 import uuid
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass, field
@@ -29,7 +30,7 @@ from agency_swarm import (
 from agency_swarm.agent.execution_stream_response import StreamingRunResponse
 from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_urls
 from agency_swarm.integrations.fastapi_utils.logging_middleware import get_logs_endpoint_impl
-from agency_swarm.messages import MessageFilter
+from agency_swarm.messages import MessageFilter, MessageFormatter
 from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
 from agency_swarm.ui.core.agui_adapter import AguiAdapter
 from agency_swarm.utils.serialization import serialize
@@ -435,8 +436,6 @@ def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency]
                 )
 
             except Exception as exc:
-                import traceback
-
                 # Surface error as AG-UI event so the frontend can react.
                 tb_str = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
                 error_message = f"{str(exc)}\n\nTraceback:\n{tb_str}"
@@ -536,8 +535,6 @@ async def generate_chat_name(new_messages: list[TResponseInputItem]):
             output_info=output_info,
             tripwire_triggered=tripwire_triggered,
         )
-
-    from agency_swarm.messages import MessageFormatter
 
     formatted_messages = str(MessageFormatter.strip_agency_metadata(new_messages))  # type: ignore[arg-type]
     if len(formatted_messages) > 1000:

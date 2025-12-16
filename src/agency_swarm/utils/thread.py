@@ -212,16 +212,6 @@ class ThreadManager:
         messages.sort(key=lambda m: cast(dict, m).get("timestamp", 0) or 0)  # Ensure numeric return
         return messages
 
-    def _save_messages(self) -> None:
-        """Save all messages using the callback if configured."""
-        if self._save_threads_callback:
-            try:
-                logger.debug(f"Saving {len(self._store.messages)} messages using callback...")
-                self._save_threads_callback(self._store.messages)
-                logger.info(f"Successfully saved {len(self._store.messages)} messages.")
-            except Exception as e:
-                logger.error(f"Error saving messages using callback: {e}", exc_info=True)
-
     def init_messages(self) -> None:
         """Load all messages from the load callback into the store."""
         if self._load_threads_callback:
@@ -239,11 +229,21 @@ class ThreadManager:
                 logger.error(f"Error loading messages from callback: {e}", exc_info=True)
 
     def clear(self) -> None:
-        """Clear all conversation messages.
-
-        Exposes a public API to reset the conversation.
-        """
+        """Clear all conversation messages and persist the empty state."""
         try:
             self._store.clear()
         except Exception as e:
             logger.error(f"Error clearing messages: {e}", exc_info=True)
+            return
+
+        self._save_messages()
+
+    def _save_messages(self) -> None:
+        """Save all messages using the callback if configured."""
+        if self._save_threads_callback:
+            try:
+                logger.debug(f"Saving {len(self._store.messages)} messages using callback...")
+                self._save_threads_callback(self._store.messages)
+                logger.info(f"Successfully saved {len(self._store.messages)} messages.")
+            except Exception as e:
+                logger.error(f"Error saving messages using callback: {e}", exc_info=True)

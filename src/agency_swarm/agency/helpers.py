@@ -1,5 +1,6 @@
 # --- Agency helper utility functions ---
 import logging
+import warnings
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any
 
@@ -26,8 +27,6 @@ def handle_deprecated_agency_args(
     Returns:
         tuple: (final_load_callback, final_save_callback, deprecated_args_used)
     """
-    import warnings
-
     deprecated_args_used = {}
     final_load_threads_callback = load_threads_callback
     final_save_threads_callback = save_threads_callback
@@ -143,16 +142,17 @@ def run_fastapi(
         Optional list of allowed CORS origins passed through to
         :func:`run_fastapi`.
     """
-    from agency_swarm import Agency
-    from agency_swarm.integrations.fastapi import run_fastapi
+    from agency_swarm.integrations.fastapi import run_fastapi as run_fastapi_server
 
-    def agency_factory(*, load_threads_callback=None, save_threads_callback=None, **_: Any) -> Agency:
+    agency_cls = agency.__class__
+
+    def agency_factory(*, load_threads_callback=None, save_threads_callback=None, **_: Any) -> "Agency":
         flows: list[Any] = []
         for sender, receiver in agency._derived_communication_flows:
             tool_cls = agency._communication_tool_classes.get((sender.name, receiver.name))
             flows.append((sender, receiver, tool_cls) if tool_cls else (sender, receiver))
 
-        return Agency(
+        return agency_cls(
             *agency.entry_points,
             communication_flows=flows,
             name=agency.name,
@@ -163,7 +163,7 @@ def run_fastapi(
             user_context=deepcopy(agency.user_context),
         )
 
-    run_fastapi(
+    run_fastapi_server(
         agencies={agency.name or "agency": agency_factory},
         host=host,
         port=port,

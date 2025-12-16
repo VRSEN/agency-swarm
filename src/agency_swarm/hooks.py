@@ -1,17 +1,11 @@
 import logging
-from collections.abc import Callable
-from typing import Any
 
-from agents import RunHooks, RunResult, TResponseInputItem
+from agents import RunHooks, RunResult
 
 from .context import MasterContext
+from .utils.thread import ThreadLoadCallback, ThreadSaveCallback
 
 logger = logging.getLogger(__name__)
-
-# Type Aliases for Callbacks
-# These match ThreadManager's new flat structure expectations
-ThreadLoadCallback = Callable[[], list[dict[str, Any]]]
-ThreadSaveCallback = Callable[[list[dict[str, Any]]], None]
 
 
 # --- Persistence Hooks ---
@@ -19,8 +13,9 @@ class PersistenceHooks(RunHooks[MasterContext]):  # type: ignore[misc]
     """Custom `RunHooks` implementation for loading and saving `ThreadManager` state.
 
     This class integrates with the `agents.Runner` lifecycle to automatically
-    load the message history at the beginning of a run and save it at the end,
-    using user-provided callback functions.
+    save message history at the end of a run using user-provided callback
+    functions. Loading relies on the `ThreadManager` initialization, which
+    invokes the same callbacks to seed the in-memory store.
 
     Note:
         The signatures for `load_threads_callback` and `save_threads_callback` now
@@ -28,29 +23,29 @@ class PersistenceHooks(RunHooks[MasterContext]):  # type: ignore[misc]
 
     Attributes:
         _load_threads_callback: The function to load all messages.
-                               Expected signature: `() -> list[dict[str, Any]]`
+                               Expected signature: `ThreadLoadCallback`
         _save_threads_callback: The function to save all messages.
-                               Expected signature: `(messages: list[dict[str, Any]]) -> None`
+                               Expected signature: `ThreadSaveCallback`
     """
 
     # Type hints for flat message structure
-    _load_threads_callback: Callable[[], list[TResponseInputItem]]
-    _save_threads_callback: Callable[[list[TResponseInputItem]], None]
+    _load_threads_callback: ThreadLoadCallback
+    _save_threads_callback: ThreadSaveCallback
 
     def __init__(
         self,
-        load_threads_callback: Callable[[], list[TResponseInputItem]],
-        save_threads_callback: Callable[[list[TResponseInputItem]], None],
+        load_threads_callback: ThreadLoadCallback,
+        save_threads_callback: ThreadSaveCallback,
     ):
         """
         Initializes the PersistenceHooks.
 
         Args:
-            load_threads_callback (Callable[[], list[TResponseInputItem]]):
-                The function to call at the start of a run to load all messages.
-                It should return a flat list of message dictionaries with
-                'agent', 'callerAgent', 'timestamp' and other OpenAI fields.
-            save_threads_callback (Callable[[list[TResponseInputItem]], None]):
+            load_threads_callback (ThreadLoadCallback):
+                The function to call when initializing the run to load all
+                messages. It should return a flat list of message dictionaries
+                with 'agent', 'callerAgent', 'timestamp' and other OpenAI fields.
+            save_threads_callback (ThreadSaveCallback):
                 The function to call at the end of a run to save all messages.
                 It receives a flat list of message dictionaries.
 
@@ -64,24 +59,17 @@ class PersistenceHooks(RunHooks[MasterContext]):  # type: ignore[misc]
         logger.info("PersistenceHooks initialized with flat message structure.")
 
     def on_run_start(self, *, context: MasterContext, **kwargs) -> None:
-        """Loads all messages into the `ThreadManager` at the start of a run.
+        """Confirm the run started after `ThreadManager` performed initial load.
 
-        Calls the `load_threads_callback` provided during initialization to load
-        the flat message list. The ThreadManager handles any necessary format
-        migration from old thread-based structure.
+        The `ThreadManager` executes the configured `load_threads_callback`
+        during initialization, so this hook only traces the lifecycle event to
+        avoid double-loading.
 
         Args:
             context (MasterContext): The master context for the run, containing the `ThreadManager`.
             **kwargs: Additional keyword arguments from the run lifecycle.
         """
-        logger.debug("PersistenceHooks: on_run_start triggered.")
-        try:
-            # ThreadManager.init_messages() already handles loading via the callback
-            # and any necessary migration from old format
-            logger.debug("Messages loaded by ThreadManager during initialization.")
-        except Exception as e:
-            logger.error(f"Error during message loading: {e}", exc_info=True)
-            # log and continue with potentially empty messages.
+        logger.debug("PersistenceHooks: on_run_start triggered; message loading handled during ThreadManager init.")
 
     def on_run_end(self, *, context: MasterContext, result: RunResult, **kwargs) -> None:
         """Saves all messages from the `ThreadManager` at the end of a run.

@@ -283,6 +283,20 @@ def test_save_callback_triggered_on_add(mocker):
     mock_save.assert_called_once_with([message])
 
 
+def test_clear_persists_empty_message_store():
+    """Ensure `clear()` persists the empty message store via the save callback."""
+    captured: list[list[dict[str, object]]] = []
+    manager = ThreadManager(save_threads_callback=lambda msgs: captured.append(list(msgs)))
+
+    manager.add_message({"role": "user", "content": "seed"})
+    captured.clear()
+
+    manager.clear()
+
+    assert captured == [[]]
+    assert manager.get_all_messages() == []
+
+
 def test_load_callback_on_init(mocker):
     """Tests that load callback is called during initialization."""
     loaded_messages = [

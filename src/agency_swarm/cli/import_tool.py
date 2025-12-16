@@ -5,22 +5,6 @@ import sys
 from pathlib import Path
 
 
-def _get_available_tools() -> list[str]:
-    """Dynamically discover available built-in tools."""
-    framework_root = Path(__file__).parent.parent
-    built_in_dir = framework_root / "tools" / "built_in"
-
-    if not built_in_dir.exists():
-        return []
-
-    tools = []
-    for file in built_in_dir.iterdir():
-        if file.is_file() and file.suffix == ".py" and file.stem not in ("__init__", "__pycache__"):
-            tools.append(file.stem)
-
-    return sorted(tools)
-
-
 def import_tool_command(tool_name: str | None = None, directory: str = "./tools", list_tools: bool = False) -> int:
     """
     Import a built-in tool from the framework into the current project.
@@ -89,3 +73,19 @@ def import_tool_command(tool_name: str | None = None, directory: str = "./tools"
     except Exception as e:
         print(f"\033[91mERROR: Failed to import tool: {e}\033[0m", file=sys.stderr)
         return 1
+
+
+def _get_available_tools() -> list[str]:
+    """Dynamically discover available built-in tools."""
+    framework_root = Path(__file__).parent.parent
+    built_in_dir = framework_root / "tools" / "built_in"
+
+    if not built_in_dir.exists():
+        return []
+
+    tools = []
+    for file in built_in_dir.iterdir():
+        if file.is_file() and file.suffix == ".py" and file.stem not in ("__init__", "__pycache__"):
+            tools.append(file.stem)
+
+    return sorted(tools)

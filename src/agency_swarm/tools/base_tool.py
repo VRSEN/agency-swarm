@@ -6,6 +6,7 @@ model validators, and Pydantic's validation features. Both BaseTool and @functio
 are fully supported approaches for tool creation.
 """
 
+import copy
 import warnings
 from abc import ABC, abstractmethod
 from typing import Any
@@ -31,8 +32,6 @@ class BaseToolMeta(type(BaseModel)):  # type: ignore[misc]
     def __repr__(cls):  # type: ignore[override]
         """Return a detailed representation of the BaseTool class."""
         try:
-            import copy
-
             # Get the full schema with all nested definitions
             schema = cls.model_json_schema()
 
