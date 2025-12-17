@@ -12,156 +12,9 @@ Agencii platform is a product built on top of our framework, which allows you to
 
 It significantly simplifies the **deployment**, **management**, and **integration** of your agents, eliminating technical barriers and unnecessary complexity.
 
-## Pricing
-
-<CardGroup cols={2}>
-  <Card title="Free Tier" icon="circle-dollar">
-    **$0 forever**
-
-    - Up to 5 agencies
-    - 3 pro integrations
-    - All Integrations (Slack, WhatsApp, Zapier, n8n, API etc.)
-    - 25 daily credits (no monthly credits)
-  </Card>
-  <Card title="Pro" icon="rocket">
-    **$20/month**
-
-    - Unlimited agencies
-    - Unlimited pro integrations
-    - All Integrations (Slack, WhatsApp, Zapier, n8n, API etc.)
-    - 25 daily credits + 2,000 monthly credits
-    - Refill credits option with configurable auto-recharge (optional)
-  </Card>
-</CardGroup>
-
-<Note>
-Credits power both plans. Use the sections below to understand how they are allocated and consumed.
-</Note>
-
-## Understanding Credits
-
-Credits power everything on the platform. Think of them as a flexible usage allowance that scales with the work your agents do—from quick chat responses to complex multi-step automations running in sandboxes.
-
-Instead of charging per request or per feature, we use credits to provide transparent, usage-based billing. The more complex the task, the more credits it uses. Simple interactions cost less; heavy compute and long-running agents cost more.
-
-
-### What Consumes Credits
-
-| Resource | Description |
-| --- | --- |
-| **AI Tokens** | Processing requests through LLMs, image generation, and other AI models |
-| **Compute** | Running agents in your custom sandboxes and execution environments |
-| **Agent Builds** | Creating, configuring, and deploying new agents |
-| **File Storage** | Storing and managing files created during your tasks |
-| **Web Searches** | Searching the internet for information needed to complete tasks |
-| **Third-Party Services** | Accessing external APIs and integrated services that extend your agent's capabilities |
-
-<Note>
-Once a task completes, agent activity stops consuming AI Tokens while Compute tokens continue to be consumed until the sandbox is stopped by reaching the timeout.
-Persistent File storage (measured per GB used) and file downloads continue to use a small number of credits even when agents are idle.
-</Note>
-
-The specific number of credits consumed depends on the complexity of the task and duration of execution.
-
-<Note>
-When you supply your own API keys, we do not deduct credits for AI tokens or other third-party services.
-</Note>
-
-### Credit Types
-
-Credits fall into three categories. They are deducted in a specific order to maximise value:
-
-#### Daily Credits
-
-|  |  |
-| --- | --- |
-| **Who gets them** | All users (Free and Pro) |
-| **Amount** | 25 credits per day |
-| **Refresh** | Every 24 hours at midnight UTC |
-| **Rollover** | No — unused daily credits reset and do not accumulate |
-
-Daily credits are use-it-or-lose-it. They refresh back to 25 every day at midnight UTC, regardless of how many you had left the previous day.
-
-#### Monthly Credits
-
-|  |  |
-| --- | --- |
-| **Who gets them** | Pro users only |
-| **Amount** | 2,000 credits per month |
-| **Refresh** | At the start of each billing cycle |
-| **Rollover** | No — unused monthly credits do not carry over |
-
-Monthly credits are your subscription's main allocation and refresh when your billing cycle renews.
-
-#### Refill Credits
-
-|  |  |
-| --- | --- |
-| **Who gets them** | Anyone who purchases them |
-| **Amount** | Based on purchase |
-| **Refresh** | One-time purchase |
-| **Rollover** | Yes — refill credits never expire |
-
-Refill credits are additional credits you purchase when needed.
-
-### Credit Usage Priority
-
-When you run a task, credits are consumed in this order:
-
-1. Daily credits (used first)
-2. Monthly credits (used second)
-3. Refill credits (used last)
-
-This ensures expiring credits are always used before your permanent refill credits.
-
-<Note>
-We prioritise expiring credits so you get maximum value from every plan. Refill credits stay available as your backup.
-</Note>
-
-## Monitoring Your Usage
-
-Track credit consumption in **Settings → Billing** to review:
-
-- **Current balance:** remaining daily, monthly, and refill credits
-- **Usage by agency:** credit consumption per agency to highlight the most resource-intensive builds
-
-## Credit Refunds
-
-If a task fails because of a system error on our side, we automatically refund the credits used for that task.
-
-<Note>
-Refunds are not issued for tasks that fail due to user-provided instructions, external service issues, or reaching task limits. Provide clear, detailed instructions to minimise unnecessary usage.
-</Note>
-
-## Tips for Optimising Credit Usage
-
-- Be specific with your requests so agents complete tasks efficiently.
-- Batch similar tasks together when possible to limit repeated setup work.
-- Review intermediate results on complex workflows before committing additional credits.
-
-## FAQ
-
-<AccordionGroup defaultOpen={true}>
-  <Accordion title="When do daily credits reset?">
-Daily credits reset every 24 hours at midnight UTC.
-  </Accordion>
-  <Accordion title="When do monthly credits reset?">
-Monthly credits refresh at the start of each billing cycle, on the same date you started your subscription.
-  </Accordion>
-  <Accordion title="Can I buy more credits?">
-    Yes. Pro users can purchase refill credits at any time, and those credits never expire.
-  </Accordion>
-  <Accordion title="What happens if I run out of credits?">
-    You'll receive notifications when your balance is low. You can wait for the daily refresh or upgrade to Pro for monthly credits and if needed, purchase refill credits.
-  </Accordion>
-  <Accordion title="Do unused credits roll over?">
-    Daily and monthly credits do not roll over. Refill credits remain in your account until you use them.
-  </Accordion>
-</AccordionGroup>
-
 ## Free Community
 
-Additionally, we offer a completely [**Free Skool Community**](https://www.skool.com/agency-ai/about) with these exclusive resources to help you get started:
+Additionally, we offer a completely [**free Skool community**](https://www.skool.com/agency-ai/about) with these exclusive resources to help you get started:
 
 - 📚 AI Agent Developer Course & Playbooks
 - 💬 Weekly Q&A Calls
@@ -170,25 +23,21 @@ Additionally, we offer a completely [**Free Skool Community**](https://www.skool
 - 🤝 Project Collaboration
 - ✨ Feature & Playbook Requests
 
-<Note>
-To get access, please first create an account on the [Agencii Platform](https://agencii.ai/signup). No payment card required :)
-</Note>
-
 ## Future Roadmap
 
 We plan to build the first true AI agent builder platform that will allow you to build and customize AI agents for any use case.
 
 Notable features include:
 
-- [ ] **MCP Tools:** Connect any MCP tools to your agents.
-- [ ] **GitHub Agent Runtime:** Deploy agents built with the framework directly from GitHub in a few clicks.
-- [ ] **No-code Visual Agency Builder:** Visually design multi-agent agencies without writing any code.
-- [ ] **Vertical Agent Marketplace:** Share and import community-built tools and agents directly within the platform.
+- [x] **Agent Hosting & Runtime:** Deploy agents built with the framework directly from GitHub in a few clicks.
+- [x] **Vertical Agent Marketplace:** Share and import community-built agents directly within the platform.
+- [ ] **Agent Builder:** Lovable-type UI to build AI agents directly within the platform.
+- [ ] **Agent Swarm**: A unified UI with super agents that complete most general tasks like coding, presentations, docs, sheets, etc and build other agents for tasks it can't do yet.
+- [ ] **Background Agents:** Agents can schedule themselves or by the user to execute tasks autonomously in the background.
 - [ ] **Workspaces:** Role-based access controls and shared workspaces for seamless collaboration with your clients.
-- [ ] **Multi-model Support:** Plug in OpenAI, Azure OpenAI, or self-hosted/open-source models interchangeably.
+- [ ] **Workflows:** Build agentic AI workflows to automate more rigid repetitive business processes.
+- [ ] **Analytics:** Comprehensive analytics and reporting with a focus on cost and outcomes. (ROI)
 - [ ] **Enterprise Security & Compliance:** SOC2 compliance, single sign-on (SSO), advanced encryption, and audit capabilities.
-
-Source: [Agencii Roadmap Notion](https://vrsen-ai.notion.site/Agencii-Roadmap-15b5bd4b16a680029fe3e3db8c642b10?pvs=4)
 
 ## Get Started  🚀
 
