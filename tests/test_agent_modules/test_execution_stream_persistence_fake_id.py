@@ -12,7 +12,7 @@ from openai.types.responses import ResponseFunctionToolCall
 
 from agency_swarm import Agent
 from agency_swarm.agent.core import AgencyContext
-from agency_swarm.agent.execution_stream_persistence import _persist_streamed_items
+from agency_swarm.agent.execution_stream_persistence import StreamMetadataStore, _persist_streamed_items
 
 
 class _DummyThreadManager:
@@ -71,18 +71,19 @@ def test_persist_streamed_items_maps_by_python_object_id_with_fake_ids(mock_extr
 
     # Metadata tracked by Python object id() during streaming
     # 4-tuple: (agent_name, agent_run_id, caller_name, timestamp)
-    metadata_by_item = {
-        id(tool_item_a): (agent_a.name, "agent_run_a", None, 1000000),
-        id(tool_item_b): (agent_b.name, "agent_run_b", None, 2000000),
-    }
+    metadata_store = StreamMetadataStore(
+        by_item={
+            id(tool_item_a): (agent_a.name, "agent_run_a", None, 1000000),
+            id(tool_item_b): (agent_b.name, "agent_run_b", None, 2000000),
+        }
+    )
 
     thread_manager = _DummyThreadManager()
     agency_context = AgencyContext(agency_instance=None, thread_manager=thread_manager)
 
     _persist_streamed_items(
         streaming_result=_DummyStreamResult([tool_item_a, tool_item_b]),
-        history_for_runner=[],
-        metadata_by_item=metadata_by_item,
+        metadata_store=metadata_store,
         collected_items=[tool_item_a, tool_item_b],
         agent=Agent(name="Runner", instructions="noop"),
         sender_name="Manager",
@@ -150,8 +151,7 @@ def test_persist_streamed_items_does_not_drop_unrelated_placeholder_id_items() -
 
     _persist_streamed_items(
         streaming_result=_DummyStreamResult([tool_item_b, tool_output_b]),
-        history_for_runner=[],
-        metadata_by_item={},  # No metadata tracked - use fallback
+        metadata_store=StreamMetadataStore(),  # No metadata tracked - use fallback
         collected_items=[],
         agent=agent,
         sender_name="Manager",

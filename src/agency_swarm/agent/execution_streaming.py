@@ -24,8 +24,7 @@ from agency_swarm.tools.mcp_manager import default_mcp_manager
 
 from .execution_guardrails import append_guardrail_feedback, extract_guardrail_texts
 from .execution_stream_persistence import (
-    ItemMetadata,
-    MetadataKey,
+    StreamMetadataStore,
     _persist_run_item_if_needed,
     _persist_streamed_items,
     _update_names_from_event,
@@ -184,7 +183,7 @@ def run_stream_with_guardrails(
             exception_guardrail_guidance = ""
             input_guardrail_exception: InputGuardrailTripwireTriggered | None = None
             collected_items: list[RunItem] = []
-            metadata_by_item: dict[MetadataKey, ItemMetadata] = {}
+            metadata_store = StreamMetadataStore()
             streaming_result: RunResultStreaming | None = None
             initial_saved_count = 0
             if agency_context and agency_context.thread_manager:
@@ -424,7 +423,7 @@ def run_stream_with_guardrails(
                         current_stream_agent_name=current_stream_agent_name,
                         current_agent_run_id=current_agent_run_id,
                         agency_context=agency_context,
-                        metadata_by_item=metadata_by_item,
+                        metadata_store=metadata_store,
                     )
 
                     yield event
@@ -474,8 +473,7 @@ def run_stream_with_guardrails(
                         if not input_guardrail_tripped:
                             _persist_streamed_items(
                                 streaming_result=streaming_result,
-                                history_for_runner=history_for_runner,
-                                metadata_by_item=metadata_by_item,
+                                metadata_store=metadata_store,
                                 collected_items=collected_items,
                                 agent=agent,
                                 sender_name=sender_name,

@@ -1,7 +1,7 @@
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, cast
+from typing import Any
 
 from agents import TResponseInputItem
 
@@ -49,14 +49,14 @@ class MessageStore:
             self.add_message(message)
 
     def get_messages(self, agent: str | None = None, caller_agent: str | None = None) -> list[TResponseInputItem]:
-        """Get filtered messages for specific agent pairs, sorted by timestamp.
+        """Get filtered messages for specific agent pairs in insertion order.
 
         Args:
             agent: Filter by recipient agent name
             caller_agent: Filter by sender agent name
 
         Returns:
-            list[TResponseInputItem]: Filtered list of messages sorted chronologically
+            list[TResponseInputItem]: Filtered list of messages in semantic order (insertion order)
         """
         if agent is None and caller_agent is None:
             messages = self.messages.copy()
@@ -71,9 +71,6 @@ class MessageStore:
                     filtered.append(msg)
             messages = filtered
 
-        # Sort by timestamp to maintain chronological order
-        messages.sort(key=lambda m: cast(dict, m).get("timestamp", 0) or 0)  # Ensure numeric return
-
         logger.debug(
             f"Filtered {len(messages)} messages for agent='{agent}', callerAgent='{caller_agent}' "
             f"from total {len(self.messages)}"
@@ -81,7 +78,7 @@ class MessageStore:
         return messages
 
     def get_conversation_between(self, agent1: str, agent2: str | None) -> list[TResponseInputItem]:
-        """Get all messages exchanged between two specific agents, sorted by timestamp.
+        """Get all messages exchanged between two specific agents in insertion order.
 
         This includes messages in both directions.
 
@@ -90,7 +87,7 @@ class MessageStore:
             agent2: Second agent name (None represents user)
 
         Returns:
-            list[TResponseInputItem]: Messages between the two agents sorted chronologically
+            list[TResponseInputItem]: Messages between the two agents in semantic order (insertion order)
         """
         conversation = []
         for msg in self.messages:
@@ -99,9 +96,6 @@ class MessageStore:
                 msg.get("agent") == agent2 and msg.get("callerAgent") == agent1
             ):
                 conversation.append(msg)
-
-        # Sort by timestamp to maintain chronological order
-        conversation.sort(key=lambda m: cast(dict, m).get("timestamp", 0) or 0)  # Ensure numeric return
 
         return conversation
 

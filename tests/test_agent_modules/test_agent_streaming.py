@@ -14,7 +14,7 @@ from openai.types.responses import ResponseOutputMessage, ResponseOutputText
 
 from agency_swarm import Agency, Agent, StreamingRunResponse
 from agency_swarm.agent.core import AgencyContext
-from agency_swarm.agent.execution_streaming import _persist_streamed_items
+from agency_swarm.agent.execution_stream_persistence import StreamMetadataStore, _persist_streamed_items
 from agency_swarm.messages import MessageFormatter
 
 # --- Streaming Tests ---
@@ -656,9 +656,9 @@ def test_streaming_forwarded_items_preserve_caller_metadata(monkeypatch, mock_th
 
     # Track metadata for the forwarded item - this simulates what happens during streaming
     # when the item's caller is captured (4-tuple: agent_name, agent_run_id, caller_name, timestamp)
-    metadata_by_item = {
-        id(forwarded_item): (analyst.name, "agent_run_analyst", worker.name, 1000000),
-    }
+    metadata_store = StreamMetadataStore(
+        by_item={id(forwarded_item): (analyst.name, "agent_run_analyst", worker.name, 1000000)}
+    )
 
     class DummyStreamResult:
         def __init__(self):
@@ -684,8 +684,7 @@ def test_streaming_forwarded_items_preserve_caller_metadata(monkeypatch, mock_th
 
     _persist_streamed_items(
         streaming_result=stream_result,
-        history_for_runner=[],
-        metadata_by_item=metadata_by_item,
+        metadata_store=metadata_store,
         collected_items=[forwarded_item],
         agent=worker,
         sender_name="Manager",
@@ -703,11 +702,6 @@ def test_streaming_forwarded_items_preserve_caller_metadata(monkeypatch, mock_th
     assert saved_entry.get("callerAgent") == worker.name, (
         "Forwarded item should retain the original caller, not the top-level sender"
     )
-
-
-
-
-
 
 @pytest.mark.asyncio
 @patch("agents.Runner.run_streamed")
@@ -828,10 +822,12 @@ def test_persist_streamed_items_uses_python_object_id_matching(monkeypatch, mock
 
     # Track metadata by Python object id() - simulating what happens during streaming
     # 4-tuple: (agent_name, agent_run_id, caller_name, timestamp)
-    metadata_by_item = {
-        id(msg_item_1): ("Agent1", "run_1", "Caller1", 1000000),
-        id(msg_item_2): ("Agent2", "run_2", "Caller2", 2000000),
-    }
+    metadata_store = StreamMetadataStore(
+        by_item={
+            id(msg_item_1): ("Agent1", "run_1", "Caller1", 1000000),
+            id(msg_item_2): ("Agent2", "run_2", "Caller2", 2000000),
+        }
+    )
 
     class DummyStreamResult:
         def __init__(self):
@@ -858,8 +854,7 @@ def test_persist_streamed_items_uses_python_object_id_matching(monkeypatch, mock
 
     _persist_streamed_items(
         streaming_result=stream_result,
-        history_for_runner=[],
-        metadata_by_item=metadata_by_item,
+        metadata_store=metadata_store,
         collected_items=[msg_item_1, msg_item_2],
         agent=agent,
         sender_name=None,
