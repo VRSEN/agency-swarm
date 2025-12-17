@@ -12,7 +12,11 @@ from openai.types.responses import ResponseFunctionToolCall
 
 from agency_swarm import Agent
 from agency_swarm.agent.core import AgencyContext
-from agency_swarm.agent.execution_stream_persistence import StreamMetadataStore, _persist_streamed_items
+from agency_swarm.agent.execution_stream_persistence import (
+    StreamMetadataStore,
+    _compute_content_hash,
+    _persist_streamed_items,
+)
 
 
 class _DummyThreadManager:
@@ -169,3 +173,68 @@ def test_persist_streamed_items_does_not_drop_unrelated_placeholder_id_items() -
     assert ("call_a", "function_call_output") in call_ids
     assert ("call_b", "function_call") in call_ids
     assert ("call_b", "function_call_output") in call_ids
+
+
+@patch(
+    "agency_swarm.agent.execution_stream_persistence.MessageFilter.remove_orphaned_messages",
+    side_effect=lambda x: x,
+)
+@patch("agency_swarm.agent.execution_stream_persistence.MessageFilter.should_filter", return_value=False)
+@patch("agency_swarm.agent.execution_stream_persistence.MessageFormatter.extract_hosted_tool_results", return_value=[])
+def test_persist_streamed_items_hash_collision_is_fifo(mock_extract, mock_filter, mock_orphan) -> None:
+    """Hash-based fallback matching consumes metadata FIFO to avoid collisions overwriting prior items."""
+
+    class _RawItem:
+        def __init__(self, output: str) -> None:
+            self.output = output
+
+    class _HashOnlyItem:
+        def __init__(self, item_type: str, output: str) -> None:
+            self.type = item_type
+            self.id = FAKE_RESPONSES_ID
+            self.call_id = None
+            self.raw_item = _RawItem(output)
+
+        def to_input_item(self) -> dict:
+            return {"id": self.id, "type": self.type, "output": self.raw_item.output}
+
+    item_type = "handoff_output_item"
+    run_item_1 = _HashOnlyItem(item_type=item_type, output="same")
+    run_item_2 = _HashOnlyItem(item_type=item_type, output="same")
+
+    content_hash = _compute_content_hash(run_item_1)
+    assert isinstance(content_hash, str)
+
+    metadata_store = StreamMetadataStore(
+        hash_queues={
+            (content_hash, item_type): [
+                ("Agent1", "run_1", "Caller1", 1000000),
+                ("Agent2", "run_2", "Caller2", 2000000),
+            ]
+        }
+    )
+
+    thread_manager = _DummyThreadManager()
+    agency_context = AgencyContext(agency_instance=None, thread_manager=thread_manager)
+
+    _persist_streamed_items(
+        streaming_result=_DummyStreamResult([run_item_1, run_item_2]),
+        metadata_store=metadata_store,
+        collected_items=[],
+        agent=Agent(name="Runner", instructions="noop"),
+        sender_name="Manager",
+        parent_run_id=None,
+        run_trace_id="trace",
+        fallback_agent_run_id="agent_run_runner",
+        agency_context=agency_context,
+        initial_saved_count=0,
+    )
+
+    persisted = thread_manager.get_all_messages()
+
+    assert persisted[0]["agent"] == "Agent1"
+    assert persisted[0]["agent_run_id"] == "run_1"
+    assert persisted[0]["callerAgent"] == "Caller1"
+    assert persisted[1]["agent"] == "Agent2"
+    assert persisted[1]["agent_run_id"] == "run_2"
+    assert persisted[1]["callerAgent"] == "Caller2"
