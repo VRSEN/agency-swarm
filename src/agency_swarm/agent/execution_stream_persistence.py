@@ -49,43 +49,43 @@ def _compute_content_hash(run_item: RunItem) -> str | None:
     object identity is not preserved (e.g., reasoning_item, handoff_output_item).
     """
     try:
-        raw_item = getattr(run_item, 'raw_item', None)
+        raw_item = getattr(run_item, "raw_item", None)
         if raw_item is None:
             return None
 
-        item_type = getattr(run_item, 'type', None)
+        item_type = getattr(run_item, "type", None)
         content_parts: list[str] = [str(item_type)]
 
         # ReasoningItem: has summary field (list of SummaryText)
-        if hasattr(raw_item, 'summary'):
+        if hasattr(raw_item, "summary"):
             summary = raw_item.summary
             if isinstance(summary, list):
                 for part in summary:
-                    if hasattr(part, 'text'):
+                    if hasattr(part, "text"):
                         content_parts.append(str(part.text))
             elif summary:
                 content_parts.append(str(summary))
 
         # MessageOutputItem: has content field (list of ResponseOutputText etc.)
-        if hasattr(raw_item, 'content') and isinstance(raw_item.content, list):
+        if hasattr(raw_item, "content") and isinstance(raw_item.content, list):
             for content_item in raw_item.content:
-                if hasattr(content_item, 'text'):
+                if hasattr(content_item, "text"):
                     content_parts.append(str(content_item.text))
 
         # HandoffOutputItem: has output field (JSON string or dict)
-        if hasattr(raw_item, 'output'):
+        if hasattr(raw_item, "output"):
             content_parts.append(str(raw_item.output))
-        elif isinstance(raw_item, dict) and 'output' in raw_item:
-            content_parts.append(str(raw_item['output']))
+        elif isinstance(raw_item, dict) and "output" in raw_item:
+            content_parts.append(str(raw_item["output"]))
 
         # ToolCallItem: has name and arguments
-        if hasattr(raw_item, 'name'):
+        if hasattr(raw_item, "name"):
             content_parts.append(str(raw_item.name))
-        if hasattr(raw_item, 'arguments'):
+        if hasattr(raw_item, "arguments"):
             content_parts.append(str(raw_item.arguments))
 
         # Fallback: try generic text field
-        if len(content_parts) == 1 and hasattr(raw_item, 'text'):
+        if len(content_parts) == 1 and hasattr(raw_item, "text"):
             content_parts.append(str(raw_item.text))
 
         if len(content_parts) == 1:
@@ -95,6 +95,7 @@ def _compute_content_hash(run_item: RunItem) -> str | None:
         return hashlib.sha256(content_str.encode()).hexdigest()[:16]
     except Exception:
         return None
+
 
 if TYPE_CHECKING:
     from agency_swarm.agent.core import AgencyContext, Agent
@@ -208,12 +209,12 @@ def _persist_run_item_if_needed(
     # 1. Python object id() - works for items that maintain identity (e.g., tool_call_output_item)
     # 2. Message ID - works for OpenAI Responses API (items may be recreated but keep same ID)
     obj_id = id(run_item_obj)
-    raw_item = getattr(run_item_obj, 'raw_item', None)
-    item_id = getattr(run_item_obj, 'id', None)
+    raw_item = getattr(run_item_obj, "raw_item", None)
+    item_id = getattr(run_item_obj, "id", None)
     if not item_id:
         # Handle both dict-backed and object-backed raw_items
-        item_id = raw_item.get('id') if isinstance(raw_item, dict) else getattr(raw_item, 'id', None)
-    item_type = getattr(run_item_obj, 'type', None)
+        item_id = raw_item.get("id") if isinstance(raw_item, dict) else getattr(raw_item, "id", None)
+    item_type = getattr(run_item_obj, "type", None)
     # Store (agent_name, agent_run_id, caller_name, timestamp)
     metadata = (item_agent_name, current_agent_run_id, caller_for_event, emission_timestamp)
 
@@ -223,9 +224,9 @@ def _persist_run_item_if_needed(
     if isinstance(item_id, str) and item_id and item_id != FAKE_RESPONSES_ID:
         metadata_store.by_item[(item_id, item_type)] = metadata
     # Also store by call_id for tool_call_item (works for LiteLLM where message ID is fake)
-    call_id = getattr(run_item_obj, 'call_id', None)
+    call_id = getattr(run_item_obj, "call_id", None)
     if not call_id:
-        call_id = raw_item.get('call_id') if isinstance(raw_item, dict) else getattr(raw_item, 'call_id', None)
+        call_id = raw_item.get("call_id") if isinstance(raw_item, dict) else getattr(raw_item, "call_id", None)
     has_call_id = isinstance(call_id, str) and call_id
     if has_call_id:
         call_key = cast(tuple[str, str, str | None], ("call", call_id, item_type))
@@ -290,16 +291,16 @@ def _persist_streamed_items(
         # 1. Try Python object id() first (works for items that maintain identity)
         # 2. Try message ID + type (works for OpenAI where items may be recreated)
         obj_id = id(run_item)
-        raw_item = getattr(run_item, 'raw_item', None)
-        item_id = getattr(run_item, 'id', None)
+        raw_item = getattr(run_item, "raw_item", None)
+        item_id = getattr(run_item, "id", None)
         if not item_id:
-            item_id = raw_item.get('id') if isinstance(raw_item, dict) else getattr(raw_item, 'id', None)
-        item_type = getattr(run_item, 'type', None)
+            item_id = raw_item.get("id") if isinstance(raw_item, dict) else getattr(raw_item, "id", None)
+        item_type = getattr(run_item, "type", None)
 
         # Try matching by call_id for tool calls (works for LiteLLM)
-        call_id = getattr(run_item, 'call_id', None)
+        call_id = getattr(run_item, "call_id", None)
         if not call_id:
-            call_id = raw_item.get('call_id') if isinstance(raw_item, dict) else getattr(raw_item, 'call_id', None)
+            call_id = raw_item.get("call_id") if isinstance(raw_item, dict) else getattr(raw_item, "call_id", None)
 
         matched = False
         emission_timestamp: int | None = None
@@ -342,9 +343,7 @@ def _persist_streamed_items(
 
         if not matched:
             # Fallback for items not seen during streaming (shouldn't happen normally)
-            logger.debug(
-                f"Metadata fallback for unmatched item type={item_type} - using persist-time timestamp"
-            )
+            logger.debug(f"Metadata fallback for unmatched item type={item_type} - using persist-time timestamp")
             caller_name = _resolve_caller_agent(item_copy, sender_name)
             current_agent_name = agent.name
             current_agent_run_id = fallback_agent_run_id
@@ -354,9 +353,7 @@ def _persist_streamed_items(
         item_payload = cast(TResponseInputItem, item_copy)
 
         if isinstance(run_item, MessageOutputItem):
-            MessageFormatter.add_citations_to_message(
-                run_item, item_payload, citations_by_message, is_streaming=True
-            )
+            MessageFormatter.add_citations_to_message(run_item, item_payload, citations_by_message, is_streaming=True)
 
         formatted_item: TResponseInputItem = MessageFormatter.add_agency_metadata(
             item_payload,

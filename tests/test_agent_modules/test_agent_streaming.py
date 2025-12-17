@@ -703,6 +703,7 @@ def test_streaming_forwarded_items_preserve_caller_metadata(monkeypatch, mock_th
         "Forwarded item should retain the original caller, not the top-level sender"
     )
 
+
 @pytest.mark.asyncio
 @patch("agents.Runner.run_streamed")
 async def test_streaming_persists_items_with_timestamps(
@@ -783,9 +784,7 @@ async def test_streaming_persists_items_with_timestamps(
     if "msg_e2e_1" in saved_by_id and "msg_e2e_2" in saved_by_id:
         ts1 = saved_by_id["msg_e2e_1"].get("timestamp", 0)
         ts2 = saved_by_id["msg_e2e_2"].get("timestamp", 0)
-        assert ts1 <= ts2, (
-            f"Timestamps should be in non-decreasing order: first ({ts1}) <= second ({ts2})"
-        )
+        assert ts1 <= ts2, f"Timestamps should be in non-decreasing order: first ({ts1}) <= second ({ts2})"
 
 
 def test_persist_streamed_items_uses_python_object_id_matching(monkeypatch, mock_thread_manager):

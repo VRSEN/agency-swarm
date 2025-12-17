@@ -299,9 +299,7 @@ class MessageFormatter:
                 if file_count > 0:
                     # Use tool call's emission timestamp if available
                     tool_timestamp = (
-                        timestamps_by_tool_id.get(tool_call.id)
-                        if timestamps_by_tool_id and tool_call.id
-                        else None
+                        timestamps_by_tool_id.get(tool_call.id) if timestamps_by_tool_id and tool_call.id else None
                     )
                     synthetic_outputs.append(
                         MessageFormatter.add_agency_metadata(
@@ -355,9 +353,7 @@ class MessageFormatter:
                 if found_content:
                     # Use tool call's emission timestamp if available
                     tool_timestamp = (
-                        timestamps_by_tool_id.get(tool_call.id)
-                        if timestamps_by_tool_id and tool_call.id
-                        else None
+                        timestamps_by_tool_id.get(tool_call.id) if timestamps_by_tool_id and tool_call.id else None
                     )
                     synthetic_outputs.append(
                         MessageFormatter.add_agency_metadata(
