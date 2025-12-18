@@ -4,6 +4,7 @@ These tests verify that the Python object id() based matching works correctly
 with LiteLLM's placeholder IDs (FAKE_RESPONSES_ID).
 """
 
+from collections import deque
 from unittest.mock import patch
 
 from agents.items import ToolCallItem
@@ -207,10 +208,12 @@ def test_persist_streamed_items_hash_collision_is_fifo(mock_extract, mock_filter
 
     metadata_store = StreamMetadataStore(
         hash_queues={
-            (content_hash, item_type): [
-                ("Agent1", "run_1", "Caller1", 1000000),
-                ("Agent2", "run_2", "Caller2", 2000000),
-            ]
+            (content_hash, item_type): deque(
+                [
+                    ("Agent1", "run_1", "Caller1", 1000000),
+                    ("Agent2", "run_2", "Caller2", 2000000),
+                ]
+            )
         }
     )
 

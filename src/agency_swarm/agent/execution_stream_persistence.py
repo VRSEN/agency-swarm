@@ -2,6 +2,7 @@ import hashlib
 import logging
 import time
 import uuid
+from collections import deque
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, cast
 
@@ -39,7 +40,7 @@ class StreamMetadataStore:
     """
 
     by_item: dict[MetadataKey, ItemMetadata] = field(default_factory=dict)
-    hash_queues: dict[HashKey, list[ItemMetadata]] = field(default_factory=dict)
+    hash_queues: dict[HashKey, deque[ItemMetadata]] = field(default_factory=dict)
 
 
 def _compute_content_hash(run_item: RunItem) -> str | None:
@@ -239,9 +240,7 @@ def _persist_run_item_if_needed(
         content_hash = _compute_content_hash(run_item_obj)
         if content_hash:
             hash_key: HashKey = (content_hash, item_type)
-            if hash_key not in metadata_store.hash_queues:
-                metadata_store.hash_queues[hash_key] = []
-            metadata_store.hash_queues[hash_key].append(metadata)
+            metadata_store.hash_queues.setdefault(hash_key, deque()).append(metadata)
 
 
 def _persist_streamed_items(
@@ -337,7 +336,7 @@ def _persist_streamed_items(
                 hash_key: HashKey = (content_hash, item_type)
                 if hash_key in metadata_store.hash_queues and metadata_store.hash_queues[hash_key]:
                     current_agent_name, current_agent_run_id, caller_name, emission_timestamp = (
-                        metadata_store.hash_queues[hash_key].pop(0)
+                        metadata_store.hash_queues[hash_key].popleft()
                     )
                     matched = True
 
