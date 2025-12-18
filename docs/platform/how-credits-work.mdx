@@ -6,7 +6,7 @@ icon: "credit-card"
 
 ## Understanding Credits
 
-Credits power everything on the platform. Think of them as a flexible usage allowance that scales with the work your agents do—from quick chat responses to complex multi-step automations running in sandboxes.
+Credits are your usage balance on the platform. They cover everything your agents do—from quick replies to long-running, multi-step workflows in sandboxes.
 
 Instead of charging per request or per feature, we use credits to provide transparent, usage-based billing. The more complex the task, the more credits it uses. Simple interactions cost less; heavy compute and long-running agents cost more.
 
@@ -32,7 +32,7 @@ Credit usage depends on task complexity and how long your sandbox runs.
 
 ### Credit Types
 
-Credits fall into three categories. They are deducted in a specific order to maximise value:
+Credits fall into three categories. They are deducted in a specific order to maximize value:
 
 <CardGroup cols={3}>
   <Card title="Daily Credits" icon="circle-dollar">
@@ -42,15 +42,15 @@ Credits fall into three categories. They are deducted in a specific order to max
     Your main monthly allocation, refreshed each billing cycle.
   </Card>
   <Card title="Refill Credits" icon="upload">
-    Extra credits you can purchase anytime that never expire.
+    Extra credits you can purchase anytime that never expire (optional auto-recharge on Pro).
   </Card>
 </CardGroup>
 
 | Credit type | Who gets them | Amount | Refresh | Rollover | Notes |
 | --- | --- | --- | --- | --- | --- |
-| **Daily** | All users (Free and Pro) | 25 credits per day | Every 24 hours at midnight UTC | No — unused daily credits reset and do not accumulate | Use-it-or-lose-it. Refreshes back to 25 every day at midnight UTC. |
-| **Monthly** | Pro users only | 2,000 credits per month | At the start of each billing cycle | No — unused monthly credits do not carry over | Your subscription's main allocation. Refreshes when your billing cycle renews. |
-| **Refill** | Anyone who purchases them | Based on purchase | One-time purchase | Yes — refill credits never expire | Extra credits you purchase when needed. |
+| **Daily** | All users (Free and Pro) | 25 credits per day | Every 24 hours at midnight UTC | No — unused daily credits reset and do not accumulate | Use-it-or-lose-it. Resets to 25 at midnight UTC. |
+| **Monthly** | Pro users only | 2,000 credits per month | At the start of each billing cycle | No — unused monthly credits do not carry over | Main plan allocation. Refreshes each billing cycle. |
+| **Refill** | Anyone who purchases them | Based on purchase | One-time purchase | Yes — refill credits never expire | One-time purchase. Never expires. |
 
 ### Credit Usage Priority
 
@@ -63,7 +63,7 @@ When you run a task, credits are consumed in this order:
 This ensures expiring credits are always used before your permanent refill credits.
 
 <Note>
-We prioritise expiring credits so you get maximum value from every plan. Refill credits stay available as your backup.
+We prioritize expiring credits so you get maximum value from every plan. Refill credits stay available as your backup.
 </Note>
 
 ## Monitoring Your Usage
@@ -78,7 +78,7 @@ Track credit consumption in [**Settings → Billing**](https://agencii.ai/settin
 If a task fails because of a system error on our side, we automatically refund the credits used for that task.
 
 <Warning>
-Refunds are not issued for tasks that fail due to user-provided instructions, external service issues, or reaching task limits. Provide clear, detailed instructions to minimise unnecessary usage.
+Refunds are not issued for tasks that fail due to user-provided instructions, external service issues, or reaching task limits. Provide clear, detailed instructions to minimize unnecessary usage.
 </Warning>
 
 ## Tips for Optimising Credit Usage
@@ -99,16 +99,16 @@ Refunds are not issued for tasks that fail due to user-provided instructions, ex
 
 <AccordionGroup defaultOpen={true}>
   <Accordion title="When do daily credits reset?">
-Daily credits reset every 24 hours at midnight UTC.
+    Daily credits reset every 24 hours at midnight UTC.
   </Accordion>
   <Accordion title="When do monthly credits reset?">
-Monthly credits refresh at the start of each billing cycle, on the same date you started your subscription.
+    Monthly credits refresh at the start of each billing cycle, on the same date you started your subscription.
   </Accordion>
   <Accordion title="Can I buy more credits?">
     Yes. Pro users can purchase refill credits at any time, and those credits never expire.
   </Accordion>
   <Accordion title="What happens if I run out of credits?">
-    You'll receive notifications when your balance is low. You can wait for the daily refresh or upgrade to Pro for monthly credits and if needed, purchase refill credits.
+    You'll receive notifications when your balance is low. You can wait for the daily refresh, upgrade to Pro for monthly credits, or purchase refill credits on PRO plan.
   </Accordion>
   <Accordion title="Do unused credits roll over?">
     Daily and monthly credits do not roll over. Refill credits remain in your account until you use them.
