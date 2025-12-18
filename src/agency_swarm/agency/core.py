@@ -6,7 +6,7 @@ import os
 import threading
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from agents import RunConfig, RunHooks, RunResult, Tool, TResponseInputItem
 
@@ -31,26 +31,20 @@ from .setup import (
 
 if TYPE_CHECKING:
     from agency_swarm.agent.context_types import AgentRuntimeState
-    from agency_swarm.mcp.oauth import MCPServerOAuth as MCPServerOAuthType, OAuthStorageHooks as OAuthStorageHooksType
+    from agency_swarm.mcp.oauth import MCPServerOAuth as MCPServerOAuthType
     from agency_swarm.mcp.oauth_client import MCPServerOAuthClient as MCPServerOAuthClientType
 else:
     MCPServerOAuthType = Any
-    OAuthStorageHooksType = Any
     MCPServerOAuthClientType = Any
 
 MCPServerOAuthRuntime: type[MCPServerOAuthType] | None
-OAuthStorageHooksRuntime: type[OAuthStorageHooksType] | None
 MCPServerOAuthClientRuntime: type[MCPServerOAuthClientType] | None
 
 try:  # pragma: no cover - optional dependency
-    from agency_swarm.mcp.oauth import (
-        MCPServerOAuth as MCPServerOAuthRuntime,
-        OAuthStorageHooks as OAuthStorageHooksRuntime,
-    )
+    from agency_swarm.mcp.oauth import MCPServerOAuth as MCPServerOAuthRuntime
     from agency_swarm.mcp.oauth_client import MCPServerOAuthClient as MCPServerOAuthClientRuntime
 except ImportError:  # pragma: no cover - OAuth extras not installed
     MCPServerOAuthRuntime = None
-    OAuthStorageHooksRuntime = None
     MCPServerOAuthClientRuntime = None
 
 logger = logging.getLogger(__name__)
@@ -200,10 +194,7 @@ class Agency:
         if load_threads_callback and save_threads_callback:
             self.persistence_hooks = PersistenceHooks(load_threads_callback, save_threads_callback)
             logger.info("Persistence hooks enabled.")
-        self._default_run_hooks: list[RunHooks] = []
-        if self.persistence_hooks:
-            self._default_run_hooks.append(self.persistence_hooks)
-        self._oauth_storage_hook: RunHooks | None = None
+        self._default_run_hooks: RunHooks | None = self.persistence_hooks
 
         self.agents = {}
         self.entry_points = []
@@ -237,10 +228,7 @@ class Agency:
             atexit.register(default_mcp_manager.shutdown_sync)
 
     def _configure_oauth_support(self) -> None:
-        """Apply oauth_token_path and enable per-user token hooks when available."""
-        if self._oauth_storage_hook and self._oauth_storage_hook in self._default_run_hooks:
-            self._default_run_hooks.remove(self._oauth_storage_hook)
-        self._oauth_storage_hook = None
+        """Apply oauth_token_path for OAuth-enabled servers."""
 
         if MCPServerOAuthRuntime is None:
             return
@@ -249,7 +237,6 @@ class Agency:
         if self.oauth_token_path:
             cache_dir = Path(self.oauth_token_path).expanduser()
 
-        has_oauth_servers = False
         for agent in self.agents.values():
             servers = getattr(agent, "mcp_servers", None)
             if not isinstance(servers, list):
@@ -262,13 +249,8 @@ class Agency:
                     config = server.oauth_config
                 if config is None:
                     continue
-                has_oauth_servers = True
                 if cache_dir and getattr(config, "cache_dir", None) is None:
                     config.cache_dir = cache_dir
-
-        if has_oauth_servers and OAuthStorageHooksRuntime is not None:
-            self._oauth_storage_hook = cast(RunHooks, OAuthStorageHooksRuntime())
-            self._default_run_hooks.append(self._oauth_storage_hook)
 
         if cache_dir:
             default_mcp_manager.update_oauth_cache_dir(cache_dir)
@@ -278,14 +260,10 @@ class Agency:
         """Return the agency-level hooks applied to each run.
 
         Notes:
-            The Agents SDK accepts either a single RunHooks instance or a list of them.
-            We keep the richer list shape at runtime but cast for typing.
+            The Agents SDK accepts a single RunHooks instance; this agency only
+            returns a single hook (or None).
         """
-        if not self._default_run_hooks:
-            return None
-        if len(self._default_run_hooks) == 1:
-            return self._default_run_hooks[0]
-        return cast(RunHooks, self._default_run_hooks)
+        return self._default_run_hooks
     def get_agent_context(self, agent_name: str) -> AgencyContext:
         """Public accessor for the agency context associated with an agent."""
         if agent_name not in self._agent_runtime_state:
