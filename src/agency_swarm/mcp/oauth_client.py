@@ -1,17 +1,40 @@
 """OAuth-authenticated MCP client for Agency Swarm."""
 
 import logging
-from typing import Any
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
+from typing import TypedDict
 
 from agents import Agent as AgentBase, RunContextWrapper
 from mcp import ClientSession
+from mcp.client.auth import OAuthClientProvider
 from mcp.client.streamable_http import streamablehttp_client
-from mcp.types import Tool as MCPTool
+from mcp.types import (
+    CallToolResult,
+    GetPromptResult,
+    Prompt,
+    ReadResourceResult,
+    Resource,
+    Tool as MCPTool,
+)
 from pydantic import AnyUrl
 
-from .oauth import MCPServerOAuth, create_oauth_provider
+from .oauth import (
+    MCPServerOAuth,
+    OAuthCallbackHandler,
+    OAuthRedirectHandler,
+    create_oauth_provider,
+)
 
 logger = logging.getLogger(__name__)
+
+
+class OAuthHandlerMap(TypedDict, total=False):
+    redirect: OAuthRedirectHandler
+    callback: OAuthCallbackHandler
+
+
+StreamableHTTPContext = AbstractAsyncContextManager[tuple[object, object, Callable[[], str | None]]]
 
 
 class MCPServerOAuthClient:
@@ -20,7 +43,7 @@ class MCPServerOAuthClient:
     def __init__(
         self,
         oauth_config: MCPServerOAuth,
-        custom_handlers: dict[str, Any] | None = None,
+        custom_handlers: OAuthHandlerMap | None = None,
     ):
         """Initialize OAuth MCP client.
 
@@ -34,8 +57,8 @@ class MCPServerOAuthClient:
         self.name = oauth_config.name  # Required by mcp_manager
         self.use_structured_content = False  # Required by Agents SDK MCP util
         self.session: ClientSession | None = None
-        self._oauth_provider: Any = None
-        self._transport_context: Any = None
+        self._oauth_provider: OAuthClientProvider | None = None
+        self._transport_context: StreamableHTTPContext | None = None
         self._transport_entered = False
         self._session_context: ClientSession | None = None
         self._session_entered = False
@@ -45,8 +68,8 @@ class MCPServerOAuthClient:
 
         # Extract custom handlers
         custom_handlers = custom_handlers or {}
-        self._redirect_handler = custom_handlers.get("redirect")
-        self._callback_handler = custom_handlers.get("callback")
+        self._redirect_handler: OAuthRedirectHandler | None = custom_handlers.get("redirect")
+        self._callback_handler: OAuthCallbackHandler | None = custom_handlers.get("callback")
 
         logger.info(f"Initialized OAuth MCP client for {self.name}")
 
@@ -95,7 +118,7 @@ class MCPServerOAuthClient:
 
     async def list_tools(
         self,
-        run_context: RunContextWrapper[Any] | None = None,
+        run_context: RunContextWrapper[object] | None = None,
         agent: AgentBase | None = None,
     ) -> list[MCPTool]:
         """List available tools from MCP server (OAuth required on HTTP transports).
@@ -117,7 +140,7 @@ class MCPServerOAuthClient:
         logger.info(f"Found {len(result.tools)} tools from {self.name} (authenticated)")
         return list(result.tools)
 
-    async def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> Any:
+    async def call_tool(self, name: str, arguments: dict[str, object] | None = None) -> CallToolResult:
         """Call an OAuth MCP tool (requires authentication).
 
         This method ensures OAuth authentication is complete before calling.
@@ -144,7 +167,7 @@ class MCPServerOAuthClient:
         logger.debug(f"Tool {name} executed successfully on {self.name}")
         return result
 
-    async def list_prompts(self) -> list[Any]:
+    async def list_prompts(self) -> list[Prompt]:
         """List available prompts from OAuth MCP server.
 
         Returns:
@@ -161,7 +184,7 @@ class MCPServerOAuthClient:
         result = await self.session.list_prompts()
         return result.prompts
 
-    async def get_prompt(self, name: str, arguments: dict[str, Any] | None = None) -> Any:
+    async def get_prompt(self, name: str, arguments: dict[str, str] | None = None) -> GetPromptResult:
         """Get a prompt from OAuth MCP server.
 
         Args:
@@ -182,7 +205,7 @@ class MCPServerOAuthClient:
         result = await self.session.get_prompt(name, arguments or {})
         return result
 
-    async def list_resources(self) -> list[Any]:
+    async def list_resources(self) -> list[Resource]:
         """List available resources from OAuth MCP server.
 
         Returns:
@@ -199,7 +222,7 @@ class MCPServerOAuthClient:
         result = await self.session.list_resources()
         return result.resources
 
-    async def read_resource(self, uri: str | AnyUrl) -> Any:
+    async def read_resource(self, uri: str | AnyUrl) -> ReadResourceResult:
         """Read a resource from OAuth MCP server.
 
         Args:

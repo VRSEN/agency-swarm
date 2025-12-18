@@ -2,12 +2,14 @@ import asyncio
 import inspect
 import logging
 import threading
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from concurrent.futures import Future
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 if TYPE_CHECKING:
+    from mcp.client.auth import OAuthClientProvider
+
     from agency_swarm.agent.core import Agent
     from agency_swarm.mcp.oauth import MCPServerOAuth
     from agency_swarm.mcp.oauth_client import MCPServerOAuthClient
@@ -16,14 +18,18 @@ logger = logging.getLogger(__name__)
 
 OAuthRedirectHandler = Callable[[str], Awaitable[None]]
 OAuthCallbackHandler = Callable[[], Awaitable[tuple[str, str | None]]]
-OAuthHandler = OAuthRedirectHandler | OAuthCallbackHandler
-OAuthHandlerMap = dict[str, OAuthHandler]
+
+
+class OAuthHandlerMap(TypedDict, total=False):
+    redirect: OAuthRedirectHandler
+    callback: OAuthCallbackHandler
+
 
 # OAuth support - imported conditionally to avoid circular imports
 _OAUTH_AVAILABLE = False
 _MCPServerOAuth: type | None = None
 _MCPServerOAuthClient: type | None = None
-_create_oauth_provider: Callable[..., Any] | None = None
+_create_oauth_provider: Callable[..., Coroutine[object, object, "OAuthClientProvider"]] | None = None
 
 try:
     from agency_swarm.mcp.oauth import (

@@ -14,10 +14,11 @@ from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import ClassVar, Literal, TypedDict, cast
 from urllib.parse import parse_qs, urlparse, urlsplit
 
 from mcp.client.auth import OAuthClientProvider
+from mcp.client.auth.oauth2 import TokenStorage
 from mcp.shared.auth import (
     OAuthClientInformationFull,
     OAuthClientMetadata,
@@ -42,12 +43,24 @@ def set_oauth_user_id(user_id: str | None) -> None:
     logger.debug(f"OAuth user_id context set to: {user_id}")
 
 
+class TokenPayload(TypedDict, total=False):
+    access_token: str
+    token_type: Literal["Bearer"]
+    expires_in: int | None
+    scope: str | None
+    refresh_token: str | None
+
+
+OAuthRedirectHandler = Callable[[str], Awaitable[None]]
+OAuthCallbackHandler = Callable[[], Awaitable[tuple[str, str | None]]]
+
+
 @dataclass
 class TokenCallbackRegistry:
     """Holds optional load/save callbacks for token persistence."""
 
-    load_callback: Callable[[str], dict[str, Any] | None] | None = None
-    save_callback: Callable[[str, dict[str, Any]], None] | None = None
+    load_callback: Callable[[str], TokenPayload | None] | None = None
+    save_callback: Callable[[str, TokenPayload], None] | None = None
 
     def has_callbacks(self) -> bool:
         """Return True if any callback has been configured."""
@@ -132,7 +145,7 @@ class FileTokenStorage:
             if not legacy_file.exists():
                 return None
             try:
-                data = json.loads(legacy_file.read_text())
+                data = cast("TokenPayload", json.loads(legacy_file.read_text()))
                 tokens = OAuthToken(**data)
                 token_file.write_text(tokens.model_dump_json(indent=2))
                 token_file.chmod(0o600)
@@ -145,7 +158,7 @@ class FileTokenStorage:
                 return None
 
         try:
-            data = json.loads(token_file.read_text())
+            data = cast("TokenPayload", json.loads(token_file.read_text()))
             return OAuthToken(**data)
         except Exception:
             logger.exception(f"Failed to load tokens from {token_file}")
@@ -168,7 +181,8 @@ class FileTokenStorage:
             logger.exception(f"Failed to save tokens to {token_file}")
         if self._token_callbacks and self._token_callbacks.save_callback:
             try:
-                self._token_callbacks.save_callback(self.server_url, tokens.model_dump())
+                payload = cast("TokenPayload", tokens.model_dump())
+                self._token_callbacks.save_callback(self.server_url, payload)
             except Exception:
                 logger.exception("OAuth save_tokens_callback failed")
 
@@ -248,13 +262,13 @@ class MCPServerOAuth:
     scopes: list[str] = field(default_factory=lambda: ["user"])
     redirect_uri: str | None = None
     cache_dir: Path | None = None
-    storage: Any | None = None
-    storage_factory: Callable[[str, str], Any] | None = None
+    storage: TokenStorage | None = None
+    storage_factory: Callable[[str, str], TokenStorage] | None = None
     client_metadata: OAuthClientMetadata | None = None
     auth_server_url: str | None = None
     use_env_credentials: bool = True
-    redirect_handler: Callable[[str], Awaitable[None]] | None = None
-    callback_handler: Callable[[], Awaitable[tuple[str, str | None]]] | None = None
+    redirect_handler: OAuthRedirectHandler | None = None
+    callback_handler: OAuthCallbackHandler | None = None
 
     def _resolve_client_id(self) -> str | None:
         """Return the client_id if provided explicitly or via environment."""
@@ -558,8 +572,8 @@ async def default_callback_handler(redirect_uri: str | None = None) -> tuple[str
 
 async def create_oauth_provider(
     server: MCPServerOAuth,
-    redirect_handler: Callable[[str], Awaitable[None]] | None = None,
-    callback_handler: Callable[[], Awaitable[tuple[str, str | None]]] | None = None,
+    redirect_handler: OAuthRedirectHandler | None = None,
+    callback_handler: OAuthCallbackHandler | None = None,
 ) -> OAuthClientProvider:
     """Create OAuth provider for MCP server.
 

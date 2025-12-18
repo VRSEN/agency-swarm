@@ -512,6 +512,7 @@ def make_stream_endpoint(
             initial_message_count = len(agency_instance.thread_manager.get_all_messages())
 
             active_run: ActiveRun | None = None
+
             async def _emit_oauth(payload: dict[str, Any]) -> AsyncGenerator[str]:
                 event_type = payload.get("type")
                 data = {
