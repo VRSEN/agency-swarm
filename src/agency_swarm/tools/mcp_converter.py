@@ -1,15 +1,17 @@
 """MCP server to tool conversion utilities."""
 
 import asyncio
+import functools
 import logging
 import threading
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, Union
 
-from agents import Agent as SDKAgent, FunctionTool, set_tracing_disabled
+from agents import Agent as SDKAgent, FunctionTool, default_tool_error_function, set_tracing_disabled
 from agents.mcp.server import MCPServer
 from agents.mcp.util import MCPUtil
 from agents.run_context import RunContextWrapper
+from agents.tool import ToolContext
 
 from agency_swarm.tools.mcp_manager import LoopAffineAsyncProxy, default_mcp_manager
 
@@ -17,6 +19,26 @@ if TYPE_CHECKING:
     from agency_swarm.agent.core import Agent as AgencyAgent
 
 logger = logging.getLogger(__name__)
+
+
+def _with_error_handling(tool: FunctionTool) -> FunctionTool:
+    """Wrap an MCP FunctionTool to catch exceptions and return error strings.
+
+    This makes MCP tools behave like @function_tool decorated functions,
+    which return error messages to the agent instead of propagating exceptions.
+    """
+    original_invoke = tool.on_invoke_tool
+
+    @functools.wraps(original_invoke)
+    async def wrapped_invoke(ctx: ToolContext[Any], input_json: str) -> Any:
+        try:
+            return await original_invoke(ctx, input_json)
+        except Exception as e:
+            logger.warning(f"MCP tool '{tool.name}' failed: {e}")
+            return default_tool_error_function(ctx, e)
+
+    tool.on_invoke_tool = wrapped_invoke
+    return tool
 
 
 def _run_coroutine_from_factory(factory: Callable[[], Awaitable[Any]]) -> Any:
@@ -123,7 +145,9 @@ def from_mcp(
                 return [t for t in tools if isinstance(t, FunctionTool)]
 
             function_tools: list[FunctionTool] = _run_coroutine_from_factory(_fetch_tools)
-            converted_tools.extend(function_tools)
+            # Wrap each tool with error handling so exceptions return as strings to the agent
+            wrapped_tools = [_with_error_handling(t) for t in function_tools]
+            converted_tools.extend(wrapped_tools)
     finally:
         # Restore the original tracing state instead of unconditionally enabling it
         set_tracing_disabled(original_tracing_disabled)

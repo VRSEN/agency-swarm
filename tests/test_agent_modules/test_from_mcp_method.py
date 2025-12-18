@@ -23,9 +23,10 @@ class _DummyServer:
         self.session = None
 
 
+@pytest.mark.asyncio
 @patch("agents.mcp.util.MCPUtil.get_function_tools", new_callable=AsyncMock)
 @patch("agency_swarm.tools.mcp_manager.default_mcp_manager")
-def test_from_mcp_connects_once_and_reuses_connection(mock_manager, mock_get_function_tools: AsyncMock) -> None:
+async def test_from_mcp_connects_once_and_reuses_connection(mock_manager, mock_get_function_tools: AsyncMock) -> None:
     server = _DummyServer()
     original_invoke = AsyncMock(return_value="payload")
     function_tool = FunctionTool(
@@ -51,7 +52,12 @@ def test_from_mcp_connects_once_and_reuses_connection(mock_manager, mock_get_fun
     assert len(tools) == 1
     assert server.connect_calls == 1
     assert server.cleanup_calls == 0
-    assert tools[0].on_invoke_tool is original_invoke
+
+    # Verify the tool is wrapped with error handling but still delegates to original
+    ctx = RunContextWrapper(context=None)
+    result = await tools[0].on_invoke_tool(ctx, "{}")
+    assert result == "payload"
+    original_invoke.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -137,3 +143,43 @@ async def test_from_mcp_function_tools_preserve_structured_outputs(
     result = await tool.on_invoke_tool(ctx, "{}")
 
     assert result is image_output
+
+
+@pytest.mark.asyncio
+@patch("agents.mcp.util.MCPUtil.get_function_tools", new_callable=AsyncMock)
+@patch("agency_swarm.tools.mcp_manager.default_mcp_manager")
+async def test_from_mcp_tools_catch_exceptions_and_return_error_strings(
+    mock_manager, mock_get_function_tools: AsyncMock
+) -> None:
+    """MCP tools should catch exceptions and return error strings instead of propagating."""
+
+    async def mock_invoke_that_raises(ctx, input_json: str):
+        raise TimeoutError("Connection timed out after 5 seconds")
+
+    function_tool = FunctionTool(
+        name="failing_tool",
+        description="a tool that fails",
+        params_json_schema={"type": "object", "properties": {}},
+        on_invoke_tool=mock_invoke_that_raises,
+        strict_json_schema=False,
+    )
+    mock_get_function_tools.return_value = [function_tool]
+
+    server = _DummyServer()
+    mock_manager.register.return_value = server
+    mock_manager.ensure_connected = AsyncMock()
+    mock_manager.get.return_value = server
+
+    # Get FunctionTool instances from MCP
+    tools = ToolFactory.from_mcp([server])
+    assert len(tools) == 1
+    tool = tools[0]
+
+    # Invoke the tool - should NOT raise, instead return error string
+    ctx = RunContextWrapper(context=None)
+    result = await tool.on_invoke_tool(ctx, "{}")
+
+    # Verify error is returned as string (using SDK's default_tool_error_function format)
+    assert isinstance(result, str)
+    assert "error" in result.lower()
+    assert "Connection timed out after 5 seconds" in result
