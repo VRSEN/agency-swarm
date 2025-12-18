@@ -2,7 +2,7 @@ import asyncio
 import inspect
 import logging
 import threading
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from concurrent.futures import Future
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -10,8 +10,14 @@ from typing import TYPE_CHECKING, Any, cast
 if TYPE_CHECKING:
     from agency_swarm.agent.core import Agent
     from agency_swarm.mcp.oauth import MCPServerOAuth
+    from agency_swarm.mcp.oauth_client import MCPServerOAuthClient
 
 logger = logging.getLogger(__name__)
+
+OAuthRedirectHandler = Callable[[str], Awaitable[None]]
+OAuthCallbackHandler = Callable[[], Awaitable[tuple[str, str | None]]]
+OAuthHandler = OAuthRedirectHandler | OAuthCallbackHandler
+OAuthHandlerMap = dict[str, OAuthHandler]
 
 # OAuth support - imported conditionally to avoid circular imports
 _OAUTH_AVAILABLE = False
@@ -404,20 +410,21 @@ class LoopAffineAsyncProxy:
 default_mcp_manager = PersistentMCPServerManager()
 
 
-def _process_oauth_servers(agent: Any, servers: list[Any]) -> None:
+def _process_oauth_servers(agent: "Agent", servers: list[object]) -> None:
     """Process OAuth-enabled MCP servers and convert them to authenticated clients.
 
     Args:
         agent: The agent instance
         servers: List of MCP server instances (may include MCPServerOAuth)
     """
-    if not _OAUTH_AVAILABLE or _MCPServerOAuth is None:
+    if not _OAUTH_AVAILABLE or _MCPServerOAuth is None or _MCPServerOAuthClient is None:
         return
 
-    # Import OAuth client here to avoid circular import
-    from agency_swarm.mcp.oauth_client import MCPServerOAuthClient
-
     handler_factory = getattr(agent, "mcp_oauth_handler_factory", None)
+    factory: Callable[[str], OAuthHandlerMap] | None = None
+    if callable(handler_factory):
+        factory = cast("Callable[[str], OAuthHandlerMap]", handler_factory)
+    oauth_client_type = cast("type[MCPServerOAuthClient]", _MCPServerOAuthClient)
 
     # Convert OAuth configs to OAuth clients
     for i, srv in enumerate(list(servers)):
@@ -433,19 +440,18 @@ def _process_oauth_servers(agent: Any, servers: list[Any]) -> None:
                 logger.info(f"OAuth configured for {oauth_srv.name} (client_id: {client_id[:8]}...)")
 
             # Build handlers: config-level first, then factory overrides (for FastAPI)
-            server_handlers: dict[str, Any] = {}
+            server_handlers: OAuthHandlerMap = {}
             if oauth_srv.redirect_handler:
                 server_handlers["redirect"] = oauth_srv.redirect_handler
             if oauth_srv.callback_handler:
                 server_handlers["callback"] = oauth_srv.callback_handler
 
-            if callable(handler_factory):
-                new_handlers = handler_factory(oauth_srv.name)
-                if isinstance(new_handlers, dict):
-                    server_handlers.update(new_handlers)
+            if factory is not None:
+                new_handlers = factory(oauth_srv.name)
+                server_handlers.update(new_handlers)
 
             handlers_arg = server_handlers if server_handlers else None
-            oauth_client = MCPServerOAuthClient(
+            oauth_client = oauth_client_type(
                 oauth_srv,
                 handlers_arg,
             )
@@ -459,7 +465,7 @@ def _process_oauth_servers(agent: Any, servers: list[Any]) -> None:
             raise
 
 
-def _sync_oauth_client_handlers(persistent: Any, candidate: Any) -> None:
+def _sync_oauth_client_handlers(persistent: object, candidate: object) -> None:
     """Update cached OAuth client with per-request handlers from a new instance."""
     if not _OAUTH_AVAILABLE or _MCPServerOAuthClient is None:
         return
@@ -470,13 +476,11 @@ def _sync_oauth_client_handlers(persistent: Any, candidate: Any) -> None:
     if not isinstance(existing_client, _MCPServerOAuthClient) or not isinstance(new_client, _MCPServerOAuthClient):
         return
 
-    # Sync handlers from the new instance to the cached one (cast to Any for dynamic attr access)
-    client: Any = existing_client
-    client._redirect_handler = getattr(new_client, "_redirect_handler", None)
-    client._callback_handler = getattr(new_client, "_callback_handler", None)
-    # Ensure next OAuth provider uses the latest handlers
-    if hasattr(client, "_oauth_provider"):
-        client._oauth_provider = None
+    client = cast("MCPServerOAuthClient", existing_client)
+    new_instance = cast("MCPServerOAuthClient", new_client)
+    client._redirect_handler = new_instance._redirect_handler
+    client._callback_handler = new_instance._callback_handler
+    client._oauth_provider = None
 
 
 async def attach_persistent_mcp_servers(agency: Any) -> None:

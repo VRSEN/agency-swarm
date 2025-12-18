@@ -1,7 +1,7 @@
 """OAuth authentication for MCP servers.
 
 Provides OAuth 2.0 with PKCE support for MCP servers using the MCP Python SDK's OAuthClientProvider.
-Supports unified local/SaaS token storage via RunHooks and contextvars.
+Supports unified local/SaaS token storage via contextvars.
 """
 
 import asyncio
@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Any, ClassVar
 from urllib.parse import parse_qs, urlparse, urlsplit
 
-from agents import RunHooks
 from mcp.client.auth import OAuthClientProvider
 from mcp.shared.auth import (
     OAuthClientInformationFull,
@@ -216,36 +215,6 @@ class FileTokenStorage:
                 legacy_file.unlink()
         except Exception:
             logger.exception(f"Failed to save client info to {client_file}")
-
-
-class OAuthStorageHooks(RunHooks):  # type: ignore[type-arg]
-    """RunHooks implementation for OAuth token storage.
-
-    Sets the user_id contextvar from MasterContext at the start of each run,
-    enabling per-user token isolation in FileTokenStorage.
-
-    Usage:
-        from agency_swarm import Agency
-        from agency_swarm.mcp.oauth import OAuthStorageHooks
-
-        agency = Agency(
-            [agent],
-            oauth_token_path="./data",
-            user_context={"user_id": "user_123"},
-            hooks=[OAuthStorageHooks()],
-        )
-    """
-
-    def on_run_start(self, *, context: Any, **kwargs: Any) -> None:
-        """Set user_id contextvar from MasterContext at run start."""
-        user_id = context.user_context.get("user_id") if hasattr(context, "user_context") else None
-        _user_id_context.set(user_id)
-        logger.debug(f"OAuth user_id context set to: {user_id}")
-
-    def on_run_end(self, *, context: Any, result: Any, **kwargs: Any) -> None:
-        """Clear user_id contextvar at run end."""
-        _user_id_context.set(None)
-        logger.debug("OAuth user_id context cleared")
 
 
 @dataclass(eq=False)

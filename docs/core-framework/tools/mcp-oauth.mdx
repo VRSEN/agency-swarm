@@ -162,11 +162,11 @@ Then run the FastMCP server (see `examples/mcp_oauth/github_server.py` for GitHu
 
 Tokens default to `~/.agency-swarm/mcp-tokens/{user}/{server}/`. Set `AGENCY_SWARM_MCP_CACHE_DIR` for a global override or pass `cache_dir` per server.
 
-For per-user isolation, pass `oauth_token_path` and `user_context`:
+For per-user isolation in FastAPI, pass the `X-User-Id` header (the integration sets the OAuth user context automatically). For non-FastAPI runs, call `set_oauth_user_id()` before the run:
 
 ```python
 from agency_swarm import Agency, Agent
-from agency_swarm.mcp import MCPServerOAuth
+from agency_swarm.mcp import MCPServerOAuth, set_oauth_user_id
 
 oauth_server = MCPServerOAuth(
     url="http://localhost:8001/mcp",
@@ -174,10 +174,11 @@ oauth_server = MCPServerOAuth(
     scopes=["repo", "user"],
 )
 
+set_oauth_user_id("user_123")
+
 agency = Agency(
     Agent(name="GitHubAgent", mcp_servers=[oauth_server]),
     oauth_token_path="./data/oauth-tokens",
-    user_context={"user_id": "user_123"},
 )
 ```
 
