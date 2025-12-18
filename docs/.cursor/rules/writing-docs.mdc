@@ -8,7 +8,7 @@ When writing or improving documentation for agency swarm, your primary goal is t
 
 - Write documentation in an easy to understand conversational language.
 - Use simple language and clear terms.
-- Docs should be readbable by a person below 5th grade.
+- Docs should be easily readable by an 8th grader.
 - Be brief and to the point.
 - Make documentation actionable. Place code snippets at the top so users can easily copy and paste them. Provide only essential context above the code. Move any complex or detailed explanations to the end of the page.
 - The more important the information is, the higher it should be on the page.
