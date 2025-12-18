@@ -8,7 +8,6 @@ from .utils.thread import ThreadLoadCallback, ThreadSaveCallback
 logger = logging.getLogger(__name__)
 
 
-# --- Persistence Hooks ---
 class PersistenceHooks(RunHooks[MasterContext]):  # type: ignore[misc]
     """Custom `RunHooks` implementation for loading and saving `ThreadManager` state.
 

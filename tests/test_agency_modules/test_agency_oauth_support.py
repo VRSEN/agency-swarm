@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from agency_swarm import Agency, Agent
-from agency_swarm.mcp import MCPServerOAuth, OAuthStorageHooks
+from agency_swarm.mcp import MCPServerOAuth
 
 
 @pytest.fixture(autouse=True)
@@ -33,18 +33,11 @@ def test_agency_applies_oauth_token_path_to_servers(tmp_path: Path) -> None:
     assert server.cache_dir == tmp_path
 
 
-def test_agency_enables_oauth_storage_hooks_by_default(tmp_path: Path) -> None:
-    """Agency attaches OAuthStorageHooks whenever OAuth servers are present."""
+def test_agency_oauth_support_does_not_register_run_hooks(tmp_path: Path) -> None:
+    """Agency does not attach OAuth run hooks automatically."""
     server = MCPServerOAuth(url="http://localhost:8001/mcp", name="github")
     agent = _build_agent_with_oauth_server(server)
 
     agency = Agency(agent, oauth_token_path=str(tmp_path), user_context={"user_id": "user-123"})
 
-    hooks = agency.default_run_hooks
-    if hooks is None:
-        pytest.fail("Expected OAuthStorageHooks to be registered by default")
-    if isinstance(hooks, list):
-        hook_iterable = hooks
-    else:
-        hook_iterable = [hooks]
-    assert any(isinstance(hook, OAuthStorageHooks) for hook in hook_iterable)
+    assert agency.default_run_hooks is None
