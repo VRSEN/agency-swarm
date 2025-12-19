@@ -1,0 +1,116 @@
+---
+title: "How Credits Work"
+description: "Everything you need to know about credits."
+icon: "credit-card"
+---
+
+## Understanding Credits
+
+Credits are your usage balance on the platform. They power everything your agents do—from quick replies to long-running, multi-step workflows in sandboxes.
+
+Instead of charging per request or per feature, we use credits to provide transparent, usage-based billing. The more complex the task, the more credits it uses. Simple interactions cost less; heavy compute and long-running agents cost more.
+
+
+### What Consumes Credits
+
+Credit usage depends on task complexity and how long your sandbox runs.
+
+| Resource | Description |
+| --- | --- |
+| **AI Tokens** | Processing requests through LLMs, image generation, and other AI models |
+| **Compute** | Running agents in your custom sandboxes and execution environments |
+| **Agent Builds** | Creating, configuring, and deploying new agents |
+| **File Storage** | Storing and managing files created during your tasks |
+| **Web Searches** | Searching the internet for information needed to complete tasks |
+| **Third-Party Services** | Accessing external APIs and integrated services that extend your agent's capabilities |
+
+<Note>
+- After a task completes, **AI token usage stops**, but **compute** can continue until your sandbox stops (timeout).
+- **Storage and downloads** can still use a small number of credits while agents are idle.
+- If you use **your own API keys**, we don’t deduct credits for AI tokens or other third-party services.
+</Note>
+
+### Credit Types
+
+Credits fall into three categories. They are deducted in a specific order to maximize value:
+
+<CardGroup cols={3}>
+  <Card title="Daily Credits" icon="circle-dollar">
+    Use-it-or-lose-it credits that reset to 25 every day.
+  </Card>
+  <Card title="Monthly Credits" icon="rocket">
+    Your main allocation, refreshed each billing cycle.
+  </Card>
+  <Card title="Refill Credits" icon="upload">
+    Extra credits you can purchase anytime that never expire.
+  </Card>
+</CardGroup>
+
+| Credit type | Who gets them | Amount | Refresh | Rollover | Notes |
+| --- | --- | --- | --- | --- | --- |
+| **Daily** | All users (Free and Pro) | 25 credits per day | Every 24 hours at midnight UTC | No — unused daily credits reset and do not accumulate | Use-it-or-lose-it. Resets to 25 at midnight UTC. |
+| **Monthly** | Pro users only | 2,000 credits per month | At the start of each billing cycle | No — unused monthly credits do not carry over | Main plan allocation. Refreshes each billing cycle. |
+| **Refill** | Anyone who purchases them | Based on purchase | One-time purchase | Yes — refill credits never expire | One-time purchase. Never expires. |
+
+### Credit Usage Priority
+
+When you run a task, credits are consumed in this order:
+
+1. **Daily credits** (used first)
+2. **Monthly credits** (used second)
+3. **Refill credits** (used last)
+
+This ensures expiring credits are always used before your permanent refill credits.
+
+<Note>
+We prioritize expiring credits so you get maximum value from every plan. Refill credits stay available as your backup.
+</Note>
+
+## Monitoring Your Usage
+
+Track credit consumption in [**Settings → Billing**](https://agencii.ai/settings/?tab=billing) to review:
+
+- **Current balance:** remaining daily, monthly, and refill credits
+- **Usage by agency:** credit consumption per agency to highlight the most resource-intensive builds
+
+## Credit Refunds
+
+If a task fails because of a system error on our side, we automatically refund the credits used for that task.
+
+<Warning>
+Refunds are not issued for tasks that fail due to user-provided instructions, external service issues, or reaching task limits. Provide clear, detailed instructions to minimize unnecessary usage.
+</Warning>
+
+## Tips for Optimising Credit Usage
+
+<Steps>
+  <Step title="Be specific">
+    Give clear, detailed requests so agents complete tasks efficiently.
+  </Step>
+  <Step title="Batch work">
+    Group similar tasks together to reduce repeated setup work.
+  </Step>
+  <Step title="Review checkpoints">
+    Review intermediate results on complex workflows before committing additional credits.
+  </Step>
+</Steps>
+
+## FAQ
+
+<AccordionGroup defaultOpen={true}>
+  <Accordion title="When do daily credits reset?">
+    Daily credits reset every 24 hours at midnight UTC.
+  </Accordion>
+  <Accordion title="When do monthly credits reset?">
+    Monthly credits refresh at the start of each billing cycle, on the same date you started your subscription.
+  </Accordion>
+  <Accordion title="Can I buy more credits?">
+    Yes. Pro users can purchase refill credits at any time, and those credits never expire.
+  </Accordion>
+  <Accordion title="What happens if I run out of credits?">
+    You'll receive notifications when your balance is low. You can wait for the daily refresh, upgrade to Pro for monthly credits, or purchase refill credits on PRO plan.
+  </Accordion>
+  <Accordion title="Do unused credits roll over?">
+    Daily and monthly credits do not roll over. Refill credits remain in your account until you use them.
+  </Accordion>
+</AccordionGroup>

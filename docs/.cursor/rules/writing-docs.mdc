@@ -1,6 +1,5 @@
 ---
-globs: docs/*
-alwaysApply: false
+alwaysApply: true
 ---
 
 When writing or improving documentation for agency swarm, your primary goal is to **make sure the user sees only the information he wants to see. No more, no less.**
@@ -9,10 +8,11 @@ When writing or improving documentation for agency swarm, your primary goal is t
 
 - Write documentation in an easy to understand conversational language.
 - Use simple language and clear terms.
+- Docs should be easily readable by an 8th grader.
 - Be brief and to the point.
 - Make documentation actionable. Place code snippets at the top so users can easily copy and paste them. Provide only essential context above the code. Move any complex or detailed explanations to the end of the page.
 - The more important the information is, the higher it should be on the page.
-- Highlight the important parts.
+- Highlight the important parts by using bold, components, etc.
 - Hide complexity under tabs, dropdowns, etc.
 - Split pages into sub pages if needed. Each page must be shorter than 150 lines.
 
@@ -110,7 +110,7 @@ Adhere closely to the writing style and structure in these examples.
 
 1. Analyze the feedback provided by the user and deteremine which specific sections you need to update.
    - If there is a lot of feedback, create a to-do list for yourself and break it down.
-2. Only update the required parts, do not add anything unrequested. Perform minimal changes, keep everything unaffected by feedback as is.
+2. Only update the required parts, do not add anything unrequested. Perform minimal changes, keep everything unaffected by feedback as is. Only update the parts and the pages that are explicitly requested.
 3. If asked to move the page, keep consistent folder and file structure, matching the structure in the `./docs/docs.json` file.
 4. Ask the user to review the changes and provide feedback.
 

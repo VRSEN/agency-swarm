@@ -149,8 +149,8 @@
         },
         "groups": [
           {
-            "group": "General",
-            "pages": ["platform/overview"]
+            "group": "Introduction",
+            "pages": ["platform/overview", "platform/pricing", "platform/how-credits-work"]
           },
           {
             "group": "Integrations",
