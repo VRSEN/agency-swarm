@@ -64,6 +64,43 @@ def test_persistence_roundtrip_exercises_helpers(tmp_path: Path, monkeypatch: py
     assert payload["metadata"]["summary"] == "call me maybe"
 
 
+def test_save_current_chat_persists_usage_in_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    persistence.set_chats_dir(str(tmp_path))
+
+    # Stabilise branch detection inside save_current_chat.
+    monkeypatch.setattr(
+        persistence.subprocess,
+        "check_output",
+        lambda *_, **__: b"main\n",
+    )
+
+    agency = _Agency([{"role": "user", "content": "hello"}])
+    chat_id = "chat_with_usage"
+    usage = {
+        "request_count": 3,
+        "cached_tokens": 1,
+        "input_tokens": 10,
+        "output_tokens": 20,
+        "total_tokens": 30,
+        "total_cost": 0.123,
+        "reasoning_tokens": 2,
+        "audio_tokens": 0,
+    }
+
+    persistence.save_current_chat(agency, chat_id, usage=usage)
+
+    payload = json.loads(Path(persistence.chat_file_path(chat_id)).read_text())
+    assert payload["metadata"]["usage"] == usage
+
+    meta = persistence.load_chat_metadata(chat_id)
+    assert isinstance(meta, dict)
+    assert meta["usage"] == usage
+
+    launcher_meta = TerminalDemoLauncher.load_chat_metadata(chat_id)
+    assert isinstance(launcher_meta, dict)
+    assert launcher_meta["usage"] == usage
+
+
 def test_summarize_messages_edge_cases() -> None:
     """Test summarize_messages with various message patterns."""
 

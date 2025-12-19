@@ -34,6 +34,10 @@ from agency_swarm.messages import MessageFilter, MessageFormatter
 from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
 from agency_swarm.ui.core.agui_adapter import AguiAdapter
 from agency_swarm.utils.serialization import serialize
+from agency_swarm.utils.usage_tracking import (
+    calculate_usage_with_cost,
+    extract_usage_from_run_result,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +139,14 @@ def make_response_endpoint(request_model, agency_factory: Callable[..., Agency],
         new_messages = all_messages[initial_message_count:]  # Only messages added during this request
         filtered_messages = MessageFilter.filter_messages(new_messages)
         result = {"response": response.final_output, "new_messages": filtered_messages}
+
+        # Extract and add usage information
+        usage_stats = extract_usage_from_run_result(response)
+        if usage_stats:
+            # Calculate cost - model_name is auto-extracted from run_result._main_agent_model
+            usage_stats = calculate_usage_with_cost(usage_stats, run_result=response)
+            result["usage"] = usage_stats.to_dict()
+
         if request.file_urls is not None and file_ids_map is not None:
             result["file_ids_map"] = file_ids_map
         if request.generate_chat_name:
@@ -269,6 +281,13 @@ def make_stream_endpoint(
                     filtered_messages = MessageFilter.remove_orphaned_messages(filtered_messages)
                     filtered_messages = _normalize_new_messages_for_client(filtered_messages)
 
+                    # Extract usage from final result
+                    final_result = stream.final_result if stream else None
+                    usage_stats = extract_usage_from_run_result(final_result)
+                    if usage_stats:
+                        # Calculate cost - model_name is auto-extracted from run_result._main_agent_model
+                        usage_stats = calculate_usage_with_cost(usage_stats, run_result=final_result)
+
                     # Build result with new messages
                     result = {"new_messages": filtered_messages, "run_id": run_id}
                     if active_run is not None and active_run.cancelled:
@@ -280,6 +299,8 @@ def make_stream_endpoint(
                             result["chat_name"] = await generate_chat_name(filtered_messages)
                         except Exception as e:
                             logger.error(f"Error generating chat name: {e}")
+                    if usage_stats:
+                        result["usage"] = usage_stats.to_dict()
 
                     yield "event: messages\ndata: " + json.dumps(result) + "\n\n"
                     yield "event: end\ndata: [DONE]\n\n"

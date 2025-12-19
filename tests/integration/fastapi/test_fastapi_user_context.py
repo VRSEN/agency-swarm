@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from dataclasses import dataclass, field
 from types import SimpleNamespace
@@ -9,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from agency_swarm import Agency, Agent, run_fastapi
+from agency_swarm.agent.execution_stream_response import StreamingRunResponse
 
 
 @dataclass
@@ -44,7 +46,25 @@ class TrackingAgent(Agent):
         **kwargs: Any,
     ):
         self._tracker.record_response(context_override)
-        return SimpleNamespace(final_output="Test response", new_items=[])
+        usage_obj = SimpleNamespace(
+            requests=1,
+            cached_tokens=0,
+            input_tokens=10,
+            output_tokens=20,
+            total_tokens=30,
+            input_tokens_details=None,
+            output_tokens_details=None,
+        )
+        context_wrapper = SimpleNamespace(usage=usage_obj)
+        run_result = SimpleNamespace(
+            final_output="Test response",
+            new_items=[],
+            context_wrapper=context_wrapper,
+            raw_responses=[],
+        )
+        # Enables cost fallback calculation in calculate_usage_with_cost(...)
+        run_result._main_agent_model = "gpt-4o"
+        return run_result
 
     def get_response_stream(
         self,
@@ -55,10 +75,29 @@ class TrackingAgent(Agent):
     ):
         self._tracker.record_stream(context_override)
 
+        usage_obj = SimpleNamespace(
+            requests=1,
+            cached_tokens=0,
+            input_tokens=10,
+            output_tokens=20,
+            total_tokens=30,
+            input_tokens_details=None,
+            output_tokens_details=None,
+        )
+        context_wrapper = SimpleNamespace(usage=usage_obj)
+        final_result = SimpleNamespace(context_wrapper=context_wrapper, raw_responses=[])
+        final_result._main_agent_model = "gpt-4o"
+
+        stream_ref: dict[str, StreamingRunResponse] = {}
+
         async def _generator():
             yield {"type": "text", "data": "Test"}
+            # Make final_result available to the FastAPI endpoint handler.
+            stream_ref["stream"]._resolve_final_result(final_result)  # noqa: SLF001
 
-        return _generator()
+        stream = StreamingRunResponse(_generator())
+        stream_ref["stream"] = stream
+        return stream
 
 
 @dataclass
@@ -93,6 +132,14 @@ def test_non_streaming_user_context(recording_agency_factory: RecordingAgencyFac
     )
 
     assert response.status_code == 200
+    payload = response.json()
+    assert "usage" in payload
+    usage = payload["usage"]
+    assert usage["request_count"] == 1
+    assert usage["input_tokens"] == 10
+    assert usage["output_tokens"] == 20
+    assert usage["total_tokens"] == 30
+    assert isinstance(usage["total_cost"], int | float)
     assert recording_agency_factory.tracker.last_response_context == {"plan": "pro", "user_id": "123"}
 
 
@@ -107,12 +154,44 @@ def test_streaming_user_context(recording_agency_factory: RecordingAgencyFactory
         json={"message": "Hello", "user_context": {"plan": "pro"}},
     ) as response:
         assert response.status_code == 200
-        list(response.iter_lines())
+        lines = list(response.iter_lines())
 
     stream_context = recording_agency_factory.tracker.last_stream_context
     assert stream_context is not None
     assert {k: v for k, v in stream_context.items() if k != "_streaming_context"} == {"plan": "pro"}
     assert "_streaming_context" in stream_context
+
+    # Assert the final messages SSE event contains usage
+    current_event: str | None = None
+    messages_payloads: list[dict[str, Any]] = []
+    for raw in lines:
+        if not raw:
+            continue
+        line = raw.decode("utf-8") if isinstance(raw, bytes | bytearray) else raw
+        if line.startswith("event:"):
+            current_event = line.split("event:", 1)[1].strip()
+            continue
+        if not line.startswith("data:"):
+            continue
+        data_str = line.split("data:", 1)[1].strip()
+        if data_str == "[DONE]":
+            continue
+        if current_event != "messages":
+            continue
+        try:
+            payload = json.loads(data_str)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            messages_payloads.append(payload)
+
+    assert messages_payloads, "Expected a final 'messages' SSE event payload"
+    usage = messages_payloads[-1]["usage"]
+    assert usage["request_count"] == 1
+    assert usage["input_tokens"] == 10
+    assert usage["output_tokens"] == 20
+    assert usage["total_tokens"] == 30
+    assert isinstance(usage["total_cost"], int | float)
 
 
 def test_agui_user_context(recording_agency_factory: RecordingAgencyFactory):

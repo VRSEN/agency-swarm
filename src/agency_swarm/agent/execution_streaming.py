@@ -540,6 +540,32 @@ def run_stream_with_guardrails(
                         cleaned = MessageFilter.remove_orphaned_messages(cleaned)
                         agency_context.thread_manager.replace_messages(cleaned)
                         agency_context.thread_manager.persist()
+
+                    # Store sub-agent raw_responses with model info for per-response cost calculation
+                    # These are tuples of (model_name, response) to enable accurate per-model pricing
+                    if streaming_result and master_context_for_run:
+                        try:
+                            sub_raw_responses = master_context_for_run._sub_agent_raw_responses
+                            if sub_raw_responses:
+                                # Store on streaming_result for access during cost calculation
+                                cast(Any, streaming_result)._sub_agent_responses_with_model = list(sub_raw_responses)
+                                # Clear after copying to avoid duplicates
+                                master_context_for_run._sub_agent_raw_responses.clear()
+                        except Exception as e:
+                            logger.debug(f"Could not store sub-agent raw_responses on streaming result: {e}")
+
+                    # Store main agent's model on streaming_result for automatic cost calculation
+                    if streaming_result:
+                        try:
+                            main_model = getattr(agent, "model", None)
+                            if not main_model:
+                                model_settings = getattr(agent, "model_settings", None)
+                                if model_settings:
+                                    main_model = getattr(model_settings, "model", None)
+                            if main_model:
+                                cast(Any, streaming_result)._main_agent_model = main_model
+                        except Exception as e:
+                            logger.debug(f"Could not store main agent model on streaming result: {e}")
                 except Exception:
                     pass
 

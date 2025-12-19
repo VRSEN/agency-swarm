@@ -34,6 +34,12 @@ from watchfiles import watch
 from agency_swarm.agency.core import Agency
 from agency_swarm.messages import MessageFilter
 from agency_swarm.utils import is_reasoning_model
+from agency_swarm.utils.usage_tracking import (
+    UsageStats,
+    calculate_usage_with_cost,
+    extract_usage_from_run_result,
+    format_usage_for_display,
+)
 
 from ..core.console_event_adapter import ConsoleEventAdapter
 from .launcher import TerminalDemoLauncher
@@ -366,12 +372,27 @@ def start_terminal(
 
     # Auto-resume on hot reload only (not on initial boot)
     resumed_chat_id: str | None = None
+    resumed_usage: UsageStats | None = None
     if os.environ.get(_RELOAD_CHILD_ENV) == "1":
         records = TerminalDemoLauncher.list_chat_records()
         if records:
             most_recent_id = records[0]["chat_id"]
             if TerminalDemoLauncher.load_chat(agency_instance, most_recent_id):
                 resumed_chat_id = most_recent_id
+                # Restore usage from saved metadata
+                metadata = TerminalDemoLauncher.load_chat_metadata(most_recent_id)
+                if metadata and "usage" in metadata:
+                    saved_usage = metadata["usage"]
+                    resumed_usage = UsageStats(
+                        request_count=saved_usage.get("request_count", 0),
+                        cached_tokens=saved_usage.get("cached_tokens", 0),
+                        input_tokens=saved_usage.get("input_tokens", 0),
+                        output_tokens=saved_usage.get("output_tokens", 0),
+                        total_tokens=saved_usage.get("total_tokens", 0),
+                        total_cost=saved_usage.get("total_cost", 0.0),
+                        reasoning_tokens=saved_usage.get("reasoning_tokens"),
+                        audio_tokens=saved_usage.get("audio_tokens"),
+                    )
 
     chat_id = resumed_chat_id if resumed_chat_id else TerminalDemoLauncher.start_new_chat(agency_instance)
 
@@ -391,6 +412,9 @@ def start_terminal(
         pass
 
     current_default_recipient = agency_instance.entry_points[0].name
+
+    # Track accumulated usage for the session (restore from saved if available)
+    session_usage = resumed_usage if resumed_usage else UsageStats()
 
     def _parse_slash_command(text: str) -> tuple[str, list[str]] | None:
         if not text:
@@ -416,28 +440,65 @@ def start_terminal(
             ("/compact [instructions]", "Summarize and continue"),
             ("/resume", "Resume a conversation"),
             ("/status", "Show current setup"),
+            ("/cost", "Show current usage and costs"),
             ("/exit (quit)", "Quit"),
         ]
         for cmd, desc in rows:
             event_converter.console.print(f"[cyan]{cmd}[/cyan]  {desc}")
         event_converter.console.rule()
 
+    def _print_cost() -> None:
+        """Display current accumulated usage and costs."""
+        nonlocal session_usage
+        if session_usage.total_tokens == 0:
+            event_converter.console.print("[dim]No usage tracked yet.[/dim]")
+        else:
+            event_converter.console.print("[bold]Session Usage:[/bold]")
+            event_converter.console.print(format_usage_for_display(session_usage))
+        event_converter.console.rule()
+
+    def _print_exit_info() -> None:
+        """Print usage and chat_id on exit."""
+        nonlocal chat_id, session_usage
+        event_converter.console.print(f"\n[bold]Chat ID:[/bold] {chat_id}")
+        if session_usage.total_tokens > 0:
+            event_converter.console.print("\n[bold]Session Usage:[/bold]")
+            event_converter.console.print(format_usage_for_display(session_usage))
+        event_converter.console.print("\n[dim]To resume this conversation, use: /resume[/dim]")
+
     def _start_new_chat() -> None:
         """Start a chat session with a fresh chat id."""
-        nonlocal chat_id
+        nonlocal chat_id, session_usage
         chat_id = TerminalDemoLauncher.start_new_chat(agency_instance)
+        session_usage = UsageStats()  # Reset usage for new chat
         event_converter.console.print("Started a new chat session.")
         event_converter.console.rule()
         event_converter.handoff_agent = None
 
     def _resume_chat() -> None:
         """Load a previously saved chat into context."""
-        nonlocal chat_id
+        nonlocal chat_id, session_usage
         chosen = TerminalDemoLauncher.resume_interactive(
             agency_instance, input_func=input, print_func=event_converter.console.print
         )
         if chosen:
             chat_id = chosen
+            # Restore usage from saved metadata
+            metadata = TerminalDemoLauncher.load_chat_metadata(chat_id)
+            if metadata and "usage" in metadata:
+                saved_usage = metadata["usage"]
+                session_usage = UsageStats(
+                    request_count=saved_usage.get("request_count", 0),
+                    cached_tokens=saved_usage.get("cached_tokens", 0),
+                    input_tokens=saved_usage.get("input_tokens", 0),
+                    output_tokens=saved_usage.get("output_tokens", 0),
+                    total_tokens=saved_usage.get("total_tokens", 0),
+                    total_cost=saved_usage.get("total_cost", 0.0),
+                    reasoning_tokens=saved_usage.get("reasoning_tokens"),
+                    audio_tokens=saved_usage.get("audio_tokens"),
+                )
+            else:
+                session_usage = UsageStats()  # Reset if no saved usage
             event_converter.console.print(f"Resumed chat: {chat_id}")
         event_converter.console.rule()
         try:
@@ -482,7 +543,7 @@ def start_terminal(
         event_converter.console.rule()
 
     async def handle_message(message: str) -> bool:  # noqa: C901
-        nonlocal chat_id, current_default_recipient
+        nonlocal chat_id, current_default_recipient, session_usage
         if not message:
             return False
 
@@ -501,10 +562,14 @@ def start_terminal(
             if cmd == "status":
                 _print_status()
                 return False
+            if cmd == "cost":
+                _print_cost()
+                return False
             if cmd == "compact":
                 await _compact_chat(args)
                 return False
             if cmd == "exit":
+                _print_exit_info()
                 return True
 
         recipient_agent = None
@@ -567,6 +632,15 @@ def start_terminal(
 
                 event_converter.openai_to_message_output(event, recipient_agent_str)
 
+            # Extract and accumulate usage from the stream result
+            final_result = stream.final_result if stream else None
+            if final_result:
+                run_usage = extract_usage_from_run_result(final_result)
+                if run_usage:
+                    # Calculate cost - model_name is auto-extracted from run_result._main_agent_model
+                    run_usage = calculate_usage_with_cost(run_usage, run_result=final_result)
+                    session_usage = session_usage + run_usage
+
             # If cancelled, clean up display and filter orphaned/duplicate messages
             if cancelled:
                 # Clean up any live displays and reset buffers
@@ -580,7 +654,9 @@ def start_terminal(
                 agency_instance.thread_manager.replace_messages(filtered)
 
             event_converter.console.rule()
-            TerminalDemoLauncher.save_current_chat(agency_instance, chat_id)
+            TerminalDemoLauncher.save_current_chat(
+                agency_instance, chat_id, usage=session_usage.to_dict()
+            )
         except Exception as e:
             logger.error(f"Error during streaming: {e}", exc_info=True)
         finally:
@@ -596,6 +672,7 @@ def start_terminal(
             "/compact": "Keep a summary in context",
             "/resume": "Resume a conversation",
             "/status": "Show current setup",
+            "/cost": "Show usage and costs",
             "/exit": "Quit",
         }
 
@@ -767,6 +844,7 @@ def start_terminal(
             try:
                 message = await application.run_async()
             except (KeyboardInterrupt, EOFError):
+                _print_exit_info()
                 return
 
             if message is None:
@@ -790,4 +868,5 @@ def start_terminal(
     try:
         asyncio.run(main_loop())
     except (KeyboardInterrupt, EOFError):
+        # Exit info is printed inside main_loop before returning
         print("\n\nExiting terminal demo...")
