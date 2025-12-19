@@ -47,6 +47,7 @@ class MessageFormatter:
         agent_run_id: str | None = None,
         parent_run_id: str | None = None,
         run_trace_id: str | None = None,
+        timestamp: int | None = None,
     ) -> TResponseInputItem:
         """Add agency-specific metadata to a message.
 
@@ -56,6 +57,8 @@ class MessageFormatter:
             caller_agent: The sender agent name (None for user)
             agent_run_id: The current agent's execution ID
             parent_run_id: The calling agent's execution ID
+            timestamp: Optional timestamp in microseconds.
+                If None, either preserves existing timestamp or generates a new one.
 
         Returns:
             dict[str, Any]: Message with added metadata
@@ -71,7 +74,16 @@ class MessageFormatter:
             modified_message["run_trace_id"] = run_trace_id  # type: ignore[typeddict-unknown-key]
         # Use microsecond precision to reduce timestamp collisions
         # time.time() returns seconds since epoch; multiply to get microseconds
-        modified_message["timestamp"] = int(time.time() * 1_000_000)  # type: ignore[typeddict-unknown-key]
+        # Priority: explicit timestamp param > valid existing timestamp > generate new
+        if timestamp is not None:
+            modified_message["timestamp"] = timestamp  # type: ignore[typeddict-unknown-key]
+        else:
+            existing_ts = modified_message.get("timestamp")  # type: ignore[attr-defined]
+            # Validate existing timestamp is a positive int (microsecond epoch)
+            if isinstance(existing_ts, int) and existing_ts > 0:
+                pass  # preserve valid existing timestamp
+            else:
+                modified_message["timestamp"] = int(time.time() * 1_000_000)  # type: ignore[typeddict-unknown-key]
         # Add type field if not present (for easier parsing/navigation)
         if "type" not in modified_message:
             modified_message["type"] = "message"  # type: ignore[arg-type]
@@ -211,10 +223,15 @@ class MessageFormatter:
         agent: "Agent",
         run_items: list[RunItem],
         caller_agent: str | None = None,
+        timestamps_by_tool_id: dict[str, int] | None = None,
     ) -> list[TResponseInputItem]:
         """
         Extract hosted tool results (FileSearch, WebSearch) from assistant message content
         and create special assistant messages to capture search results in conversation history.
+
+        Args:
+            timestamps_by_tool_id: Optional mapping from tool call ID to emission timestamp.
+                If provided, synthetic outputs inherit the tool call's arrival time.
         """
         synthetic_outputs = []
 
@@ -280,6 +297,10 @@ class MessageFormatter:
                     search_results_content += f"File {file_count}: {file_id}\nContent: {content_text}\n\n"
 
                 if file_count > 0:
+                    # Use tool call's emission timestamp if available
+                    tool_timestamp = (
+                        timestamps_by_tool_id.get(tool_call.id) if timestamps_by_tool_id and tool_call.id else None
+                    )
                     synthetic_outputs.append(
                         MessageFormatter.add_agency_metadata(
                             {  # type: ignore[arg-type]
@@ -289,6 +310,7 @@ class MessageFormatter:
                             },
                             agent=tool_agent_name,
                             caller_agent=caller_agent,
+                            timestamp=tool_timestamp,
                         )
                     )
                     logger.debug(f"Created file_search results message for call_id: {tool_call.id}")
@@ -329,6 +351,10 @@ class MessageFormatter:
                             break  # Process only first available assistant message with content
 
                 if found_content:
+                    # Use tool call's emission timestamp if available
+                    tool_timestamp = (
+                        timestamps_by_tool_id.get(tool_call.id) if timestamps_by_tool_id and tool_call.id else None
+                    )
                     synthetic_outputs.append(
                         MessageFormatter.add_agency_metadata(
                             {  # type: ignore[arg-type]
@@ -338,6 +364,7 @@ class MessageFormatter:
                             },
                             agent=tool_agent_name,
                             caller_agent=caller_agent,
+                            timestamp=tool_timestamp,
                         )
                     )
                     logger.debug(f"Created web_search results message for call_id: {tool_call.id}")

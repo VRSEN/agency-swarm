@@ -14,7 +14,7 @@ from openai.types.responses import ResponseOutputMessage, ResponseOutputText
 
 from agency_swarm import Agency, Agent, StreamingRunResponse
 from agency_swarm.agent.core import AgencyContext
-from agency_swarm.agent.execution_streaming import _persist_streamed_items
+from agency_swarm.agent.execution_stream_persistence import StreamMetadataStore, _persist_streamed_items
 from agency_swarm.messages import MessageFormatter
 
 # --- Streaming Tests ---
@@ -585,6 +585,7 @@ async def test_streaming_persists_hosted_tool_outputs(
     class DummyStreamedResult:
         def __init__(self, input_history):
             self._input_history = input_history
+            self.new_items = [msg_item]  # Required for new persistence implementation
 
         def stream_events(self):
             async def _gen():
@@ -620,7 +621,7 @@ async def test_streaming_persists_hosted_tool_outputs(
     mock_thread_manager.replace_messages.reset_mock()
 
     with patch(
-        "agency_swarm.agent.execution_streaming.MessageFormatter.extract_hosted_tool_results",
+        "agency_swarm.agent.execution_stream_persistence.MessageFormatter.extract_hosted_tool_results",
         return_value=[hosted_message],
     ) as mock_extract:
         async for _ in minimal_agent.get_response_stream("search the files"):
@@ -653,29 +654,37 @@ def test_streaming_forwarded_items_preserve_caller_metadata(monkeypatch, mock_th
 
     agency_context = AgencyContext(agency_instance=MagicMock(), thread_manager=mock_thread_manager)
 
+    # Track metadata for the forwarded item - this simulates what happens during streaming
+    # when the item's caller is captured (4-tuple: agent_name, agent_run_id, caller_name, timestamp)
+    metadata_store = StreamMetadataStore(
+        by_item={id(forwarded_item): (analyst.name, "agent_run_analyst", worker.name, 1000000)}
+    )
+
     class DummyStreamResult:
+        def __init__(self):
+            self.new_items = [forwarded_item]  # Provide actual RunItem objects
+
         def to_input_list(self) -> list[dict[str, object]]:
             return [forwarded_payload]
 
     stream_result = DummyStreamResult()
 
     monkeypatch.setattr(
-        "agency_swarm.agent.execution_streaming.MessageFormatter.extract_hosted_tool_results",
+        "agency_swarm.agent.execution_stream_persistence.MessageFormatter.extract_hosted_tool_results",
         lambda *args, **kwargs: [],
     )
     monkeypatch.setattr(
-        "agency_swarm.agent.execution_streaming.MessageFilter.should_filter",
+        "agency_swarm.agent.execution_stream_persistence.MessageFilter.should_filter",
         lambda _item: False,
     )
     monkeypatch.setattr(
-        "agency_swarm.agent.execution_streaming.MessageFilter.filter_messages",
+        "agency_swarm.agent.execution_stream_persistence.MessageFilter.filter_messages",
         lambda items: items,
     )
 
     _persist_streamed_items(
         streaming_result=stream_result,
-        history_for_runner=[],
-        persistence_candidates=[],
+        metadata_store=metadata_store,
         collected_items=[forwarded_item],
         agent=worker,
         sender_name="Manager",
@@ -693,3 +702,180 @@ def test_streaming_forwarded_items_preserve_caller_metadata(monkeypatch, mock_th
     assert saved_entry.get("callerAgent") == worker.name, (
         "Forwarded item should retain the original caller, not the top-level sender"
     )
+
+
+@pytest.mark.asyncio
+@patch("agents.Runner.run_streamed")
+async def test_streaming_persists_items_with_timestamps(
+    mock_runner_run_streamed_patch,
+    minimal_agent,
+    mock_thread_manager,
+):
+    """End-to-end test verifying that streaming persists items with timestamps.
+
+    This tests that items persisted through the streaming flow have timestamps attached.
+    """
+    msg_item_1 = MessageOutputItem(
+        raw_item=ResponseOutputMessage(
+            id="msg_e2e_1",
+            content=[ResponseOutputText(text="First", type="output_text", annotations=[])],
+            role="assistant",
+            status="completed",
+            type="message",
+        ),
+        type="message_output_item",
+        agent=minimal_agent,
+    )
+    msg_item_2 = MessageOutputItem(
+        raw_item=ResponseOutputMessage(
+            id="msg_e2e_2",
+            content=[ResponseOutputText(text="Second", type="output_text", annotations=[])],
+            role="assistant",
+            status="completed",
+            type="message",
+        ),
+        type="message_output_item",
+        agent=minimal_agent,
+    )
+
+    async def mock_stream():
+        yield RunItemStreamEvent(name="message_output_created", item=msg_item_1, type="run_item_stream_event")
+        yield RunItemStreamEvent(name="message_output_created", item=msg_item_2, type="run_item_stream_event")
+
+    class DummyStreamedResult:
+        def __init__(self):
+            self.new_items = [msg_item_1, msg_item_2]
+
+        def stream_events(self):
+            return mock_stream()
+
+        def to_input_list(self):
+            return [msg_item_1.to_input_item(), msg_item_2.to_input_item()]
+
+        def cancel(self, mode=None):
+            pass
+
+    mock_runner_run_streamed_patch.return_value = DummyStreamedResult()
+
+    events = []
+    async for event in minimal_agent.get_response_stream("test"):
+        events.append(event)
+
+    # Verify at least 2 events were streamed
+    assert len(events) >= 2, "Should have streamed at least 2 events"
+
+    # Verify replace_messages was called (final persistence)
+    assert mock_thread_manager.replace_messages.called, "Should persist messages"
+    persisted = mock_thread_manager.replace_messages.call_args[0][0]
+
+    # Find the persisted items
+    saved_by_id = {item.get("id"): item for item in persisted if isinstance(item, dict)}
+
+    # Both items should have timestamps
+    if "msg_e2e_1" in saved_by_id:
+        ts1 = saved_by_id["msg_e2e_1"].get("timestamp")
+        assert ts1 is not None, "First message should have a timestamp"
+
+    if "msg_e2e_2" in saved_by_id:
+        ts2 = saved_by_id["msg_e2e_2"].get("timestamp")
+        assert ts2 is not None, "Second message should have a timestamp"
+
+    # Timestamps should be in non-decreasing order (may be equal if processed quickly)
+    if "msg_e2e_1" in saved_by_id and "msg_e2e_2" in saved_by_id:
+        ts1 = saved_by_id["msg_e2e_1"].get("timestamp", 0)
+        ts2 = saved_by_id["msg_e2e_2"].get("timestamp", 0)
+        assert ts1 <= ts2, f"Timestamps should be in non-decreasing order: first ({ts1}) <= second ({ts2})"
+
+
+def test_persist_streamed_items_uses_python_object_id_matching(monkeypatch, mock_thread_manager):
+    """Verify metadata is correctly matched using Python object id().
+
+    This tests that the new matching approach using Python object identity works
+    correctly regardless of message ID values (works for both OpenAI and LiteLLM).
+    """
+    agent = Agent(name="TestAgent", instructions="Test object id matching")
+
+    # Create two message items
+    msg_item_1 = MessageOutputItem(
+        raw_item=ResponseOutputMessage(
+            id="msg_1",
+            content=[ResponseOutputText(text="First message", type="output_text", annotations=[])],
+            role="assistant",
+            status="completed",
+            type="message",
+        ),
+        type="message_output_item",
+        agent=agent,
+    )
+    msg_item_2 = MessageOutputItem(
+        raw_item=ResponseOutputMessage(
+            id="msg_2",
+            content=[ResponseOutputText(text="Second message", type="output_text", annotations=[])],
+            role="assistant",
+            status="completed",
+            type="message",
+        ),
+        type="message_output_item",
+        agent=agent,
+    )
+
+    # Track metadata by Python object id() - simulating what happens during streaming
+    # 4-tuple: (agent_name, agent_run_id, caller_name, timestamp)
+    metadata_store = StreamMetadataStore(
+        by_item={
+            id(msg_item_1): ("Agent1", "run_1", "Caller1", 1000000),
+            id(msg_item_2): ("Agent2", "run_2", "Caller2", 2000000),
+        }
+    )
+
+    class DummyStreamResult:
+        def __init__(self):
+            self.new_items = [msg_item_1, msg_item_2]
+
+        def to_input_list(self) -> list[dict[str, object]]:
+            return [msg_item_1.to_input_item(), msg_item_2.to_input_item()]
+
+    stream_result = DummyStreamResult()
+    agency_context = AgencyContext(agency_instance=MagicMock(), thread_manager=mock_thread_manager)
+
+    monkeypatch.setattr(
+        "agency_swarm.agent.execution_stream_persistence.MessageFormatter.extract_hosted_tool_results",
+        lambda *args, **kwargs: [],
+    )
+    monkeypatch.setattr(
+        "agency_swarm.agent.execution_stream_persistence.MessageFilter.should_filter",
+        lambda _item: False,
+    )
+    monkeypatch.setattr(
+        "agency_swarm.agent.execution_stream_persistence.MessageFilter.filter_messages",
+        lambda items: items,
+    )
+
+    _persist_streamed_items(
+        streaming_result=stream_result,
+        metadata_store=metadata_store,
+        collected_items=[msg_item_1, msg_item_2],
+        agent=agent,
+        sender_name=None,
+        parent_run_id=None,
+        run_trace_id="trace_obj_id",
+        fallback_agent_run_id="run_fallback",
+        agency_context=agency_context,
+        initial_saved_count=0,
+    )
+
+    mock_thread_manager.replace_messages.assert_called()
+    persisted = mock_thread_manager.replace_messages.call_args[0][0]
+    assert len(persisted) >= 2, "Both items should be persisted"
+
+    # Find the persisted items by their message id
+    saved_by_id = {item.get("id"): item for item in persisted if isinstance(item, dict)}
+
+    # Verify metadata was correctly matched using Python object id()
+    assert saved_by_id["msg_1"]["agent"] == "Agent1", "First message should have Agent1"
+    assert saved_by_id["msg_1"]["agent_run_id"] == "run_1", "First message should have run_1"
+    assert saved_by_id["msg_1"]["callerAgent"] == "Caller1", "First message should have Caller1"
+
+    assert saved_by_id["msg_2"]["agent"] == "Agent2", "Second message should have Agent2"
+    assert saved_by_id["msg_2"]["agent_run_id"] == "run_2", "Second message should have run_2"
+    assert saved_by_id["msg_2"]["callerAgent"] == "Caller2", "Second message should have Caller2"

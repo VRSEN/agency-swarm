@@ -1,3 +1,9 @@
+import hashlib
+import logging
+import time
+import uuid
+from collections import deque
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, cast
 
 from agents import TResponseInputItem
@@ -6,6 +12,91 @@ from agents.models.fake_id import FAKE_RESPONSES_ID
 
 from agency_swarm.messages import MessageFilter, MessageFormatter
 from agency_swarm.utils.citation_extractor import extract_direct_file_annotations
+
+logger = logging.getLogger(__name__)
+
+# Type alias for metadata stored during streaming.
+# Tuple of (agent_name, agent_run_id, caller_name, emission_timestamp).
+# Used to match RunItems between streaming and final persistence.
+ItemMetadata = tuple[str, str, str | None, int]
+
+# Key types for by_item dictionary:
+# - int: Python object id() for identity matching
+# - (str, str | None): (message_id, item_type) for OpenAI recreated objects
+# - ("call", str, str | None): (marker, call_id, item_type) for tool calls
+MetadataKey = int | tuple[str, str | None] | tuple[str, str, str | None]
+
+# Hash keys use a queue structure to handle identical content items.
+HashKey = tuple[str, str | None]  # (content_hash, item_type)
+
+
+@dataclass
+class StreamMetadataStore:
+    """Container for metadata collected during streaming.
+
+    Stores metadata by various keys for matching items between streaming
+    and final persistence. Hash-based matching uses queues to preserve
+    metadata for all identical items.
+    """
+
+    by_item: dict[MetadataKey, ItemMetadata] = field(default_factory=dict)
+    hash_queues: dict[HashKey, deque[ItemMetadata]] = field(default_factory=dict)
+
+
+def _compute_content_hash(run_item: RunItem) -> str | None:
+    """Compute a hash of the item's content for matching when IDs fail.
+
+    Used as fallback for LiteLLM where message IDs are __fake_id__ and
+    object identity is not preserved (e.g., reasoning_item, handoff_output_item).
+    """
+    try:
+        raw_item = getattr(run_item, "raw_item", None)
+        if raw_item is None:
+            return None
+
+        item_type = getattr(run_item, "type", None)
+        content_parts: list[str] = [str(item_type)]
+
+        # ReasoningItem: has summary field (list of SummaryText)
+        if hasattr(raw_item, "summary"):
+            summary = raw_item.summary
+            if isinstance(summary, list):
+                for part in summary:
+                    if hasattr(part, "text"):
+                        content_parts.append(str(part.text))
+            elif summary:
+                content_parts.append(str(summary))
+
+        # MessageOutputItem: has content field (list of ResponseOutputText etc.)
+        if hasattr(raw_item, "content") and isinstance(raw_item.content, list):
+            for content_item in raw_item.content:
+                if hasattr(content_item, "text"):
+                    content_parts.append(str(content_item.text))
+
+        # HandoffOutputItem: has output field (JSON string or dict)
+        if hasattr(raw_item, "output"):
+            content_parts.append(str(raw_item.output))
+        elif isinstance(raw_item, dict) and "output" in raw_item:
+            content_parts.append(str(raw_item["output"]))
+
+        # ToolCallItem: has name and arguments
+        if hasattr(raw_item, "name"):
+            content_parts.append(str(raw_item.name))
+        if hasattr(raw_item, "arguments"):
+            content_parts.append(str(raw_item.arguments))
+
+        # Fallback: try generic text field
+        if len(content_parts) == 1 and hasattr(raw_item, "text"):
+            content_parts.append(str(raw_item.text))
+
+        if len(content_parts) == 1:
+            return None  # No content to hash
+
+        content_str = "|".join(content_parts)
+        return hashlib.sha256(content_str.encode()).hexdigest()[:16]
+    except Exception:
+        return None
+
 
 if TYPE_CHECKING:
     from agency_swarm.agent.core import AgencyContext, Agent
@@ -30,7 +121,7 @@ def _update_names_from_event(
                 target = MessageFormatter.extract_handoff_target_name(item) if item is not None else None
                 if target:
                     current_stream_agent_name = target
-                    current_agent_run_id = f"agent_run_{__import__('uuid').uuid4().hex}"
+                    current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
         elif getattr(event, "type", None) == "agent_updated_stream_event":
             new_agent = getattr(event, "new_agent", None)
             if new_agent is not None and hasattr(new_agent, "name") and new_agent.name:
@@ -39,7 +130,7 @@ def _update_names_from_event(
                 if isinstance(event_id, str) and event_id:
                     current_agent_run_id = event_id
                 else:
-                    current_agent_run_id = f"agent_run_{__import__('uuid').uuid4().hex}"
+                    current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
                 master_context_for_run._current_agent_run_id = current_agent_run_id
     except Exception:
         pass
@@ -69,13 +160,14 @@ def _persist_run_item_if_needed(
     current_stream_agent_name: str,
     current_agent_run_id: str,
     agency_context: "AgencyContext | None",
-    persistence_candidates: list[tuple[RunItem, str, str, str | None]],
+    metadata_store: StreamMetadataStore,
 ) -> None:
     """Persist run item to thread manager with agency metadata if applicable."""
     run_item_obj = getattr(event, "item", None)
-    if run_item_obj is None or getattr(event, "_forwarded", False):
+    if run_item_obj is None:
         return
 
+    is_forwarded = getattr(event, "_forwarded", False)
     if not agency_context or not agency_context.thread_manager:
         return
 
@@ -97,24 +189,64 @@ def _persist_run_item_if_needed(
         parent_run_id=parent_run_id,
         run_trace_id=run_trace_id,
     )
-    if not MessageFilter.should_filter(formatted_item):
+
+    # Skip per-event persistence for forwarded items (they're persisted by their originating agent)
+    # but continue to capture metadata below for final persistence matching
+    if not is_forwarded and not MessageFilter.should_filter(formatted_item):
         agency_context.thread_manager.add_messages([formatted_item])  # type: ignore[arg-type]
 
-    run_item_id, call_id = _extract_identifiers(run_item_obj)
-    if run_item_id or call_id:
-        tool_run_agent = getattr(run_item_obj, "agent", None)
-        tool_agent_name = getattr(tool_run_agent, "name", None) if tool_run_agent is not None else None
-        if not isinstance(tool_agent_name, str) or not tool_agent_name:
-            tool_agent_name = current_stream_agent_name
+    # Capture the timestamp that was just generated for this item
+    _ts = formatted_item.get("timestamp")
+    emission_timestamp: int = _ts if isinstance(_ts, int) else int(time.time() * 1_000_000)
 
-        persistence_candidates.append((run_item_obj, tool_agent_name, current_agent_run_id, caller_for_event))
+    # Prefer agent name from the item itself (more reliable than current_stream_agent_name
+    # which depends on event parsing). Fall back to current_stream_agent_name if not available.
+    item_agent = getattr(run_item_obj, "agent", None)
+    item_agent_name = getattr(item_agent, "name", None) if item_agent is not None else None
+    if not isinstance(item_agent_name, str) or not item_agent_name:
+        item_agent_name = current_stream_agent_name
+
+    # Track metadata using multiple keys for matching in _persist_streamed_items:
+    # 1. Python object id() - works for items that maintain identity (e.g., tool_call_output_item)
+    # 2. Message ID - works for OpenAI Responses API (items may be recreated but keep same ID)
+    obj_id = id(run_item_obj)
+    raw_item = getattr(run_item_obj, "raw_item", None)
+    item_id = getattr(run_item_obj, "id", None)
+    if not item_id:
+        # Handle both dict-backed and object-backed raw_items
+        item_id = raw_item.get("id") if isinstance(raw_item, dict) else getattr(raw_item, "id", None)
+    item_type = getattr(run_item_obj, "type", None)
+    # Store (agent_name, agent_run_id, caller_name, timestamp)
+    metadata = (item_agent_name, current_agent_run_id, caller_for_event, emission_timestamp)
+
+    # Store by Python object ID (primary)
+    metadata_store.by_item[obj_id] = metadata
+    # Also store by message ID if available and not fake (for matching recreated objects)
+    if isinstance(item_id, str) and item_id and item_id != FAKE_RESPONSES_ID:
+        metadata_store.by_item[(item_id, item_type)] = metadata
+    # Also store by call_id for tool_call_item (works for LiteLLM where message ID is fake)
+    call_id = getattr(run_item_obj, "call_id", None)
+    if not call_id:
+        call_id = raw_item.get("call_id") if isinstance(raw_item, dict) else getattr(raw_item, "call_id", None)
+    has_call_id = isinstance(call_id, str) and call_id
+    if has_call_id:
+        call_key = cast(tuple[str, str, str | None], ("call", call_id, item_type))
+        metadata_store.by_item[call_key] = metadata
+    # Store by content hash for items without reliable IDs (e.g., reasoning_item with LiteLLM)
+    needs_hash_fallback = (
+        not isinstance(item_id, str) or not item_id or item_id == FAKE_RESPONSES_ID
+    ) and not has_call_id
+    if needs_hash_fallback:
+        content_hash = _compute_content_hash(run_item_obj)
+        if content_hash:
+            hash_key: HashKey = (content_hash, item_type)
+            metadata_store.hash_queues.setdefault(hash_key, deque()).append(metadata)
 
 
 def _persist_streamed_items(
     *,
     streaming_result: Any,
-    history_for_runner: list[TResponseInputItem],
-    persistence_candidates: list[tuple[RunItem, str, str, str | None]],
+    metadata_store: StreamMetadataStore,
     collected_items: list[RunItem],
     agent: "Agent",
     sender_name: str | None,
@@ -128,25 +260,15 @@ def _persist_streamed_items(
     if agency_context.thread_manager is None:
         return
 
-    try:
-        new_history = streaming_result.to_input_list()
-    except Exception:  # Defensive: fall back to existing behavior
-        return
-
-    new_items = [item for item in new_history[len(history_for_runner) :] if isinstance(item, dict)]
+    # Get new_items directly from streaming_result - these are the same Python objects
+    # that were emitted during streaming via RunItemStreamEvent
+    new_items: list[RunItem] = getattr(streaming_result, "new_items", None) or []
     if not new_items:
+        logger.warning(
+            "streaming_result.new_items is empty or missing - skipping final persistence. "
+            "This may indicate a guardrail trip (expected) or an SDK issue (unexpected)."
+        )
         return
-
-    id_map: dict[str, tuple[RunItem, str, str, str | None]] = {}
-    call_map: dict[str, tuple[RunItem, str, str, str | None]] = {}
-    for run_item, agent_name, agent_run_id, caller_name in reversed(persistence_candidates):
-        run_item_id, call_id = _extract_identifiers(run_item)
-        # Skip placeholder ID from LiteLLM/Chat Completions models
-        # to avoid collision when multiple items share the same placeholder ID
-        if run_item_id and run_item_id != FAKE_RESPONSES_ID and run_item_id not in id_map:
-            id_map[run_item_id] = (run_item, agent_name, agent_run_id, caller_name)
-        if call_id and call_id not in call_map:
-            call_map[call_id] = (run_item, agent_name, agent_run_id, caller_name)
 
     assistant_messages = [item for item in collected_items if isinstance(item, MessageOutputItem)]
     citations_by_message = (
@@ -157,31 +279,80 @@ def _persist_streamed_items(
     current_agent_name = agent.name
     current_agent_run_id = fallback_agent_run_id
 
-    for item_dict in new_items:
+    for run_item in new_items:
+        # Convert RunItem to dict representation
+        item_dict = run_item.to_input_item()
+        if not isinstance(item_dict, dict):
+            continue
         item_copy: dict[str, Any] = dict(item_dict)
 
-        run_item_obj: RunItem | None = None
-        run_item_id = item_copy.get("id")
-        call_id = item_copy.get("call_id")
-        caller_name = _resolve_caller_agent(item_copy, sender_name)
+        # Look up metadata using hybrid matching:
+        # 1. Try Python object id() first (works for items that maintain identity)
+        # 2. Try message ID + type (works for OpenAI where items may be recreated)
+        obj_id = id(run_item)
+        raw_item = getattr(run_item, "raw_item", None)
+        item_id = getattr(run_item, "id", None)
+        if not item_id:
+            item_id = raw_item.get("id") if isinstance(raw_item, dict) else getattr(raw_item, "id", None)
+        item_type = getattr(run_item, "type", None)
 
-        mapped_values: tuple[RunItem, str, str, str | None] | None = None
-        if isinstance(run_item_id, str) and run_item_id in id_map:
-            mapped_values = id_map[run_item_id]
-        elif isinstance(call_id, str) and call_id in call_map:
-            mapped_values = call_map[call_id]
-        else:
-            run_item_obj = next((ri for ri in collected_items if getattr(ri, "id", None) == run_item_id), None)
+        # Try matching by call_id for tool calls (works for LiteLLM)
+        call_id = getattr(run_item, "call_id", None)
+        if not call_id:
+            call_id = raw_item.get("call_id") if isinstance(raw_item, dict) else getattr(raw_item, "call_id", None)
 
-        if mapped_values is not None:
-            run_item_obj, current_agent_name, current_agent_run_id, caller_name = mapped_values
+        matched = False
+        emission_timestamp: int | None = None
+
+        # Try matching strategies in order of preference:
+        # 1. Python object id() - most reliable, works when objects maintain identity
+        if obj_id in metadata_store.by_item:
+            current_agent_name, current_agent_run_id, caller_name, emission_timestamp = metadata_store.by_item[obj_id]
+            matched = True
+
+        # 2. Message ID + type - works for OpenAI where items may be recreated
+        if not matched and isinstance(item_id, str) and item_id and item_id != FAKE_RESPONSES_ID:
+            id_key = (item_id, item_type)
+            if id_key in metadata_store.by_item:
+                current_agent_name, current_agent_run_id, caller_name, emission_timestamp = metadata_store.by_item[
+                    id_key
+                ]
+                matched = True
+
+        # 3. Call ID + type - works for tool calls with LiteLLM (FAKE_RESPONSES_ID)
+        if not matched and isinstance(call_id, str) and call_id:
+            call_key = ("call", call_id, item_type)
+            if call_key in metadata_store.by_item:
+                current_agent_name, current_agent_run_id, caller_name, emission_timestamp = metadata_store.by_item[
+                    call_key
+                ]
+                matched = True
+
+        # 4. Content hash matching as last resort (for reasoning_item with LiteLLM)
+        # Use queues preserve metadata for identical items - pop from front (FIFO)
+        if not matched:
+            content_hash = _compute_content_hash(run_item)
+            if content_hash:
+                hash_key: HashKey = (content_hash, item_type)
+                if hash_key in metadata_store.hash_queues and metadata_store.hash_queues[hash_key]:
+                    current_agent_name, current_agent_run_id, caller_name, emission_timestamp = (
+                        metadata_store.hash_queues[hash_key].popleft()
+                    )
+                    matched = True
+
+        if not matched:
+            # Fallback for items not seen during streaming (shouldn't happen normally)
+            logger.debug(f"Metadata fallback for unmatched item type={item_type} - using persist-time timestamp")
+            caller_name = _resolve_caller_agent(item_copy, sender_name)
+            current_agent_name = agent.name
+            current_agent_run_id = fallback_agent_run_id
+            # Re-generate timestamp to ensure it's fresh
+            emission_timestamp = int(time.time() * 1_000_000)
 
         item_payload = cast(TResponseInputItem, item_copy)
 
-        if run_item_obj and isinstance(run_item_obj, MessageOutputItem):
-            MessageFormatter.add_citations_to_message(
-                run_item_obj, item_payload, citations_by_message, is_streaming=True
-            )
+        if isinstance(run_item, MessageOutputItem):
+            MessageFormatter.add_citations_to_message(run_item, item_payload, citations_by_message, is_streaming=True)
 
         formatted_item: TResponseInputItem = MessageFormatter.add_agency_metadata(
             item_payload,
@@ -190,11 +361,13 @@ def _persist_streamed_items(
             agent_run_id=current_agent_run_id,
             parent_run_id=parent_run_id,
             run_trace_id=run_trace_id,
+            timestamp=emission_timestamp,
         )
         items_to_save.append(formatted_item)
 
-        if run_item_obj and getattr(run_item_obj, "type", None) == "handoff_output_item":
-            target = MessageFormatter.extract_handoff_target_name(run_item_obj)
+        # Update state for handoffs
+        if getattr(run_item, "type", None) == "handoff_output_item":
+            target = MessageFormatter.extract_handoff_target_name(run_item)
             if target:
                 current_agent_name = target
         else:
@@ -211,7 +384,18 @@ def _persist_streamed_items(
         if isinstance(origin := item.get("message_origin"), str)
     }
 
-    hosted_tool_outputs = MessageFormatter.extract_hosted_tool_results(agent, collected_items, sender_name)
+    # Build timestamp mapping for hosted tool calls (file_search, web_search)
+    timestamps_by_tool_id: dict[str, int] = {}
+    for item in filtered_items:
+        if isinstance(item, dict):
+            call_id = item.get("call_id")
+            ts = item.get("timestamp")
+            if isinstance(call_id, str) and isinstance(ts, int):
+                timestamps_by_tool_id[call_id] = ts
+
+    hosted_tool_outputs = MessageFormatter.extract_hosted_tool_results(
+        agent, collected_items, sender_name, timestamps_by_tool_id
+    )
     if hosted_tool_outputs:
         filtered_hosted_outputs = MessageFilter.filter_messages(hosted_tool_outputs)  # type: ignore[arg-type]
         for hosted_item in filtered_hosted_outputs:
@@ -233,25 +417,21 @@ def _persist_streamed_items(
 
     mutable_tail = existing_messages[initial_index:]
 
+    # Only collect run_ids from items that are actually being saved (filtered_items).
     run_ids_to_replace: set[str] = {
         run_id for item in filtered_items if isinstance(run_id := item.get("agent_run_id"), str)
     }
-    for _run_item, _, agent_run_id, _caller_name in reversed(persistence_candidates):
-        if isinstance(agent_run_id, str):
-            run_ids_to_replace.add(agent_run_id)
 
     keys_to_replace: set[tuple[str, str | None, str | None]] = set()
-    for run_item, _, _, _caller_name in reversed(persistence_candidates):
-        run_id, call_id = _extract_identifiers(run_item)
-        if isinstance(run_id, str):
-            keys_to_replace.add(("id", run_id, getattr(run_item, "type", None)))
-        if isinstance(call_id, str):
-            keys_to_replace.add(("call", call_id, getattr(run_item, "type", None)))
-
     for item in filtered_items:
-        msg_key = _message_key(item)
-        if msg_key is not None:
-            keys_to_replace.add(msg_key)
+        item_id = item.get("id")
+        call_id = item.get("call_id")
+        item_type = item.get("type")
+        # Add both id and call_id keys if present (skip placeholder IDs)
+        if isinstance(item_id, str) and item_id and item_id != FAKE_RESPONSES_ID:
+            keys_to_replace.add(("id", item_id, item_type))
+        if isinstance(call_id, str) and call_id:
+            keys_to_replace.add(("call", call_id, item_type))
 
     rebuilt_tail: list[TResponseInputItem] = []
     for existing_item in mutable_tail:
@@ -276,32 +456,6 @@ def _persist_streamed_items(
 
     agency_context.thread_manager.replace_messages(sanitized_history)
     agency_context.thread_manager.persist()
-
-
-def _extract_identifiers(run_item: RunItem) -> tuple[str | None, str | None]:
-    run_item_id = getattr(run_item, "id", None)
-    call_id = getattr(run_item, "call_id", None)
-
-    raw_item = getattr(run_item, "raw_item", None)
-    if isinstance(raw_item, dict):
-        raw_id = raw_item.get("id")
-        raw_call = raw_item.get("call_id")
-        if isinstance(raw_id, str) and not isinstance(run_item_id, str):
-            run_item_id = raw_id
-        if isinstance(raw_call, str) and not isinstance(call_id, str):
-            call_id = raw_call
-    elif raw_item is not None:
-        raw_id = getattr(raw_item, "id", None)
-        raw_call = getattr(raw_item, "call_id", None)
-        if isinstance(raw_id, str) and not isinstance(run_item_id, str):
-            run_item_id = raw_id
-        if isinstance(raw_call, str) and not isinstance(call_id, str):
-            call_id = raw_call
-
-    return (
-        run_item_id if isinstance(run_item_id, str) else None,
-        call_id if isinstance(call_id, str) else None,
-    )
 
 
 def _message_key(message: TResponseInputItem) -> tuple[str, str | None, str | None] | None:
