@@ -60,10 +60,11 @@ async def test_context_sharing_between_agents():
 
     # Agent1 stores data
     response1 = await agency.get_response(
-        "Store 'shared_key' with value 'shared_value'",
+        "Store shared_key with value shared_value",
         recipient_agent=agent1,
     )
-    assert "shared_value" in response1.final_output
+    tool_outputs_1 = [item.output for item in response1.new_items if hasattr(item, "output")]
+    assert any("Stored shared_key=shared_value" in str(output) for output in tool_outputs_1)
 
     # Verify data is in agency context
     assert agency.user_context.get("shared_key") == "shared_value"
@@ -71,14 +72,15 @@ async def test_context_sharing_between_agents():
 
     # Directly ask Agent2 to retrieve the data
     response2 = await agency.get_response(
-        "Get the value for 'shared_key'",
+        "Get the value for shared_key",
         recipient_agent=agent2,
     )
-    assert "shared_value" in response2.final_output
+    tool_outputs_2 = [item.output for item in response2.new_items if hasattr(item, "output")]
+    assert any("Value for shared_key: shared_value" in str(output) for output in tool_outputs_2)
 
     # Agent2 can also store data that's visible to the agency
     await agency.get_response(
-        "Store 'agent2_key' with value 'agent2_value'",
+        "Store agent2_key with value agent2_value",
         recipient_agent=agent2,
     )
 
@@ -88,7 +90,8 @@ async def test_context_sharing_between_agents():
 
     # Retrieve Agent2's data directly from Agent2
     response4 = await agency.get_response(
-        "Get the value for 'agent2_key'",
+        "Get the value for agent2_key",
         recipient_agent=agent2,
     )
-    assert "agent2_value" in response4.final_output
+    tool_outputs_4 = [item.output for item in response4.new_items if hasattr(item, "output")]
+    assert any("Value for agent2_key: agent2_value" in str(output) for output in tool_outputs_4)

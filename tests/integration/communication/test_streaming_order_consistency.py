@@ -321,7 +321,7 @@ async def test_nested_delegation_streaming() -> None:
             "Then use send_message to ask AgentB to process and analyze data. "
             "Finally respond with 'Complete'."
         ),
-        model_settings=ModelSettings(temperature=0.0),
+        model="gpt-5-mini",
         tools=[],
     )
 
@@ -334,7 +334,8 @@ async def test_nested_delegation_streaming() -> None:
             "Then use process_data tool with the response. "
             "Finally respond 'Processed'."
         ),
-        model_settings=ModelSettings(temperature=0.0),
+        model="gpt-5-mini",
+        model_settings=ModelSettings(tool_choice="required"),
         tools=[process_data],
     )
 
@@ -342,7 +343,8 @@ async def test_nested_delegation_streaming() -> None:
         name="AgentC",
         description="Risk analyzer",
         instructions="When asked: use analyze_risk tool and respond 'Risk analyzed'.",
-        model_settings=ModelSettings(temperature=0.0),
+        model="gpt-5-mini",
+        model_settings=ModelSettings(tool_choice="required"),
         tools=[analyze_risk],
     )
 
