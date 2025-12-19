@@ -29,7 +29,8 @@ logger = logging.getLogger(__name__)
 _INPUT_GUARDRAIL_WRAPPED_ATTR = "_agency_swarm_input_guardrail_wrapped"
 
 # Agency Swarm defaults applied when the SDK leaves a field unset
-_FRAMEWORK_DEFAULT_MODEL_SETTINGS = ModelSettings(truncation="auto")
+# include_usage=True enables streaming usage tracking for LiteLLM models
+_FRAMEWORK_DEFAULT_MODEL_SETTINGS = ModelSettings(truncation="auto", include_usage=True)
 
 
 def _get_framework_default_model_settings(model: str | None = None) -> ModelSettings:

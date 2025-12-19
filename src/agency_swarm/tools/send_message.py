@@ -378,13 +378,15 @@ class SendMessage(FunctionTool):
                 # Create agency context for the recipient agent
                 recipient_agency_context = self._create_recipient_agency_context(wrapper)
 
-                async for event in self.recipient_agent.get_response_stream(
+                stream = self.recipient_agent.get_response_stream(
                     message=message_content,
                     sender_name=self.sender_agent.name,
                     additional_instructions=additional_instructions or None,
                     agency_context=recipient_agency_context,
                     parent_run_id=tool_call_id,  # Use tool_call_id as parent_run_id
-                ):
+                )
+
+                async for event in stream:
                     # Non-destructively add agent/caller and attach IDs
                     event = add_agent_name_to_event(
                         event,
@@ -429,8 +431,28 @@ class SendMessage(FunctionTool):
                             f"Error getting response from the agent: {event.get('content', 'Unknown error')}"
                         )
 
+                # Get final result from stream after it completes
+                final_result = getattr(stream, "final_result", None)
+
                 if tool_calls_seen:
                     logger.info(f"Sub-agent '{recipient_name_for_call}' executed tools: {tool_calls_seen}")
+
+                # Merge sub-agent raw_responses into parent's raw_responses for per-response cost calculation
+                if final_result and wrapper and wrapper.context:
+                    try:
+                        sub_raw_responses = getattr(final_result, "raw_responses", None)
+                        if sub_raw_responses:
+                            # Get sub-agent's model name for accurate per-response pricing
+                            sub_agent_model = getattr(self.recipient_agent, "model", None)
+                            if not sub_agent_model:
+                                model_settings = getattr(self.recipient_agent, "model_settings", None)
+                                if model_settings:
+                                    sub_agent_model = getattr(model_settings, "model", None)
+                            # Store tuples of (model_name, response) for per-model cost calculation
+                            for resp in sub_raw_responses:
+                                wrapper.context._sub_agent_raw_responses.append((sub_agent_model, resp))
+                    except Exception as e:
+                        logger.debug(f"Could not store sub-agent raw_responses: {e}")
 
                 logger.info(
                     f"Received response via tool '{self.name}' from '{recipient_name_for_call}': "
@@ -450,6 +472,23 @@ class SendMessage(FunctionTool):
                     agency_context=recipient_agency_context,
                     parent_run_id=tool_call_id,  # Use tool_call_id as parent_run_id
                 )
+
+                # Merge sub-agent raw_responses into parent's raw_responses for per-response cost calculation
+                if response and wrapper and wrapper.context:
+                    try:
+                        sub_raw_responses = getattr(response, "raw_responses", None)
+                        if sub_raw_responses:
+                            # Get sub-agent's model name for accurate per-response pricing
+                            sub_agent_model = getattr(self.recipient_agent, "model", None)
+                            if not sub_agent_model:
+                                model_settings = getattr(self.recipient_agent, "model_settings", None)
+                                if model_settings:
+                                    sub_agent_model = getattr(model_settings, "model", None)
+                            # Store tuples of (model_name, response) for per-model cost calculation
+                            for resp in sub_raw_responses:
+                                wrapper.context._sub_agent_raw_responses.append((sub_agent_model, resp))
+                    except Exception as e:
+                        logger.debug(f"Could not store sub-agent raw_responses: {e}")
 
             current_final_output = response.final_output
             if current_final_output is None:

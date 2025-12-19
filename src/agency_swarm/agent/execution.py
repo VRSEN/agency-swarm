@@ -2,7 +2,7 @@ import asyncio
 import logging
 import uuid
 from collections.abc import AsyncGenerator
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from agents import (
     RunConfig,
@@ -135,6 +135,33 @@ class Execution:
                 validation_attempts=int(getattr(self.agent, "validation_attempts", 1) or 0),
                 throw_input_guardrail_error=getattr(self.agent, "throw_input_guardrail_error", False),
             )
+
+            # Store sub-agent raw_responses with model info for per-response cost calculation
+            # These are tuples of (model_name, response) to enable accurate per-model pricing
+            if run_result and master_context_for_run:
+                try:
+                    sub_raw_responses = master_context_for_run._sub_agent_raw_responses
+                    if sub_raw_responses:
+                        # Store on run_result for access during cost calculation
+                        cast(Any, run_result)._sub_agent_responses_with_model = list(sub_raw_responses)
+                        # Clear after copying to avoid duplicates
+                        master_context_for_run._sub_agent_raw_responses.clear()
+                except Exception as e:
+                    logger.debug(f"Could not store sub-agent raw_responses on RunResult: {e}")
+
+            # Store main agent's model on run_result for automatic cost calculation
+            if run_result:
+                try:
+                    main_model = getattr(self.agent, "model", None)
+                    if not main_model:
+                        model_settings = getattr(self.agent, "model_settings", None)
+                        if model_settings:
+                            main_model = getattr(model_settings, "model", None)
+                    if main_model:
+                        cast(Any, run_result)._main_agent_model = main_model
+                except Exception as e:
+                    logger.debug(f"Could not store main agent model on RunResult: {e}")
+
             completion_info = (
                 f"Output Type: {type(run_result.final_output).__name__}"
                 if run_result.final_output is not None

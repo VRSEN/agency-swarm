@@ -164,7 +164,9 @@ def list_chat_records() -> list[dict[str, Any]]:
     return scan_records
 
 
-def save_current_chat(agency_instance: Any, chat_id: str) -> None:
+def save_current_chat(
+    agency_instance: Any, chat_id: str, usage: dict[str, Any] | None = None
+) -> None:
     file_path = chat_file_path(chat_id)
     messages = agency_instance.thread_manager.get_all_messages()
 
@@ -190,13 +192,17 @@ def save_current_chat(agency_instance: Any, chat_id: str) -> None:
         branch = ""
 
     now_iso = datetime.now(timezone.utc).isoformat()  # noqa: UP017
-    meta = {
+    meta: dict[str, Any] = {
         "created_at": created_at or now_iso,
         "modified_at": now_iso,
         "msgs": len(messages),
         "branch": branch,
         "summary": summarize_messages(messages),
     }
+
+    # Add usage if provided
+    if usage:
+        meta["usage"] = usage
 
     with open(file_path, "w") as f:
         json.dump({"items": messages, "metadata": meta}, f, indent=2)
@@ -220,6 +226,24 @@ def _read_chat_messages(chat_id: str) -> list[dict[str, Any]]:
         return payload
 
     raise ValueError("Chat payload must be a list of messages.")
+
+
+def load_chat_metadata(chat_id: str) -> dict[str, Any] | None:
+    """Load metadata from a chat file.
+
+    Returns the metadata dict if found, None otherwise.
+    """
+    path = Path(chat_file_path(chat_id))
+    if not path.exists():
+        return None
+    try:
+        with open(path) as f:
+            payload = json.load(f)
+        if isinstance(payload, dict):
+            return payload.get("metadata", {})
+    except Exception:
+        pass
+    return None
 
 
 def load_chat(agency_instance: Any, chat_id: str) -> bool:

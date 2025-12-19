@@ -36,6 +36,8 @@ class MasterContext:
     _parent_run_id: str | None = None  # Parent run ID for nested agent calls
     _is_streaming: bool = False  # Flag to indicate if we're in streaming mode
     _streaming_context: Any = None  # Streaming context for passing state
+    # Internal: tuples of (model_name, response) from sub-agents for per-model cost calculation
+    _sub_agent_raw_responses: list[tuple[str | None, Any]] = field(default_factory=list)
 
     def __post_init__(self):
         """Basic validation after initialization."""
