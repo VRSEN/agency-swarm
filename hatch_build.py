@@ -53,10 +53,7 @@ class CustomBuildHook(BuildHookInterface):
             # but we ensure it exists before the build proceeds
 
         except Exception as e:
-            logger.warning(
-                f"Failed to download pricing data: {e}. "
-                "Build will continue with existing file if present."
-            )
+            logger.warning(f"Failed to download pricing data: {e}. Build will continue with existing file if present.")
             # Don't fail the build if download fails - use existing file or handle gracefully
             pricing_file_path = Path(self.root) / PRICING_FILE_RELATIVE_PATH
             if not pricing_file_path.exists():
@@ -65,6 +62,6 @@ class CustomBuildHook(BuildHookInterface):
                     "Some features may not work correctly."
                 )
 
+
 # Export the hook class for hatchling to discover
 __all__ = ["CustomBuildHook"]
-
