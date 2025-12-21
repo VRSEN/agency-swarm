@@ -2,7 +2,7 @@ import asyncio
 import logging
 import uuid
 from collections.abc import AsyncGenerator
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from agents import (
     RunConfig,
@@ -27,6 +27,7 @@ from agency_swarm.messages import (
     MessageFilter,
     MessageFormatter,
 )
+from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
 from agency_swarm.utils.citation_extractor import extract_direct_file_annotations
 
 if TYPE_CHECKING:
@@ -196,7 +197,22 @@ class Execution:
 
                 items_to_save.extend(hosted_tool_outputs)
                 filtered_items = MessageFilter.filter_messages(items_to_save)  # type: ignore[arg-type] # Filter out unwanted message types
-                agency_context.thread_manager.add_messages(filtered_items)  # type: ignore[arg-type] # Save filtered items to flat storage
+
+                normalizer = StreamIdNormalizer()
+                dict_messages: list[dict[str, Any]] = [
+                    cast(dict[str, Any], msg) for msg in filtered_items if isinstance(msg, dict)
+                ]
+                normalized_dicts = normalizer.normalize_message_dicts(dict_messages)
+
+                normalized_items: list[TResponseInputItem] = []
+                dict_iter = iter(normalized_dicts)
+                for msg in filtered_items:
+                    if not isinstance(msg, dict):
+                        normalized_items.append(msg)
+                        continue
+                    normalized_items.append(cast(TResponseInputItem, next(dict_iter)))
+
+                agency_context.thread_manager.add_messages(normalized_items)  # type: ignore[arg-type] # Save filtered items to flat storage
                 logger.debug(f"Saved {len(filtered_items)} items to storage (filtered from {len(items_to_save)}).")
 
             # Sync back context changes if we used a merged context due to override

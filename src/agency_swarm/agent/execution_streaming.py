@@ -19,6 +19,7 @@ from openai.types.responses import ResponseOutputMessage, ResponseOutputText
 
 from agency_swarm.context import MasterContext
 from agency_swarm.messages import MessageFilter, MessageFormatter
+from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
 from agency_swarm.streaming.utils import add_agent_name_to_event
 from agency_swarm.tools.mcp_manager import default_mcp_manager
 
@@ -184,6 +185,7 @@ def run_stream_with_guardrails(
             input_guardrail_exception: InputGuardrailTripwireTriggered | None = None
             collected_items: list[RunItem] = []
             metadata_store = StreamMetadataStore()
+            id_normalizer = StreamIdNormalizer()
             streaming_result: RunResultStreaming | None = None
             initial_saved_count = 0
             if agency_context and agency_context.thread_manager:
@@ -410,6 +412,8 @@ def run_stream_with_guardrails(
                             agent_run_id=current_agent_run_id,
                             parent_run_id=parent_run_id,
                         )
+
+                    event = id_normalizer.normalize_stream_event(event)
 
                     if isinstance(event, RunItemStreamEvent) and event.item:
                         collected_items.append(event.item)
