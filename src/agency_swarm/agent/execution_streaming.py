@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import typing
 from collections.abc import AsyncGenerator, Callable
 from contextlib import AsyncExitStack, suppress
 from typing import TYPE_CHECKING, Any, cast
@@ -41,9 +42,17 @@ __all__ = [
 ]
 
 if TYPE_CHECKING:
+    from agents.items import ModelResponse
+
     from agency_swarm.agent.core import AgencyContext, Agent
 
 logger = logging.getLogger(__name__)
+
+
+class _UsageTrackingRunResult(typing.Protocol):
+    _sub_agent_responses_with_model: list[tuple[str | None, "ModelResponse"]]
+    _main_agent_model: str
+
 
 GUARDRAIL_ORIGINS = {"input_guardrail_message", "input_guardrail_error"}
 SENTINEL_TRACE_IDS = {"no-op", "", None}
@@ -556,7 +565,8 @@ def run_stream_with_guardrails(
                             sub_raw_responses = master_context_for_run._sub_agent_raw_responses
                             if sub_raw_responses:
                                 # Store on streaming_result for access during cost calculation
-                                cast(Any, streaming_result)._sub_agent_responses_with_model = list(sub_raw_responses)
+                                typed_streaming_result = cast(_UsageTrackingRunResult, streaming_result)
+                                typed_streaming_result._sub_agent_responses_with_model = list(sub_raw_responses)
                                 # Clear after copying to avoid duplicates
                                 master_context_for_run._sub_agent_raw_responses.clear()
                         except Exception as e:
@@ -565,13 +575,9 @@ def run_stream_with_guardrails(
                     # Store main agent's model on streaming_result for automatic cost calculation
                     if streaming_result:
                         try:
-                            main_model = getattr(agent, "model", None)
-                            if not main_model:
-                                model_settings = getattr(agent, "model_settings", None)
-                                if model_settings:
-                                    main_model = getattr(model_settings, "model", None)
-                            if main_model:
-                                cast(Any, streaming_result)._main_agent_model = main_model
+                            main_model = agent.model
+                            if isinstance(main_model, str):
+                                cast(_UsageTrackingRunResult, streaming_result)._main_agent_model = main_model
                         except Exception as e:
                             logger.debug(f"Could not store main agent model on streaming result: {e}")
                 except Exception:
