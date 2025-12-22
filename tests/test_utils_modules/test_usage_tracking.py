@@ -107,6 +107,41 @@ def test_extract_usage_from_run_result_aggregates_subagent_usage_dict_with_fallb
     assert stats.total_tokens == 10
 
 
+def test_extract_request_count_for_empty_usage() -> None:
+    main_usage = SimpleNamespace(
+        requests=0,
+        cached_tokens=0,
+        input_tokens=0,
+        output_tokens=0,
+        total_tokens=0,
+        input_tokens_details=None,
+        output_tokens_details=None,
+    )
+
+    # Usage object omits `requests`, but tokens are present.
+    sub_usage = SimpleNamespace(
+        cached_tokens=0,
+        input_tokens=4,
+        output_tokens=6,
+        total_tokens=10,
+        input_tokens_details=None,
+        output_tokens_details=None,
+    )
+    sub_response = SimpleNamespace(usage=sub_usage)
+
+    run_result = SimpleNamespace(
+        context_wrapper=SimpleNamespace(usage=main_usage),
+        _sub_agent_responses_with_model=[("gpt-4o", sub_response)],
+    )
+
+    stats = extract_usage_from_run_result(run_result)
+    assert stats is not None
+    assert stats.request_count == 1
+    assert stats.input_tokens == 4
+    assert stats.output_tokens == 6
+    assert stats.total_tokens == 10
+
+
 def test_calculate_usage_with_cost_per_response_costs_all_token_types() -> None:
     """
     Single per-response costing test that verifies:
@@ -114,6 +149,7 @@ def test_calculate_usage_with_cost_per_response_costs_all_token_types() -> None:
     - cached input token pricing (via input_tokens_details.cached_tokens)
     - output token pricing
     - reasoning token pricing (via output_tokens_details.reasoning_tokens)
+    - dict-based usage (sub-agent) uses that sub-agent's model pricing
     """
     pricing_data = {
         "test/all-tokens-model": {
@@ -122,6 +158,13 @@ def test_calculate_usage_with_cost_per_response_costs_all_token_types() -> None:
             "output_cost_per_token": 2.0,
             "output_cost_per_reasoning_token": 0.01,
         }
+        ,
+        "test/sub-agent-model": {
+            "input_cost_per_token": 10.0,
+            "cache_read_input_token_cost": 1.0,
+            "output_cost_per_token": 20.0,
+            "output_cost_per_reasoning_token": 0.5,
+        },
     }
 
     response_usage = SimpleNamespace(
@@ -133,7 +176,22 @@ def test_calculate_usage_with_cost_per_response_costs_all_token_types() -> None:
     )
     response = SimpleNamespace(usage=response_usage)
 
-    run_result = SimpleNamespace(raw_responses=[response], _main_agent_model="test/all-tokens-model")
+    # Sub-agent response where usage is a dict (some providers/SDK adapters expose usage this way)
+    sub_response = SimpleNamespace(
+        usage={
+            "input_tokens": 2,
+            "output_tokens": 1,
+            # cached_tokens omitted on purpose; reported only in nested details
+            "input_tokens_details": {"cached_tokens": 1},
+            "output_tokens_details": {"reasoning_tokens": 4},
+        }
+    )
+
+    run_result = SimpleNamespace(
+        raw_responses=[response],
+        _main_agent_model="test/all-tokens-model",
+        _sub_agent_responses_with_model=[("test/sub-agent-model", sub_response)],
+    )
 
     base = UsageStats(
         request_count=1,
@@ -148,6 +206,10 @@ def test_calculate_usage_with_cost_per_response_costs_all_token_types() -> None:
 
     with_cost = calculate_usage_with_cost(base, pricing_data=pricing_data, run_result=run_result)
 
+    # Main response:
     # (10 - 4)*1.0 + 4*0.1 + 3*2.0 + 5*0.01 = 6 + 0.4 + 6 + 0.05 = 12.45
-    assert with_cost.total_cost == pytest.approx(12.45)
+    #
+    # Sub-agent (dict usage) response under its own pricing:
+    # (2 - 1)*10.0 + 1*1.0 + 1*20.0 + 4*0.5 = 10 + 1 + 20 + 2 = 33
+    assert with_cost.total_cost == pytest.approx(45.45)
 

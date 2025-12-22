@@ -234,7 +234,8 @@ def _extract_usage_from_response(response: Any) -> dict[str, int] | None:
         }
     else:
         return {
-            "requests": getattr(usage, "requests", 0) or 0,
+            # Many SDK usage objects omit a request counter; treat each response as 1 request.
+            "requests": getattr(usage, "requests", 0) or getattr(usage, "request_count", 0) or 1,
             "cached_tokens": getattr(usage, "cached_tokens", 0) or 0,
             "input_tokens": getattr(usage, "input_tokens", 0) or 0,
             "output_tokens": getattr(usage, "output_tokens", 0) or 0,
@@ -388,33 +389,69 @@ def calculate_usage_with_cost(
 
             # If we have both model name and usage for this response, calculate cost
             if resp_model_name and response_usage:
-                response_input_tokens = (
-                    getattr(response_usage, "input_tokens", 0)
-                    or getattr(response_usage, "prompt_tokens", 0)
-                )
-                response_output_tokens = (
-                    getattr(response_usage, "output_tokens", 0)
-                    or getattr(response_usage, "completion_tokens", 0)
-                )
-                response_cached_tokens = getattr(response_usage, "cached_tokens", 0) or 0
-                response_reasoning_tokens = None
-                input_reasoning = None
-                output_reasoning = None
-                input_details = None
-                if hasattr(response_usage, "input_tokens_details"):
-                    input_details = getattr(response_usage, "input_tokens_details", None)
-                    if input_details:
-                        input_reasoning = getattr(input_details, "reasoning_tokens", None)
-                        # Some SDKs report cached tokens inside input_tokens_details.cached_tokens
-                        if response_cached_tokens == 0:
-                            response_cached_tokens = getattr(input_details, "cached_tokens", 0) or 0
-                if hasattr(response_usage, "output_tokens_details"):
-                    output_details = getattr(response_usage, "output_tokens_details", None)
-                    if output_details:
-                        output_reasoning = getattr(output_details, "reasoning_tokens", None)
+                # Normalize usage into token counts, supporting both objects and dicts.
+                response_input_tokens = 0
+                response_output_tokens = 0
+                response_cached_tokens = 0
+                response_reasoning_tokens: int | None = None
 
-                if input_reasoning is not None or output_reasoning is not None:
-                    response_reasoning_tokens = (input_reasoning or 0) + (output_reasoning or 0)
+                if isinstance(response_usage, dict):
+                    response_input_tokens = (
+                        response_usage.get("input_tokens", 0)
+                        or response_usage.get("prompt_tokens", 0)
+                        or 0
+                    )
+                    response_output_tokens = (
+                        response_usage.get("output_tokens", 0)
+                        or response_usage.get("completion_tokens", 0)
+                        or 0
+                    )
+                    response_cached_tokens = response_usage.get("cached_tokens", 0) or 0
+
+                    input_details = response_usage.get("input_tokens_details")
+                    output_details = response_usage.get("output_tokens_details")
+
+                    if response_cached_tokens == 0 and isinstance(input_details, dict):
+                        response_cached_tokens = input_details.get("cached_tokens", 0) or 0
+
+                    input_reasoning = (
+                        input_details.get("reasoning_tokens")
+                        if isinstance(input_details, dict)
+                        else None
+                    )
+                    output_reasoning = (
+                        output_details.get("reasoning_tokens")
+                        if isinstance(output_details, dict)
+                        else None
+                    )
+                    if input_reasoning is not None or output_reasoning is not None:
+                        response_reasoning_tokens = (input_reasoning or 0) + (output_reasoning or 0)
+                else:
+                    response_input_tokens = (
+                        getattr(response_usage, "input_tokens", 0)
+                        or getattr(response_usage, "prompt_tokens", 0)
+                    )
+                    response_output_tokens = (
+                        getattr(response_usage, "output_tokens", 0)
+                        or getattr(response_usage, "completion_tokens", 0)
+                    )
+                    response_cached_tokens = getattr(response_usage, "cached_tokens", 0) or 0
+
+                    input_reasoning = None
+                    output_reasoning = None
+                    if hasattr(response_usage, "input_tokens_details"):
+                        input_details = getattr(response_usage, "input_tokens_details", None)
+                        if input_details:
+                            input_reasoning = getattr(input_details, "reasoning_tokens", None)
+                            # Some SDKs report cached tokens inside input_tokens_details.cached_tokens
+                            if response_cached_tokens == 0:
+                                response_cached_tokens = getattr(input_details, "cached_tokens", 0) or 0
+                    if hasattr(response_usage, "output_tokens_details"):
+                        output_details = getattr(response_usage, "output_tokens_details", None)
+                        if output_details:
+                            output_reasoning = getattr(output_details, "reasoning_tokens", None)
+                    if input_reasoning is not None or output_reasoning is not None:
+                        response_reasoning_tokens = (input_reasoning or 0) + (output_reasoning or 0)
 
                 return calculate_openai_cost(
                     model_name=str(resp_model_name),
