@@ -117,6 +117,7 @@ def test_calculate_usage_with_cost_per_response_costs_all_token_types() -> None:
     - cached input token pricing (via input_tokens_details.cached_tokens)
     - output token pricing
     - reasoning token pricing (via output_tokens_details.reasoning_tokens)
+    - dict-based usage (sub-agent) uses that sub-agent's model pricing
     """
     pricing_data = {
         "test/all-tokens-model": {
@@ -125,6 +126,13 @@ def test_calculate_usage_with_cost_per_response_costs_all_token_types() -> None:
             "output_cost_per_token": 2.0,
             "output_cost_per_reasoning_token": 0.01,
         }
+        ,
+        "test/sub-agent-model": {
+            "input_cost_per_token": 10.0,
+            "cache_read_input_token_cost": 1.0,
+            "output_cost_per_token": 20.0,
+            "output_cost_per_reasoning_token": 0.5,
+        },
     }
 
     response_usage = Usage(
@@ -152,5 +160,6 @@ def test_calculate_usage_with_cost_per_response_costs_all_token_types() -> None:
 
     with_cost = calculate_usage_with_cost(base, pricing_data=pricing_data, run_result=run_result)
 
+    # Main response:
     # (10 - 4)*1.0 + 4*0.1 + 3*2.0 + 5*0.01 = 6 + 0.4 + 6 + 0.05 = 12.45
     assert with_cost.total_cost == pytest.approx(12.45)
