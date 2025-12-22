@@ -6,6 +6,7 @@ from urllib.parse import parse_qs, urlparse
 
 MCPServerOAuthRuntime: type[Any] | None
 MCPServerOAuthClientRuntime: type[Any] | None
+HostedMCPToolRuntime: type[Any] | None
 
 try:
     from agency_swarm.mcp.oauth import MCPServerOAuth as MCPServerOAuthRuntime
@@ -13,6 +14,11 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     MCPServerOAuthRuntime = None
     MCPServerOAuthClientRuntime = None
+
+try:
+    from agents.tool import HostedMCPTool as HostedMCPToolRuntime
+except ImportError:  # pragma: no cover - agents sdk is an optional dependency
+    HostedMCPToolRuntime = None
 
 
 class OAuthFlowError(Exception):
@@ -161,6 +167,34 @@ def is_oauth_server(server: Any) -> bool:
     return False
 
 
+def has_hosted_mcp_tools_missing_authorization(agency_instance: Any) -> bool:
+    """Return True when HostedMCPTool is present without an access token.
+
+    Hosted MCP tools require the caller to supply an OAuth access token via
+    `tool_config.authorization` when the remote server is OAuth-protected.
+    """
+    if HostedMCPToolRuntime is None:
+        return False
+    agents_map = getattr(agency_instance, "agents", {})
+    if not isinstance(agents_map, dict):
+        return False
+    for agent in agents_map.values():
+        tools = getattr(agent, "tools", None)
+        if not isinstance(tools, list):
+            continue
+        for tool in tools:
+            if not isinstance(tool, HostedMCPToolRuntime):
+                continue
+            tool_config = getattr(tool, "tool_config", None)
+            if not isinstance(tool_config, dict):
+                continue
+            if not isinstance(tool_config.get("server_url"), str) or tool_config.get("server_url") == "":
+                continue
+            if tool_config.get("authorization") in (None, ""):
+                return True
+    return False
+
+
 class FastAPIOAuthRuntime:
     """Per-request OAuth coordinator for FastAPI streaming."""
 
@@ -202,7 +236,14 @@ class FastAPIOAuthRuntime:
         current request's queue, not a stale one from a previous request.
         """
         servers = getattr(agent, "mcp_servers", None)
-        if not isinstance(servers, list) or not any(is_oauth_server(srv) for srv in servers):
+        has_oauth_servers = isinstance(servers, list) and any(is_oauth_server(srv) for srv in servers)
+        tools = getattr(agent, "tools", None)
+        has_hosted_mcp_tools = (
+            HostedMCPToolRuntime is not None
+            and isinstance(tools, list)
+            and any(isinstance(tool, HostedMCPToolRuntime) for tool in tools)
+        )
+        if not has_oauth_servers and not has_hosted_mcp_tools:
             return
 
         def _factory(server_name: str) -> dict[str, Any]:
@@ -220,4 +261,4 @@ class FastAPIOAuthConfig:
 
     registry: OAuthStateRegistry
     user_header: str = "X-User-Id"
-    timeout: float | None = 300.0
+    timeout: float | None = 900.0

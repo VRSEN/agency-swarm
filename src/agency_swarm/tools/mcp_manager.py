@@ -471,6 +471,73 @@ def _process_oauth_servers(agent: "Agent", servers: list[object]) -> None:
             raise
 
 
+async def _authorize_hosted_mcp_tools(agent: Any, *, cache_dir: Path | None) -> None:
+    """Ensure HostedMCPTool has an OAuth access token when missing.
+
+    OpenAI's remote MCP tool (`HostedMCPTool`) requires callers to supply an OAuth
+    access token via `tool_config.authorization` for OAuth-protected servers.
+
+    For FastAPI deployments, handlers are sourced from `agent.mcp_oauth_handler_factory`
+    so the auth URL is emitted as SSE (instead of opening a browser on the server).
+    """
+    if not _OAUTH_AVAILABLE or _MCPServerOAuth is None or _MCPServerOAuthClient is None:
+        return
+
+    tools = getattr(agent, "tools", None)
+    if not isinstance(tools, list) or len(tools) == 0:
+        return
+
+    handler_factory = getattr(agent, "mcp_oauth_handler_factory", None)
+    factory: Callable[[str], OAuthHandlerMap] | None = None
+    if callable(handler_factory):
+        factory = cast("Callable[[str], OAuthHandlerMap]", handler_factory)
+
+    oauth_config_type = cast("type[MCPServerOAuth]", _MCPServerOAuth)
+    oauth_client_type = cast("type[MCPServerOAuthClient]", _MCPServerOAuthClient)
+
+    for tool in tools:
+        if getattr(tool, "name", None) != "hosted_mcp":
+            continue
+        tool_config = getattr(tool, "tool_config", None)
+        if not isinstance(tool_config, dict):
+            continue
+
+        # Respect user-provided authorization tokens.
+        if tool_config.get("authorization") not in (None, ""):
+            continue
+
+        server_label = tool_config.get("server_label")
+        server_url = tool_config.get("server_url")
+        if not isinstance(server_label, str) or server_label == "":
+            continue
+        if not isinstance(server_url, str) or server_url == "":
+            # Connector-based MCP tools have no server_url; token injection is not supported here.
+            continue
+
+        oauth_srv = oauth_config_type(url=server_url, name=server_label)
+        if cache_dir is not None and getattr(oauth_srv, "cache_dir", None) is None:
+            oauth_srv.cache_dir = cache_dir
+
+        server_handlers: OAuthHandlerMap = {}
+        if factory is not None:
+            server_handlers.update(factory(server_label))
+
+        handlers_arg = server_handlers if server_handlers else None
+        oauth_client = oauth_client_type(oauth_srv, handlers_arg)
+
+        try:
+            await oauth_client.connect()
+            provider = getattr(oauth_client, "_oauth_provider", None)
+            if provider is None:
+                continue
+            tokens = await provider.context.storage.get_tokens()
+            if tokens is None or not getattr(tokens, "access_token", None):
+                continue
+            tool_config["authorization"] = tokens.access_token
+        finally:
+            await oauth_client.cleanup()
+
+
 def _sync_oauth_client_handlers(persistent: object, candidate: object) -> None:
     """Update cached OAuth client with per-request handlers from a new instance."""
     if not _OAUTH_AVAILABLE or _MCPServerOAuthClient is None:
@@ -499,7 +566,12 @@ async def attach_persistent_mcp_servers(agency: Any) -> None:
     agents_map = getattr(agency, "agents", None)
     if not isinstance(agents_map, dict):
         return
+    cache_dir: Path | None = None
+    oauth_token_path = getattr(agency, "oauth_token_path", None)
+    if isinstance(oauth_token_path, str) and oauth_token_path != "":
+        cache_dir = Path(oauth_token_path).expanduser()
     for agent in agents_map.values():
+        await _authorize_hosted_mcp_tools(agent, cache_dir=cache_dir)
         servers = getattr(agent, "mcp_servers", None)
         if not isinstance(servers, list):
             continue

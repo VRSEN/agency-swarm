@@ -81,7 +81,12 @@ def run_fastapi(
             RequestTracker,
             setup_enhanced_logging,
         )
-        from .fastapi_utils.oauth_support import FastAPIOAuthConfig, OAuthStateRegistry, is_oauth_server
+        from .fastapi_utils.oauth_support import (
+            FastAPIOAuthConfig,
+            OAuthStateRegistry,
+            has_hosted_mcp_tools_missing_authorization,
+            is_oauth_server,
+        )
         from .fastapi_utils.request_models import (
             BaseRequest,
             CancelRequest,
@@ -155,6 +160,8 @@ def run_fastapi(
                     if isinstance(servers, list) and any(is_oauth_server(srv) for srv in servers):
                         has_oauth_servers = True
                         break
+            if not has_oauth_servers and has_hosted_mcp_tools_missing_authorization(preview_instance):
+                has_oauth_servers = True
             if has_oauth_servers and shared_oauth_registry is None:
                 shared_oauth_registry = OAuthStateRegistry()
             if has_oauth_servers and oauth_config is None and shared_oauth_registry is not None:

@@ -17,6 +17,33 @@ This feature lets **your users** connect their personal accounts to AI agents yo
 - **Automatic refresh** - Tokens renew automatically; users only re-authorize when needed
 - **Works with any OAuth provider** - GitHub, Google, Notion, and more
 
+## Where OAuth is used (supported run modes)
+
+<Tabs>
+<Tab title="FastAPI (production)" defaultOpen={true}>
+
+Use this when your agency runs on a server and users authenticate from a web/mobile UI.
+
+- **Hosted MCP** (Notion): Configure `MCPServerOAuth(url=..., name=...)` and deploy your agency.
+- **Self-hosted MCP** (GitHub/Google): Run your OAuth-enabled MCP server + deploy your agency.
+- **HostedMCPTool (remote MCP)**: If you use `HostedMCPTool`, OAuth tokens must be provided via `tool_config.authorization`. In FastAPI, Agency Swarm will surface the auth URL via `event: oauth_redirect` and inject the access token once authorized.
+- **Streaming is required**: OAuth authorization is delivered via `event: oauth_redirect`, so use `POST /{agency}/get_response_stream`. The non-streaming `POST /{agency}/get_response` endpoint is not compatible with OAuth-enabled MCP servers.
+- **Per-user token isolation**: Send `X-User-Id` so each user gets their own token bucket.
+
+See the FastAPI OAuth section: [OAuth-enabled agencies](/additional-features/fastapi-integration#oauth-enabled-agencies).
+
+</Tab>
+<Tab title="Local CLI / scripts (dev only)">
+
+Use this when you are running locally (developer machine) and can open a browser.
+
+- **Works with non-streaming**: `agency.get_response(...)` can open the browser and wait for the callback, then continue the run.
+- **Hosted MCP** (Notion): Just the hosted MCP URL.
+- **Self-hosted MCP** (GitHub/Google): Start the MCP server locally + export `*_CLIENT_ID` / `*_CLIENT_SECRET`.
+
+</Tab>
+</Tabs>
+
 ## Two types of MCP servers
 
 **Hosted servers** (like Notion) handle OAuth for you—just connect:
@@ -28,7 +55,7 @@ notion = MCPServerOAuth(url="https://mcp.notion.com/mcp", name="notion")
 
 agent = Agent(name="NotionAgent", mcp_servers=[notion])
 agency = Agency(agent)
-agency.get_response("List my recent Notion pages")  # Browser opens for authorization
+agency.get_response("List my recent Notion pages")  # Local run: browser opens for authorization
 ```
 
 **Self-hosted servers** (GitHub, Google) require you to run a FastMCP server with your OAuth credentials:
@@ -47,7 +74,7 @@ github = MCPServerOAuth(url="http://localhost:8001/mcp", name="github", scopes=[
 
 agent = Agent(name="GitHubAgent", mcp_servers=[github])
 agency = Agency(agent)
-agency.get_response("List my repositories")  # Browser opens for authorization
+agency.get_response("List my repositories")  # Local run: browser opens for authorization
 ```
 
 <Note>
@@ -104,7 +131,7 @@ Then run the FastMCP server (see `examples/mcp_oauth/github_server.py` for GitHu
 
 - Naming drives env vars: `name="github"` -> `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`.
 - Scopes are explicit: pass only what the tool needs (e.g., `["repo", "user"]`).
-- Redirects: keep `http://localhost:8000/auth/callback` for desktop; override `redirect_uri` for hosted flows.
+- Redirects: local runs default to `http://localhost:8000/auth/callback`. For FastAPI, set `redirect_uri` (or `OAUTH_CALLBACK_URL` / `<SERVER>_REDIRECT_URI`) to your publicly reachable `/auth/callback` URL.
 
 <ParamField param="url" type="string" required>
   MCP server endpoint (e.g., `http://localhost:8001/mcp`)
@@ -155,7 +182,7 @@ Then run the FastMCP server (see `examples/mcp_oauth/github_server.py` for GitHu
 </ParamField>
 
 <ParamField param="callback_handler" type="Callable[[], Awaitable[tuple[str, str | None]]]">
-  Custom async handler to receive the OAuth callback code. Returns a tuple of (code, state). By default, starts a local HTTP server to capture the redirect.
+  Custom async handler to receive the OAuth callback code. Returns a tuple of (code, state). By default, starts a local HTTP server (or prompts for manual paste) to capture the redirect. In FastAPI deployments you typically do **not** set this—`run_fastapi` wires callback handling through `/auth/callback`.
 </ParamField>
 
 ## Token storage and isolation
@@ -202,9 +229,9 @@ notion = MCPServerOAuth(url="http://localhost:8002/mcp", name="notion", scopes=[
 agent = Agent(name="MultiServiceAgent", mcp_servers=[github, notion])
 ```
 
-## Custom handlers for web UIs
+## Advanced: Custom handlers (when you are not using FastAPI)
 
-Send the auth URL to your frontend and wait for the code there:
+If you are building your own UI/server (not using `run_fastapi`), you can send the auth URL to your frontend and wait for the callback code there:
 
 ```python
 from agency_swarm import Agent
@@ -228,7 +255,7 @@ oauth_server = MCPServerOAuth(
 agent = Agent(name="BrowserlessAgent", mcp_servers=[oauth_server])
 ```
 
-See [MCP OAuth for Production](/platform/integrations/mcp-oauth-integration) for the full FastAPI/Docker flow.
+See [OAuth-enabled agencies](/additional-features/fastapi-integration#oauth-enabled-agencies) for the FastAPI production flow.
 
 ## Troubleshooting
 - Browser doesn’t open or redirect fails: paste the full callback URL when prompted; confirm it matches the provider config.
@@ -237,7 +264,7 @@ See [MCP OAuth for Production](/platform/integrations/mcp-oauth-integration) for
 
 ## See Also
 
-- [MCP OAuth for SaaS/Docker](/platform/integrations/mcp-oauth-integration)
+- [FastAPI Integration](/additional-features/fastapi-integration)
 - [MCP Integration](/core-framework/tools/mcp-integration)
 - [MCP Specification](https://github.com/modelcontextprotocol/modelcontextprotocol)
 - [FastMCP](https://gofastmcp.com/getting-started/welcome)
