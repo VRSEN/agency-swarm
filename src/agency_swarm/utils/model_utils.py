@@ -1,9 +1,11 @@
 """Utility functions for working with model configurations."""
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from agents import FunctionTool, Model, Tool
+from agents.models.openai_chatcompletions import OpenAIChatCompletionsModel
+from agents.models.openai_responses import OpenAIResponsesModel
 
 if TYPE_CHECKING:
     from agency_swarm.agent.core import Agent
@@ -11,6 +13,20 @@ if TYPE_CHECKING:
 # Reasoning model prefixes that support reasoning parameter but not temperature
 REASONING_MODEL_PREFIXES = ("gpt-5", "o3", "o4-mini", "o1")
 logger = logging.getLogger(__name__)
+
+
+def get_model_name(model: str | Model | None) -> str | None:
+    """Extract a string model name from supported Agents SDK model types."""
+    if isinstance(model, str):
+        return model
+    if isinstance(model, OpenAIResponsesModel | OpenAIChatCompletionsModel):
+        return str(model.model)
+    if isinstance(model, Model):
+        try:
+            return str(cast("_ModelWithName", model).model)
+        except AttributeError:
+            return None
+    return None
 
 
 def is_reasoning_model(model: str | Model | None) -> bool:
@@ -106,6 +122,10 @@ def get_agent_capabilities(agent: "Agent") -> list[str]:
             capabilities.append(tool_name)
 
     return capabilities
+
+
+class _ModelWithName(Protocol):
+    model: str
 
 
 def _isinstance_or_subclass(obj: object, cls: Any) -> bool:
