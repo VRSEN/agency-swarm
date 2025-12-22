@@ -3,6 +3,7 @@ import atexit
 import logging
 import os
 import warnings
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from agents import RunConfig, RunHooks, RunResult, TResponseInputItem
@@ -26,6 +27,23 @@ from .setup import (
     parse_deprecated_agency_chart,
     register_all_agents_and_set_entry_points,
 )
+
+if TYPE_CHECKING:
+    from agency_swarm.mcp.oauth import MCPServerOAuth as MCPServerOAuthType
+    from agency_swarm.mcp.oauth_client import MCPServerOAuthClient as MCPServerOAuthClientType
+else:
+    MCPServerOAuthType = Any
+    MCPServerOAuthClientType = Any
+
+MCPServerOAuthRuntime: type[Any] | None = None
+MCPServerOAuthClientRuntime: type[Any] | None = None
+
+try:  # pragma: no cover - optional dependency
+    from agency_swarm.mcp.oauth import MCPServerOAuth as MCPServerOAuthRuntime
+    from agency_swarm.mcp.oauth_client import MCPServerOAuthClient as MCPServerOAuthClientRuntime
+except ImportError:  # pragma: no cover - OAuth extras not installed
+    MCPServerOAuthRuntime = None
+    MCPServerOAuthClientRuntime = None
 
 if TYPE_CHECKING:
     from agency_swarm.agent.context_types import AgentRuntimeState
@@ -90,6 +108,7 @@ class Agency:
         load_threads_callback: ThreadLoadCallback | None = None,
         save_threads_callback: ThreadSaveCallback | None = None,
         user_context: dict[str, Any] | None = None,
+        oauth_token_path: str | None = None,
         **kwargs: Any,
     ):
         """
@@ -121,6 +140,8 @@ class Agency:
             load_threads_callback (ThreadLoadCallback | None, optional): Callable to load conversation threads.
             save_threads_callback (ThreadSaveCallback | None, optional): Callable to save conversation threads.
             user_context (dict[str, Any] | None, optional): Initial shared context accessible to all agents.
+            oauth_token_path (str | None, optional): Base directory for OAuth token storage (defaults to
+                ~/.agency-swarm/mcp-tokens or $AGENCY_SWARM_MCP_CACHE_DIR when omitted).
             **kwargs: Catches other deprecated parameters, issuing warnings if used.
 
         Raises:
@@ -195,16 +216,19 @@ class Agency:
 
         self.user_context = user_context or {}
         self.send_message_tool_class = send_message_tool_class
+        self.oauth_token_path = oauth_token_path
+        self.persistence_hooks = None
 
         # --- Initialize Core Components ---
         self.thread_manager = ThreadManager(
             load_threads_callback=final_load_threads_callback, save_threads_callback=final_save_threads_callback
         )
         self.event_stream_merger = EventStreamMerger()
-        self.persistence_hooks = None
         if final_load_threads_callback and final_save_threads_callback:
             self.persistence_hooks = PersistenceHooks(final_load_threads_callback, final_save_threads_callback)
             logger.info("Persistence hooks enabled.")
+
+        self._default_run_hooks: RunHooks | None = self.persistence_hooks
 
         # --- Register Agents and Set Entry Points ---
         self.agents = {}
@@ -230,12 +254,53 @@ class Agency:
         # configure_agents uses _derived_communication_flows determined above
         configure_agents(self, _derived_communication_flows)
 
+        # Configure OAuth integration after agents are registered
+        self._configure_oauth_support()
+
         # Update agent contexts with communication flows
         logger.info("Agency initialization complete.")
 
         # Register MCP shutdown at process exit so persistent servers are cleaned in scripts
         if default_mcp_manager.mark_atexit_registered():
             atexit.register(default_mcp_manager.shutdown_sync)
+
+    def _configure_oauth_support(self) -> None:
+        """Apply oauth_token_path for OAuth-enabled servers."""
+
+        if MCPServerOAuthRuntime is None:
+            return
+
+        cache_dir: Path | None = None
+        if self.oauth_token_path:
+            cache_dir = Path(self.oauth_token_path).expanduser()
+
+        for agent in self.agents.values():
+            servers = getattr(agent, "mcp_servers", None)
+            if not isinstance(servers, list):
+                continue
+            for server in servers:
+                config: Any | None = None
+                if MCPServerOAuthRuntime is not None and isinstance(server, MCPServerOAuthRuntime):
+                    config = server
+                elif MCPServerOAuthClientRuntime is not None and isinstance(server, MCPServerOAuthClientRuntime):
+                    config = server.oauth_config
+                if config is None:
+                    continue
+                if cache_dir and getattr(config, "cache_dir", None) is None:
+                    config.cache_dir = cache_dir
+
+        if cache_dir:
+            default_mcp_manager.update_oauth_cache_dir(cache_dir)
+
+    @property
+    def default_run_hooks(self) -> RunHooks | None:
+        """Return the agency-level hooks applied to each run.
+
+        Notes:
+            The Agents SDK accepts a single RunHooks instance; this agency only
+            returns a single hook (or None).
+        """
+        return self._default_run_hooks
 
     # Private helper methods that were missed during split
     def get_agent_context(self, agent_name: str) -> AgencyContext:
