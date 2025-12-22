@@ -6,8 +6,10 @@ process various file types through HTTP requests, and return appropriate respons
 containing the expected file content.
 """
 
+import socket
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -17,11 +19,17 @@ import uvicorn
 from agents import ModelSettings
 from openai.types.shared import Reasoning
 
-from agency_swarm import Agency, Agent
+from agency_swarm import Agency, Agent, run_fastapi
 
 
 class TestFastAPIFileProcessing:
     """Test suite for FastAPI file processing with file_urls parameter."""
+
+    @staticmethod
+    def _get_free_tcp_port() -> int:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind(("127.0.0.1", 0))
+            return int(sock.getsockname()[1])
 
     @staticmethod
     def get_http_client(timeout_seconds: int = 120) -> httpx.AsyncClient:
@@ -63,19 +71,22 @@ class TestFastAPIFileProcessing:
         return create_agency
 
     @pytest.fixture(scope="class")
-    def file_server_process(self):
-        """Start HTTP file server on port 7860 for serving test files."""
+    def file_server_base_url(self) -> str:
+        """Start HTTP file server for serving test files."""
         # Get the path to tests/data/files directory
         test_files_dir = Path(__file__).parents[2] / "data" / "files"
         if not test_files_dir.exists():
             pytest.skip(f"Test files directory not found: {test_files_dir}")
 
+        port = self._get_free_tcp_port()
+        base_url = f"http://127.0.0.1:{port}"
+
         # Start HTTP server
         server_process = subprocess.Popen(
-            [sys.executable, "-m", "http.server", "7860"],
+            [sys.executable, "-m", "http.server", str(port), "--bind", "127.0.0.1"],
             cwd=test_files_dir,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
 
         # Wait for server to start
@@ -83,34 +94,33 @@ class TestFastAPIFileProcessing:
 
         # Verify server is running
         try:
-            response = httpx.get("http://localhost:7860/", timeout=5)
+            response = httpx.get(f"{base_url}/", timeout=5)
             assert response.status_code == 200
         except Exception as e:
             server_process.terminate()
             pytest.skip(f"Could not start file server: {e}")
 
-        yield server_process
+        yield base_url
 
         # Cleanup
         server_process.terminate()
         server_process.wait()
 
     @pytest.fixture(scope="class")
-    def fastapi_server(self, agency_factory):
-        """Start FastAPI server on port 8080."""
-        import threading
-
-        from agency_swarm import run_fastapi
+    def fastapi_base_url(self, agency_factory) -> str:
+        """Start FastAPI server on an available port."""
+        port = self._get_free_tcp_port()
+        base_url = f"http://127.0.0.1:{port}"
 
         # Ensure no authentication is required by using a non-existent env var
         # This will make app_token None and disable authentication
         app = run_fastapi(
-            agencies={"test_agency": agency_factory}, port=8080, app_token_env="", return_app=True, enable_agui=False
+            agencies={"test_agency": agency_factory}, port=port, app_token_env="", return_app=True, enable_agui=False
         )
 
         # Start server in a thread
         def run_server():
-            uvicorn.run(app, host="127.0.0.1", port=8080, log_level="error")
+            uvicorn.run(app, host="127.0.0.1", port=port, log_level="error")
 
         server_thread = threading.Thread(target=run_server, daemon=True)
         server_thread.start()
@@ -122,7 +132,7 @@ class TestFastAPIFileProcessing:
         max_retries = 15
         for i in range(max_retries):
             try:
-                response = httpx.get("http://localhost:8080/docs", timeout=10.0)
+                response = httpx.get(f"{base_url}/docs", timeout=10.0)
                 if response.status_code == 200:
                     # Ensure server is fully ready
                     time.sleep(1)
@@ -136,12 +146,12 @@ class TestFastAPIFileProcessing:
                 if i == max_retries - 1:
                     pytest.skip(f"Could not start FastAPI server: {e}")
 
-        yield server_thread
+        yield base_url
 
     @pytest.mark.asyncio
-    async def test_chat_name(self, file_server_process, fastapi_server):
+    async def test_chat_name(self, file_server_base_url: str, fastapi_base_url: str):
         """Test processing a single text file via file_urls with chat name generation."""
-        url = "http://localhost:8080/test_agency/get_response"
+        url = f"{fastapi_base_url}/test_agency/get_response"
         payload = {
             "message": "I want to find a restaurant in New York.",
             "generate_chat_name": True,
@@ -154,12 +164,12 @@ class TestFastAPIFileProcessing:
         assert len(response_data["chat_name"]) > 0
 
     @pytest.mark.asyncio
-    async def test_file_search_attachment(self, file_server_process, fastapi_server):
+    async def test_file_search_attachment(self, file_server_base_url: str, fastapi_base_url: str):
         """Test processing a single text file via file_urls."""
-        url = "http://localhost:8080/test_agency/get_response"
+        url = f"{fastapi_base_url}/test_agency/get_response"
         payload = {
             "message": "Please read the content of the uploaded file and tell me what secret phrase you find.",
-            "file_urls": {"test_file.txt": "http://localhost:7860/test-txt.txt"},
+            "file_urls": {"test_file.txt": f"{file_server_base_url}/test-txt.txt"},
         }
         headers = {}
 
@@ -175,12 +185,12 @@ class TestFastAPIFileProcessing:
         assert "first txt secret phrase" in response_text
 
     @pytest.mark.asyncio
-    async def test_code_interpreter_attachment(self, file_server_process, fastapi_server):
+    async def test_code_interpreter_attachment(self, file_server_base_url: str, fastapi_base_url: str):
         """Test processing an HTML file via file_urls."""
-        url = "http://localhost:8080/test_agency/get_response"
+        url = f"{fastapi_base_url}/test_agency/get_response"
         payload = {
             "message": "Search for the secret phrase inside the document.",
-            "file_urls": {"webpage.html": "http://localhost:7860/test-html.html"},
+            "file_urls": {"webpage.html": f"{file_server_base_url}/test-html.html"},
         }
         headers = {}
 
@@ -198,17 +208,17 @@ class TestFastAPIFileProcessing:
         assert "webpage.html" in file_ids.keys()
 
     @pytest.mark.asyncio
-    async def test_image_and_pdf_attachments(self, file_server_process, fastapi_server):
+    async def test_image_and_pdf_attachments(self, file_server_base_url: str, fastapi_base_url: str):
         """Test processing multiple files simultaneously via file_urls."""
-        url = "http://localhost:8080/test_agency/get_response"
+        url = f"{fastapi_base_url}/test_agency/get_response"
         payload = {
             "message": (
                 "I'm uploading multiple files. Please tell me the function name presented in the image"
                 "and tell me what my favorite food is."
             ),
             "file_urls": {
-                "text_image": "http://localhost:7860/test-image.png",
-                "pdf_file": "http://localhost:7860/test-pdf-2.pdf",
+                "text_image": f"{file_server_base_url}/test-image.png",
+                "pdf_file": f"{file_server_base_url}/test-pdf-2.pdf",
             },
         }
         headers = {}
@@ -225,12 +235,12 @@ class TestFastAPIFileProcessing:
         assert "sum_of_squares" in response_text or "sum of squares" in response_text
 
     @pytest.mark.asyncio
-    async def test_streaming_response(self, file_server_process, fastapi_server):
+    async def test_streaming_response(self, file_server_base_url: str, fastapi_base_url: str):
         """Test streaming response with file processing."""
-        url = "http://localhost:8080/test_agency/get_response_stream"
+        url = f"{fastapi_base_url}/test_agency/get_response_stream"
         payload = {
             "message": "Please read the text file and describe its content in detail.",
-            "file_urls": {"stream_test.txt": "http://localhost:7860/test-txt.txt"},
+            "file_urls": {"stream_test.txt": f"{file_server_base_url}/test-txt.txt"},
         }
         headers = {}
 
@@ -250,12 +260,12 @@ class TestFastAPIFileProcessing:
         assert "first txt secret phrase" in full_response
 
     @pytest.mark.asyncio
-    async def test_invalid_file_url(self, file_server_process, fastapi_server):
+    async def test_invalid_file_url(self, file_server_base_url: str, fastapi_base_url: str):
         """Test handling of invalid file URLs."""
-        url = "http://localhost:8080/test_agency/get_response"
+        url = f"{fastapi_base_url}/test_agency/get_response"
         payload = {
             "message": "Please process this file.",
-            "file_urls": {"nonexistent.txt": "http://localhost:7860/nonexistent-file.txt"},
+            "file_urls": {"nonexistent.txt": f"{file_server_base_url}/nonexistent-file.txt"},
         }
         headers = {}
 
@@ -271,12 +281,12 @@ class TestFastAPIFileProcessing:
         assert "error downloading file from provided urls" in response_text
 
     @pytest.mark.asyncio
-    async def test_streaming_invalid_file_url(self, file_server_process, fastapi_server):
+    async def test_streaming_invalid_file_url(self, file_server_base_url: str, fastapi_base_url: str):
         """Test that streaming endpoint properly handles invalid file URLs without hanging."""
-        url = "http://localhost:8080/test_agency/get_response_stream"
+        url = f"{fastapi_base_url}/test_agency/get_response_stream"
         payload = {
             "message": "Please process this file.",
-            "file_urls": {"nonexistent.txt": "http://localhost:7860/nonexistent-file.txt"},
+            "file_urls": {"nonexistent.txt": f"{file_server_base_url}/nonexistent-file.txt"},
         }
         headers = {}
 

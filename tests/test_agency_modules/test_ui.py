@@ -483,7 +483,7 @@ def test_copilot_demo_launcher_sets_client_facing_backend_url():
         patch("shutil.which", return_value="/usr/bin/npm"),
         patch.object(Path, "exists", fake_exists),
         patch("subprocess.Popen", return_value=_DummyProc()) as popen,
-        patch("agency_swarm.integrations.fastapi.run_fastapi", return_value=None),
+        patch("agency_swarm.ui.demos.copilot.run_fastapi", return_value=None),
     ):
         os.environ.pop("NEXT_PUBLIC_AG_UI_BACKEND_URL", None)
         CopilotDemoLauncher.start(agency, host="0.0.0.0", port=8000)
