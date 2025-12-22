@@ -39,27 +39,34 @@ def _make_agency_with_stream_stub(monkeypatch: pytest.MonkeyPatch):
     )
     calls: list[tuple[str, str, str]] = []
 
+    class _FakeStream:
+        def __init__(self) -> None:
+            self.final_result = None
+            self._events = [
+                SimpleNamespace(
+                    type="raw_response_event",
+                    data=SimpleNamespace(type="response.output_text.delta", delta="ack"),
+                ),
+                SimpleNamespace(
+                    type="raw_response_event",
+                    data=SimpleNamespace(type="response.output_text.done"),
+                ),
+            ]
+
+        def cancel(self, mode: str = "immediate") -> None:
+            pass
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            if not self._events:
+                raise StopAsyncIteration
+            return self._events.pop(0)
+
     def fake_stream(*, message: str, recipient_agent: str, chat_id: str, **_: object):
         calls.append((message, recipient_agent, chat_id))
-
-        class _Stream:
-            def __init__(self):
-                self._emitted = False
-                self.final_result = SimpleNamespace()
-
-            def __aiter__(self):
-                return self
-
-            async def __anext__(self):
-                if self._emitted:
-                    raise StopAsyncIteration
-                self._emitted = True
-                return SimpleNamespace(data=SimpleNamespace(type="response.output_text.delta", delta="ack"))
-
-            def cancel(self, mode: str = "immediate") -> None:  # noqa: ARG002
-                self._emitted = True
-
-        return _Stream()
+        return _FakeStream()
 
     monkeypatch.setattr(agency, "get_response_stream", fake_stream)
     return agency, calls
@@ -70,7 +77,7 @@ def test_cli_help_new_and_stream(monkeypatch: pytest.MonkeyPatch) -> None:
 
     saved_ids: list[str] = []
 
-    def _record_save(_: object, chat_id: str, **__: object) -> None:
+    def _record_save(_: object, chat_id: str, usage: dict[str, object] | None = None) -> None:
         saved_ids.append(chat_id)
 
     monkeypatch.setattr(TerminalDemoLauncher, "save_current_chat", staticmethod(_record_save))
@@ -98,7 +105,7 @@ def test_cli_resume_switches_chat_id(monkeypatch: pytest.MonkeyPatch) -> None:
 
     saved_ids: list[str] = []
 
-    def _record_save(_: object, chat_id: str, **__: object) -> None:
+    def _record_save(_: object, chat_id: str, usage: dict[str, object] | None = None) -> None:
         saved_ids.append(chat_id)
 
     monkeypatch.setattr(TerminalDemoLauncher, "save_current_chat", staticmethod(_record_save))
@@ -119,7 +126,7 @@ def test_cli_compact_updates_chat_id(monkeypatch: pytest.MonkeyPatch) -> None:
 
     saved_ids: list[str] = []
 
-    def _record_save(_: object, chat_id: str, **__: object) -> None:
+    def _record_save(_: object, chat_id: str, usage: dict[str, object] | None = None) -> None:
         saved_ids.append(chat_id)
 
     async def _fake_compact(*_args, **_kwargs) -> str:
@@ -281,7 +288,7 @@ def test_cli_stream_cancellation(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(terminal, "EscapeKeyWatcher", MockEscapeWatcher)
 
-    def _record_save(_: object, chat_id: str) -> None:
+    def _record_save(_: object, chat_id: str, usage: dict[str, object] | None = None) -> None:
         pass
 
     monkeypatch.setattr(TerminalDemoLauncher, "save_current_chat", staticmethod(_record_save))

@@ -1,33 +1,43 @@
 from __future__ import annotations
 
 import json
+import typing
 from copy import deepcopy
 from dataclasses import dataclass, field
-from types import SimpleNamespace
-from typing import Any
 
 import pytest
+from agents.result import RunResult, RunResultStreaming
+from agents.run_context import RunContextWrapper
+from agents.usage import Usage
 from fastapi.testclient import TestClient
+from openai.types.responses.response_usage import InputTokensDetails, OutputTokensDetails
 
 from agency_swarm import Agency, Agent, run_fastapi
 from agency_swarm.agent.execution_stream_response import StreamingRunResponse
+from agency_swarm.context import MasterContext
+from agency_swarm.streaming.utils import StreamingContext
+from agency_swarm.utils.thread import ThreadManager
+
+
+class _HasMainAgentModel(typing.Protocol):
+    _main_agent_model: str
 
 
 @dataclass
 class ContextTracker:
     """Keep the latest contexts observed by the test agent."""
 
-    last_response_context: dict[str, Any] | None = None
-    last_stream_context: dict[str, Any] | None = None
+    last_response_context: dict[str, str] | None = None
+    last_stream_context: dict[str, str | StreamingContext] | None = None
 
     def reset(self) -> None:
         self.last_response_context = None
         self.last_stream_context = None
 
-    def record_response(self, context: dict[str, Any] | None) -> None:
+    def record_response(self, context: dict[str, str] | None) -> None:
         self.last_response_context = deepcopy(context) if context is not None else None
 
-    def record_stream(self, context: dict[str, Any] | None) -> None:
+    def record_stream(self, context: dict[str, str | StreamingContext] | None) -> None:
         self.last_stream_context = deepcopy(context) if context is not None else None
 
 
@@ -42,51 +52,89 @@ class TrackingAgent(Agent):
         self,
         message,
         sender_name=None,
-        context_override: dict[str, Any] | None = None,
-        **kwargs: Any,
+        context_override: dict[str, str] | None = None,
+        **kwargs: str | int | float | bool | None | list[str],
     ):
         self._tracker.record_response(context_override)
-        usage_obj = SimpleNamespace(
+        usage = Usage(
             requests=1,
-            cached_tokens=0,
             input_tokens=10,
             output_tokens=20,
             total_tokens=30,
-            input_tokens_details=None,
-            output_tokens_details=None,
+            input_tokens_details=InputTokensDetails(cached_tokens=0),
+            output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
         )
-        context_wrapper = SimpleNamespace(usage=usage_obj)
-        run_result = SimpleNamespace(
-            final_output="Test response",
+
+        thread_manager = ThreadManager()
+        master_context = MasterContext(
+            thread_manager=thread_manager,
+            agents={self.name: self},
+            user_context=context_override or {},
+            agent_runtime_state={},
+            current_agent_name=self.name,
+            shared_instructions=None,
+        )
+
+        run_result = RunResult(
+            input=str(message),
             new_items=[],
-            context_wrapper=context_wrapper,
             raw_responses=[],
+            final_output="Test response",
+            input_guardrail_results=[],
+            output_guardrail_results=[],
+            tool_input_guardrail_results=[],
+            tool_output_guardrail_results=[],
+            context_wrapper=RunContextWrapper(context=master_context, usage=usage),
+            _last_agent=self,
         )
         # Enables cost fallback calculation in calculate_usage_with_cost(...)
-        run_result._main_agent_model = "gpt-4o"
+        typing.cast(_HasMainAgentModel, run_result)._main_agent_model = "gpt-4o"
         return run_result
 
     def get_response_stream(
         self,
         message,
         sender_name=None,
-        context_override: dict[str, Any] | None = None,
-        **kwargs: Any,
+        context_override: dict[str, str | StreamingContext] | None = None,
+        **kwargs: str | int | float | bool | None | list[str],
     ):
         self._tracker.record_stream(context_override)
 
-        usage_obj = SimpleNamespace(
+        usage = Usage(
             requests=1,
-            cached_tokens=0,
             input_tokens=10,
             output_tokens=20,
             total_tokens=30,
-            input_tokens_details=None,
-            output_tokens_details=None,
+            input_tokens_details=InputTokensDetails(cached_tokens=0),
+            output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
         )
-        context_wrapper = SimpleNamespace(usage=usage_obj)
-        final_result = SimpleNamespace(context_wrapper=context_wrapper, raw_responses=[])
-        final_result._main_agent_model = "gpt-4o"
+        thread_manager = ThreadManager()
+        master_context = MasterContext(
+            thread_manager=thread_manager,
+            agents={self.name: self},
+            user_context=(context_override or {}),
+            agent_runtime_state={},
+            current_agent_name=self.name,
+            shared_instructions=None,
+        )
+
+        final_result = RunResultStreaming(
+            input=str(message),
+            new_items=[],
+            raw_responses=[],
+            final_output="Test response",
+            input_guardrail_results=[],
+            output_guardrail_results=[],
+            tool_input_guardrail_results=[],
+            tool_output_guardrail_results=[],
+            context_wrapper=RunContextWrapper(context=master_context, usage=usage),
+            current_agent=self,
+            current_turn=1,
+            max_turns=1,
+            _current_agent_output_schema=None,
+            trace=None,
+        )
+        typing.cast(_HasMainAgentModel, final_result)._main_agent_model = "gpt-4o"
 
         stream_ref: dict[str, StreamingRunResponse] = {}
 
@@ -163,7 +211,7 @@ def test_streaming_user_context(recording_agency_factory: RecordingAgencyFactory
 
     # Assert the final messages SSE event contains usage
     current_event: str | None = None
-    messages_payloads: list[dict[str, Any]] = []
+    messages_payloads = []
     for raw in lines:
         if not raw:
             continue

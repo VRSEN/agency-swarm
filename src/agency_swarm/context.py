@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from agents.items import ModelResponse
+
     from .agent.context_types import AgentRuntimeState
     from .agent.core import Agent
     from .utils.thread import ThreadManager
@@ -37,7 +39,7 @@ class MasterContext:
     _is_streaming: bool = False  # Flag to indicate if we're in streaming mode
     _streaming_context: Any = None  # Streaming context for passing state
     # Internal: tuples of (model_name, response) from sub-agents for per-model cost calculation
-    _sub_agent_raw_responses: list[tuple[str | None, Any]] = field(default_factory=list)
+    _sub_agent_raw_responses: list[tuple[str | None, "ModelResponse"]] = field(default_factory=list)
 
     def __post_init__(self):
         """Basic validation after initialization."""

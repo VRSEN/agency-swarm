@@ -654,9 +654,7 @@ def start_terminal(
                 agency_instance.thread_manager.replace_messages(filtered)
 
             event_converter.console.rule()
-            TerminalDemoLauncher.save_current_chat(
-                agency_instance, chat_id, usage=session_usage.to_dict()
-            )
+            TerminalDemoLauncher.save_current_chat(agency_instance, chat_id, usage=session_usage.to_dict())
         except Exception as e:
             logger.error(f"Error during streaming: {e}", exc_info=True)
         finally:

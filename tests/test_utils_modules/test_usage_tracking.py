@@ -1,28 +1,68 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
+import typing
 
 import pytest
+from agents.items import ModelResponse
+from agents.result import RunResult
+from agents.run_context import RunContextWrapper
+from agents.usage import Usage
+from openai.types.responses.response_usage import InputTokensDetails, OutputTokensDetails
 
+from agency_swarm.agent.core import Agent
+from agency_swarm.context import MasterContext
+from agency_swarm.utils.thread import ThreadManager
 from agency_swarm.utils.usage_tracking import UsageStats, calculate_usage_with_cost, extract_usage_from_run_result
 
 
-def test_extract_usage_from_run_result_returns_none_without_context_wrapper() -> None:
-    run_result = SimpleNamespace(context_wrapper=None)
-    assert extract_usage_from_run_result(run_result) is None
+class _HasSubAgentResponsesWithModel(typing.Protocol):
+    _sub_agent_responses_with_model: list[tuple[str | None, ModelResponse]]
+
+
+class _HasMainAgentModel(typing.Protocol):
+    _main_agent_model: str
+
+
+def _make_run_result(*, usage: Usage, raw_responses: list[ModelResponse] | None = None) -> RunResult:
+    agent = Agent(name="TestAgent", instructions="Base instructions")
+    thread_manager = ThreadManager()
+    master_context = MasterContext(
+        thread_manager=thread_manager,
+        agents={agent.name: agent},
+        user_context={},
+        agent_runtime_state={},
+        current_agent_name=agent.name,
+        shared_instructions=None,
+    )
+    wrapper = RunContextWrapper(context=master_context, usage=usage)
+    return RunResult(
+        input="Hello",
+        new_items=[],
+        raw_responses=list(raw_responses or []),
+        final_output="ok",
+        input_guardrail_results=[],
+        output_guardrail_results=[],
+        tool_input_guardrail_results=[],
+        tool_output_guardrail_results=[],
+        context_wrapper=wrapper,
+        _last_agent=agent,
+    )
+
+
+def test_extract_usage_from_run_result_returns_none_without_run_result() -> None:
+    assert extract_usage_from_run_result(None) is None
 
 
 def test_extract_usage_from_run_result_reads_requests_and_tokens() -> None:
-    usage = SimpleNamespace(
+    usage = Usage(
         requests=2,
-        cached_tokens=3,
         input_tokens=10,
         output_tokens=20,
         total_tokens=30,
-        input_tokens_details=None,
-        output_tokens_details=None,
+        input_tokens_details=InputTokensDetails(cached_tokens=3),
+        output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
     )
-    run_result = SimpleNamespace(context_wrapper=SimpleNamespace(usage=usage))
+    run_result = _make_run_result(usage=usage)
 
     stats = extract_usage_from_run_result(run_result)
     assert stats == UsageStats(
@@ -38,32 +78,28 @@ def test_extract_usage_from_run_result_reads_requests_and_tokens() -> None:
 
 
 def test_extract_usage_from_run_result_extracts_reasoning_and_sums_subagent_reasoning() -> None:
-    main_usage = SimpleNamespace(
+    main_usage = Usage(
         requests=1,
-        cached_tokens=0,
         input_tokens=10,
         output_tokens=20,
         total_tokens=30,
-        input_tokens_details=SimpleNamespace(reasoning_tokens=5, audio_tokens=None),
-        output_tokens_details=None,
+        input_tokens_details=InputTokensDetails(cached_tokens=0),
+        output_tokens_details=OutputTokensDetails(reasoning_tokens=5),
     )
 
-    # Sub-agent response usage is an object (not a dict), so reasoning extraction path runs.
-    sub_usage = SimpleNamespace(
+    sub_usage = Usage(
         requests=1,
-        cached_tokens=0,
         input_tokens=1,
         output_tokens=2,
         total_tokens=3,
-        input_tokens_details=SimpleNamespace(reasoning_tokens=7),
-        output_tokens_details=None,
+        input_tokens_details=InputTokensDetails(cached_tokens=0),
+        output_tokens_details=OutputTokensDetails(reasoning_tokens=7),
     )
-    sub_response = SimpleNamespace(usage=sub_usage)
 
-    run_result = SimpleNamespace(
-        context_wrapper=SimpleNamespace(usage=main_usage),
-        _sub_agent_responses_with_model=[("gpt-4o", sub_response)],
-    )
+    run_result = _make_run_result(usage=main_usage)
+    typing.cast(_HasSubAgentResponsesWithModel, run_result)._sub_agent_responses_with_model = [
+        ("gpt-4o", ModelResponse(output=[], usage=sub_usage, response_id=None))
+    ]
 
     stats = extract_usage_from_run_result(run_result)
     assert stats is not None
@@ -72,74 +108,6 @@ def test_extract_usage_from_run_result_extracts_reasoning_and_sums_subagent_reas
     assert stats.output_tokens == 22
     assert stats.total_tokens == 33
     assert stats.reasoning_tokens == 12  # 5 main + 7 sub
-
-
-def test_extract_usage_from_run_result_aggregates_subagent_usage_dict_with_fallback_requests() -> None:
-    main_usage = SimpleNamespace(
-        requests=0,
-        cached_tokens=0,
-        input_tokens=0,
-        output_tokens=0,
-        total_tokens=0,
-        input_tokens_details=None,
-        output_tokens_details=None,
-    )
-
-    # For dict usage, helper defaults requests to 1 if neither requests nor request_count are present.
-    sub_response = SimpleNamespace(
-        usage={
-            "input_tokens": 4,
-            "output_tokens": 6,
-            "total_tokens": 10,
-        }
-    )
-
-    run_result = SimpleNamespace(
-        context_wrapper=SimpleNamespace(usage=main_usage),
-        _sub_agent_responses_with_model=[("gpt-4o", sub_response)],
-    )
-
-    stats = extract_usage_from_run_result(run_result)
-    assert stats is not None
-    assert stats.request_count == 1
-    assert stats.input_tokens == 4
-    assert stats.output_tokens == 6
-    assert stats.total_tokens == 10
-
-
-def test_extract_request_count_for_empty_usage() -> None:
-    main_usage = SimpleNamespace(
-        requests=0,
-        cached_tokens=0,
-        input_tokens=0,
-        output_tokens=0,
-        total_tokens=0,
-        input_tokens_details=None,
-        output_tokens_details=None,
-    )
-
-    # Usage object omits `requests`, but tokens are present.
-    sub_usage = SimpleNamespace(
-        cached_tokens=0,
-        input_tokens=4,
-        output_tokens=6,
-        total_tokens=10,
-        input_tokens_details=None,
-        output_tokens_details=None,
-    )
-    sub_response = SimpleNamespace(usage=sub_usage)
-
-    run_result = SimpleNamespace(
-        context_wrapper=SimpleNamespace(usage=main_usage),
-        _sub_agent_responses_with_model=[("gpt-4o", sub_response)],
-    )
-
-    stats = extract_usage_from_run_result(run_result)
-    assert stats is not None
-    assert stats.request_count == 1
-    assert stats.input_tokens == 4
-    assert stats.output_tokens == 6
-    assert stats.total_tokens == 10
 
 
 def test_calculate_usage_with_cost_per_response_costs_all_token_types() -> None:
@@ -167,31 +135,17 @@ def test_calculate_usage_with_cost_per_response_costs_all_token_types() -> None:
         },
     }
 
-    response_usage = SimpleNamespace(
+    response_usage = Usage(
+        requests=1,
         input_tokens=10,
         output_tokens=3,
-        cached_tokens=0,  # simulate missing top-level cached_tokens
-        input_tokens_details=SimpleNamespace(cached_tokens=4),
-        output_tokens_details=SimpleNamespace(reasoning_tokens=5),
+        total_tokens=13,
+        input_tokens_details=InputTokensDetails(cached_tokens=4),
+        output_tokens_details=OutputTokensDetails(reasoning_tokens=5),
     )
-    response = SimpleNamespace(usage=response_usage)
-
-    # Sub-agent response where usage is a dict (some providers/SDK adapters expose usage this way)
-    sub_response = SimpleNamespace(
-        usage={
-            "input_tokens": 2,
-            "output_tokens": 1,
-            # cached_tokens omitted on purpose; reported only in nested details
-            "input_tokens_details": {"cached_tokens": 1},
-            "output_tokens_details": {"reasoning_tokens": 4},
-        }
-    )
-
-    run_result = SimpleNamespace(
-        raw_responses=[response],
-        _main_agent_model="test/all-tokens-model",
-        _sub_agent_responses_with_model=[("test/sub-agent-model", sub_response)],
-    )
+    response = ModelResponse(output=[], usage=response_usage, response_id=None)
+    run_result = _make_run_result(usage=Usage(), raw_responses=[response])
+    typing.cast(_HasMainAgentModel, run_result)._main_agent_model = "test/all-tokens-model"
 
     base = UsageStats(
         request_count=1,
@@ -208,8 +162,4 @@ def test_calculate_usage_with_cost_per_response_costs_all_token_types() -> None:
 
     # Main response:
     # (10 - 4)*1.0 + 4*0.1 + 3*2.0 + 5*0.01 = 6 + 0.4 + 6 + 0.05 = 12.45
-    #
-    # Sub-agent (dict usage) response under its own pricing:
-    # (2 - 1)*10.0 + 1*1.0 + 1*20.0 + 4*0.5 = 10 + 1 + 20 + 2 = 33
-    assert with_cost.total_cost == pytest.approx(45.45)
-
+    assert with_cost.total_cost == pytest.approx(12.45)

@@ -9,12 +9,44 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import NotRequired, Protocol, TypedDict, cast
+
+from agents.items import ModelResponse
+from agents.result import RunResultBase
 
 logger = logging.getLogger(__name__)
 
 # Path to the pricing JSON file
 PRICING_FILE_PATH = Path(__file__).parent.parent / "data" / "model_prices_and_context_window.json"
+
+PricingData = dict[str, dict[str, float]]
+
+
+class UsageStatsDict(TypedDict):
+    request_count: int
+    cached_tokens: int
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    total_cost: float
+    reasoning_tokens: NotRequired[int]
+    audio_tokens: NotRequired[int]
+
+
+def _coerce_price(value: object) -> float:
+    if isinstance(value, bool):
+        return 0.0
+    if isinstance(value, int | float):
+        return float(value)
+    return 0.0
+
+
+class _HasSubAgentResponsesWithModel(Protocol):
+    _sub_agent_responses_with_model: list[tuple[str | None, ModelResponse]]
+
+
+class _HasMainAgentModel(Protocol):
+    _main_agent_model: str
 
 
 @dataclass
@@ -52,9 +84,9 @@ class UsageStats:
             ),
         )
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> UsageStatsDict:
         """Convert to dictionary for JSON serialization."""
-        result: dict[str, Any] = {
+        result: UsageStatsDict = {
             "request_count": self.request_count,
             "cached_tokens": self.cached_tokens,
             "input_tokens": self.input_tokens,
@@ -69,20 +101,33 @@ class UsageStats:
         return result
 
 
-def load_pricing_data() -> dict[str, Any]:
+def load_pricing_data() -> PricingData:
     """Load pricing data from the JSON file."""
     if not PRICING_FILE_PATH.exists():
         logger.warning(f"Pricing file not found at {PRICING_FILE_PATH}. Cost calculation will be unavailable.")
         return {}
     try:
         with open(PRICING_FILE_PATH, encoding="utf-8") as f:
-            return json.load(f)
+            raw = json.load(f)
+        if not isinstance(raw, dict):
+            return {}
+        pricing_data: PricingData = {}
+        for model_name, model_pricing in raw.items():
+            if not isinstance(model_name, str) or not isinstance(model_pricing, dict):
+                continue
+            pricing_data[model_name] = {
+                "input_cost_per_token": _coerce_price(model_pricing.get("input_cost_per_token")),
+                "output_cost_per_token": _coerce_price(model_pricing.get("output_cost_per_token")),
+                "cache_read_input_token_cost": _coerce_price(model_pricing.get("cache_read_input_token_cost")),
+                "output_cost_per_reasoning_token": _coerce_price(model_pricing.get("output_cost_per_reasoning_token")),
+            }
+        return pricing_data
     except Exception as e:
         logger.error(f"Failed to load pricing data: {e}")
         return {}
 
 
-def get_model_pricing(model_name: str, pricing_data: dict[str, Any] | None = None) -> dict[str, Any] | None:
+def get_model_pricing(model_name: str, pricing_data: PricingData | None = None) -> dict[str, float] | None:
     """Get pricing information for a specific model.
 
     Handles model name variations and provider prefixes:
@@ -148,7 +193,7 @@ def calculate_openai_cost(
     output_tokens: int,
     cached_tokens: int = 0,
     reasoning_tokens: int | None = None,
-    pricing_data: dict[str, Any] | None = None,
+    pricing_data: PricingData | None = None,
 ) -> float:
     """Calculate cost for any model based on token usage.
 
@@ -212,38 +257,22 @@ def calculate_openai_cost(
     return cost
 
 
-def _extract_usage_from_response(response: Any) -> dict[str, int] | None:
+def _extract_usage_from_response(response: ModelResponse) -> dict[str, int]:
     """Extract usage data from a single response.
 
     Returns a dict with normalized keys: requests, cached_tokens, input_tokens, output_tokens, total_tokens
     """
-    # Get usage from response.usage (SDK's ModelResponse)
-    usage = getattr(response, "usage", None)
-
-    if usage is None:
-        return None
-
-    # Normalize to dict with standard keys
-    if isinstance(usage, dict):
-        return {
-            "requests": usage.get("requests", 0) or usage.get("request_count", 0) or 1,
-            "cached_tokens": usage.get("cached_tokens", 0) or 0,
-            "input_tokens": usage.get("input_tokens", 0) or usage.get("prompt_tokens", 0) or 0,
-            "output_tokens": usage.get("output_tokens", 0) or usage.get("completion_tokens", 0) or 0,
-            "total_tokens": usage.get("total_tokens", 0) or 0,
-        }
-    else:
-        return {
-            # Many SDK usage objects omit a request counter; treat each response as 1 request.
-            "requests": getattr(usage, "requests", 0) or getattr(usage, "request_count", 0) or 1,
-            "cached_tokens": getattr(usage, "cached_tokens", 0) or 0,
-            "input_tokens": getattr(usage, "input_tokens", 0) or 0,
-            "output_tokens": getattr(usage, "output_tokens", 0) or 0,
-            "total_tokens": getattr(usage, "total_tokens", 0) or 0,
-        }
+    usage = response.usage
+    return {
+        "requests": usage.requests,
+        "cached_tokens": usage.input_tokens_details.cached_tokens,
+        "input_tokens": usage.input_tokens,
+        "output_tokens": usage.output_tokens,
+        "total_tokens": usage.total_tokens,
+    }
 
 
-def extract_usage_from_run_result(run_result: Any) -> UsageStats | None:
+def extract_usage_from_run_result(run_result: RunResultBase | None) -> UsageStats | None:
     """Extract usage information from a RunResult or RunResultStreaming object.
 
     Aggregates usage from:
@@ -269,62 +298,33 @@ def extract_usage_from_run_result(run_result: Any) -> UsageStats | None:
     audio_tokens = None
     found_any_usage = False
 
-    # Extract usage from context_wrapper
-    usage = None
-    if hasattr(run_result, "context_wrapper") and run_result.context_wrapper is not None:
-        if hasattr(run_result.context_wrapper, "usage"):
-            usage = run_result.context_wrapper.usage
+    usage = run_result.context_wrapper.usage
+    found_any_usage = True
 
-    if usage is not None:
-        found_any_usage = True
-        # Extract usage fields from main agent
-        # SDK uses "requests" but we normalize to "request_count" for our UsageStats
-        request_count = getattr(usage, "requests", 0) or getattr(usage, "request_count", 0) or 0
-        cached_tokens = getattr(usage, "cached_tokens", 0) or 0
-        input_tokens = getattr(usage, "input_tokens", 0) or 0
-        output_tokens = getattr(usage, "output_tokens", 0) or 0
-        total_tokens = getattr(usage, "total_tokens", 0) or 0
-
-        # Extract detailed token information if available
-        input_details = getattr(usage, "input_tokens_details", None)
-        output_details = getattr(usage, "output_tokens_details", None)
-
-        if input_details:
-            reasoning_tokens = getattr(input_details, "reasoning_tokens", None)
-            audio_tokens = getattr(input_details, "audio_tokens", None)
-
-        if output_details:
-            # Output details might also have reasoning tokens
-            if reasoning_tokens is None:
-                reasoning_tokens = getattr(output_details, "reasoning_tokens", None)
+    request_count = usage.requests
+    cached_tokens = usage.input_tokens_details.cached_tokens
+    input_tokens = usage.input_tokens
+    output_tokens = usage.output_tokens
+    total_tokens = usage.total_tokens
+    reasoning_tokens = usage.output_tokens_details.reasoning_tokens or None
+    audio_tokens = None
 
     # Aggregate usage from sub-agent responses
-    sub_agent_responses = getattr(run_result, "_sub_agent_responses_with_model", None)
-    if sub_agent_responses:
+    if hasattr(run_result, "_sub_agent_responses_with_model"):
+        sub_agent_responses = cast(_HasSubAgentResponsesWithModel, run_result)._sub_agent_responses_with_model
         for item in sub_agent_responses:
             try:
                 if isinstance(item, tuple) and len(item) == 2:
                     _, response = item
                     resp_usage = _extract_usage_from_response(response)
-                    if resp_usage:
-                        found_any_usage = True
-                        request_count += resp_usage.get("requests", 0)
-                        cached_tokens += resp_usage.get("cached_tokens", 0)
-                        input_tokens += resp_usage.get("input_tokens", 0)
-                        output_tokens += resp_usage.get("output_tokens", 0)
-                        total_tokens += resp_usage.get("total_tokens", 0)
-                        # Also check for reasoning tokens in SDK Usage objects
-                        sub_usage = getattr(response, "usage", None)
-                        if sub_usage and not isinstance(sub_usage, dict):
-                            sub_reasoning = None
-                            sub_input_details = getattr(sub_usage, "input_tokens_details", None)
-                            sub_output_details = getattr(sub_usage, "output_tokens_details", None)
-                            if sub_input_details:
-                                sub_reasoning = getattr(sub_input_details, "reasoning_tokens", None)
-                            if sub_reasoning is None and sub_output_details:
-                                sub_reasoning = getattr(sub_output_details, "reasoning_tokens", None)
-                            if sub_reasoning:
-                                reasoning_tokens = (reasoning_tokens or 0) + sub_reasoning
+                    request_count += resp_usage.get("requests", 0)
+                    cached_tokens += resp_usage.get("cached_tokens", 0)
+                    input_tokens += resp_usage.get("input_tokens", 0)
+                    output_tokens += resp_usage.get("output_tokens", 0)
+                    total_tokens += resp_usage.get("total_tokens", 0)
+                    sub_reasoning = response.usage.output_tokens_details.reasoning_tokens
+                    if sub_reasoning:
+                        reasoning_tokens = (reasoning_tokens or 0) + sub_reasoning
             except Exception:
                 pass  # Skip malformed entries
 
@@ -345,8 +345,8 @@ def extract_usage_from_run_result(run_result: Any) -> UsageStats | None:
 def calculate_usage_with_cost(
     usage_stats: UsageStats,
     model_name: str | None = None,
-    pricing_data: dict[str, Any] | None = None,
-    run_result: Any = None,
+    pricing_data: PricingData | None = None,
+    run_result: RunResultBase | None = None,
 ) -> UsageStats:
     """Calculate cost for usage statistics and add it to the stats.
 
@@ -366,106 +366,34 @@ def calculate_usage_with_cost(
         UsageStats with cost calculated
     """
     # Extract main agent's model from run_result if not explicitly provided
-    if model_name is None and run_result is not None:
-        model_name = getattr(run_result, "_main_agent_model", None)
+    if model_name is None and run_result is not None and hasattr(run_result, "_main_agent_model"):
+        model_name = cast(_HasMainAgentModel, run_result)._main_agent_model
 
-    # Step 1: Try per-response cost calculation
-    # This ensures correct pricing when multiple agents with different models are involved
+    # Try per-response costing first for multi-agent correctness.
     if run_result:
         total_cost = 0.0
         calculated_any = False
 
-        def _calculate_response_cost(response: Any, resp_model_name: str | None) -> float:
+        def _calculate_response_cost(response: ModelResponse, resp_model_name: str | None) -> float:
             """Calculate cost for a single response given its model name."""
-            # Try to extract model name from response if not provided
             if not resp_model_name:
-                if hasattr(response, "model"):
-                    resp_model_name = getattr(response, "model", None)
-                elif hasattr(response, "model_name"):
-                    resp_model_name = getattr(response, "model_name", None)
+                return 0.0
 
-            # Get usage from response
-            response_usage = getattr(response, "usage", None)
+            response_usage = response.usage
+            response_reasoning_tokens = response_usage.output_tokens_details.reasoning_tokens or None
 
-            # If we have both model name and usage for this response, calculate cost
-            if resp_model_name and response_usage:
-                # Normalize usage into token counts, supporting both objects and dicts.
-                response_input_tokens = 0
-                response_output_tokens = 0
-                response_cached_tokens = 0
-                response_reasoning_tokens: int | None = None
-
-                if isinstance(response_usage, dict):
-                    response_input_tokens = (
-                        response_usage.get("input_tokens", 0)
-                        or response_usage.get("prompt_tokens", 0)
-                        or 0
-                    )
-                    response_output_tokens = (
-                        response_usage.get("output_tokens", 0)
-                        or response_usage.get("completion_tokens", 0)
-                        or 0
-                    )
-                    response_cached_tokens = response_usage.get("cached_tokens", 0) or 0
-
-                    input_details = response_usage.get("input_tokens_details")
-                    output_details = response_usage.get("output_tokens_details")
-
-                    if response_cached_tokens == 0 and isinstance(input_details, dict):
-                        response_cached_tokens = input_details.get("cached_tokens", 0) or 0
-
-                    input_reasoning = (
-                        input_details.get("reasoning_tokens")
-                        if isinstance(input_details, dict)
-                        else None
-                    )
-                    output_reasoning = (
-                        output_details.get("reasoning_tokens")
-                        if isinstance(output_details, dict)
-                        else None
-                    )
-                    if input_reasoning is not None or output_reasoning is not None:
-                        response_reasoning_tokens = (input_reasoning or 0) + (output_reasoning or 0)
-                else:
-                    response_input_tokens = (
-                        getattr(response_usage, "input_tokens", 0)
-                        or getattr(response_usage, "prompt_tokens", 0)
-                    )
-                    response_output_tokens = (
-                        getattr(response_usage, "output_tokens", 0)
-                        or getattr(response_usage, "completion_tokens", 0)
-                    )
-                    response_cached_tokens = getattr(response_usage, "cached_tokens", 0) or 0
-
-                    input_reasoning = None
-                    output_reasoning = None
-                    if hasattr(response_usage, "input_tokens_details"):
-                        input_details = getattr(response_usage, "input_tokens_details", None)
-                        if input_details:
-                            input_reasoning = getattr(input_details, "reasoning_tokens", None)
-                            # Some SDKs report cached tokens inside input_tokens_details.cached_tokens
-                            if response_cached_tokens == 0:
-                                response_cached_tokens = getattr(input_details, "cached_tokens", 0) or 0
-                    if hasattr(response_usage, "output_tokens_details"):
-                        output_details = getattr(response_usage, "output_tokens_details", None)
-                        if output_details:
-                            output_reasoning = getattr(output_details, "reasoning_tokens", None)
-                    if input_reasoning is not None or output_reasoning is not None:
-                        response_reasoning_tokens = (input_reasoning or 0) + (output_reasoning or 0)
-
-                return calculate_openai_cost(
-                    model_name=str(resp_model_name),
-                    input_tokens=response_input_tokens,
-                    output_tokens=response_output_tokens,
-                    cached_tokens=response_cached_tokens,
-                    reasoning_tokens=response_reasoning_tokens,
-                    pricing_data=pricing_data,
-                )
-            return 0.0
+            return calculate_openai_cost(
+                model_name=resp_model_name,
+                input_tokens=response_usage.input_tokens,
+                output_tokens=response_usage.output_tokens,
+                cached_tokens=response_usage.input_tokens_details.cached_tokens,
+                reasoning_tokens=response_reasoning_tokens,
+                pricing_data=pricing_data,
+            )
 
         # Process main agent's raw_responses (use fallback model_name)
-        raw_responses = getattr(run_result, "raw_responses", None)
-        if raw_responses and len(raw_responses) > 0:
+        raw_responses = run_result.raw_responses
+        if len(raw_responses) > 0:
             for response in raw_responses:
                 try:
                     # For main agent responses, use the provided model_name as fallback
@@ -478,39 +406,33 @@ def calculate_usage_with_cost(
 
         # Process sub-agent responses with their specific model names
         # These are stored as tuples of (model_name, response)
-        sub_agent_responses = getattr(run_result, "_sub_agent_responses_with_model", None)
-        if sub_agent_responses and len(sub_agent_responses) > 0:
-            for item in sub_agent_responses:
-                try:
-                    if isinstance(item, tuple) and len(item) == 2:
-                        sub_model_name, response = item
-                        response_cost = _calculate_response_cost(response, sub_model_name)
-                        if response_cost > 0:
-                            total_cost += response_cost
-                            calculated_any = True
-                except Exception as e:
-                    logger.debug(f"Could not calculate cost for sub-agent response: {e}")
+        if hasattr(run_result, "_sub_agent_responses_with_model"):
+            sub_agent_responses = cast(_HasSubAgentResponsesWithModel, run_result)._sub_agent_responses_with_model
+            if len(sub_agent_responses) > 0:
+                for item in sub_agent_responses:
+                    try:
+                        if isinstance(item, tuple) and len(item) == 2:
+                            sub_model_name, response = item
+                            response_cost = _calculate_response_cost(response, sub_model_name)
+                            if response_cost > 0:
+                                total_cost += response_cost
+                                calculated_any = True
+                    except Exception as e:
+                        logger.debug(f"Could not calculate cost for sub-agent response: {e}")
 
         if calculated_any:
             usage_stats.total_cost = total_cost
             return usage_stats
 
-    # Step 3: Fall back to single-model calculation using aggregated usage
-    # This is less accurate for multi-agent scenarios but better than nothing
+    # Fall back to single-model costing using aggregated usage.
     if model_name:
-        # Handle LiteLLM model name format (e.g., "litellm/anthropic/claude-sonnet-4")
-        # Extract the actual model name after the last "/"
+        # Handle LiteLLM model name format (e.g., "litellm/anthropic/claude-sonnet-4").
         actual_model_name = model_name
         if "/" in model_name:
-            # For LiteLLM format: "litellm/provider/model" -> "model"
-            # But we want to try both the full path and just the model name
             parts = model_name.split("/")
             if len(parts) > 1:
-                # Try the full model path first (e.g., "anthropic/claude-sonnet-4")
-                # Then try just the model name
                 actual_model_name = "/".join(parts[-2:]) if len(parts) > 2 else parts[-1]
 
-        # Use the same cost calculation function (works for all models in pricing JSON)
         cost = calculate_openai_cost(
             model_name=actual_model_name,
             input_tokens=usage_stats.input_tokens,
@@ -572,4 +494,3 @@ def format_usage_for_display(usage_stats: UsageStats, model_name: str | None = N
         lines.append(f"Cost: ${usage_stats.total_cost:.6f}")
 
     return "\n".join(lines)
-

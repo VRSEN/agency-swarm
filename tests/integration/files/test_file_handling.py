@@ -711,7 +711,9 @@ async def test_file_reupload_on_mtime_update(real_openai_client: AsyncOpenAI, tm
 
     # Verify vector store now references a new file id
     vs_files = await real_openai_client.vector_stores.files.list(vector_store_id=vs_id, filter="completed")
-    new_ids = {getattr(f, "file_id", None) or getattr(f, "id", None) for f in vs_files.data}
+    vs_file_ids = {f.id for f in vs_files.data}
+    # Vector Store file listings are eventually consistent; the old id may still appear transiently.
+    new_ids = vs_file_ids - {old_id}
     assert len(new_ids) == 1
     (new_id,) = tuple(new_ids)
     assert new_id != old_id

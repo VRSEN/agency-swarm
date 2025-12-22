@@ -448,9 +448,10 @@ class SendMessage(FunctionTool):
                                 model_settings = getattr(self.recipient_agent, "model_settings", None)
                                 if model_settings:
                                     sub_agent_model = getattr(model_settings, "model", None)
+                            sub_agent_model_name = sub_agent_model if isinstance(sub_agent_model, str) else None
                             # Store tuples of (model_name, response) for per-model cost calculation
                             for resp in sub_raw_responses:
-                                wrapper.context._sub_agent_raw_responses.append((sub_agent_model, resp))
+                                wrapper.context._sub_agent_raw_responses.append((sub_agent_model_name, resp))
                     except Exception as e:
                         logger.debug(f"Could not store sub-agent raw_responses: {e}")
 
@@ -484,9 +485,10 @@ class SendMessage(FunctionTool):
                                 model_settings = getattr(self.recipient_agent, "model_settings", None)
                                 if model_settings:
                                     sub_agent_model = getattr(model_settings, "model", None)
+                            sub_agent_model_name = sub_agent_model if isinstance(sub_agent_model, str) else None
                             # Store tuples of (model_name, response) for per-model cost calculation
                             for resp in sub_raw_responses:
-                                wrapper.context._sub_agent_raw_responses.append((sub_agent_model, resp))
+                                wrapper.context._sub_agent_raw_responses.append((sub_agent_model_name, resp))
                     except Exception as e:
                         logger.debug(f"Could not store sub-agent raw_responses: {e}")
 
