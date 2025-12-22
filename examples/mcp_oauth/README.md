@@ -2,6 +2,10 @@
 
 OAuth-authenticated MCP server integrations for Agency Swarm.
 
+> **Note**
+> These examples use `MCPServerOAuth` (the MCP SDK client) and are meant for **local development** (they open a browser on the machine running the script).
+> For **production SaaS**, use the FastAPI streaming flow so OAuth redirects are sent to your frontend via SSE (see `examples/fastapi_integration/`).
+
 ## Quick Start
 
 ### Notion (Hosted MCP)

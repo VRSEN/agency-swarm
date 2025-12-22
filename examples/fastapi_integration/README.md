@@ -13,6 +13,7 @@ This directory contains examples demonstrating how to integrate Agency Swarm wit
 
 - `server.py` - FastAPI server that exposes an agency with two communicating agents
 - `client.py` - Python client showing how to interact with the API endpoints
+- `notion_hosted_mcp_tool.py` - Notion hosted MCP via `HostedMCPTool` + FastAPI OAuth SSE flow
 
 ## Setup
 

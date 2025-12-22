@@ -44,7 +44,7 @@ from agency_swarm.integrations.fastapi_utils.logging_middleware import get_logs_
 from agency_swarm.integrations.fastapi_utils.oauth_support import (
     FastAPIOAuthConfig,
     FastAPIOAuthRuntime,
-    OAuthFlowError,
+    has_hosted_mcp_tools_missing_authorization,
     is_oauth_server,
 )
 from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
@@ -393,10 +393,14 @@ def make_response_endpoint(
         if request.client_config is not None:
             apply_openai_client_config(agency_instance, request.client_config)
 
-        if oauth_runtime and _has_oauth_servers(agency_instance):
+        if oauth_runtime and (
+            _has_oauth_servers(agency_instance) or has_hosted_mcp_tools_missing_authorization(agency_instance)
+        ):
             raise HTTPException(
                 status_code=400,
-                detail="OAuth-enabled MCP servers require /get_response_stream for redirect events",
+                detail=(
+                    "OAuth-enabled MCP servers and hosted MCP tools require /get_response_stream for redirect events"
+                ),
             )
         oauth_runtime = _prepare_oauth_runtime(agency_instance, oauth_runtime, user_id)
         # Attach persistent MCP servers and ensure connections before handling the request
@@ -549,7 +553,7 @@ def make_stream_endpoint(
                     if connect_task in done:
                         try:
                             await connect_task
-                        except OAuthFlowError as exc:
+                        except Exception as exc:
                             if queue_task:
                                 queue_task.cancel()
                             yield "data: " + json.dumps({"error": str(exc)}) + "\n\n"
@@ -899,7 +903,7 @@ def make_agui_chat_endpoint(
                         if connect_task in done:
                             try:
                                 await connect_task
-                            except OAuthFlowError as exc:
+                            except Exception as exc:
                                 if queue_task:
                                     queue_task.cancel()
                                 yield encoder.encode(RunErrorEvent(type=EventType.RUN_ERROR, message=str(exc)))
