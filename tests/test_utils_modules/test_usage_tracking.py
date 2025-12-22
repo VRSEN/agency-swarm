@@ -125,8 +125,7 @@ def test_calculate_usage_with_cost_per_response_costs_all_token_types() -> None:
             "cache_read_input_token_cost": 0.1,
             "output_cost_per_token": 2.0,
             "output_cost_per_reasoning_token": 0.01,
-        }
-        ,
+        },
         "test/sub-agent-model": {
             "input_cost_per_token": 10.0,
             "cache_read_input_token_cost": 1.0,

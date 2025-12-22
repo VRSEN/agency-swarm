@@ -30,6 +30,7 @@ from agency_swarm.messages import (
 )
 from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
 from agency_swarm.utils.citation_extractor import extract_direct_file_annotations
+from agency_swarm.utils.model_utils import get_model_name
 
 if TYPE_CHECKING:
     from agents.items import ModelResponse
@@ -161,9 +162,9 @@ class Execution:
             # Store main agent's model on run_result for automatic cost calculation
             if run_result:
                 try:
-                    main_model = self.agent.model
-                    if isinstance(main_model, str):
-                        typing.cast(_UsageTrackingRunResult, run_result)._main_agent_model = main_model
+                    main_model_name = get_model_name(self.agent.model)
+                    if main_model_name:
+                        typing.cast(_UsageTrackingRunResult, run_result)._main_agent_model = main_model_name
                 except Exception as e:
                     logger.debug(f"Could not store main agent model on RunResult: {e}")
 
