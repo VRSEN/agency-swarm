@@ -1,5 +1,7 @@
 """OAuth-authenticated MCP client for Agency Swarm."""
 
+import asyncio
+import contextlib
 import logging
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
@@ -111,9 +113,16 @@ class MCPServerOAuthClient:
             self._authenticated = True
             logger.info(f"Successfully authenticated to OAuth MCP server: {self.name}")
 
+        except asyncio.CancelledError:
+            logger.info("OAuth MCP client connect cancelled: %s", self.name)
+            # Ensure we close any partially-opened async context managers even when cancelled.
+            await asyncio.shield(self.cleanup())
+            raise
         except Exception:
             logger.exception(f"Failed to connect to OAuth MCP server: {self.name}")
-            await self.cleanup()
+            # Cleanup should not clobber the original error.
+            with contextlib.suppress(Exception):
+                await asyncio.shield(self.cleanup())
             raise
 
     async def list_tools(
