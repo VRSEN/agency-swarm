@@ -6,6 +6,7 @@ process various file types through HTTP requests, and return appropriate respons
 containing the expected file content.
 """
 
+import asyncio
 import socket
 import subprocess
 import sys
@@ -167,22 +168,54 @@ class TestFastAPIFileProcessing:
     async def test_file_search_attachment(self, file_server_base_url: str, fastapi_base_url: str):
         """Test processing a single text file via file_urls."""
         url = f"{fastapi_base_url}/test_agency/get_response"
-        payload = {
-            "message": "Please read the content of the uploaded file and tell me what secret phrase you find.",
-            "file_urls": {"test_file.txt": f"{file_server_base_url}/test-txt.txt"},
-        }
+        message = "Please read the content of the uploaded file and tell me what secret phrase you find."
+        expected_phrase = "first txt secret phrase"
+        file_name = "test_file.txt"
+        file_url = f"{file_server_base_url}/test-txt.txt"
         headers = {}
 
-        async with self.get_http_client(timeout_seconds=120) as client:
-            response = await client.post(url, json=payload, headers=headers)
+        # OpenAI file availability can be eventually consistent even after upload reports "processed".
+        # Mirror other tests' stabilization: retry by re-asking using the returned file_id (no re-upload).
+        max_attempts = 3
+        retry_delay_seconds = 2
+        file_id: str | None = None
+        last_response_text = ""
+        last_response_data: dict[str, object] | None = None
 
-        assert response.status_code == 200
-        response_data = response.json()
+        async with self.get_http_client(timeout_seconds=120) as client:
+            for attempt in range(max_attempts):
+                if attempt == 0:
+                    payload = {"message": message, "file_urls": {file_name: file_url}}
+                else:
+                    assert file_id is not None
+                    payload = {"message": message, "file_ids": [file_id]}
+
+                response = await client.post(url, json=payload, headers=headers)
+
+                assert response.status_code == 200
+                response_data = response.json()
+                last_response_data = response_data
+                if "error" in response_data:
+                    pytest.fail(f"Unexpected error response: {response_data['error']}")
+
+                if attempt == 0:
+                    file_ids_map = response_data.get("file_ids_map")
+                    assert isinstance(file_ids_map, dict), f"Expected file_ids_map dict, got: {type(file_ids_map)}"
+                    file_id_value = file_ids_map.get(file_name)
+                    assert isinstance(file_id_value, str) and file_id_value, f"Missing file_id for {file_name}"
+                    file_id = file_id_value
+
+                assert "response" in response_data
+                last_response_text = str(response_data["response"]).lower()
+                if expected_phrase in last_response_text:
+                    break
+                if attempt < max_attempts - 1:
+                    await asyncio.sleep(retry_delay_seconds)
+
+        assert expected_phrase in last_response_text, f"Expected phrase not found. Last response: {last_response_data}"
 
         # Verify response contains expected content
-        assert "response" in response_data
-        response_text = response_data["response"].lower()
-        assert "first txt secret phrase" in response_text
+        assert last_response_data is not None and "response" in last_response_data
 
     @pytest.mark.asyncio
     async def test_code_interpreter_attachment(self, file_server_base_url: str, fastapi_base_url: str):
