@@ -1,5 +1,7 @@
 import pytest
+from agents import HostedMCPTool
 from fastapi.testclient import TestClient
+from openai.types.responses.tool_param import Mcp
 
 from agency_swarm import Agency, Agent, run_fastapi
 from agency_swarm.integrations.fastapi_utils.oauth_support import OAuthStateRegistry
@@ -46,6 +48,38 @@ def test_oauth_callback_handles_provider_error_response():
     assert response.status_code == 400
     data = response.json()
     assert "access_denied" in data.get("detail", "").lower() or "error" in data.get("detail", "").lower()
+
+
+def test_run_fastapi_enables_oauth_routes_for_hosted_mcp_tool() -> None:
+    """HostedMCPTool without an access token should enable FastAPI OAuth routes."""
+
+    hosted_tool = HostedMCPTool(
+        tool_config=Mcp(
+            type="mcp",
+            server_label="notion",
+            server_url="https://mcp.notion.com/mcp",
+        )
+    )
+
+    def agency_factory(load_threads_callback=None, save_threads_callback=None):
+        agent = Agent(name="TestAgent", instructions="Base instructions", tools=[hosted_tool])
+        return Agency(
+            agent,
+            load_threads_callback=load_threads_callback,
+            save_threads_callback=save_threads_callback,
+        )
+
+    app = run_fastapi(
+        agencies={"test_agency": agency_factory},
+        return_app=True,
+        app_token_env="",
+    )
+    client = TestClient(app)
+
+    # Route should exist when hosted MCP tools need OAuth.
+    response = client.get("/auth/status/test-state")
+    assert response.status_code == 200
+    assert response.json()["status"] == "unknown"
 
 
 @pytest.mark.asyncio
