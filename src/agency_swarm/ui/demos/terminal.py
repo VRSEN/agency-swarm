@@ -379,7 +379,7 @@ def start_terminal(
             most_recent_id = records[0]["chat_id"]
             if TerminalDemoLauncher.load_chat(agency_instance, most_recent_id):
                 resumed_chat_id = most_recent_id
-                # Restore usage from saved metadata
+                # Restore usage from saved metadata.
                 metadata = TerminalDemoLauncher.load_chat_metadata(most_recent_id)
                 if metadata and "usage" in metadata:
                     saved_usage = metadata["usage"]
@@ -413,7 +413,7 @@ def start_terminal(
 
     current_default_recipient = agency_instance.entry_points[0].name
 
-    # Track accumulated usage for the session (restore from saved if available)
+    # Track accumulated usage for the session (restore from saved if available).
     session_usage = resumed_usage if resumed_usage else UsageStats()
 
     def _parse_slash_command(text: str) -> tuple[str, list[str]] | None:
@@ -483,7 +483,7 @@ def start_terminal(
         )
         if chosen:
             chat_id = chosen
-            # Restore usage from saved metadata
+            # Restore usage from saved metadata.
             metadata = TerminalDemoLauncher.load_chat_metadata(chat_id)
             if metadata and "usage" in metadata:
                 saved_usage = metadata["usage"]
@@ -498,7 +498,7 @@ def start_terminal(
                     audio_tokens=saved_usage.get("audio_tokens"),
                 )
             else:
-                session_usage = UsageStats()  # Reset if no saved usage
+                session_usage = UsageStats()  # Reset if no saved usage.
             event_converter.console.print(f"Resumed chat: {chat_id}")
         event_converter.console.rule()
         try:

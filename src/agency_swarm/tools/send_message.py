@@ -432,8 +432,8 @@ class SendMessage(FunctionTool):
                             f"Error getting response from the agent: {event.get('content', 'Unknown error')}"
                         )
 
-                # Get final result from stream after it completes
-                final_result = getattr(stream, "final_result", None)
+                # Get final result from stream after it completes.
+                final_result = stream.final_result
 
                 if tool_calls_seen:
                     logger.info(f"Sub-agent '{recipient_name_for_call}' executed tools: {tool_calls_seen}")
@@ -441,7 +441,7 @@ class SendMessage(FunctionTool):
                 # Merge sub-agent raw_responses into parent's raw_responses for per-response cost calculation
                 if final_result and wrapper and wrapper.context:
                     try:
-                        sub_raw_responses = getattr(final_result, "raw_responses", None)
+                        sub_raw_responses = final_result.raw_responses
                         if sub_raw_responses:
                             # Get sub-agent's model name for accurate per-response pricing
                             sub_agent_model_name = get_model_name(self.recipient_agent.model)
@@ -473,7 +473,7 @@ class SendMessage(FunctionTool):
                 # Merge sub-agent raw_responses into parent's raw_responses for per-response cost calculation
                 if response and wrapper and wrapper.context:
                     try:
-                        sub_raw_responses = getattr(response, "raw_responses", None)
+                        sub_raw_responses = response.raw_responses
                         if sub_raw_responses:
                             # Get sub-agent's model name for accurate per-response pricing
                             sub_agent_model_name = get_model_name(self.recipient_agent.model)

@@ -209,32 +209,8 @@ def test_streaming_user_context(recording_agency_factory: RecordingAgencyFactory
     assert {k: v for k, v in stream_context.items() if k != "_streaming_context"} == {"plan": "pro"}
     assert "_streaming_context" in stream_context
 
-    # Assert the final messages SSE event contains usage
-    current_event: str | None = None
-    messages_payloads = []
-    for raw in lines:
-        if not raw:
-            continue
-        line = raw.decode("utf-8") if isinstance(raw, bytes | bytearray) else raw
-        if line.startswith("event:"):
-            current_event = line.split("event:", 1)[1].strip()
-            continue
-        if not line.startswith("data:"):
-            continue
-        data_str = line.split("data:", 1)[1].strip()
-        if data_str == "[DONE]":
-            continue
-        if current_event != "messages":
-            continue
-        try:
-            payload = json.loads(data_str)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(payload, dict):
-            messages_payloads.append(payload)
-
-    assert messages_payloads, "Expected a final 'messages' SSE event payload"
-    usage = messages_payloads[-1]["usage"]
+    messages_payload = _extract_last_messages_payload(lines)
+    usage = messages_payload["usage"]
     assert usage["request_count"] == 1
     assert usage["input_tokens"] == 10
     assert usage["output_tokens"] == 20
@@ -285,3 +261,29 @@ def test_user_context_defaults_to_none(recording_agency_factory: RecordingAgency
 
     assert response.status_code == 200
     assert recording_agency_factory.tracker.last_response_context is None
+
+
+def _extract_last_messages_payload(lines: list[bytes | str]) -> dict[str, object]:
+    """Return the last SSE `event: messages` payload as a dict."""
+    current_event: str | None = None
+    messages_payloads: list[dict[str, object]] = []
+    for raw in lines:
+        if not raw:
+            continue
+        line = raw.decode("utf-8") if isinstance(raw, bytes | bytearray) else raw
+        if line.startswith("event:"):
+            current_event = line.split("event:", 1)[1].strip()
+            continue
+        if not line.startswith("data:"):
+            continue
+        data_str = line.split("data:", 1)[1].strip()
+        if data_str == "[DONE]":
+            continue
+        if current_event != "messages":
+            continue
+        payload = json.loads(data_str)
+        if isinstance(payload, dict):
+            messages_payloads.append(payload)
+
+    assert messages_payloads, "Expected a final 'messages' SSE event payload"
+    return messages_payloads[-1]
