@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 import typing
+from collections.abc import AsyncIterator
 
 import pytest
-from agents.items import ModelResponse
+from agents import Tool
+from agents.agent_output import AgentOutputSchemaBase
+from agents.handoffs import Handoff
+from agents.items import ModelResponse, TResponseInputItem, TResponseStreamEvent
+from agents.model_settings import ModelSettings
+from agents.models.interface import Model, ModelTracing
 from agents.result import RunResult
 from agents.run_context import RunContextWrapper
 from agents.usage import Usage
+from openai.types.responses import ResponseOutputMessage, ResponseOutputText
+from openai.types.responses.response_prompt_param import ResponsePromptParam
 from openai.types.responses.response_usage import InputTokensDetails, OutputTokensDetails
 
 from agency_swarm.agent.core import Agent
@@ -162,3 +170,84 @@ def test_calculate_usage_with_cost_per_response_costs_all_token_types() -> None:
     # Main response:
     # (10 - 4)*1.0 + 4*0.1 + 3*2.0 + 5*0.01 = 6 + 0.4 + 6 + 0.05 = 12.45
     assert with_cost.total_cost == pytest.approx(12.45)
+
+
+@pytest.mark.asyncio
+async def test_calculate_usage_with_cost_uses_model_name_from_model_instance() -> None:
+    """Regression: costing should work when an Agent is configured with a Model instance."""
+
+    class FakeModel(Model):
+        def __init__(self, model: str) -> None:
+            self.model = model
+
+        async def get_response(
+            self,
+            system_instructions: str | None,
+            input: str | list[TResponseInputItem],
+            model_settings: ModelSettings,
+            tools: list[Tool],
+            output_schema: AgentOutputSchemaBase | None,
+            handoffs: list[Handoff],
+            tracing: ModelTracing,
+            *,
+            previous_response_id: str | None,
+            conversation_id: str | None,
+            prompt: ResponsePromptParam | None,
+        ) -> ModelResponse:
+            usage = Usage(
+                requests=1,
+                input_tokens=2,
+                output_tokens=1,
+                total_tokens=3,
+                input_tokens_details=InputTokensDetails(cached_tokens=0),
+                output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
+            )
+            msg = ResponseOutputMessage(
+                id="msg_1",
+                content=[ResponseOutputText(text="ok", type="output_text", annotations=[])],
+                role="assistant",
+                status="completed",
+                type="message",
+            )
+            return ModelResponse(output=[msg], usage=usage, response_id="resp_1")
+
+        def stream_response(
+            self,
+            system_instructions: str | None,
+            input: str | list[TResponseInputItem],
+            model_settings: ModelSettings,
+            tools: list[Tool],
+            output_schema: AgentOutputSchemaBase | None,
+            handoffs: list[Handoff],
+            tracing: ModelTracing,
+            *,
+            previous_response_id: str | None,
+            conversation_id: str | None,
+            prompt: ResponsePromptParam | None,
+        ) -> AsyncIterator[TResponseStreamEvent]:
+            async def _stream() -> AsyncIterator[TResponseStreamEvent]:
+                if False:
+                    yield typing.cast(TResponseStreamEvent, {})
+                return
+
+            return _stream()
+
+    model_name = "test/model-instance"
+    agent = Agent(name="ModelInstanceAgent", instructions="Respond with 'ok'.", model=FakeModel(model_name))
+    result = await agent.get_response("hi")
+
+    assert typing.cast(_HasMainAgentModel, result)._main_agent_model == model_name
+
+    usage_stats = extract_usage_from_run_result(result)
+    assert usage_stats is not None
+
+    pricing_data = {
+        model_name: {
+            "input_cost_per_token": 1.0,
+            "cache_read_input_token_cost": 0.0,
+            "output_cost_per_token": 1.0,
+            "output_cost_per_reasoning_token": 0.0,
+        }
+    }
+    with_cost = calculate_usage_with_cost(usage_stats, pricing_data=pricing_data, run_result=result)
+    assert with_cost.total_cost == pytest.approx(3.0)
