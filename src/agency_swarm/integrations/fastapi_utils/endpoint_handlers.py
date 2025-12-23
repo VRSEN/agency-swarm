@@ -7,7 +7,6 @@ import uuid
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass, field
 from importlib import metadata
-from typing import Any, cast
 
 from ag_ui.core import EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
 from ag_ui.encoder import EventEncoder
@@ -456,18 +455,7 @@ def _normalize_new_messages_for_client(messages: list[TResponseInputItem]) -> li
     calls.
     """
     normalizer = StreamIdNormalizer()
-    dict_messages: list[dict[str, Any]] = [cast(dict[str, Any], msg) for msg in messages if isinstance(msg, dict)]
-    normalized_dicts = normalizer.normalize_message_dicts(dict_messages)
-
-    normalized: list[TResponseInputItem] = []
-    dict_iter = iter(normalized_dicts)
-    for msg in messages:
-        if not isinstance(msg, dict):
-            normalized.append(msg)
-            continue
-        normalized.append(cast(TResponseInputItem, next(dict_iter)))
-
-    return normalized
+    return normalizer.normalize_message_dicts(messages)
 
 
 def make_metadata_endpoint(agency_metadata: dict, verify_token):

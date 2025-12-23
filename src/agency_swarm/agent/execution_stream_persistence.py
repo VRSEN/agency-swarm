@@ -11,6 +11,7 @@ from agents.items import MessageOutputItem, RunItem
 from agents.models.fake_id import FAKE_RESPONSES_ID
 
 from agency_swarm.messages import MessageFilter, MessageFormatter
+from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
 from agency_swarm.utils.citation_extractor import extract_direct_file_annotations
 
 logger = logging.getLogger(__name__)
@@ -377,6 +378,9 @@ def _persist_streamed_items(
     filtered_items = [item for item in items_to_save if not MessageFilter.should_filter(item)]
     if not filtered_items:
         return
+
+    normalizer = StreamIdNormalizer()
+    filtered_items = normalizer.normalize_message_dicts(filtered_items)
 
     synthetic_keys_to_replace: set[tuple[str, str]] = {
         (origin, str(item.get("content")))

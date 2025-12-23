@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import deque
 from typing import Any
 
+from agents import TResponseInputItem
 from agents.models.fake_id import FAKE_RESPONSES_ID
 from pydantic import BaseModel
 
@@ -144,21 +145,21 @@ class StreamIdNormalizer:
             event.call_id = stable_id
         return event
 
-    def normalize_message_dicts(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Rewrite placeholder ids in serialized message dicts.
+    def normalize_message_dicts(self, messages: list[TResponseInputItem]) -> list[TResponseInputItem]:
+        """Rewrite placeholder ids in serialized message items.
 
         This is used both for API payloads (`new_messages`) and for normalizing messages before
         persistence when the upstream model supplies placeholder IDs.
         """
         seq_by_agent_run_id: dict[str, int] = {}
-        normalized: list[dict[str, Any]] = []
+        normalized: list[TResponseInputItem] = []
         for idx, msg in enumerate(messages):
             msg_id = msg.get("id")
             if msg_id != FAKE_RESPONSES_ID:
                 normalized.append(msg)
                 continue
 
-            msg_copy: dict[str, Any] = dict(msg)
+            msg_copy: Any = dict(msg)
 
             call_id = msg_copy.get("call_id")
             if isinstance(call_id, str) and call_id and call_id != FAKE_RESPONSES_ID:

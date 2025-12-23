@@ -2,7 +2,7 @@ import asyncio
 import logging
 import uuid
 from collections.abc import AsyncGenerator
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from agents import (
     RunConfig,
@@ -199,18 +199,7 @@ class Execution:
                 filtered_items = MessageFilter.filter_messages(items_to_save)  # type: ignore[arg-type] # Filter out unwanted message types
 
                 normalizer = StreamIdNormalizer()
-                dict_messages: list[dict[str, Any]] = [
-                    cast(dict[str, Any], msg) for msg in filtered_items if isinstance(msg, dict)
-                ]
-                normalized_dicts = normalizer.normalize_message_dicts(dict_messages)
-
-                normalized_items: list[TResponseInputItem] = []
-                dict_iter = iter(normalized_dicts)
-                for msg in filtered_items:
-                    if not isinstance(msg, dict):
-                        normalized_items.append(msg)
-                        continue
-                    normalized_items.append(cast(TResponseInputItem, next(dict_iter)))
+                normalized_items = normalizer.normalize_message_dicts(filtered_items)
 
                 agency_context.thread_manager.add_messages(normalized_items)  # type: ignore[arg-type] # Save filtered items to flat storage
                 logger.debug(f"Saved {len(filtered_items)} items to storage (filtered from {len(items_to_save)}).")
