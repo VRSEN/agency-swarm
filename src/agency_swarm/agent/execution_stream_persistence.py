@@ -116,7 +116,7 @@ def _update_names_from_event(
     try:
         if getattr(event, "type", None) == "run_item_stream_event":
             evt_name = getattr(event, "name", None)
-            if evt_name == "handoff_occurred":
+            if evt_name == "handoff_occured":
                 item = getattr(event, "item", None)
                 target = MessageFormatter.extract_handoff_target_name(item) if item is not None else None
                 if target:
