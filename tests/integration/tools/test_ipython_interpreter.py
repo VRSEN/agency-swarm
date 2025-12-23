@@ -282,6 +282,33 @@ result
         assert "TimeoutError" in result or "timeout" in result.lower()
 
     @pytest.mark.asyncio
+    async def test_nest_asyncio_reapplied_after_restart(self, shared_context):
+        """Ensure kernel restart keeps asyncio.run usable by reapplying nest_asyncio."""
+
+        class ShortTimeoutInterpreter(IPythonInterpreter):
+            class ToolConfig:
+                kernel_timeout_seconds = 0.5
+
+        agent = Agent(name="RestartAgent", description="", instructions="", tools=[ShortTimeoutInterpreter])
+
+        # Trigger a timeout to force a kernel restart
+        timed_out = ShortTimeoutInterpreter(code="while True: pass")
+        timed_out._caller_agent = agent
+        timed_out._context = shared_context
+        timeout_result = await asyncio.wait_for(timed_out.run(), timeout=20)
+        assert "Error:" in timeout_result
+        assert "Timeout" in timeout_result or "timeout" in timeout_result.lower()
+
+        # After restart, asyncio.run should work if nest_asyncio was re-applied
+        post_restart = ShortTimeoutInterpreter(code="import asyncio; asyncio.run(asyncio.sleep(0)); 'ok'")
+        post_restart._caller_agent = agent
+        post_restart._context = shared_context
+        success_result = await asyncio.wait_for(post_restart.run(), timeout=20)
+
+        assert "Error:" not in success_result
+        assert "ok" in success_result
+
+    @pytest.mark.asyncio
     async def test_large_output_handling(self, agent_with_ipython, shared_context):
         """Test that large outputs are properly captured."""
         # Generate large output
