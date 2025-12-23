@@ -10,6 +10,7 @@ Begin each task only after completing this readiness checklist:
 - When the work needs more than a single straightforward action, draft a 3-7 bullet plan tied to the mandatory workflow safeguards and keep the plan/todo tool in sync; skip the plan step for one-off commands. Never rely on memory alone—persist every multi-step task and context in the todo list immediately.
 - Restate the user's intent and the active task in every response; when asked about correctness, answer explicitly before elaborating.
 - Prime yourself with all available context—read, trace, and analyze until additional context produces zero marginal returns, and do not proceed unless you can explain every change in your own words.
+- Refresh your context with tool calls before acting; rely on fresh outputs instead of memory.
 - If any requirement or behavior remains unclear after your deep research, ask clear questions before continuing.
 - When the user directly requests a fix, apply your best expert judgment and start implementing immediately; only pause for clarification if you can point to a concrete contradiction after finishing your research.
 - Enforce this document before anything else: whenever a diff violates AGENTS.md, apply the smallest possible fix immediately—no questions, no delays.
@@ -41,13 +42,15 @@ Prime Directive: Rigorously compare every user request with patterns established
 4. ESCALATE DECISIONS: Always escalate design decisions or conflicts with explicit user direction by asking the user clear questions before proceeding.
 5. ESCALATE UNFAMILIAR CHANGES: If diffs include files outside your intended change set or changes you cannot attribute to your edits or hooks, assume they were made by the user; capture the observation, immediately surface a blocking question to the user, and do not modify them until you receive explicit instruction.
 6. EVIDENCE OVER INTUITION: Base all decisions on verifiable evidence—tests, git history, logs, actual code behavior—and never misstate or invent facts; if evidence is missing, say so and escalate. Integrity is absolute.
-7. ASK FOR CLARITY: After deliberate research, if any instruction or code path (including this document) still feels ambiguous, pause and ask the user—never proceed under assumptions. When everything is clear, continue without stopping.
-8. ACT IMMEDIATELY: Do not acknowledge a request without taking action—begin executing at once and continue until the task is complete or explicitly escalated.
+7. SELF-IMPROVEMENT: Treat user feedback as a signal to improve this document and your behavior; generalize the lesson and apply it immediately.
+8. ASK FOR CLARITY: After deliberate research, if any instruction or code path (including this document) still feels ambiguous, pause and ask the user—never proceed under assumptions. When everything is clear, continue without stopping.
+9. ACT IMMEDIATELY: Do not acknowledge a request without taking action—begin executing at once and continue until the task is complete or explicitly escalated.
 
 ## 🔴 FILE REQUIREMENTS
 These requirements apply to every file in the repository. Bullets prefixed with “In this document” are scoped to `AGENTS.md` only.
 
 - Every line must fight for its place: No redundant, unnecessary, or "nice to have" content. Each line must serve a critical purpose; each change must reduce codebase entropy (fewer ad‑hoc paths, clearer contracts, more reuse).
+- Every change must have a clear reason; do not edit formatting or whitespace without justification.
 - Performance is a first-class constraint: favor the fastest viable design, measure regressions immediately, and back every slowdown with data and reviewer approval.
 - Clarity over verbosity: Use the fewest words necessary without loss of meaning. For documentation, ensure you deliver value to end users and your writing is beginner-friendly.
 - No duplicate information or code: within reason, keep the content dry and prefer using references instead of duplicating any idea or functionality.
@@ -175,7 +178,7 @@ Agency Swarm is a multi-agent orchestration framework built on the OpenAI Agents
 - /docs/ is the current reference for v1.x
 
 ### Documentation Rules
-- All documentation writing and updates MUST follow `docs/mintlify.cursorrules` for formatting, components, links, and page metadata.
+- All documentation writing and updates MUST follow `.cursor/rules/writing-docs.mdc` for formatting, components, links, and page metadata.
 - Always reference the code files relevant to the documented behavior so maintainers know where to look.
 - Introduce every feature by explaining the user benefit before you dive into the technical steps.
 - Spell out the concrete workflows or use cases the change unlocks so readers know when to apply it.
@@ -257,6 +260,7 @@ Strictness
 - **Establish dashboard first**: Before any git operation, run `git branch --show-current`, `git status --short`, `git diff --name-only`, and `git diff --cached --name-only` to know exactly where you are and what has changed.
 - **Never merge directly to protected branches**: Always create PRs for merging to `main` or other protected branches—direct merges are prohibited.
 - Never stage files (`git add`) unless the user explicitly requests it; the staging area is a human-approved, protected zone.
+- Staged files are sacred: never modify staged changes; work only in the unstaged area unless the user explicitly requests otherwise.
 - Always inspect unstaged files with `git diff --name-only` and staged files with `git diff --cached --name-only`.
 - If the working tree is not clean or there is any confusion/ambiguity, report to the user immediately with a clear description of the problem and an explicit question before proceeding.
 - Never hard-reset (`git reset --hard`) without preserving progress
@@ -310,6 +314,7 @@ Strictness
 
 ## Memory & Expectations
 - User expects explicit status reporting, test-first mindset, and directness. Ask at most one question at a time. After any negative feedback or protocol breach, switch to manual approval: present minimal options and wait for explicit approval before changes; re-run Step 1 before and after edits.
+- Operate with maximum diligence and ownership; carry every task to completion with urgency and reliability.
 - Always distill new insights into existing sections (prefer refining current lines over adding new ones). After every feedback event, enforce the Continuous Work Rule before replying.
 
 ## Search Discipline
