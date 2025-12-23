@@ -61,6 +61,11 @@ class AsyncKernelSession:
 
         self.km = km
         self.kc = kc
+
+        # Enable nested event loops so asyncio.run() works inside the kernel
+        nest_asyncio_code = "import nest_asyncio; nest_asyncio.apply()"
+        await self._execute_single(kc, nest_asyncio_code, timeout=10.0)
+
         self._ready.set()
 
     async def shutdown(self) -> None:
