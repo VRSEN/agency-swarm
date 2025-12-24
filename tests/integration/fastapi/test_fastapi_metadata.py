@@ -93,13 +93,13 @@ def test_metadata_includes_agent_capabilities():
         agent3 = Agent(
             name="ReasoningAgent",
             instructions="Test",
-            model="gpt-5.1",
+            model="gpt-5.2",
             model_settings=ModelSettings(reasoning=Reasoning(effort="low")),
         )
         agent4 = Agent(
             name="FullAgent",
             instructions="Test",
-            model="gpt-5.1",
+            model="gpt-5.2",
             tools=[CustomTool, FileSearchTool(vector_store_ids=["vs_456"])],
         )
         return Agency(

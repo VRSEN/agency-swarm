@@ -62,7 +62,7 @@ async def test_file_attachment_citation_extraction():
                     "information from the document. Be precise and reference exact text when "
                     "providing answers."
                 ),
-                model="gpt-5.1",
+                model="gpt-5.2",
             )
 
             # Create agency with the agent
@@ -182,14 +182,14 @@ async def test_file_attachment_vs_vector_store_citation_distinction():
             name="VectorAgent",
             instructions="Use your FileSearch tool to answer questions.",
             files_folder=str(vector_dir),
-            model="gpt-5.1",
+            model="gpt-5.2",
         )
 
         # Create agent for direct file attachments
         attachment_agent = Agent(
             name="AttachmentAgent",
             instructions="Analyze attached files directly and provide specific citations.",
-            model="gpt-5.1",
+            model="gpt-5.2",
         )
 
         # Create agencies

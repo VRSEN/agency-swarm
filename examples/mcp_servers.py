@@ -59,7 +59,7 @@ mcp_agent_local = Agent(
     name="local_MCP_Agent",
     instructions="You are a helpful assistant",
     description="Helpful assistant",
-    model="gpt-5.1",
+    model="gpt-5.2",
     mcp_servers=[stdio_server],  # <- local mcp server
 )
 
@@ -69,7 +69,7 @@ mcp_agent_public = Agent(
     name="public_MCP_Agent",
     instructions="You are a helpful assistant",
     description="Helpful assistant",
-    model="gpt-5.1",
+    model="gpt-5.2",
     tools=[
         HostedMCPTool(  # <- public mcp server (requires ngrok)
             tool_config={
