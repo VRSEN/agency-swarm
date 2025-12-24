@@ -57,7 +57,7 @@ class TestFastAPIFileProcessing:
                 alternative text. If multiple phrases appear, include them all exactly as written.
                 """,
                 description="Agent that processes and analyzes file content",
-                model="gpt-5.1",
+                model="gpt-5.2",
                 model_settings=ModelSettings(
                     reasoning=Reasoning(effort="low"),
                 ),

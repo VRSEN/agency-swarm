@@ -64,7 +64,7 @@ strategy_agent = Agent(
 
     Be decisive, practical, and always tie recommendations back to market data.
     """,
-    model="openai/gpt-5.1",
+    model="openai/gpt-5.2",
 )
 
 market_research_agent = Agent(

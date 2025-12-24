@@ -9,7 +9,7 @@ from .model_utils import is_reasoning_model
 def create_agent_template(
     agent_name=None,
     agent_description=None,
-    model="gpt-5.1",
+    model="gpt-5.2",
     reasoning=None,
     max_tokens=None,
     temperature=None,

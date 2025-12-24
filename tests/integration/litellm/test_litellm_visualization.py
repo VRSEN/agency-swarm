@@ -17,7 +17,7 @@ def test_visualize_redacts_litellm_credentials(tmp_path):
         name="Visualizer",
         instructions="Visualize the agency safely.",
         model_settings=ModelSettings(temperature=0.0),
-        model=LitellmModel(model="openai/gpt-5.1", api_key=api_key),
+        model=LitellmModel(model="openai/gpt-5.2", api_key=api_key),
     )
     agency = Agency(agent)
 
