@@ -40,6 +40,7 @@ Optionally, you can specify following parameters:
 - return_app (default: False) - If True, will return the FastAPI instead of running the server
 - cors_origins: (default: ["*"])
 - enable_agui (default: `False`) - Enable AG-UI protocol compatibility for streaming endpoints
+- enable_chatkit (default: `False`) - Enable [ChatKit](https://platform.openai.com/docs/guides/chatkit) protocol endpoint
 - enable_logging (default: `False`) - Enable request tracking and expose `/get_logs` endpoint
 - logs_dir (default: `"activity-logs"`) - Directory for log files when logging is enabled
 
@@ -239,6 +240,9 @@ data: [DONE]
 
 Store the `run_id` from the `meta` event to use with the cancel endpoint.
 
+- **ChatKit Protocol:**
+  When `enable_chatkit=True`, adds `/{agency_name}/chatkit` endpoint. See [ChatKit Integration](/additional-features/chatkit-integration).
+
 ---
 
 ## Inspecting Tool Schemas
@@ -306,3 +310,4 @@ When using the agency endpoints (`/{your_agency}/get_response` and `/{your_agenc
 Behavior with `file_urls`:
 - The server downloads each URL, uploads it to OpenAI, waits until processed, and uses the resulting File IDs.
 - `file_ids_map` (shape: `{ filename: file_id }`) is returned in the non‑streaming JSON response of `POST /get_response` and in the final `event: messages` SSE payload of `POST /get_response_stream`.
+
