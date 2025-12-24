@@ -1,3 +1,4 @@
+import warnings
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -41,6 +42,20 @@ async def test_agency_get_response_basic(mock_agent):
     mock_agent.get_response.return_value = MagicMock(final_output="Test response")
 
     result = await agency.get_response("Test message", "MockAgent")
+
+    assert result.final_output == "Test response"
+    mock_agent.get_response.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_agency_get_response_sync_inside_running_event_loop(mock_agent):
+    """Ensure Agency.get_response_sync works when called from a running event loop."""
+    agency = Agency(mock_agent)
+    mock_agent.get_response.return_value = MagicMock(final_output="Test response")
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        result = agency.get_response_sync("Test message", "MockAgent")
 
     assert result.final_output == "Test response"
     mock_agent.get_response.assert_called_once()

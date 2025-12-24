@@ -66,6 +66,20 @@ def test_get_completion_emits_deprecation_and_delegates(monkeypatch):
     assert out == "text"
 
 
+@pytest.mark.asyncio
+async def test_get_completion_works_inside_running_event_loop(monkeypatch):
+    async def fake_async(*args, **kwargs):  # noqa: ANN001, ANN002
+        return "text"
+
+    monkeypatch.setattr(ag_completions, "async_get_completion", fake_async)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        with pytest.warns(DeprecationWarning):
+            out = ag_completions.get_completion(_make_agency(), message="hi")
+    assert out == "text"
+
+
 def test_get_completion_stream_is_not_implemented():
     with pytest.warns(DeprecationWarning):
         with pytest.raises(NotImplementedError):
