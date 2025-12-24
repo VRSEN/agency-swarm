@@ -1,8 +1,11 @@
 # --- Deprecated completion methods ---
 import asyncio
+import contextvars
 import logging
+import threading
 import warnings
-from typing import TYPE_CHECKING, Any
+from concurrent.futures import Future
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from .core import Agency
@@ -108,9 +111,8 @@ def get_completion(
         stacklevel=2,
     )
 
-    # Use asyncio.run to call the async method from sync context
-    return asyncio.run(
-        async_get_completion(
+    def _coro():
+        return async_get_completion(
             agency,
             message=message,
             message_files=message_files,
@@ -123,7 +125,30 @@ def get_completion(
             response_format=response_format,
             **kwargs,
         )
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(_coro())
+
+    result_future: Future[str] = Future()
+    caller_context = contextvars.copy_context()
+
+    def _runner() -> None:
+        try:
+            result = caller_context.run(lambda: asyncio.run(_coro()))
+            result_future.set_result(cast(str, result))
+        except BaseException as exc:
+            result_future.set_exception(exc)
+
+    thread = threading.Thread(
+        target=_runner,
+        name="agency-get-completion-sync",
+        daemon=True,
     )
+    thread.start()
+
+    return result_future.result()
 
 
 def get_completion_stream(agency: "Agency", *args: Any, **kwargs: Any):
