@@ -241,3 +241,45 @@ def test_persist_streamed_items_hash_collision_is_fifo(mock_extract, mock_filter
     assert persisted[1]["agent"] == "Agent2"
     assert persisted[1]["agent_run_id"] == "run_2"
     assert persisted[1]["callerAgent"] == "Caller2"
+
+
+@patch(
+    "agency_swarm.agent.execution_stream_persistence.MessageFilter.remove_orphaned_messages",
+    side_effect=lambda x: x,
+)
+@patch("agency_swarm.agent.execution_stream_persistence.MessageFilter.should_filter", return_value=False)
+@patch("agency_swarm.agent.execution_stream_persistence.MessageFormatter.extract_hosted_tool_results", return_value=[])
+def test_persist_streamed_items_normalizes_placeholder_tool_ids(mock_extract, mock_filter, mock_orphan) -> None:
+    """Streamed tool call items should persist with stable ids instead of FAKE_RESPONSES_ID."""
+    agent = Agent(name="Runner", instructions="noop")
+    tool_call = ResponseFunctionToolCall(
+        arguments="{}",
+        call_id="call_x",
+        name="tool",
+        type="function_call",
+        id=FAKE_RESPONSES_ID,
+        status="in_progress",
+    )
+    tool_item = ToolCallItem(agent=agent, raw_item=tool_call)
+
+    thread_manager = _DummyThreadManager()
+    agency_context = AgencyContext(agency_instance=None, thread_manager=thread_manager)
+
+    _persist_streamed_items(
+        streaming_result=_DummyStreamResult([tool_item]),
+        metadata_store=StreamMetadataStore(),
+        collected_items=[tool_item],
+        agent=agent,
+        sender_name="Manager",
+        parent_run_id=None,
+        run_trace_id="trace",
+        fallback_agent_run_id="agent_run_runner",
+        agency_context=agency_context,
+        initial_saved_count=0,
+    )
+
+    persisted = thread_manager.get_all_messages()
+    assert persisted, "Expected at least one persisted message"
+    assert persisted[0]["call_id"] == "call_x"
+    assert persisted[0]["id"] == "call_x"
+    assert persisted[0]["id"] != FAKE_RESPONSES_ID

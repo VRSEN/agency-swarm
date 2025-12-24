@@ -7,14 +7,12 @@ import uuid
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass, field
 from importlib import metadata
-from typing import cast
 
 from ag_ui.core import EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
 from ag_ui.encoder import EventEncoder
 from agents import OpenAIResponsesModel, TResponseInputItem, output_guardrail
 from agents.exceptions import OutputGuardrailTripwireTriggered
 from agents.models._openai_shared import get_default_openai_client
-from agents.models.fake_id import FAKE_RESPONSES_ID
 from fastapi import Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -31,6 +29,7 @@ from agency_swarm.agent.execution_stream_response import StreamingRunResponse
 from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_urls
 from agency_swarm.integrations.fastapi_utils.logging_middleware import get_logs_endpoint_impl
 from agency_swarm.messages import MessageFilter, MessageFormatter
+from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
 from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
 from agency_swarm.ui.core.agui_adapter import AguiAdapter
 from agency_swarm.utils.serialization import serialize
@@ -134,6 +133,7 @@ def make_response_endpoint(request_model, agency_factory: Callable[..., Agency],
         all_messages = agency_instance.thread_manager.get_all_messages()
         new_messages = all_messages[initial_message_count:]  # Only messages added during this request
         filtered_messages = MessageFilter.filter_messages(new_messages)
+        filtered_messages = _normalize_new_messages_for_client(filtered_messages)
         result = {"response": response.final_output, "new_messages": filtered_messages}
         if request.file_urls is not None and file_ids_map is not None:
             result["file_ids_map"] = file_ids_map
@@ -454,35 +454,8 @@ def _normalize_new_messages_for_client(messages: list[TResponseInputItem]) -> li
     unique ids within the final `new_messages` payload while preserving `call_id` linking for tool
     calls.
     """
-    normalized: list[TResponseInputItem] = []
-    for idx, msg in enumerate(messages):
-        if not isinstance(msg, dict):
-            normalized.append(msg)
-            continue
-
-        msg_id = msg.get("id")
-        if not (isinstance(msg_id, str) and msg_id == FAKE_RESPONSES_ID):
-            normalized.append(msg)
-            continue
-
-        msg_copy: dict[str, object] = dict(msg)
-
-        call_id = msg_copy.get("call_id")
-        if isinstance(call_id, str) and call_id and call_id != FAKE_RESPONSES_ID:
-            msg_copy["id"] = call_id
-            normalized.append(cast(TResponseInputItem, msg_copy))
-            continue
-
-        agent_run_id = msg_copy.get("agent_run_id")
-        timestamp = msg_copy.get("timestamp")
-        if isinstance(agent_run_id, str) and agent_run_id and isinstance(timestamp, int):
-            msg_copy["id"] = f"msg_{agent_run_id}_{timestamp}"
-        else:
-            msg_copy["id"] = f"msg_{idx}"
-
-        normalized.append(cast(TResponseInputItem, msg_copy))
-
-    return normalized
+    normalizer = StreamIdNormalizer()
+    return normalizer.normalize_message_dicts(messages)
 
 
 def make_metadata_endpoint(agency_metadata: dict, verify_token):

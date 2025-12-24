@@ -27,6 +27,7 @@ from agency_swarm.messages import (
     MessageFilter,
     MessageFormatter,
 )
+from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
 from agency_swarm.utils.citation_extractor import extract_direct_file_annotations
 
 if TYPE_CHECKING:
@@ -196,7 +197,11 @@ class Execution:
 
                 items_to_save.extend(hosted_tool_outputs)
                 filtered_items = MessageFilter.filter_messages(items_to_save)  # type: ignore[arg-type] # Filter out unwanted message types
-                agency_context.thread_manager.add_messages(filtered_items)  # type: ignore[arg-type] # Save filtered items to flat storage
+
+                normalizer = StreamIdNormalizer()
+                normalized_items = normalizer.normalize_message_dicts(filtered_items)
+
+                agency_context.thread_manager.add_messages(normalized_items)  # type: ignore[arg-type] # Save filtered items to flat storage
                 logger.debug(f"Saved {len(filtered_items)} items to storage (filtered from {len(items_to_save)}).")
 
             # Sync back context changes if we used a merged context due to override

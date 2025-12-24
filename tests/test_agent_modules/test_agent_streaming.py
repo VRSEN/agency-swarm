@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from agents import RunConfig
 from agents.agent import Agent as SDKAgent
-from agents.items import MessageOutputItem
+from agents.items import HandoffOutputItem, MessageOutputItem
 from agents.lifecycle import RunHooks
 from agents.stream_events import (
     AgentUpdatedStreamEvent,
@@ -561,6 +561,49 @@ async def test_stream_assigns_stable_agent_run_id_per_new_agent(
     assert set(saved_assistant.keys()) == {"msg_A", "msg_B"}
     assert saved_assistant["msg_A"]["agent_run_id"] == "agent_updated_stream_event_AAAA"
     assert saved_assistant["msg_B"]["agent_run_id"] == "agent_updated_stream_event_BBBB"
+
+
+@pytest.mark.asyncio
+@patch("agents.Runner.run_streamed")
+async def test_stream_handoff_event_updates_agent_name(
+    mock_runner_run_streamed_patch, minimal_agent, mock_thread_manager
+) -> None:
+    """Handoff stream events should switch agent attribution using the SDK event name."""
+    target_agent = Agent(name="HandoffTarget", instructions="noop")
+    handoff_item = HandoffOutputItem(
+        agent=minimal_agent,
+        raw_item={"type": "handoff_output_item", "output": '{"assistant": "HandoffTarget"}'},
+        source_agent=minimal_agent,
+        target_agent=target_agent,
+    )
+    message_item = MessageOutputItem(
+        raw_item=ResponseOutputMessage(
+            id="msg_handoff_target",
+            content=[ResponseOutputText(text="Post handoff", type="output_text", annotations=[])],
+            role="assistant",
+            status="completed",
+            type="message",
+        ),
+        type="message_output_item",
+        agent=target_agent,
+    )
+
+    async def mock_stream_wrapper():
+        yield RunItemStreamEvent(name="handoff_occured", item=handoff_item, type="run_item_stream_event")
+        yield RunItemStreamEvent(name="message_output_created", item=message_item, type="run_item_stream_event")
+
+    class MockStreamedResult:
+        def stream_events(self):
+            return mock_stream_wrapper()
+
+    mock_runner_run_streamed_patch.return_value = MockStreamedResult()
+
+    events = []
+    async for event in minimal_agent.get_response_stream("Test message"):
+        events.append(event)
+
+    assert events[0].agent == "HandoffTarget"
+    assert events[1].agent == "HandoffTarget"
 
 
 @pytest.mark.asyncio
