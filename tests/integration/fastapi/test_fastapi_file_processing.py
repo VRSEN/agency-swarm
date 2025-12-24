@@ -257,12 +257,12 @@ class TestFastAPIFileProcessing:
         assert last_response_data is not None and "response" in last_response_data
 
     @pytest.mark.asyncio
-    async def test_local_file_attachment(self, fastapi_server, tmp_path):
+    async def test_local_file_attachment(self, fastapi_base_url: str, tmp_path):
         """Test processing a local absolute file path via file_urls."""
         file_path = tmp_path / "local-file.txt"
         file_path.write_text("local secret phrase", encoding="utf-8")
 
-        url = "http://localhost:8080/test_agency/get_response"
+        url = f"{fastapi_base_url}/test_agency/get_response"
         payload = {
             "message": "Please read the content of the uploaded file and tell me what secret phrase you find.",
             "file_urls": {"local-file.txt": str(file_path)},
