@@ -144,7 +144,6 @@ cython_debug/
 .pypirc
 .aider*
 
-# Added by Claude Task Master
 # Logs
 logs
 npm-debug.log*
@@ -168,7 +167,6 @@ package-lock.json
 tasks.json
 tasks/
 # Custom Ignores
-/.cursor/rules/
 /scripts/
 /references/
 

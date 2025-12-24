@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -14,31 +15,69 @@ from agency_swarm.utils.thread import ThreadManager
 # --- Fixtures ---
 
 
+class _FakeStream:
+    def __init__(self, events: list[SimpleNamespace], final_result: object | None = None) -> None:
+        self._events = events
+        self._final_result = final_result
+
+    def __aiter__(self):
+        async def _events():
+            for event in self._events:
+                yield event
+
+        return _events()
+
+    @property
+    def final_result(self):
+        return self._final_result
+
+
+class _FakeAgent:
+    def __init__(self, name: str, stream_events: list[SimpleNamespace] | None = None) -> None:
+        self.name = name
+        self.model = "gpt-5-mini"
+        self.throw_input_guardrail_error = False
+        self._stream_events = stream_events or []
+
+    def get_response_stream(self, **_kwargs):
+        return _FakeStream(self._stream_events)
+
+    async def get_response(self, **_kwargs):
+        return "ok"
+
+
+class _ErroringStreamAgent(_FakeAgent):
+    def __init__(self, name: str, error_text: str) -> None:
+        super().__init__(name)
+        self._error_text = error_text
+
+    def get_response_stream(self, **_kwargs):
+        raise RuntimeError(self._error_text)
+
+
+class _GuardrailTripwireAgent(_FakeAgent):
+    def __init__(self, name: str, exc: InputGuardrailTripwireTriggered) -> None:
+        super().__init__(name)
+        self._exc = exc
+
+    async def get_response(self, **_kwargs):
+        raise self._exc
+
+
 @pytest.fixture
 def mock_sender_agent():
-    agent = MagicMock(spec=Agent)
-    agent.name = "SenderAgent"
-    return agent
+    return _FakeAgent("SenderAgent")
 
 
 @pytest.fixture
-def mock_recipient_agent(mock_run_context_wrapper):
-    agent = MagicMock(spec=Agent)
-    agent.name = "RecipientAgent"
-
-    # Create a mock event that simulates the stream output
-    async def mock_stream(*args, **kwargs):
-        # Create a mock event with the expected structure
-        mock_event = MagicMock()
-        mock_event.item = MagicMock()
-        mock_event.item.type = "message_output_item"
-        mock_event.item.raw_item = MagicMock()
-        mock_event.item.raw_item.content = [MagicMock()]
-        mock_event.item.raw_item.content[0].text = "Response from recipient"
-        yield mock_event
-
-    agent.get_response_stream = mock_stream
-    return agent
+def mock_recipient_agent():
+    event = SimpleNamespace(
+        item=SimpleNamespace(
+            type="message_output_item",
+            raw_item=SimpleNamespace(content=[SimpleNamespace(text="Response from recipient")]),
+        )
+    )
+    return _FakeAgent("RecipientAgent", stream_events=[event])
 
 
 @pytest.fixture
@@ -64,6 +103,9 @@ def mock_context(mock_sender_agent, mock_recipient_agent):
     context.thread_manager.add_items_and_save = AsyncMock()
     context.user_context = {"user_key": "user_val"}
     context.shared_instructions = None
+    context._is_streaming = True
+    context._streaming_context = None
+    context._sub_agent_raw_responses = []
     return context
 
 
@@ -185,32 +227,25 @@ async def test_send_message_missing_required_param(specific_send_message_tool, m
 
 
 @pytest.mark.asyncio
-async def test_send_message_target_agent_error(specific_send_message_tool, mock_wrapper, mock_recipient_agent):
+async def test_send_message_target_agent_error(mock_wrapper):
     error_text = "Target agent failed"
 
-    # Mock get_response_stream to raise an error
-    async def mock_stream_error(*args, **kwargs):
-        raise RuntimeError(error_text)
-        # Make this an async generator by adding yield (unreachable but needed for type)
-        yield  # pragma: no cover
-
-    mock_recipient_agent.get_response_stream = mock_stream_error
+    tool = SendMessage(
+        sender_agent=mock_wrapper.agent,
+        recipients={"recipientagent": _ErroringStreamAgent("RecipientAgent", error_text)},
+    )
     message_content = "Test message"
     args_dict = {
-        "recipient_agent": mock_recipient_agent.name,
+        "recipient_agent": "RecipientAgent",
         "my_primary_instructions": "Primary instructions.",
         "message": message_content,
         "additional_instructions": "",
     }
     args_json_string = json.dumps(args_dict)
-    expected_error_message = (
-        f"Error: Failed to get response from agent '{mock_recipient_agent.name}'. Reason: {error_text}"
-    )
+    expected_error_message = f"Error: Failed to get response from agent 'RecipientAgent'. Reason: {error_text}"
 
     with patch("agency_swarm.tools.send_message.logger") as mock_module_logger:
-        result = await specific_send_message_tool.on_invoke_tool(
-            wrapper=mock_wrapper, arguments_json_string=args_json_string
-        )
+        result = await tool.on_invoke_tool(wrapper=mock_wrapper, arguments_json_string=args_json_string)
 
     assert result == expected_error_message
     mock_module_logger.error.assert_called_once()
@@ -218,9 +253,6 @@ async def test_send_message_target_agent_error(specific_send_message_tool, mock_
 
 @pytest.mark.asyncio
 async def test_send_message_input_guardrail_returns_error(mock_sender_agent, mock_wrapper):
-    recipient = MagicMock(spec=Agent)
-    recipient.name = "RecipientAgent"
-
     class _InRes:
         output = GuardrailFunctionOutput(
             output_info="Prefix your request with 'Task:'",
@@ -228,10 +260,7 @@ async def test_send_message_input_guardrail_returns_error(mock_sender_agent, moc
         )
         guardrail = object()
 
-    async def mock_get_response(*args, **kwargs):
-        raise InputGuardrailTripwireTriggered(_InRes())
-
-    recipient.get_response = AsyncMock(side_effect=mock_get_response)
+    recipient = _GuardrailTripwireAgent("RecipientAgent", InputGuardrailTripwireTriggered(_InRes()))
 
     mock_wrapper.context.agents = {"SenderAgent": mock_sender_agent, "RecipientAgent": recipient}
     mock_wrapper.context._is_streaming = False
@@ -247,7 +276,7 @@ async def test_send_message_input_guardrail_returns_error(mock_sender_agent, moc
 
     result = await tool.on_invoke_tool(wrapper=mock_wrapper, arguments_json_string=json.dumps(args))
 
-    assert "Prefix your request with 'Task:'" in result
+    assert result == "Prefix your request with 'Task:'"
 
 
 @pytest.mark.asyncio
