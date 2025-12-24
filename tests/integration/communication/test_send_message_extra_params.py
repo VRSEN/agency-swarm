@@ -58,7 +58,6 @@ async def test_validation_of_extra_params_errors():
 
     args = {
         "recipient_agent": "B",
-        "my_primary_instructions": "",
         "message": "hi",
         "additional_instructions": "",
     }

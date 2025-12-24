@@ -109,7 +109,6 @@ async def test_send_message_success(specific_send_message_tool, mock_wrapper, mo
     message_content = "Test message"
     args_dict = {
         "recipient_agent": mock_recipient_agent.name,  # Add the recipient_agent field
-        "my_primary_instructions": "Primary instructions for test.",
         "message": message_content,
         "additional_instructions": "Additional instructions for test.",
     }
@@ -144,7 +143,6 @@ async def test_send_message_missing_required_param(specific_send_message_tool, m
     # Test missing 'message'
     args_dict_missing_message = {
         "recipient_agent": "RecipientAgent",
-        "my_primary_instructions": "Primary instructions.",
         # "message" is missing
     }
     args_json_missing_message = json.dumps(args_dict_missing_message)
@@ -163,26 +161,6 @@ async def test_send_message_missing_required_param(specific_send_message_tool, m
 
     mock_module_logger.reset_mock()
 
-    # Test missing 'my_primary_instructions'
-    args_dict_missing_instr = {
-        "recipient_agent": "RecipientAgent",
-        "message": "A message",
-        # my_primary_instructions is missing
-    }
-    args_json_missing_instr = json.dumps(args_dict_missing_instr)
-    expected_error_missing_instr = (
-        f"Error: Missing required parameter 'my_primary_instructions' for tool {specific_send_message_tool.name}."
-    )
-
-    with patch("agency_swarm.tools.send_message.logger") as mock_module_logger_instr:
-        result = await specific_send_message_tool.on_invoke_tool(
-            wrapper=mock_wrapper, arguments_json_string=args_json_missing_instr
-        )
-    assert result == expected_error_missing_instr
-    mock_module_logger_instr.error.assert_called_once_with(
-        f"Tool '{specific_send_message_tool.name}' invoked without 'my_primary_instructions' parameter."
-    )
-
 
 @pytest.mark.asyncio
 async def test_send_message_target_agent_error(specific_send_message_tool, mock_wrapper, mock_recipient_agent):
@@ -198,7 +176,6 @@ async def test_send_message_target_agent_error(specific_send_message_tool, mock_
     message_content = "Test message"
     args_dict = {
         "recipient_agent": mock_recipient_agent.name,
-        "my_primary_instructions": "Primary instructions.",
         "message": message_content,
         "additional_instructions": "",
     }
@@ -240,7 +217,6 @@ async def test_send_message_input_guardrail_returns_error(mock_sender_agent, moc
 
     args = {
         "recipient_agent": recipient.name,
-        "my_primary_instructions": "inst",
         "message": "Hello",
         "additional_instructions": "",
     }

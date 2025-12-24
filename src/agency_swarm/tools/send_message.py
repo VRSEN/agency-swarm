@@ -91,18 +91,6 @@ class SendMessage(FunctionTool):
                     "enum": recipient_enum,
                     "description": "The name of the agent to send the message to.",
                 },
-                "my_primary_instructions": {
-                    "type": "string",
-                    "description": (
-                        "Please repeat your primary instructions step-by-step, including both completed "
-                        "and the following next steps that you need to perform. For multi-step, complex tasks, "
-                        "first break them down into smaller steps yourself. Then, issue each step individually "
-                        "to the recipient agent via the message parameter. Each identified step should be "
-                        "sent in a separate message. Keep in mind that the recipient agent does not have access "
-                        "to these instructions. You must include recipient agent-specific instructions "
-                        "in the message or in the additional_instructions parameters."
-                    ),
-                },
                 "message": {
                     "type": "string",
                     "description": (
@@ -120,7 +108,7 @@ class SendMessage(FunctionTool):
                 },
             },
             # OpenAI API requires all properties in 'required' array, even optional ones
-            "required": ["recipient_agent", "my_primary_instructions", "message", "additional_instructions"],
+            "required": ["recipient_agent", "message", "additional_instructions"],
             "additionalProperties": False,
         }
 
@@ -283,7 +271,6 @@ class SendMessage(FunctionTool):
 
         recipient_agent_name = kwargs.get("recipient_agent")
         message_content = kwargs.get("message")
-        my_primary_instructions = kwargs.get("my_primary_instructions")
         additional_instructions = kwargs.get("additional_instructions", "")
 
         # Validate extra params, if a Pydantic model was provided by subclass
@@ -305,10 +292,6 @@ class SendMessage(FunctionTool):
         if not message_content:
             logger.error(f"Tool '{self.name}' invoked without 'message' parameter.")
             return f"Error: Missing required parameter 'message' for tool {self.name}."
-        if not my_primary_instructions:
-            logger.error(f"Tool '{self.name}' invoked without 'my_primary_instructions' parameter.")
-            return f"Error: Missing required parameter 'my_primary_instructions' for tool {self.name}."
-
         # Case-insensitive lookup for recipient agent
         recipient_key = recipient_agent_name.lower()
         if recipient_key not in self.recipients:
