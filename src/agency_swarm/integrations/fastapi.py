@@ -22,6 +22,7 @@ def run_fastapi(
     enable_agui: bool = False,
     enable_logging: bool = False,
     logs_dir: str = "activity-logs",
+    allowed_local_file_dirs: list[str] | None = None,
 ):
     """Launch a FastAPI server exposing endpoints for multiple agencies and tools.
 
@@ -46,6 +47,9 @@ def run_fastapi(
     logs_dir : str
         Directory to store log files when logging is enabled.
         Defaults to 'activity-logs'.
+    allowed_local_file_dirs : list[str] | None
+        Optional allowlist of directories that local file_urls may read from.
+        When omitted, local file access is disabled.
     """
     if (agencies is None or len(agencies) == 0) and (tools is None or len(tools) == 0):
         logger.warning("No endpoints to deploy. Please provide at least one agency or tool.")
@@ -67,6 +71,7 @@ def run_fastapi(
             make_response_endpoint,
             make_stream_endpoint,
         )
+        from .fastapi_utils.file_handler import _normalize_allowed_dirs
         from .fastapi_utils.logging_middleware import (
             RequestTracker,
             setup_enhanced_logging,
@@ -97,6 +102,8 @@ def run_fastapi(
         base_url = f"http://localhost:{port}"
     else:
         base_url = f"http://{host}:{port}"
+
+    normalized_allowed_dirs = _normalize_allowed_dirs(allowed_local_file_dirs)
 
     app = FastAPI(servers=[{"url": base_url}])
 
@@ -144,7 +151,12 @@ def run_fastapi(
                 if enable_agui:
                     app.add_api_route(
                         f"/{agency_name}/get_response_stream",
-                        make_agui_chat_endpoint(RunAgentInputCustom, agency_factory, verify_token),
+                        make_agui_chat_endpoint(
+                            RunAgentInputCustom,
+                            agency_factory,
+                            verify_token,
+                            allowed_local_dirs=normalized_allowed_dirs,
+                        ),
                         methods=["POST"],
                     )
                     endpoints.append(f"/{agency_name}/get_response_stream")
@@ -152,7 +164,12 @@ def run_fastapi(
                     run_registry = ActiveRunRegistry()
                     app.add_api_route(
                         f"/{agency_name}/get_response",
-                        make_response_endpoint(AgencyRequest, agency_factory, verify_token),
+                        make_response_endpoint(
+                            AgencyRequest,
+                            agency_factory,
+                            verify_token,
+                            allowed_local_dirs=normalized_allowed_dirs,
+                        ),
                         methods=["POST"],
                     )
                     app.add_api_route(
@@ -162,6 +179,7 @@ def run_fastapi(
                             agency_factory,
                             verify_token,
                             run_registry,
+                            allowed_local_dirs=normalized_allowed_dirs,
                         ),
                         methods=["POST"],
                     )

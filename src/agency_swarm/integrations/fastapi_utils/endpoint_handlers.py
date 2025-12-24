@@ -4,9 +4,10 @@ import logging
 import time
 import traceback
 import uuid
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Callable, Sequence
 from dataclasses import dataclass, field
 from importlib import metadata
+from pathlib import Path
 from typing import cast
 
 from ag_ui.core import EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
@@ -96,7 +97,12 @@ def get_verify_token(app_token):
 
 
 # Non‑streaming response endpoint
-def make_response_endpoint(request_model, agency_factory: Callable[..., Agency], verify_token):
+def make_response_endpoint(
+    request_model,
+    agency_factory: Callable[..., Agency],
+    verify_token,
+    allowed_local_dirs: Sequence[str | Path] | None = None,
+):
     async def handler(request: request_model, token: str = Depends(verify_token)):
         if request.chat_history is not None:
             # Chat history is now a flat list
@@ -111,7 +117,7 @@ def make_response_endpoint(request_model, agency_factory: Callable[..., Agency],
         file_ids_map = None
         if request.file_urls is not None:
             try:
-                file_ids_map = await upload_from_urls(request.file_urls)
+                file_ids_map = await upload_from_urls(request.file_urls, allowed_local_dirs=allowed_local_dirs)
                 combined_file_ids = (combined_file_ids or []) + list(file_ids_map.values())
             except Exception as e:
                 return {"error": f"Error downloading file from provided urls: {e}"}
@@ -154,6 +160,7 @@ def make_stream_endpoint(
     agency_factory: Callable[..., Agency],
     verify_token,
     run_registry: ActiveRunRegistry,
+    allowed_local_dirs: Sequence[str | Path] | None = None,
 ):
     async def handler(
         http_request: Request,
@@ -173,7 +180,7 @@ def make_stream_endpoint(
         file_ids_map = None
         if request.file_urls is not None:
             try:
-                file_ids_map = await upload_from_urls(request.file_urls)
+                file_ids_map = await upload_from_urls(request.file_urls, allowed_local_dirs=allowed_local_dirs)
                 combined_file_ids = (combined_file_ids or []) + list(file_ids_map.values())
             except Exception as e:
                 error_msg = str(e)
@@ -353,11 +360,39 @@ def make_cancel_endpoint(request_model, verify_token, run_registry: ActiveRunReg
     return handler
 
 
-def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency], verify_token):
+def make_agui_chat_endpoint(
+    request_model,
+    agency_factory: Callable[..., Agency],
+    verify_token,
+    allowed_local_dirs: Sequence[str | Path] | None = None,
+):
     async def handler(request: request_model, token: str = Depends(verify_token)):
         """Accepts AG-UI `RunAgentInput`, returns an AG-UI event stream."""
 
         encoder = EventEncoder()
+
+        combined_file_ids = list(request.file_ids or []) if getattr(request, "file_ids", None) else []
+        if getattr(request, "file_urls", None):
+            try:
+                file_ids_map = await upload_from_urls(request.file_urls, allowed_local_dirs=allowed_local_dirs)
+                combined_file_ids = combined_file_ids + list(file_ids_map.values())
+            except Exception as exc:
+                error_message = f"Error downloading file from provided urls: {exc}"
+                run_started = RunStartedEvent(
+                    type=EventType.RUN_STARTED,
+                    thread_id=request.thread_id,
+                    run_id=request.run_id,
+                )
+                run_error = RunErrorEvent(type=EventType.RUN_ERROR, message=error_message)
+                run_finished = RunFinishedEvent(
+                    type=EventType.RUN_FINISHED,
+                    thread_id=request.thread_id,
+                    run_id=request.run_id,
+                )
+                return StreamingResponse(
+                    (encoder.encode(event) for event in (run_started, run_error, run_finished)),
+                    media_type=encoder.get_content_type(),
+                )
 
         if request.chat_history is not None:
             # Chat history is now a flat list
@@ -411,6 +446,7 @@ def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency]
                     message=request.messages[-1].content,
                     context_override=request.user_context,
                     additional_instructions=request.additional_instructions,
+                    file_ids=combined_file_ids or None,
                 ):
                     agui_event = agui_adapter.openai_to_agui_events(
                         event,

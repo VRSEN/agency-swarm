@@ -8,6 +8,7 @@ containing the expected file content.
 
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -105,7 +106,12 @@ class TestFastAPIFileProcessing:
         # Ensure no authentication is required by using a non-existent env var
         # This will make app_token None and disable authentication
         app = run_fastapi(
-            agencies={"test_agency": agency_factory}, port=8080, app_token_env="", return_app=True, enable_agui=False
+            agencies={"test_agency": agency_factory},
+            port=8080,
+            app_token_env="",
+            return_app=True,
+            enable_agui=False,
+            allowed_local_file_dirs=[tempfile.gettempdir()],
         )
 
         # Start server in a thread
@@ -135,6 +141,39 @@ class TestFastAPIFileProcessing:
                 time.sleep(1)
                 if i == max_retries - 1:
                     pytest.skip(f"Could not start FastAPI server: {e}")
+
+        yield server_thread
+
+    @pytest.fixture(scope="class")
+    def fastapi_server_no_local(self, agency_factory):
+        """Start FastAPI server on port 8081 with local file access disabled (no allowlist)."""
+        import threading
+
+        from agency_swarm import run_fastapi
+
+        app = run_fastapi(
+            agencies={"test_agency": agency_factory},
+            port=8081,
+            app_token_env="",
+            return_app=True,
+            enable_agui=False,
+            allowed_local_file_dirs=None,
+        )
+
+        def run_server():
+            uvicorn.run(app, host="127.0.0.1", port=8081, log_level="error")
+
+        server_thread = threading.Thread(target=run_server, daemon=True)
+        server_thread.start()
+
+        time.sleep(3)
+
+        try:
+            response = httpx.get("http://localhost:8081/docs", timeout=10.0)
+            assert response.status_code == 200
+            time.sleep(1)
+        except Exception as e:
+            pytest.skip(f"Could not start FastAPI server (no-local) after retries: {e}")
 
         yield server_thread
 
@@ -173,6 +212,54 @@ class TestFastAPIFileProcessing:
         assert "response" in response_data
         response_text = response_data["response"].lower()
         assert "first txt secret phrase" in response_text
+
+    @pytest.mark.asyncio
+    async def test_local_file_attachment(self, fastapi_server, tmp_path):
+        """Test processing a local absolute file path via file_urls."""
+        file_path = tmp_path / "local-file.txt"
+        file_path.write_text("local secret phrase", encoding="utf-8")
+
+        url = "http://localhost:8080/test_agency/get_response"
+        payload = {
+            "message": "Please read the content of the uploaded file and tell me what secret phrase you find.",
+            "file_urls": {"local-file.txt": str(file_path)},
+        }
+        headers = {}
+
+        async with self.get_http_client(timeout_seconds=120) as client:
+            response = await client.post(url, json=payload, headers=headers)
+
+        assert response.status_code == 200
+        response_data = response.json()
+
+        # Verify the file was attached and processed
+        assert "file_ids_map" in response_data
+        assert "local-file.txt" in response_data["file_ids_map"]
+
+        # Should return a response without error
+        assert "response" in response_data
+        response_text = response_data["response"].lower()
+        assert "local secret phrase" in response_text
+
+    @pytest.mark.asyncio
+    async def test_local_file_attachment_disallowed_without_allowlist(self, fastapi_server_no_local, tmp_path):
+        """Local file access should be blocked when no allowlist is configured."""
+        file_path = tmp_path / "local-file.txt"
+        file_path.write_text("local secret phrase", encoding="utf-8")
+
+        url = "http://localhost:8081/test_agency/get_response"
+        payload = {
+            "message": "Please read the content of the uploaded file and tell me what secret phrase you find.",
+            "file_urls": {"local-file.txt": str(file_path)},
+        }
+
+        async with self.get_http_client(timeout_seconds=60) as client:
+            response = await client.post(url, json=payload)
+
+        assert response.status_code == 200
+        response_data = response.json()
+        assert "error" in response_data
+        assert "disabled" in response_data["error"].lower()
 
     @pytest.mark.asyncio
     async def test_code_interpreter_attachment(self, file_server_process, fastapi_server):
