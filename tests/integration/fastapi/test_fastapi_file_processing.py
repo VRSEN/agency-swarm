@@ -6,9 +6,12 @@ process various file types through HTTP requests, and return appropriate respons
 containing the expected file content.
 """
 
+import asyncio
+import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -18,11 +21,17 @@ import uvicorn
 from agents import ModelSettings
 from openai.types.shared import Reasoning
 
-from agency_swarm import Agency, Agent
+from agency_swarm import Agency, Agent, run_fastapi
 
 
 class TestFastAPIFileProcessing:
     """Test suite for FastAPI file processing with file_urls parameter."""
+
+    @staticmethod
+    def _get_free_tcp_port() -> int:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind(("127.0.0.1", 0))
+            return int(sock.getsockname()[1])
 
     @staticmethod
     def get_http_client(timeout_seconds: int = 120) -> httpx.AsyncClient:
@@ -49,7 +58,7 @@ class TestFastAPIFileProcessing:
                 alternative text. If multiple phrases appear, include them all exactly as written.
                 """,
                 description="Agent that processes and analyzes file content",
-                model="gpt-5.1",
+                model="gpt-5.2",
                 model_settings=ModelSettings(
                     reasoning=Reasoning(effort="low"),
                 ),
@@ -64,19 +73,22 @@ class TestFastAPIFileProcessing:
         return create_agency
 
     @pytest.fixture(scope="class")
-    def file_server_process(self):
-        """Start HTTP file server on port 7860 for serving test files."""
+    def file_server_base_url(self) -> str:
+        """Start HTTP file server for serving test files."""
         # Get the path to tests/data/files directory
         test_files_dir = Path(__file__).parents[2] / "data" / "files"
         if not test_files_dir.exists():
             pytest.skip(f"Test files directory not found: {test_files_dir}")
 
+        port = self._get_free_tcp_port()
+        base_url = f"http://127.0.0.1:{port}"
+
         # Start HTTP server
         server_process = subprocess.Popen(
-            [sys.executable, "-m", "http.server", "7860"],
+            [sys.executable, "-m", "http.server", str(port), "--bind", "127.0.0.1"],
             cwd=test_files_dir,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
 
         # Wait for server to start
@@ -84,30 +96,29 @@ class TestFastAPIFileProcessing:
 
         # Verify server is running
         try:
-            response = httpx.get("http://localhost:7860/", timeout=5)
+            response = httpx.get(f"{base_url}/", timeout=5)
             assert response.status_code == 200
         except Exception as e:
             server_process.terminate()
             pytest.skip(f"Could not start file server: {e}")
 
-        yield server_process
+        yield base_url
 
         # Cleanup
         server_process.terminate()
         server_process.wait()
 
     @pytest.fixture(scope="class")
-    def fastapi_server(self, agency_factory):
-        """Start FastAPI server on port 8080."""
-        import threading
-
-        from agency_swarm import run_fastapi
+    def fastapi_base_url(self, agency_factory) -> str:
+        """Start FastAPI server on an available port."""
+        port = self._get_free_tcp_port()
+        base_url = f"http://127.0.0.1:{port}"
 
         # Ensure no authentication is required by using a non-existent env var
         # This will make app_token None and disable authentication
         app = run_fastapi(
             agencies={"test_agency": agency_factory},
-            port=8080,
+            port=port,
             app_token_env="",
             return_app=True,
             enable_agui=False,
@@ -116,7 +127,7 @@ class TestFastAPIFileProcessing:
 
         # Start server in a thread
         def run_server():
-            uvicorn.run(app, host="127.0.0.1", port=8080, log_level="error")
+            uvicorn.run(app, host="127.0.0.1", port=port, log_level="error")
 
         server_thread = threading.Thread(target=run_server, daemon=True)
         server_thread.start()
@@ -128,7 +139,7 @@ class TestFastAPIFileProcessing:
         max_retries = 15
         for i in range(max_retries):
             try:
-                response = httpx.get("http://localhost:8080/docs", timeout=10.0)
+                response = httpx.get(f"{base_url}/docs", timeout=10.0)
                 if response.status_code == 200:
                     # Ensure server is fully ready
                     time.sleep(1)
@@ -142,7 +153,7 @@ class TestFastAPIFileProcessing:
                 if i == max_retries - 1:
                     pytest.skip(f"Could not start FastAPI server: {e}")
 
-        yield server_thread
+        yield base_url
 
     @pytest.fixture(scope="class")
     def fastapi_server_no_local(self, agency_factory):
@@ -178,9 +189,9 @@ class TestFastAPIFileProcessing:
         yield server_thread
 
     @pytest.mark.asyncio
-    async def test_chat_name(self, file_server_process, fastapi_server):
+    async def test_chat_name(self, file_server_base_url: str, fastapi_base_url: str):
         """Test processing a single text file via file_urls with chat name generation."""
-        url = "http://localhost:8080/test_agency/get_response"
+        url = f"{fastapi_base_url}/test_agency/get_response"
         payload = {
             "message": "I want to find a restaurant in New York.",
             "generate_chat_name": True,
@@ -193,25 +204,57 @@ class TestFastAPIFileProcessing:
         assert len(response_data["chat_name"]) > 0
 
     @pytest.mark.asyncio
-    async def test_file_search_attachment(self, file_server_process, fastapi_server):
+    async def test_file_search_attachment(self, file_server_base_url: str, fastapi_base_url: str):
         """Test processing a single text file via file_urls."""
-        url = "http://localhost:8080/test_agency/get_response"
-        payload = {
-            "message": "Please read the content of the uploaded file and tell me what secret phrase you find.",
-            "file_urls": {"test_file.txt": "http://localhost:7860/test-txt.txt"},
-        }
+        url = f"{fastapi_base_url}/test_agency/get_response"
+        message = "Please read the content of the uploaded file and tell me what secret phrase you find."
+        expected_phrase = "first txt secret phrase"
+        file_name = "test_file.txt"
+        file_url = f"{file_server_base_url}/test-txt.txt"
         headers = {}
 
-        async with self.get_http_client(timeout_seconds=120) as client:
-            response = await client.post(url, json=payload, headers=headers)
+        # OpenAI file availability can be eventually consistent even after upload reports "processed".
+        # Mirror other tests' stabilization: retry by re-asking using the returned file_id (no re-upload).
+        max_attempts = 3
+        retry_delay_seconds = 2
+        file_id: str | None = None
+        last_response_text = ""
+        last_response_data: dict[str, object] | None = None
 
-        assert response.status_code == 200
-        response_data = response.json()
+        async with self.get_http_client(timeout_seconds=120) as client:
+            for attempt in range(max_attempts):
+                if attempt == 0:
+                    payload = {"message": message, "file_urls": {file_name: file_url}}
+                else:
+                    assert file_id is not None
+                    payload = {"message": message, "file_ids": [file_id]}
+
+                response = await client.post(url, json=payload, headers=headers)
+
+                assert response.status_code == 200
+                response_data = response.json()
+                last_response_data = response_data
+                if "error" in response_data:
+                    pytest.fail(f"Unexpected error response: {response_data['error']}")
+
+                if attempt == 0:
+                    file_ids_map = response_data.get("file_ids_map")
+                    assert isinstance(file_ids_map, dict), f"Expected file_ids_map dict, got: {type(file_ids_map)}"
+                    file_id_value = file_ids_map.get(file_name)
+                    assert isinstance(file_id_value, str) and file_id_value, f"Missing file_id for {file_name}"
+                    file_id = file_id_value
+
+                assert "response" in response_data
+                last_response_text = str(response_data["response"]).lower()
+                if expected_phrase in last_response_text:
+                    break
+                if attempt < max_attempts - 1:
+                    await asyncio.sleep(retry_delay_seconds)
+
+        assert expected_phrase in last_response_text, f"Expected phrase not found. Last response: {last_response_data}"
 
         # Verify response contains expected content
-        assert "response" in response_data
-        response_text = response_data["response"].lower()
-        assert "first txt secret phrase" in response_text
+        assert last_response_data is not None and "response" in last_response_data
 
     @pytest.mark.asyncio
     async def test_local_file_attachment(self, fastapi_server, tmp_path):
@@ -262,12 +305,12 @@ class TestFastAPIFileProcessing:
         assert "disabled" in response_data["error"].lower()
 
     @pytest.mark.asyncio
-    async def test_code_interpreter_attachment(self, file_server_process, fastapi_server):
+    async def test_code_interpreter_attachment(self, file_server_base_url: str, fastapi_base_url: str):
         """Test processing an HTML file via file_urls."""
-        url = "http://localhost:8080/test_agency/get_response"
+        url = f"{fastapi_base_url}/test_agency/get_response"
         payload = {
             "message": "Search for the secret phrase inside the document.",
-            "file_urls": {"webpage.html": "http://localhost:7860/test-html.html"},
+            "file_urls": {"webpage.html": f"{file_server_base_url}/test-html.html"},
         }
         headers = {}
 
@@ -285,17 +328,17 @@ class TestFastAPIFileProcessing:
         assert "webpage.html" in file_ids.keys()
 
     @pytest.mark.asyncio
-    async def test_image_and_pdf_attachments(self, file_server_process, fastapi_server):
+    async def test_image_and_pdf_attachments(self, file_server_base_url: str, fastapi_base_url: str):
         """Test processing multiple files simultaneously via file_urls."""
-        url = "http://localhost:8080/test_agency/get_response"
+        url = f"{fastapi_base_url}/test_agency/get_response"
         payload = {
             "message": (
                 "I'm uploading multiple files. Please tell me the function name presented in the image"
                 "and tell me what my favorite food is."
             ),
             "file_urls": {
-                "text_image": "http://localhost:7860/test-image.png",
-                "pdf_file": "http://localhost:7860/test-pdf-2.pdf",
+                "text_image": f"{file_server_base_url}/test-image.png",
+                "pdf_file": f"{file_server_base_url}/test-pdf-2.pdf",
             },
         }
         headers = {}
@@ -312,12 +355,12 @@ class TestFastAPIFileProcessing:
         assert "sum_of_squares" in response_text or "sum of squares" in response_text
 
     @pytest.mark.asyncio
-    async def test_streaming_response(self, file_server_process, fastapi_server):
+    async def test_streaming_response(self, file_server_base_url: str, fastapi_base_url: str):
         """Test streaming response with file processing."""
-        url = "http://localhost:8080/test_agency/get_response_stream"
+        url = f"{fastapi_base_url}/test_agency/get_response_stream"
         payload = {
             "message": "Please read the text file and describe its content in detail.",
-            "file_urls": {"stream_test.txt": "http://localhost:7860/test-txt.txt"},
+            "file_urls": {"stream_test.txt": f"{file_server_base_url}/test-txt.txt"},
         }
         headers = {}
 
@@ -337,12 +380,12 @@ class TestFastAPIFileProcessing:
         assert "first txt secret phrase" in full_response
 
     @pytest.mark.asyncio
-    async def test_invalid_file_url(self, file_server_process, fastapi_server):
+    async def test_invalid_file_url(self, file_server_base_url: str, fastapi_base_url: str):
         """Test handling of invalid file URLs."""
-        url = "http://localhost:8080/test_agency/get_response"
+        url = f"{fastapi_base_url}/test_agency/get_response"
         payload = {
             "message": "Please process this file.",
-            "file_urls": {"nonexistent.txt": "http://localhost:7860/nonexistent-file.txt"},
+            "file_urls": {"nonexistent.txt": f"{file_server_base_url}/nonexistent-file.txt"},
         }
         headers = {}
 
@@ -358,12 +401,12 @@ class TestFastAPIFileProcessing:
         assert "error downloading file from provided urls" in response_text
 
     @pytest.mark.asyncio
-    async def test_streaming_invalid_file_url(self, file_server_process, fastapi_server):
+    async def test_streaming_invalid_file_url(self, file_server_base_url: str, fastapi_base_url: str):
         """Test that streaming endpoint properly handles invalid file URLs without hanging."""
-        url = "http://localhost:8080/test_agency/get_response_stream"
+        url = f"{fastapi_base_url}/test_agency/get_response_stream"
         payload = {
             "message": "Please process this file.",
-            "file_urls": {"nonexistent.txt": "http://localhost:7860/nonexistent-file.txt"},
+            "file_urls": {"nonexistent.txt": f"{file_server_base_url}/nonexistent-file.txt"},
         }
         headers = {}
 

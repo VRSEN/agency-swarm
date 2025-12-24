@@ -1,5 +1,5 @@
 """
-Integration test verifying LiteLLM placeholder IDs are preserved.
+Integration test verifying LiteLLM placeholder IDs are normalized before persistence.
 
 Requires live Anthropic access; skipped automatically when ANTHROPIC_API_KEY is not configured.
 """
@@ -64,7 +64,7 @@ def _build_agency() -> Agency:
     )
 
 
-def test_litellm_placeholder_ids_are_preserved() -> None:
+def test_litellm_placeholder_ids_are_not_persisted() -> None:
     litellm.modify_params = True
 
     agency = _build_agency()
@@ -76,7 +76,7 @@ def test_litellm_placeholder_ids_are_preserved() -> None:
     placeholder_items = [msg for msg in messages if msg.get("id") == FAKE_RESPONSES_ID]
 
     assert len(messages) >= 6, "Expected multiple conversation items after two turns"
-    assert len(placeholder_items) >= 2, "Placeholder IDs should persist across turns"
+    assert not placeholder_items, "Placeholder IDs should not be persisted after normalization"
 
     call_ids = {msg.get("call_id") for msg in messages if msg.get("type") == "function_call_output"}
     assert len(call_ids) >= 1, "Tool call outputs should be captured with unique call_ids"

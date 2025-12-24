@@ -1,6 +1,10 @@
 """Unit tests for model utility functions."""
 
-from agency_swarm.utils.model_utils import is_reasoning_model
+from agents.models.openai_chatcompletions import OpenAIChatCompletionsModel
+from agents.models.openai_responses import OpenAIResponsesModel
+from openai import AsyncOpenAI
+
+from agency_swarm.utils.model_utils import get_model_name, is_reasoning_model
 
 
 def test_is_reasoning_model_with_o_series():
@@ -38,3 +42,17 @@ def test_is_reasoning_model_with_none():
 def test_is_reasoning_model_with_empty_string():
     """Empty string model name returns False."""
     assert is_reasoning_model("") is False
+
+
+def test_get_model_name_from_openai_responses_model() -> None:
+    """OpenAI Responses models expose their model identifier."""
+    client = AsyncOpenAI(api_key="test")
+    model = OpenAIResponsesModel(model="gpt-4o", openai_client=client)
+    assert get_model_name(model) == "gpt-4o"
+
+
+def test_get_model_name_from_openai_chat_completions_model() -> None:
+    """OpenAI Chat Completions models expose their model identifier."""
+    client = AsyncOpenAI(api_key="test")
+    model = OpenAIChatCompletionsModel(model="gpt-4.1", openai_client=client)
+    assert get_model_name(model) == "gpt-4.1"

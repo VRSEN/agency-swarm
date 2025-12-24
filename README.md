@@ -47,7 +47,7 @@ If you hit environment issues, see the [Installation guide](https://agency-swarm
 
 ## Getting Started
 
-> **Recommended**: Follow the [Agency Templates guide](https://agency-swarm.ai/welcome/getting-started/agency-templates)—it walks you through cloning the Agency Starter Template or adapting the Agency Code example before you customize anything.
+> **Recommended**: Start with the [Agency Starter Template](https://github.com/agency-ai-solutions/agency-starter-template) before you customize anything.
 
 1. **Set Your OpenAI Key**:
     - Create a `.env` file with `OPENAI_API_KEY=your_key` (auto-loaded), or export it in your shell:
@@ -125,7 +125,7 @@ Define tools using the modern `@function_tool` decorator (recommended), or exten
         files_folder="./files", # files to be uploaded to OpenAI
         schemas_folder="./schemas", # OpenAPI schemas to be converted into tools
         tools=[my_custom_tool],  # FunctionTool returned by @function_tool (or adapt BaseTool via ToolFactory)
-        model="gpt-5.1",
+        model="gpt-5.2",
         model_settings=ModelSettings(
             max_tokens=25000,
         ),
@@ -220,7 +220,7 @@ This structure ensures that each agent has its dedicated space with all necessar
 - Agencies overview: https://agency-swarm.ai/core-framework/agencies/overview
 - Communication flows: https://agency-swarm.ai/core-framework/agencies/communication-flows
 - Running an agency: https://agency-swarm.ai/core-framework/agencies/running-agency
-- Agency Templates guide (Starter Template + Agency Code): https://agency-swarm.ai/welcome/getting-started/agency-templates
+- Agency Code example: https://github.com/VRSEN/Agency-Code
 - Observability: https://agency-swarm.ai/additional-features/observability
 
 ## Contributing

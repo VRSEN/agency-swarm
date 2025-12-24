@@ -1,10 +1,15 @@
 import json
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import Any, cast
 
 import pytest
+from agents.items import MessageOutputItem
 from agents.models.fake_id import FAKE_RESPONSES_ID
+from agents.stream_events import RawResponsesStreamEvent
+from openai.types.responses.response_output_message import ResponseOutputMessage
+from openai.types.responses.response_text_delta_event import ResponseTextDeltaEvent
 
+from agency_swarm import Agency, Agent
 from agency_swarm.agent.execution_stream_response import StreamingRunResponse
 from agency_swarm.integrations.fastapi_utils.endpoint_handlers import (
     ActiveRun,
@@ -55,6 +60,113 @@ def _parse_sse_messages_payload(chunks: list[str]) -> dict[str, Any]:
             if line.startswith("data: "):
                 return json.loads(line.split("data: ", 1)[1])
     raise AssertionError("messages payload not found in SSE stream")
+
+
+def _parse_sse_stream_events(chunks: list[str]) -> list[dict[str, Any]]:
+    """Extract per-event streamed payloads (the `data: {"data": ...}` SSE lines)."""
+    events: list[dict[str, Any]] = []
+    for chunk in chunks:
+        for line in chunk.splitlines():
+            if not line.startswith("data: "):
+                continue
+            payload_str = line.split("data: ", 1)[1]
+            if payload_str == "[DONE]":
+                continue
+            try:
+                payload = json.loads(payload_str)
+            except json.JSONDecodeError:
+                continue
+            data = payload.get("data") if isinstance(payload, dict) else None
+            if isinstance(data, dict) and isinstance(data.get("type"), str):
+                events.append(data)
+    return events
+
+
+@pytest.mark.asyncio
+async def test_stream_endpoint_streamed_chunks_normalize_fake_item_ids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Streamed SSE chunks must not expose `__fake_id__` item IDs, and must match final payload IDs."""
+
+    async def _noop_attach(_agency: Any) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.attach_persistent_mcp_servers",
+        _noop_attach,
+    )
+
+    async def dummy_raw_events() -> AsyncGenerator[Any]:
+        yield RawResponsesStreamEvent(
+            data=ResponseTextDeltaEvent(
+                content_index=0,
+                delta="A",
+                item_id=FAKE_RESPONSES_ID,
+                logprobs=[],
+                output_index=0,
+                sequence_number=1,
+                type="response.output_text.delta",
+            )
+        )
+
+    class DummyStreamedResult:
+        def __init__(self, input_history: list[dict[str, Any]], agent: Agent) -> None:
+            self._input_history = list(input_history)
+            self.final_output = "A"
+            self.new_items = [
+                MessageOutputItem(
+                    raw_item=ResponseOutputMessage(
+                        id=FAKE_RESPONSES_ID,
+                        content=[],
+                        role="assistant",
+                        status="completed",
+                        type="message",
+                    ),
+                    type="message_output_item",
+                    agent=agent,
+                )
+            ]
+
+        def stream_events(self):
+            return dummy_raw_events()
+
+        def to_input_list(self) -> list[dict[str, Any]]:
+            return self._input_history + [
+                {"type": "message", "role": "assistant", "content": "A", "id": FAKE_RESPONSES_ID}
+            ]
+
+        def cancel(self, *_args: Any, **_kwargs: Any) -> None:
+            return None
+
+    def _run_streamed_stub(*_args: Any, **kwargs: Any) -> DummyStreamedResult:
+        agent_arg = cast(Agent, kwargs["starting_agent"])
+        return DummyStreamedResult(cast(list[dict[str, Any]], kwargs.get("input", [])), agent_arg)
+
+    monkeypatch.setattr("agents.Runner.run_streamed", _run_streamed_stub)
+
+    def agency_factory(**_kwargs: Any) -> Agency:
+        agent = Agent(name="Streamer", instructions="noop")
+        return Agency(agent, shared_instructions="test")
+
+    handler = make_stream_endpoint(BaseRequest, agency_factory, lambda: None, ActiveRunRegistry())
+    response = await handler(http_request=_StubRequest(), request=BaseRequest(message="hi"), token=None)
+    chunks = [chunk async for chunk in response.body_iterator]
+
+    streamed = _parse_sse_stream_events(chunks)
+    assert streamed, 'Expected streamed `data: {"data": ...}` chunks'
+
+    raw_event = streamed[0]
+    assert raw_event["type"] == "raw_response_event"
+
+    inner = raw_event.get("data")
+    assert isinstance(inner, dict)
+    assert inner.get("type") == "response.output_text.delta"
+    assert inner.get("item_id") != FAKE_RESPONSES_ID
+
+    final_payload = _parse_sse_messages_payload(chunks)
+    new_messages = final_payload["new_messages"]
+    assistant = next(m for m in new_messages if isinstance(m, dict) and m.get("role") == "assistant")
+    assert assistant["id"] == inner["item_id"]
 
 
 @pytest.mark.asyncio

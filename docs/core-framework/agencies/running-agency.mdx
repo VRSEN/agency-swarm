@@ -74,6 +74,21 @@ print(result.final_output)
 - `additional_instructions` (optional): Additional instructions that will be appended at the end of instructions for the recipient agent.
 - `recipient_agent` (optional): The agent to which the message should be sent.
 
+## Track Usage and Cost
+
+FastAPI responses include a `usage` object with token counts and cost when `ModelSettings(include_usage=True)` is enabled (default). For streaming, usage appears in the final `event: messages` payload. The payload shape is shown in [Observability](/additional-features/observability).
+
+<Note>
+For streaming usage with LiteLLM models, keep `ModelSettings(include_usage=True)` on your agents. It is enabled by default.
+</Note>
+<Tip>
+Use the `/cost` command in the terminal demo to see the current session usage and cost.
+</Tip>
+
+![Terminal demo `/cost` output showing session usage and cost](/images/cost.png)
+
+**Implementation:** `src/agency_swarm/integrations/fastapi_utils/endpoint_handlers.py`
+
 ## Terminal Version
 
 To run the agency directly from your terminal, use the `terminal_demo` method:
@@ -84,3 +99,4 @@ agency.terminal_demo()
 <Tip>
 When using the terminal to run the agency, you can send messages directly to any top-level agent by using the "mentions" feature. To do this, start your message with the agent's name preceded by an @ symbol (for example, `@Developer I want you to build me a website`). This directs your message to the specified agent instead of the CEO. You can also press the tab key to autocomplete the agent's name.
 </Tip>
+**Implementation:** `src/agency_swarm/ui/demos/terminal.py`

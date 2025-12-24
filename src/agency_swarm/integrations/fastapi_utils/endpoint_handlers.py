@@ -15,7 +15,6 @@ from ag_ui.encoder import EventEncoder
 from agents import OpenAIResponsesModel, TResponseInputItem, output_guardrail
 from agents.exceptions import OutputGuardrailTripwireTriggered
 from agents.models._openai_shared import get_default_openai_client
-from agents.models.fake_id import FAKE_RESPONSES_ID
 from fastapi import Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -32,9 +31,14 @@ from agency_swarm.agent.execution_stream_response import StreamingRunResponse
 from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_urls
 from agency_swarm.integrations.fastapi_utils.logging_middleware import get_logs_endpoint_impl
 from agency_swarm.messages import MessageFilter, MessageFormatter
+from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
 from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
 from agency_swarm.ui.core.agui_adapter import AguiAdapter
 from agency_swarm.utils.serialization import serialize
+from agency_swarm.utils.usage_tracking import (
+    calculate_usage_with_cost,
+    extract_usage_from_run_result,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +144,16 @@ def make_response_endpoint(
         all_messages = agency_instance.thread_manager.get_all_messages()
         new_messages = all_messages[initial_message_count:]  # Only messages added during this request
         filtered_messages = MessageFilter.filter_messages(new_messages)
+        filtered_messages = _normalize_new_messages_for_client(filtered_messages)
         result = {"response": response.final_output, "new_messages": filtered_messages}
+
+        # Extract and add usage information
+        usage_stats = extract_usage_from_run_result(response)
+        if usage_stats:
+            # Calculate cost - model_name is auto-extracted from run_result._main_agent_model
+            usage_stats = calculate_usage_with_cost(usage_stats, run_result=response)
+            result["usage"] = usage_stats.to_dict()
+
         if request.file_urls is not None and file_ids_map is not None:
             result["file_ids_map"] = file_ids_map
         if request.generate_chat_name:
@@ -276,6 +289,13 @@ def make_stream_endpoint(
                     filtered_messages = MessageFilter.remove_orphaned_messages(filtered_messages)
                     filtered_messages = _normalize_new_messages_for_client(filtered_messages)
 
+                    # Extract usage from final result
+                    final_result = stream.final_result if stream else None
+                    usage_stats = extract_usage_from_run_result(final_result)
+                    if usage_stats:
+                        # Calculate cost - model_name is auto-extracted from run_result._main_agent_model
+                        usage_stats = calculate_usage_with_cost(usage_stats, run_result=final_result)
+
                     # Build result with new messages
                     result = {"new_messages": filtered_messages, "run_id": run_id}
                     if active_run is not None and active_run.cancelled:
@@ -287,6 +307,8 @@ def make_stream_endpoint(
                             result["chat_name"] = await generate_chat_name(filtered_messages)
                         except Exception as e:
                             logger.error(f"Error generating chat name: {e}")
+                    if usage_stats:
+                        result["usage"] = usage_stats.to_dict()
 
                     yield "event: messages\ndata: " + json.dumps(result) + "\n\n"
                     yield "event: end\ndata: [DONE]\n\n"
@@ -490,35 +512,8 @@ def _normalize_new_messages_for_client(messages: list[TResponseInputItem]) -> li
     unique ids within the final `new_messages` payload while preserving `call_id` linking for tool
     calls.
     """
-    normalized: list[TResponseInputItem] = []
-    for idx, msg in enumerate(messages):
-        if not isinstance(msg, dict):
-            normalized.append(msg)
-            continue
-
-        msg_id = msg.get("id")
-        if not (isinstance(msg_id, str) and msg_id == FAKE_RESPONSES_ID):
-            normalized.append(msg)
-            continue
-
-        msg_copy: dict[str, object] = dict(msg)
-
-        call_id = msg_copy.get("call_id")
-        if isinstance(call_id, str) and call_id and call_id != FAKE_RESPONSES_ID:
-            msg_copy["id"] = call_id
-            normalized.append(cast(TResponseInputItem, msg_copy))
-            continue
-
-        agent_run_id = msg_copy.get("agent_run_id")
-        timestamp = msg_copy.get("timestamp")
-        if isinstance(agent_run_id, str) and agent_run_id and isinstance(timestamp, int):
-            msg_copy["id"] = f"msg_{agent_run_id}_{timestamp}"
-        else:
-            msg_copy["id"] = f"msg_{idx}"
-
-        normalized.append(cast(TResponseInputItem, msg_copy))
-
-    return normalized
+    normalizer = StreamIdNormalizer()
+    return normalizer.normalize_message_dicts(messages)
 
 
 def make_metadata_endpoint(agency_metadata: dict, verify_token):

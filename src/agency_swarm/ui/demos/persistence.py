@@ -2,11 +2,26 @@ import json
 import os
 import re
 import subprocess
+import typing
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, cast
 
+from agents import TResponseInputItem
+
+from agency_swarm import Agency
+from agency_swarm.utils.usage_tracking import UsageStatsDict
+
 _CHATS_DIR: str | None = None
+
+
+class ChatMetadata(typing.TypedDict, total=False):
+    created_at: str
+    modified_at: str
+    msgs: int
+    branch: str
+    summary: str
+    usage: UsageStatsDict
 
 
 def set_chats_dir(path: str) -> None:
@@ -42,20 +57,22 @@ def save_index(index: dict[str, dict[str, Any]]) -> None:
         json.dump(index, f, indent=2)
 
 
-def summarize_messages(messages: list[dict[str, Any]]) -> str:
+def summarize_messages(messages: list[TResponseInputItem]) -> str:
     def _clip(text: str, limit: int = 64) -> str:
         text = " ".join(text.split())
         return text if len(text) <= limit else text[: limit - 1] + "…"
 
     for msg in messages:
-        if msg.get("role") == "user" and isinstance(msg.get("content"), str):
-            return _clip(msg["content"]) or "(no summary)"
+        content = msg.get("content")
+        if msg.get("role") == "user" and isinstance(content, str):
+            return _clip(content) or "(no summary)"
     for msg in messages:
-        if msg.get("role") == "assistant" and isinstance(msg.get("content"), str):
-            return _clip(msg["content"]) or "(no summary)"
+        content = msg.get("content")
+        if msg.get("role") == "assistant" and isinstance(content, str):
+            return _clip(content) or "(no summary)"
     for msg in messages:
-        if msg.get("role") == "system" and isinstance(msg.get("content"), str):
-            content = msg["content"]
+        content = msg.get("content")
+        if msg.get("role") == "system" and isinstance(content, str):
             if "All user messages:" in content:
                 lines = content.split("\n")
                 for i, line in enumerate(lines):
@@ -98,7 +115,7 @@ def format_relative(ts_iso: str | None) -> str:
         return "-"
 
 
-def update_index(chat_id: str, messages: list[dict[str, Any]], branch: str) -> None:
+def update_index(chat_id: str, messages: list[TResponseInputItem], branch: str) -> None:
     index = load_index()
     now_iso = datetime.now(timezone.utc).isoformat()  # noqa: UP017
     summary = summarize_messages(messages)
@@ -134,7 +151,7 @@ def list_chat_records() -> list[dict[str, Any]]:
                 payload = json.load(f)
             if isinstance(payload, dict):
                 raw_items = payload.get("items")
-                items = cast(list[dict[str, Any]], raw_items if isinstance(raw_items, list) else [])
+                items = cast(list[TResponseInputItem], raw_items if isinstance(raw_items, list) else [])
                 meta = payload.get("metadata", {}) if isinstance(payload.get("metadata"), dict) else {}
                 created = meta.get("created_at")
                 modified = meta.get("modified_at")
@@ -142,7 +159,7 @@ def list_chat_records() -> list[dict[str, Any]]:
                 branch = meta.get("branch") or ""
                 summary = summarize_messages(items)
             else:
-                items = cast(list[dict[str, Any]], payload if isinstance(payload, list) else [])
+                items = cast(list[TResponseInputItem], payload if isinstance(payload, list) else [])
                 created = None
                 modified = None
                 msgs = len(items)
@@ -164,7 +181,7 @@ def list_chat_records() -> list[dict[str, Any]]:
     return scan_records
 
 
-def save_current_chat(agency_instance: Any, chat_id: str) -> None:
+def save_current_chat(agency_instance: "Agency", chat_id: str, usage: UsageStatsDict | None = None) -> None:
     file_path = chat_file_path(chat_id)
     messages = agency_instance.thread_manager.get_all_messages()
 
@@ -198,6 +215,10 @@ def save_current_chat(agency_instance: Any, chat_id: str) -> None:
         "summary": summarize_messages(messages),
     }
 
+    # Add usage if provided
+    if usage:
+        meta["usage"] = usage
+
     with open(file_path, "w") as f:
         json.dump({"items": messages, "metadata": meta}, f, indent=2)
 
@@ -220,6 +241,24 @@ def _read_chat_messages(chat_id: str) -> list[dict[str, Any]]:
         return payload
 
     raise ValueError("Chat payload must be a list of messages.")
+
+
+def load_chat_metadata(chat_id: str) -> ChatMetadata | None:
+    """Load metadata from a chat file.
+
+    Returns the metadata dict if found, None otherwise.
+    """
+    path = Path(chat_file_path(chat_id))
+    if not path.exists():
+        return None
+    try:
+        with open(path) as f:
+            payload = json.load(f)
+        if isinstance(payload, dict):
+            return payload.get("metadata", {})
+    except Exception:
+        pass
+    return None
 
 
 def load_chat(agency_instance: Any, chat_id: str) -> bool:

@@ -210,7 +210,7 @@ def test_generate_agent_script_escapes_strings(tmp_path: Path) -> None:
         "name": 'Quote "Tester"',
         "description": 'Says "hello" often',
         "instructions": "Be helpful",
-        "model": "gpt-5.1",
+        "model": "gpt-5.2",
     }
 
     settings_path = tmp_path / "settings.json"
