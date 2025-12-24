@@ -186,7 +186,7 @@ async def test_non_blocking_parallel_agent_interactions(
             except Exception:
                 args = {}
             if isinstance(args, dict):
-                if {"message", "my_primary_instructions", "additional_instructions"}.issubset(args.keys()):
+                if {"message", "additional_instructions"}.issubset(args.keys()):
                     send_message_like_call_indices.append(idx)
                 # Track recipient if present
                 recipient = args.get("recipient_agent")
