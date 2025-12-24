@@ -148,6 +148,9 @@ ignore_missing_imports = true
 disallow_incomplete_defs = false
 disallow_untyped_defs = false
 disallow_untyped_calls = false
+warn_no_return = true
+warn_redundant_casts = true
+warn_unused_configs = true
 
 [[tool.mypy.overrides]]
 module = "sounddevice.*"

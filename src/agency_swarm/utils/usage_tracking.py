@@ -108,23 +108,24 @@ class UsageStats:
 def load_pricing_data() -> PricingData:
     """Load pricing data from the JSON file."""
     global _PRICING_DATA_CACHE
-    if _PRICING_DATA_CACHE is not None:
-        return _PRICING_DATA_CACHE
-
     with _PRICING_DATA_LOCK:
         if _PRICING_DATA_CACHE is not None:
             return _PRICING_DATA_CACHE
 
-    if not PRICING_FILE_PATH.exists():
-        logger.warning(f"Pricing file not found at {PRICING_FILE_PATH}. Cost calculation will be unavailable.")
-        _PRICING_DATA_CACHE = {}
-        return _PRICING_DATA_CACHE
-    try:
-        with open(PRICING_FILE_PATH, encoding="utf-8") as f:
-            raw = json.load(f)
+        if not PRICING_FILE_PATH.exists():
+            logger.warning(f"Pricing file not found at {PRICING_FILE_PATH}. Cost calculation will be unavailable.")
+            return {}
+
+        try:
+            with open(PRICING_FILE_PATH, encoding="utf-8") as f:
+                raw = json.load(f)
+        except Exception as e:
+            logger.error(f"Failed to load pricing data: {e}")
+            return {}
+
         if not isinstance(raw, dict):
-            _PRICING_DATA_CACHE = {}
-            return _PRICING_DATA_CACHE
+            return {}
+
         pricing_data: PricingData = {}
         for model_name, model_pricing in raw.items():
             if not isinstance(model_name, str) or not isinstance(model_pricing, dict):
@@ -135,11 +136,8 @@ def load_pricing_data() -> PricingData:
                 "cache_read_input_token_cost": _coerce_price(model_pricing.get("cache_read_input_token_cost")),
                 "output_cost_per_reasoning_token": _coerce_price(model_pricing.get("output_cost_per_reasoning_token")),
             }
+
         _PRICING_DATA_CACHE = pricing_data
-        return _PRICING_DATA_CACHE
-    except Exception as e:
-        logger.error(f"Failed to load pricing data: {e}")
-        _PRICING_DATA_CACHE = {}
         return _PRICING_DATA_CACHE
 
 

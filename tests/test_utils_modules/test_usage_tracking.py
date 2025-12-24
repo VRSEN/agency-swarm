@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+import time
 import typing
 from collections.abc import AsyncIterator
 
@@ -19,6 +21,7 @@ from openai.types.responses.response_usage import InputTokensDetails, OutputToke
 
 from agency_swarm.agent.core import Agent
 from agency_swarm.context import MasterContext
+from agency_swarm.utils import usage_tracking
 from agency_swarm.utils.thread import ThreadManager
 from agency_swarm.utils.usage_tracking import UsageStats, calculate_usage_with_cost, extract_usage_from_run_result
 
@@ -251,3 +254,66 @@ async def test_calculate_usage_with_cost_uses_model_name_from_model_instance() -
     }
     with_cost = calculate_usage_with_cost(usage_stats, pricing_data=pricing_data, run_result=result)
     assert with_cost.total_cost == pytest.approx(3.0)
+
+
+def test_load_pricing_data_is_single_load_under_concurrency(tmp_path, monkeypatch) -> None:
+    """Regression: cache lock must prevent concurrent duplicate JSON parses."""
+    pricing_file = tmp_path / "pricing.json"
+    pricing_file.write_text('{"test/model": {"input_cost_per_token": 1}}', encoding="utf-8")
+    monkeypatch.setattr(usage_tracking, "PRICING_FILE_PATH", pricing_file)
+    monkeypatch.setattr(usage_tracking, "_PRICING_DATA_CACHE", None)
+
+    original_json_load = usage_tracking.json.load
+    call_count = 0
+    first_load_started = threading.Event()
+    allow_return = threading.Event()
+
+    def blocking_load(fp: typing.Any) -> typing.Any:
+        nonlocal call_count
+        call_count += 1
+        first_load_started.set()
+        assert allow_return.wait(timeout=1.0), "Test timed out waiting to release json.load"
+        return original_json_load(fp)
+
+    monkeypatch.setattr(usage_tracking.json, "load", blocking_load)
+
+    results: list[usage_tracking.PricingData] = []
+    results_lock = threading.Lock()
+
+    def worker() -> None:
+        data = usage_tracking.load_pricing_data()
+        with results_lock:
+            results.append(data)
+
+    first_thread = threading.Thread(target=worker, daemon=True)
+    first_thread.start()
+    assert first_load_started.wait(timeout=1.0)
+
+    second_thread = threading.Thread(target=worker, daemon=True)
+    second_thread.start()
+
+    try:
+        time.sleep(0.05)
+    finally:
+        allow_return.set()
+        first_thread.join(timeout=1.0)
+        second_thread.join(timeout=1.0)
+
+    assert call_count == 1, f"Expected a single JSON load under lock, got {call_count}"
+    assert results
+    assert all("test/model" in data for data in results)
+
+
+def test_load_pricing_data_does_not_cache_invalid_json(tmp_path, monkeypatch) -> None:
+    """Regression: invalid JSON must not poison the in-process cache."""
+    pricing_file = tmp_path / "pricing.json"
+    pricing_file.write_text("{", encoding="utf-8")
+    monkeypatch.setattr(usage_tracking, "PRICING_FILE_PATH", pricing_file)
+    monkeypatch.setattr(usage_tracking, "_PRICING_DATA_CACHE", None)
+
+    first = usage_tracking.load_pricing_data()
+    assert first == {}
+
+    pricing_file.write_text('{"test/model": {"input_cost_per_token": 1}}', encoding="utf-8")
+    second = usage_tracking.load_pricing_data()
+    assert "test/model" in second

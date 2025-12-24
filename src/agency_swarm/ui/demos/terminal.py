@@ -69,8 +69,7 @@ class EscapeKeyWatcher:
         if _MSVCRT is None:
             return
 
-        msvcrt_module = cast(ModuleType, _MSVCRT)
-        msvcrt_any = cast(Any, msvcrt_module)
+        msvcrt_any = cast(Any, _MSVCRT)
 
         while not self._stop:
             try:
