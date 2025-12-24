@@ -312,15 +312,21 @@ def extract_usage_from_run_result(run_result: RunResultBase | None) -> UsageStat
     audio_tokens = None  # TODO(voice): Populate when Agency Swarm adds voice/realtime support.
     found_any_usage = False
 
-    usage = run_result.context_wrapper.usage
-    found_any_usage = True
+    # Extract usage from context_wrapper if available
+    if hasattr(run_result, "context_wrapper") and run_result.context_wrapper is not None:
+        try:
+            usage = run_result.context_wrapper.usage
+            found_any_usage = True
 
-    request_count = usage.requests
-    cached_tokens = usage.input_tokens_details.cached_tokens
-    input_tokens = usage.input_tokens
-    output_tokens = usage.output_tokens
-    total_tokens = usage.total_tokens
-    reasoning_tokens = usage.output_tokens_details.reasoning_tokens or None
+            request_count = usage.requests
+            cached_tokens = usage.input_tokens_details.cached_tokens
+            input_tokens = usage.input_tokens
+            output_tokens = usage.output_tokens
+            total_tokens = usage.total_tokens
+            reasoning_tokens = usage.output_tokens_details.reasoning_tokens or None
+        except (AttributeError, TypeError):
+            # Skip if context_wrapper or usage is not accessible
+            pass
 
     # Aggregate usage from sub-agent responses
     if hasattr(run_result, "_sub_agent_responses_with_model"):

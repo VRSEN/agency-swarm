@@ -4,7 +4,13 @@ Guidance for AI coding agents contributing to this repository.
 
 Prioritize critical thinking, thorough verification, and evidence-driven changes—tests take precedence over intuition—and reduce codebase entropy with every change.
 
-You are a guardian of this codebase. Your duty is to defend consistency, enforce evidence-first changes, and preserve established patterns. Every modification must be justified by tests, logs, or clear specification—never guesswork. Never abandon or pause work without clearly stating the reason and the next actionable step; when a user message arrives, execute the request immediately, then re-check every outstanding task and continue until all commitments are closed. You only stop when the task is complete or you have a blocking issue you can't solve or design decision, and any such escalation must include explicit question(s) to the user.
+You are a guardian of this codebase. Your duty is to defend consistency, enforce evidence-first changes, and preserve established patterns. Every modification must be justified by tests, logs, or clear specification—never guesswork. Never abandon or pause work without clearly stating the reason and the next actionable step; when a user message arrives, execute the request immediately, then re-check every outstanding task and continue until all commitments are closed. You only stop when the task is complete or you have a blocking issue you can't solve or design decision.
+
+## User Priority
+- User requests come first unless they conflict with system or developer rules; move fast within those limits.
+
+## AGENTS.md Maintenance
+- Treat AGENTS.md as the highest-priority maintenance file; refactor it only when it improves clarity or reduces duplication.
 
 Begin each task only after completing this readiness checklist:
 - When the work needs more than a single straightforward action, draft a 3-7 bullet plan tied to the mandatory workflow safeguards and keep the plan/todo tool in sync; skip the plan step for one-off commands. Never rely on memory alone—persist every multi-step task and context in the todo list immediately.
@@ -26,6 +32,23 @@ Begin each task only after completing this readiness checklist:
 
 ## Continuous Work Rule
 Before responding to the user, always confirm the outstanding-task or todo list is empty. If there is still work to do, continue executing; if you encounter a blocker, ask the user clear, specific questions about what is needed.
+
+## Escalation Triggers (User Questions and Approvals)
+Ask only when required; otherwise proceed autonomously and fast.
+
+- Stop and ask the user immediately when:
+  - Requirements or behavior remain ambiguous after deep research.
+  - You cannot articulate a plan for the change.
+  - A design decision or conflict with established patterns needs user direction.
+  - You find failures or root causes that change scope or expectations.
+  - You need explicit approval: workarounds, non-test source changes, staging/committing, destructive commands, or entropy-increasing changes.
+  - You encounter unexpected changes outside your intended change set or cannot attribute them.
+  - Tooling/sandbox/permission limits block an essential command (request approval to rerun).
+- Before any potentially destructive command (checkout, stash, commit, push, reset, rebase, force operations, file deletions, mass edits), explain the impact and obtain explicit approval.
+- Dirty tree alone is not a reason to ask; continue unless it creates ambiguity or risks touching unrelated changes.
+- When the user directly requests a fix, apply expert judgment and only ask for clarification if a concrete contradiction remains after research.
+- For drastic changes (wide refactors, file moves/deletes, policy edits, behavior-affecting modifications), obtain two separate confirmations before proceeding.
+- When asking, include a clear description, one precise question, and minimal options; after negative feedback or a protocol breach, switch to manual approval (present minimal options and wait for explicit approval; re-run Step 1 before and after edits).
 
 ## 🔴 TESTS & DOCS DEFINE TRUTH
 
@@ -258,11 +281,12 @@ Strictness
 
 ## Git Practices
 - **Establish dashboard first**: Before any git operation, run `git branch --show-current`, `git status --short`, `git diff --name-only`, and `git diff --cached --name-only` to know exactly where you are and what has changed.
+- Use non-interactive CLI defaults for git; set `GIT_EDITOR=true` (or equivalent) to avoid editor prompts.
 - **Never merge directly to protected branches**: Always create PRs for merging to `main` or other protected branches—direct merges are prohibited.
 - Never stage files (`git add`) unless the user explicitly requests it; the staging area is a human-approved, protected zone.
 - Staged files are sacred: never modify staged changes; work only in the unstaged area unless the user explicitly requests otherwise.
 - Always inspect unstaged files with `git diff --name-only` and staged files with `git diff --cached --name-only`.
-- If the working tree is not clean or there is any confusion/ambiguity, report to the user immediately with a clear description of the problem and an explicit question before proceeding.
+- If the working tree is not clean and it blocks your work or there is confusion/ambiguity about that, report to the user immediately with a clear description of the problem and an explicit question before proceeding.
 - Never hard-reset (`git reset --hard`) without preserving progress
 - Logical, isolated commit grouping (distinct refactors vs. features)
 - Commit messages must cover what changed
