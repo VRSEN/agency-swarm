@@ -6,6 +6,24 @@ icon: "eyes"
 
 Agency Swarm supports multiple observability approaches to help you track and analyze your agent's behavior and performance.
 
+## Usage Payload
+
+```json
+{
+  "response": "Test response",
+  "new_messages": [],
+  "usage": {
+    "request_count": 1,
+    "cached_tokens": 0,
+    "input_tokens": 10,
+    "output_tokens": 20,
+    "total_tokens": 30,
+    "total_cost": 0.0
+  }
+}
+```
+
+Streaming responses include the same `usage` object in the final `event: messages` payload.
 ## Supported Observability Platforms
 
 Agency Swarm supports three main observability approaches:

@@ -1,7 +1,10 @@
 # --- Agency response methods ---
 import asyncio
+import contextvars
 import logging
-from typing import TYPE_CHECKING, Any
+import threading
+from concurrent.futures import Future
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from .core import Agency
@@ -111,8 +114,8 @@ def get_response_sync(
 ) -> RunResult:
     """Synchronous wrapper around :meth:`get_response`."""
 
-    return asyncio.run(
-        get_response(
+    def _coro():
+        return get_response(
             agency,
             message=message,
             recipient_agent=recipient_agent,
@@ -124,7 +127,30 @@ def get_response_sync(
             additional_instructions=additional_instructions,
             **kwargs,
         )
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(_coro())
+
+    result_future: Future[RunResult] = Future()
+    caller_context = contextvars.copy_context()
+
+    def _runner() -> None:
+        try:
+            result = caller_context.run(lambda: asyncio.run(_coro()))
+            result_future.set_result(cast(RunResult, result))
+        except BaseException as exc:
+            result_future.set_exception(exc)
+
+    thread = threading.Thread(
+        target=_runner,
+        name="agency-get-response-sync",
+        daemon=True,
     )
+    thread.start()
+
+    return result_future.result()
 
 
 def get_response_stream(

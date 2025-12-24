@@ -1,10 +1,17 @@
+from __future__ import annotations
+
 import asyncio
+import typing
 import uuid
 from typing import Any
 
 from prompt_toolkit.shortcuts import radiolist_dialog
 
 from agency_swarm import Agency
+from agency_swarm.utils.usage_tracking import UsageStatsDict
+
+if typing.TYPE_CHECKING:
+    from .persistence import ChatMetadata
 
 from .compact import (
     compact_thread as _build_compact_summary,
@@ -16,6 +23,7 @@ from .persistence import (
     index_file_path as _index_file_path,
     list_chat_records as _list_chat_records,
     load_chat as _load_chat,
+    load_chat_metadata as _load_chat_metadata,
     save_current_chat as _save_current_chat,
     set_chats_dir as _set_chats_dir,
 )
@@ -63,9 +71,9 @@ class TerminalDemoLauncher:
         return _index_file_path()
 
     @staticmethod
-    def save_current_chat(agency_instance: Agency, chat_id: str) -> None:
+    def save_current_chat(agency_instance: Agency, chat_id: str, usage: UsageStatsDict | None = None) -> None:
         """Persist current flat messages to disk for the given chat_id."""
-        _save_current_chat(agency_instance, chat_id)
+        _save_current_chat(agency_instance, chat_id, usage=usage)
 
     @staticmethod
     def load_chat(agency_instance: Agency, chat_id: str) -> bool:
@@ -75,6 +83,11 @@ class TerminalDemoLauncher:
             return False
         TerminalDemoLauncher.set_current_chat_id(chat_id)
         return True
+
+    @staticmethod
+    def load_chat_metadata(chat_id: str) -> ChatMetadata | None:
+        """Load metadata for a chat_id, including usage if available."""
+        return _load_chat_metadata(chat_id)
 
     @staticmethod
     def start_new_chat(agency_instance: Agency, chat_id: str | None = None) -> str:

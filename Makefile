@@ -83,6 +83,7 @@ serve-docs:
 
 .PHONY: build
 build:
+	@echo "Building package (pricing data will be auto-downloaded by build hook)..."
 	uv build
 
 .PHONY: help

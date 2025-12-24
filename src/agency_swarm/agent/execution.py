@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import typing
 import uuid
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, Any
@@ -27,14 +28,23 @@ from agency_swarm.messages import (
     MessageFilter,
     MessageFormatter,
 )
+from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
 from agency_swarm.utils.citation_extractor import extract_direct_file_annotations
+from agency_swarm.utils.model_utils import get_model_name
 
 if TYPE_CHECKING:
+    from agents.items import ModelResponse
+
     from agency_swarm.agent.core import AgencyContext, Agent
 
 DEFAULT_MAX_TURNS = 1000000  # Unlimited by default
 
 logger = logging.getLogger(__name__)
+
+
+class _UsageTrackingRunResult(typing.Protocol):
+    _sub_agent_responses_with_model: list[tuple[str | None, "ModelResponse"]]
+    _main_agent_model: str
 
 
 class Execution:
@@ -134,6 +144,30 @@ class Execution:
                 validation_attempts=int(getattr(self.agent, "validation_attempts", 1) or 0),
                 throw_input_guardrail_error=getattr(self.agent, "throw_input_guardrail_error", False),
             )
+
+            # Store sub-agent raw_responses with model info for per-response cost calculation
+            # These are tuples of (model_name, response) to enable accurate per-model pricing
+            if run_result and master_context_for_run:
+                try:
+                    sub_raw_responses = master_context_for_run._sub_agent_raw_responses
+                    if sub_raw_responses:
+                        # Store on run_result for access during cost calculation
+                        typed_run_result = typing.cast(_UsageTrackingRunResult, run_result)
+                        typed_run_result._sub_agent_responses_with_model = list(sub_raw_responses)
+                        # Clear after copying to avoid duplicates
+                        master_context_for_run._sub_agent_raw_responses.clear()
+                except Exception as e:
+                    logger.debug(f"Could not store sub-agent raw_responses on RunResult: {e}")
+
+            # Store main agent's model on run_result for automatic cost calculation
+            if run_result:
+                try:
+                    main_model_name = get_model_name(self.agent.model)
+                    if main_model_name:
+                        typing.cast(_UsageTrackingRunResult, run_result)._main_agent_model = main_model_name
+                except Exception as e:
+                    logger.debug(f"Could not store main agent model on RunResult: {e}")
+
             completion_info = (
                 f"Output Type: {type(run_result.final_output).__name__}"
                 if run_result.final_output is not None
@@ -196,7 +230,11 @@ class Execution:
 
                 items_to_save.extend(hosted_tool_outputs)
                 filtered_items = MessageFilter.filter_messages(items_to_save)  # type: ignore[arg-type] # Filter out unwanted message types
-                agency_context.thread_manager.add_messages(filtered_items)  # type: ignore[arg-type] # Save filtered items to flat storage
+
+                normalizer = StreamIdNormalizer()
+                normalized_items = normalizer.normalize_message_dicts(filtered_items)
+
+                agency_context.thread_manager.add_messages(normalized_items)  # type: ignore[arg-type] # Save filtered items to flat storage
                 logger.debug(f"Saved {len(filtered_items)} items to storage (filtered from {len(items_to_save)}).")
 
             # Sync back context changes if we used a merged context due to override

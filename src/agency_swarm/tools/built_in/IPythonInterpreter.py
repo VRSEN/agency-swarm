@@ -61,6 +61,9 @@ class AsyncKernelSession:
 
         self.km = km
         self.kc = kc
+
+        await self._apply_nest_asyncio(kc)
+
         self._ready.set()
 
     async def shutdown(self) -> None:
@@ -92,6 +95,7 @@ class AsyncKernelSession:
                 self.kc = self.km.client()
                 self.kc.start_channels()
                 await self.kc.wait_for_ready()
+                await self._apply_nest_asyncio(self.kc)
         except TimeoutError:
             # Kernel is truly dead, force shutdown and recreate
             await self.shutdown()
@@ -263,6 +267,11 @@ del _ipython_prev_cwd, _ipython_os
 
         ok = got_idle and got_reply and ename is None
         return ExecResult(ok=ok, stdout="".join(stdout_chunks), ename=ename, evalue=evalue, traceback=tb_joined)
+
+    async def _apply_nest_asyncio(self, kc) -> None:
+        """Enable nested event loops inside the kernel so asyncio.run works post-restart."""
+        nest_asyncio_code = "import nest_asyncio; nest_asyncio.apply()"
+        await self._execute_single(kc, nest_asyncio_code, timeout=10.0)
 
 
 class AsyncKernelPool:

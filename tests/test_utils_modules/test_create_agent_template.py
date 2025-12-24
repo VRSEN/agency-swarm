@@ -85,9 +85,9 @@ class TestCreateAgentTemplate:
         assert 'instructions="./instructions.md"' in agent_content
         assert 'files_folder="./files"' in agent_content
         assert 'tools_folder="./tools"' in agent_content
-        assert 'model="gpt-5.1"' in agent_content  # Updated default model
+        assert 'model="gpt-5.2"' in agent_content  # Updated default model
         assert "ModelSettings(" in agent_content
-        # gpt-5.1 is a reasoning model - no temperature
+        # gpt-5.2 is a reasoning model - no temperature
         assert "temperature=" not in agent_content
 
     def test_instructions_file_content(self, tmp_path: Path) -> None:

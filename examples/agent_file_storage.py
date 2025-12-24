@@ -55,7 +55,7 @@ async def main():
             ),
             files_folder=str(docs_dir),
             include_search_results=True,
-            model="gpt-5.1",
+            model="gpt-5.2",
             model_settings=ModelSettings(tool_choice="file_search"),
             tool_use_behavior="stop_on_first_tool",
         )

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import typing
 from collections.abc import AsyncGenerator, Callable
 from contextlib import AsyncExitStack, suppress
 from typing import TYPE_CHECKING, Any, cast
@@ -19,8 +20,10 @@ from openai.types.responses import ResponseOutputMessage, ResponseOutputText
 
 from agency_swarm.context import MasterContext
 from agency_swarm.messages import MessageFilter, MessageFormatter
+from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
 from agency_swarm.streaming.utils import add_agent_name_to_event
 from agency_swarm.tools.mcp_manager import default_mcp_manager
+from agency_swarm.utils.model_utils import get_model_name
 
 from .execution_guardrails import append_guardrail_feedback, extract_guardrail_texts
 from .execution_stream_persistence import (
@@ -40,9 +43,17 @@ __all__ = [
 ]
 
 if TYPE_CHECKING:
+    from agents.items import ModelResponse
+
     from agency_swarm.agent.core import AgencyContext, Agent
 
 logger = logging.getLogger(__name__)
+
+
+class _UsageTrackingRunResult(typing.Protocol):
+    _sub_agent_responses_with_model: list[tuple[str | None, "ModelResponse"]]
+    _main_agent_model: str
+
 
 GUARDRAIL_ORIGINS = {"input_guardrail_message", "input_guardrail_error"}
 SENTINEL_TRACE_IDS = {"no-op", "", None}
@@ -184,6 +195,7 @@ def run_stream_with_guardrails(
             input_guardrail_exception: InputGuardrailTripwireTriggered | None = None
             collected_items: list[RunItem] = []
             metadata_store = StreamMetadataStore()
+            id_normalizer = StreamIdNormalizer()
             streaming_result: RunResultStreaming | None = None
             initial_saved_count = 0
             if agency_context and agency_context.thread_manager:
@@ -411,6 +423,8 @@ def run_stream_with_guardrails(
                             parent_run_id=parent_run_id,
                         )
 
+                    event = id_normalizer.normalize_stream_event(event)
+
                     if isinstance(event, RunItemStreamEvent) and event.item:
                         collected_items.append(event.item)
 
@@ -544,6 +558,29 @@ def run_stream_with_guardrails(
                         cleaned = MessageFilter.remove_orphaned_messages(cleaned)
                         agency_context.thread_manager.replace_messages(cleaned)
                         agency_context.thread_manager.persist()
+
+                    # Store sub-agent raw_responses with model info for per-response cost calculation
+                    # These are tuples of (model_name, response) to enable accurate per-model pricing
+                    if streaming_result and master_context_for_run:
+                        try:
+                            sub_raw_responses = master_context_for_run._sub_agent_raw_responses
+                            if sub_raw_responses:
+                                # Store on streaming_result for access during cost calculation
+                                typed_streaming_result = cast(_UsageTrackingRunResult, streaming_result)
+                                typed_streaming_result._sub_agent_responses_with_model = list(sub_raw_responses)
+                                # Clear after copying to avoid duplicates
+                                master_context_for_run._sub_agent_raw_responses.clear()
+                        except Exception as e:
+                            logger.debug(f"Could not store sub-agent raw_responses on streaming result: {e}")
+
+                    # Store main agent's model on streaming_result for automatic cost calculation
+                    if streaming_result:
+                        try:
+                            main_model_name = get_model_name(agent.model)
+                            if main_model_name:
+                                cast(_UsageTrackingRunResult, streaming_result)._main_agent_model = main_model_name
+                        except Exception as e:
+                            logger.debug(f"Could not store main agent model on streaming result: {e}")
                 except Exception:
                     pass
 

@@ -24,7 +24,7 @@ def main() -> None:
     )
     create_agent_parser.add_argument("name", help="Name of the agent (e.g., 'Data Analyst', 'Content Writer')")
     create_agent_parser.add_argument("--description", help="Description of the agent's role and responsibilities")
-    create_agent_parser.add_argument("--model", default="gpt-5.1", help="OpenAI model to use (default: gpt-5.1)")
+    create_agent_parser.add_argument("--model", default="gpt-5.2", help="OpenAI model to use (default: gpt-5.2)")
     create_agent_parser.add_argument(
         "--reasoning", choices=["low", "medium", "high"], help="Reasoning effort level for the model"
     )

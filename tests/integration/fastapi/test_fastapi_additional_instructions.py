@@ -1,11 +1,49 @@
 """Integration tests to verify additional_instructions handling in FastAPI endpoints."""
 
-from types import SimpleNamespace
-
 import pytest
+from agents.result import RunResult
+from agents.run_context import RunContextWrapper
+from agents.usage import Usage
 from fastapi.testclient import TestClient
+from openai.types.responses.response_usage import InputTokensDetails, OutputTokensDetails
 
 from agency_swarm import Agency, Agent, run_fastapi
+from agency_swarm.context import MasterContext
+from agency_swarm.utils.thread import ThreadManager
+
+
+def _make_fake_run_result(*, agent: Agent, message: str, final_output: str) -> RunResult:
+    usage = Usage(
+        requests=0,
+        input_tokens=0,
+        output_tokens=0,
+        total_tokens=0,
+        input_tokens_details=InputTokensDetails(cached_tokens=0),
+        output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
+    )
+    wrapper = RunContextWrapper(
+        context=MasterContext(
+            thread_manager=ThreadManager(),
+            agents={agent.name: agent},
+            user_context={},
+            agent_runtime_state={},
+            current_agent_name=agent.name,
+            shared_instructions=None,
+        ),
+        usage=usage,
+    )
+    return RunResult(
+        input=message,
+        new_items=[],
+        raw_responses=[],
+        final_output=final_output,
+        input_guardrail_results=[],
+        output_guardrail_results=[],
+        tool_input_guardrail_results=[],
+        tool_output_guardrail_results=[],
+        context_wrapper=wrapper,
+        _last_agent=agent,
+    )
 
 
 def test_non_streaming_additional_instructions(monkeypatch, agency_factory):
@@ -14,7 +52,7 @@ def test_non_streaming_additional_instructions(monkeypatch, agency_factory):
 
     async def fake_get_response(self, message, additional_instructions=None, **kwargs):
         captured_params["additional_instructions"] = additional_instructions
-        return SimpleNamespace(final_output="Test response", new_items=[])
+        return _make_fake_run_result(agent=self, message=message, final_output="Test response")
 
     monkeypatch.setattr(Agent, "get_response", fake_get_response)
 
@@ -145,7 +183,7 @@ def test_additional_instructions_none_handling(monkeypatch, agency_factory):
 
     async def fake_get_response(self, message, additional_instructions=None, **kwargs):
         captured_params["additional_instructions"] = additional_instructions
-        return SimpleNamespace(final_output="Test response", new_items=[])
+        return _make_fake_run_result(agent=self, message=message, final_output="Test response")
 
     monkeypatch.setattr(Agent, "get_response", fake_get_response)
 

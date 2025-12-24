@@ -38,7 +38,6 @@
                 "pages": [
                   "welcome/installation",
                   "welcome/getting-started/from-scratch",
-                  "welcome/getting-started/agency-templates",
                   "welcome/getting-started/cursor-ide"
                 ]
               }
