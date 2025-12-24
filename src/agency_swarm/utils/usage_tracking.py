@@ -309,7 +309,7 @@ def extract_usage_from_run_result(run_result: RunResultBase | None) -> UsageStat
     output_tokens = 0
     total_tokens = 0
     reasoning_tokens = None
-    audio_tokens = None
+    audio_tokens = None  # TODO(voice): Populate when Agency Swarm adds voice/realtime support.
     found_any_usage = False
 
     usage = run_result.context_wrapper.usage
@@ -321,7 +321,6 @@ def extract_usage_from_run_result(run_result: RunResultBase | None) -> UsageStat
     output_tokens = usage.output_tokens
     total_tokens = usage.total_tokens
     reasoning_tokens = usage.output_tokens_details.reasoning_tokens or None
-    audio_tokens = None
 
     # Aggregate usage from sub-agent responses
     if hasattr(run_result, "_sub_agent_responses_with_model"):
