@@ -42,6 +42,7 @@ Optionally, you can specify following parameters:
 - enable_agui (default: `False`) - Enable AG-UI protocol compatibility for streaming endpoints
 - enable_logging (default: `False`) - Enable request tracking and expose `/get_logs` endpoint
 - logs_dir (default: `"activity-logs"`) - Directory for log files when logging is enabled
+- allowed_local_file_dirs (default: `None`) - Optional allowlist of directories for local `file_urls`. When omitted, local paths are rejected.
 
 This will create 4 endpoints for the agency:
 - `/test_agency/get_response`
@@ -59,7 +60,8 @@ message: str
 chat_history: list[dict[str, Any]] = None
 recipient_agent: str = None
 file_ids: list[str] = None
-# Files to download and attach to the agent. Should be provided in a form of a mapping: {"filename_1":"url", "filename_2":"url", ...}
+# File attachments as URLs or absolute local paths. Requires the server to be configured with allowed_local_file_dirs for local paths.
+# Provide as {"filename_1":"url_or_path", "filename_2":"url_or_path", ...}
 file_urls: dict[str, str] = None
 additional_instructions: str = None
 user_context: dict[str, Any] = None  # Per-request context accessible via Agency Context
@@ -308,5 +310,6 @@ When using the agency endpoints (`/{your_agency}/get_response` and `/{your_agenc
 - Payload fields: `file_ids: string[]` OR `file_urls: { filename: url }`
 
 Behavior with `file_urls`:
-- The server downloads each URL, uploads it to OpenAI, waits until processed, and uses the resulting File IDs.
+- Remote files: downloaded to a temp file named after your provided key, uploaded to OpenAI, and waited on until processed.
+- Local absolute paths (when `allowed_local_file_dirs` is set on `run_fastapi`): uploaded directly after checking the path is inside the allowlist. Paths outside the allowlist or missing the allowlist return an error.
 - `file_ids_map` (shape: `{ filename: file_id }`) is returned in the non‑streaming JSON response of `POST /get_response` and in the final `event: messages` SSE payload of `POST /get_response_stream`.
