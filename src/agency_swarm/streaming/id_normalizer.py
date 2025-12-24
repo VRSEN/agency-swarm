@@ -5,6 +5,7 @@ from typing import Any
 
 from agents import TResponseInputItem
 from agents.models.fake_id import FAKE_RESPONSES_ID
+from agents.stream_events import RawResponsesStreamEvent, RunItemStreamEvent, StreamEvent
 from pydantic import BaseModel
 
 
@@ -27,18 +28,18 @@ class StreamIdNormalizer:
         self._pending_ids_by_run_and_kind: dict[tuple[str, str], deque[str]] = {}
         self._unmatched_output_indices_by_run_and_kind: dict[tuple[str, str], deque[int]] = {}
 
-    def normalize_stream_event(self, event: Any) -> Any:
+    def normalize_stream_event(self, event: StreamEvent | dict[str, Any]) -> StreamEvent | dict[str, Any]:
         """Normalize a StreamEvent in-place and return it."""
         if isinstance(event, dict):
             return event
 
-        event_type = getattr(event, "type", None)
-        if event_type == "run_item_stream_event":
+        if isinstance(event, RunItemStreamEvent):
             return self._normalize_run_item_stream_event(event)
-        if event_type != "raw_response_event":
+        if not isinstance(event, RawResponsesStreamEvent):
             return event
 
-        data = getattr(event, "data", None)
+        event_any: Any = event
+        data = event.data
         if not isinstance(data, BaseModel):
             return event
 
@@ -75,9 +76,9 @@ class StreamIdNormalizer:
                 data_copy = data.model_copy(update={"item": item_copy})
                 event.data = data_copy
                 # Keep root-level convenience attributes consistent if present.
-                event.item_id = stable_id
+                event_any.item_id = stable_id
                 if getattr(event, "call_id", None) == FAKE_RESPONSES_ID:
-                    event.call_id = stable_id
+                    event_any.call_id = stable_id
                 return event
 
         # Rewrite any raw event that references item_id (most ChatCmpl/LiteLLM events do).
@@ -98,15 +99,15 @@ class StreamIdNormalizer:
 
         data_copy = data.model_copy(update={"item_id": stable_item_id})
         event.data = data_copy
-        event.item_id = stable_item_id
+        event_any.item_id = stable_item_id
         return event
 
-    def _normalize_run_item_stream_event(self, event: Any) -> Any:
+    def _normalize_run_item_stream_event(self, event: RunItemStreamEvent) -> RunItemStreamEvent:
         agent_run_id = self._coerce_agent_run_id(getattr(event, "agent_run_id", None))
         if agent_run_id is None:
             return event
 
-        item = getattr(event, "item", None)
+        item = event.item
         if item is None:
             return event
         raw_item = getattr(item, "raw_item", None)
@@ -117,7 +118,7 @@ class StreamIdNormalizer:
         if raw_id != FAKE_RESPONSES_ID:
             return event
 
-        name = getattr(event, "name", None)
+        name = event.name
         if name == "message_output_created":
             kind = "message"
         elif name == "reasoning_item_created":
@@ -139,10 +140,12 @@ class StreamIdNormalizer:
                 return event
 
         raw_copy = raw_item.model_copy(update={"id": stable_id})
-        item.raw_item = raw_copy
-        event.item_id = stable_id
+        item_any: Any = item
+        item_any.raw_item = raw_copy
+        event_any: Any = event
+        event_any.item_id = stable_id
         if getattr(event, "call_id", None) == FAKE_RESPONSES_ID:
-            event.call_id = stable_id
+            event_any.call_id = stable_id
         return event
 
     def normalize_message_dicts(self, messages: list[TResponseInputItem]) -> list[TResponseInputItem]:
