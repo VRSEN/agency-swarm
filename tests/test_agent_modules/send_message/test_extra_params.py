@@ -55,7 +55,6 @@ async def test_nested_extra_params_validates_and_sends():
     args = json.dumps(
         {
             "recipient_agent": "B",
-            "my_primary_instructions": "hi",
             "message": "msg",
             "additional_instructions": "",
             "foo": "bar",
@@ -94,7 +93,6 @@ async def test_validation_type_error_unit():
     bad_args = json.dumps(
         {
             "recipient_agent": "B",
-            "my_primary_instructions": "",
             "message": "hi",
             "additional_instructions": "",
             "count": "bad",
@@ -140,7 +138,6 @@ async def test_bad_extra_params_model_gracefully_handled():
     ok_args = json.dumps(
         {
             "recipient_agent": "B",
-            "my_primary_instructions": "inst",
             "message": "m",
             "additional_instructions": "",
         }
@@ -149,7 +146,6 @@ async def test_bad_extra_params_model_gracefully_handled():
     extra_args = json.dumps(
         {
             "recipient_agent": "B",
-            "my_primary_instructions": "inst",
             "message": "m",
             "additional_instructions": "",
             "foo": "x",
@@ -201,7 +197,6 @@ async def test_nested_extra_params_schema_and_success() -> None:
 
     args = {
         "recipient_agent": "B",
-        "my_primary_instructions": "inst",
         "message": "hi",
         "additional_instructions": "",
         "foo": 1,
@@ -233,8 +228,7 @@ async def test_nested_extra_params_missing_field_error() -> None:
 
     args = {
         "recipient_agent": "B",
-        "my_primary_instructions": "",
-        "message": "",
+        "message": "hi",
         "additional_instructions": "",
         "foo": 1,
     }

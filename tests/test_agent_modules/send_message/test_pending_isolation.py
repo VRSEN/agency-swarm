@@ -107,7 +107,6 @@ async def test_send_message_pending_state_isolated_per_thread_manager():
     async def invoke(tool: SendMessage, wrapper: SimpleNamespace, message: str) -> str:
         payload = {
             "recipient_agent": recipient.name,
-            "my_primary_instructions": "state your plan",
             "message": message,
             "additional_instructions": "",
         }
@@ -160,7 +159,6 @@ async def test_module_level_agent_reuse_isolated_recipients():
 
     allowed_payload = {
         "recipient_agent": WORKER_A.name,
-        "my_primary_instructions": "state your plan",
         "message": "Task for A",
         "additional_instructions": "",
     }
@@ -170,7 +168,6 @@ async def test_module_level_agent_reuse_isolated_recipients():
 
     leaked_payload = {
         "recipient_agent": WORKER_B.name,
-        "my_primary_instructions": "state your plan",
         "message": "Task for B",
         "additional_instructions": "",
     }
@@ -245,13 +242,11 @@ async def test_runtime_send_message_respects_one_call_guard_across_recipients():
 
     payload_a = {
         "recipient_agent": worker_a.name,
-        "my_primary_instructions": "First task",
         "message": "Do task A",
         "additional_instructions": "",
     }
     payload_b = {
         "recipient_agent": worker_b.name,
-        "my_primary_instructions": "Second task",
         "message": "Do task B",
         "additional_instructions": "",
     }
