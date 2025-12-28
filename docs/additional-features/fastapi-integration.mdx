@@ -67,7 +67,25 @@ user_context: dict[str, Any] = None  # Per-request context accessible via Agency
 
 `user_context` passes structured data to [Agency Context](/additional-features/agency-context) without exposing it to the LLM. It merges with any `user_context` set on the agency instance.
 
-Responses include a `usage` object with token counts and cost when `ModelSettings(include_usage=True)` is set (default). For streaming, the final `event: messages` payload includes `usage`.
+Responses include a `usage` object with token counts and cost by default. For streaming, the final `event: messages` payload includes the same `usage` object.
+
+To understand what's inside `usage`, see [Observability](/additional-features/observability#usage-payload).
+
+<Accordion title="Turning usage tracking on/off" defaultOpen={false}>
+Usage tracking is configured on the agent (not on FastAPI).
+
+```python
+from agency_swarm import Agent, ModelSettings
+
+agent = Agent(
+    name="Assistant",
+    instructions="You are a helpful assistant.",
+    model_settings=ModelSettings(include_usage=False),
+)
+```
+
+If you're using LiteLLM models and want usage in streaming responses, keep `include_usage=True`.
+</Accordion>
 
 **Implementation:** `src/agency_swarm/integrations/fastapi_utils/endpoint_handlers.py`
 
