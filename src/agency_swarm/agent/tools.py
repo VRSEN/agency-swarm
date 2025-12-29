@@ -8,77 +8,14 @@ and OpenAPI schema parsing for the Agent class.
 import inspect
 import logging
 import os
-import typing
 from pathlib import Path
-from typing import TYPE_CHECKING, get_args
+from typing import TYPE_CHECKING, get_args, get_origin
 
 from agents import FunctionTool, Tool
 
 from agency_swarm.tools import BaseTool, ToolFactory, validate_openapi_spec
 
 logger = logging.getLogger(__name__)
-
-
-def _attach_one_call_guard(tool: Tool, agent: "Agent") -> None:
-    """Attach a one-call-at-a-time guard to a FunctionTool in-place (idempotent)."""
-    if not isinstance(tool, FunctionTool):
-        return
-
-    original_on_invoke = getattr(tool, "on_invoke_tool", None)
-    if not callable(original_on_invoke) or getattr(tool, "_one_call_guard_installed", False):
-        return
-
-    one_call = bool(getattr(tool, "one_call_at_a_time", False))
-    if one_call:
-        tool.description = (
-            f"{tool.description} This tool can only be used sequentially. "
-            "Do not try to run it in parallel with other tools."
-        )
-
-    async def guarded_on_invoke(ctx, input_json: str):
-        concurrency_manager = None
-        master_context = getattr(ctx, "context", None)
-        runtime_state = None
-        if master_context is not None and getattr(master_context, "agent_runtime_state", None):
-            runtime_state = master_context.agent_runtime_state.get(agent.name)
-        if runtime_state is not None:
-            concurrency_manager = runtime_state.tool_concurrency_manager
-        else:
-            concurrency_manager = agent.tool_concurrency_manager
-
-        # First, block if any one_call tool is currently running for this agent
-        busy, owner = concurrency_manager.is_lock_active()
-        if busy:
-            return (
-                f"Error: Tool concurrency violation. '{owner or 'unknown'}' tool is still running. "
-                f"No other tools may run until it finishes. Wait for the tool to finish before running another one."
-            )
-
-        # If this tool enforces one_call and ANY tool is already running for this agent, block
-        if one_call and concurrency_manager.get_active_count() > 0:
-            return (
-                f"Error: Tool concurrency violation. Tool {tool.name} can only be used sequentially. "
-                "Make sure no other tools are running while using this tool."
-            )
-
-        # Track that a tool is starting for this agent
-        concurrency_manager.increment_active_count()
-
-        # If this tool enforces one_call, acquire the lock for the duration of this run
-        if one_call:
-            concurrency_manager.acquire_lock(getattr(tool, "name", "FunctionTool"))
-
-        try:
-            return await original_on_invoke(ctx, input_json)
-        finally:
-            # Release lock if held
-            if one_call:
-                concurrency_manager.release_lock()
-            # Decrement active tool count
-            concurrency_manager.decrement_active_count()
-
-    tool.on_invoke_tool = guarded_on_invoke  # type: ignore[attr-defined]
-    tool._one_call_guard_installed = True  # type: ignore[attr-defined]
 
 
 if TYPE_CHECKING:
@@ -105,7 +42,7 @@ def add_tool(agent: "Agent", tool: Tool) -> None:
         )
         return
 
-    tool_types = get_args(Tool)
+    tool_types = _runtime_tool_types()
     if not isinstance(tool, tool_types):
         raise TypeError(f"Expected an instance of Tool, got {type(tool)}")
 
@@ -227,8 +164,7 @@ def validate_hosted_tools(tools: list) -> None:
     """
 
     # Get all hosted tool types from the Tool union (excluding FunctionTool)
-    hosted_tool_types = typing.get_args(Tool)
-    hosted_tool_types = tuple(t for t in hosted_tool_types if t != FunctionTool)
+    hosted_tool_types = tuple(t for t in _runtime_tool_types() if t != FunctionTool)
 
     uninitialized_tools = []
 
@@ -248,3 +184,80 @@ def validate_hosted_tools(tools: list) -> None:
             f"that require proper instantiation with their configuration parameters.\n"
             f"Please initialize these tools according to their schemas before adding them to the agent."
         )
+
+
+def _attach_one_call_guard(tool: Tool, agent: "Agent") -> None:
+    """Attach a one-call-at-a-time guard to a FunctionTool in-place (idempotent)."""
+    if not isinstance(tool, FunctionTool):
+        return
+
+    original_on_invoke = getattr(tool, "on_invoke_tool", None)
+    if not callable(original_on_invoke) or getattr(tool, "_one_call_guard_installed", False):
+        return
+
+    one_call = bool(getattr(tool, "one_call_at_a_time", False))
+    if one_call:
+        tool.description = (
+            f"{tool.description} This tool can only be used sequentially. "
+            "Do not try to run it in parallel with other tools."
+        )
+
+    async def guarded_on_invoke(ctx, input_json: str):
+        concurrency_manager = None
+        master_context = getattr(ctx, "context", None)
+        runtime_state = None
+        if master_context is not None and getattr(master_context, "agent_runtime_state", None):
+            runtime_state = master_context.agent_runtime_state.get(agent.name)
+        if runtime_state is not None:
+            concurrency_manager = runtime_state.tool_concurrency_manager
+        else:
+            concurrency_manager = agent.tool_concurrency_manager
+
+        # First, block if any one_call tool is currently running for this agent
+        busy, owner = concurrency_manager.is_lock_active()
+        if busy:
+            return (
+                f"Error: Tool concurrency violation. '{owner or 'unknown'}' tool is still running. "
+                f"No other tools may run until it finishes. Wait for the tool to finish before running another one."
+            )
+
+        # If this tool enforces one_call and ANY tool is already running for this agent, block
+        if one_call and concurrency_manager.get_active_count() > 0:
+            return (
+                f"Error: Tool concurrency violation. Tool {tool.name} can only be used sequentially. "
+                "Make sure no other tools are running while using this tool."
+            )
+
+        # Track that a tool is starting for this agent
+        concurrency_manager.increment_active_count()
+
+        # If this tool enforces one_call, acquire the lock for the duration of this run
+        if one_call:
+            concurrency_manager.acquire_lock(getattr(tool, "name", "FunctionTool"))
+
+        try:
+            return await original_on_invoke(ctx, input_json)
+        finally:
+            # Release lock if held
+            if one_call:
+                concurrency_manager.release_lock()
+            # Decrement active tool count
+            concurrency_manager.decrement_active_count()
+
+    tool.on_invoke_tool = guarded_on_invoke  # type: ignore[attr-defined]
+    tool._one_call_guard_installed = True  # type: ignore[attr-defined]
+
+
+def _runtime_tool_types() -> tuple[type, ...]:
+    runtime_types: list[type] = []
+    for tool_type in get_args(Tool):
+        origin = get_origin(tool_type)
+        if isinstance(tool_type, type):
+            runtime_type = tool_type
+        elif isinstance(origin, type):
+            runtime_type = origin
+        else:
+            continue
+        if runtime_type not in runtime_types:
+            runtime_types.append(runtime_type)
+    return tuple(runtime_types)
