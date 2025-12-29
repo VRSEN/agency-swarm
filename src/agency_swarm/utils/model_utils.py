@@ -1,7 +1,8 @@
 """Utility functions for working with model configurations."""
 
 import logging
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from types import UnionType
+from typing import TYPE_CHECKING, Any, Protocol, Union, cast, get_args, get_origin
 
 from agents import FunctionTool, Model, Tool
 from agents.models.openai_chatcompletions import OpenAIChatCompletionsModel
@@ -128,7 +129,24 @@ class _ModelWithName(Protocol):
     model: str
 
 
+def _runtime_types_for_check(cls: Any) -> tuple[type[Any], ...]:
+    origin = get_origin(cls)
+    if origin in (Union, UnionType):
+        runtime_types: list[type[Any]] = []
+        for arg in get_args(cls):
+            runtime_types.extend(_runtime_types_for_check(arg))
+        return tuple(runtime_types)
+    if origin is None:
+        return (cls,) if isinstance(cls, type) else ()
+    if isinstance(origin, type):
+        return (origin,)
+    return ()
+
+
 def _isinstance_or_subclass(obj: object, cls: Any) -> bool:
     """Return True when obj is an instance of cls or a subclass reference."""
 
-    return isinstance(obj, cls) or (isinstance(obj, type) and issubclass(obj, cls))
+    runtime_types = _runtime_types_for_check(cls)
+    if not runtime_types:
+        return False
+    return isinstance(obj, runtime_types) or (isinstance(obj, type) and any(issubclass(obj, t) for t in runtime_types))
