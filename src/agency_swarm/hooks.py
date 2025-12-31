@@ -8,8 +8,7 @@ from .utils.thread import ThreadLoadCallback, ThreadSaveCallback
 logger = logging.getLogger(__name__)
 
 
-# --- Persistence Hooks ---
-class PersistenceHooks(RunHooks[MasterContext]):  # type: ignore[misc]
+class PersistenceHooks(RunHooks):
     """Custom `RunHooks` implementation for loading and saving `ThreadManager` state.
 
     This class integrates with the `agents.Runner` lifecycle to automatically
@@ -58,7 +57,7 @@ class PersistenceHooks(RunHooks[MasterContext]):  # type: ignore[misc]
         self._save_threads_callback = save_threads_callback
         logger.info("PersistenceHooks initialized with flat message structure.")
 
-    def on_run_start(self, *, context: MasterContext, **kwargs) -> None:
+    def on_run_start(self, *, context: MasterContext, **kwargs: object) -> None:
         """Confirm the run started after `ThreadManager` performed initial load.
 
         The `ThreadManager` executes the configured `load_threads_callback`
@@ -71,7 +70,7 @@ class PersistenceHooks(RunHooks[MasterContext]):  # type: ignore[misc]
         """
         logger.debug("PersistenceHooks: on_run_start triggered; message loading handled during ThreadManager init.")
 
-    def on_run_end(self, *, context: MasterContext, result: RunResult, **kwargs) -> None:
+    def on_run_end(self, *, context: MasterContext, result: RunResult, **kwargs: object) -> None:
         """Saves all messages from the `ThreadManager` at the end of a run.
 
         Calls the `save_threads_callback` provided during initialization, passing

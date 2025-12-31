@@ -170,7 +170,8 @@ async def run_with_guardrails(
                 )
             raise e
         except Exception as e:
-            raise AgentsException(f"Runner execution failed for agent {agent.name}") from e
+            cause_type = type(e).__name__
+            raise AgentsException(f"Runner execution failed for agent {agent.name} (cause: {cause_type})") from e
         finally:
             if agent.attachment_manager is None:
                 raise RuntimeError(f"attachment_manager not initialized for agent {agent.name}")
