@@ -163,27 +163,36 @@ def validate_hosted_tools(tools: list) -> None:
         TypeError: If any hosted tool class is passed uninitialized
     """
 
+    tool_types = _runtime_tool_types()
     # Get all hosted tool types from the Tool union (excluding FunctionTool)
-    hosted_tool_types = tuple(t for t in _runtime_tool_types() if t != FunctionTool)
+    hosted_tool_types = tuple(t for t in tool_types if t != FunctionTool)
 
-    uninitialized_tools = []
-
-    for i, tool in enumerate(tools):
+    for tool in tools:
         # Check if the tool is a class (uninitialized) rather than an instance
-        if inspect.isclass(tool) and tool in hosted_tool_types:
-            uninitialized_tools.append(f"  - {tool.__name__} at index {i}")
-
-    if uninitialized_tools:
-        tool_list = "\n".join(uninitialized_tools)
-        hosted_tool_names = [t.__name__ for t in hosted_tool_types]
-
-        raise TypeError(
-            f"Hosted tools must be initialized before passing to the agent.\n\n"
-            f"Found uninitialized hosted tool classes:\n{tool_list}\n\n"
-            f"Hosted tools ({', '.join(hosted_tool_names)}) are OpenAI's built-in tools "
-            f"that require proper instantiation with their configuration parameters.\n"
-            f"Please initialize these tools according to their schemas before adding them to the agent."
-        )
+        tool_class = tool if inspect.isclass(tool) else get_origin(tool)
+        if tool_class in hosted_tool_types:
+            tool_name = tool_class.__name__ if inspect.isclass(tool_class) else str(tool)
+            raise TypeError(
+                f"Tool '{tool_name}' is a hosted tool class. Create an instance first, like {tool_name}(...),"
+                " then pass that to the agent."
+            )
+        if inspect.isclass(tool) and issubclass(tool, FunctionTool):
+            tool_name = tool.__name__
+            raise TypeError(
+                f"Tool '{tool_name}' is a FunctionTool class. Use @function_tool or ToolFactory to create a tool."
+            )
+        if isinstance(tool, BaseTool):
+            tool_name = type(tool).__name__
+            raise TypeError(
+                f"Tool '{tool_name}' is a BaseTool instance. Pass the BaseTool class (like {tool_name}),"
+                f" not {tool_name}()."
+            )
+        if not isinstance(tool, tool_types):
+            tool_name = tool.__name__ if inspect.isclass(tool) else type(tool).__name__
+            raise TypeError(
+                f"Tool '{tool_name}' is not a supported tool. Use @function_tool, a BaseTool class, or a hosted"
+                " tool instance."
+            )
 
 
 def _attach_one_call_guard(tool: Tool, agent: "Agent") -> None:
