@@ -89,6 +89,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 
 ### Writing Style (User Responses Only)
 - When replying to the user, open with a short setup, then use scannable bullet or numbered lists for multi-point updates.
+- Use 8th grade language in all user responses.
 
 ## 🔴 SAFETY PROTOCOLS
 
