@@ -478,13 +478,16 @@ def _apply_shared_mcp_servers(agency: "Agency") -> None:
             agent_instance.mcp_servers = []
 
         for server in agency.shared_mcp_servers:
-            # Check if server is already added (by name)
-            server_name = getattr(server, "name", None)
-            existing_names = [getattr(s, "name", None) for s in agent_instance.mcp_servers]
-
-            if server_name and server_name in existing_names:
-                logger.debug(f"MCP server '{server_name}' already exists for agent '{agent_name}'; skipping")
+            # Check if server is already added (by identity or name)
+            if server in agent_instance.mcp_servers:
                 continue
+
+            server_name = getattr(server, "name", None)
+            if server_name:
+                existing_names = [getattr(s, "name", None) for s in agent_instance.mcp_servers]
+                if server_name in existing_names:
+                    logger.debug(f"MCP server '{server_name}' already exists for agent '{agent_name}'; skipping")
+                    continue
 
             agent_instance.mcp_servers.append(server)
             logger.debug(f"Added shared MCP server '{server_name}' to agent '{agent_name}'")
