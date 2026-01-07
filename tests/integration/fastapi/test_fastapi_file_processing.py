@@ -299,10 +299,10 @@ class TestFastAPIFileProcessing:
         async with self.get_http_client(timeout_seconds=60) as client:
             response = await client.post(url, json=payload)
 
-        assert response.status_code == 200
+        assert response.status_code == 404
         response_data = response.json()
-        assert "error" in response_data
-        assert "disabled" in response_data["error"].lower()
+        assert "detail" in response_data
+        assert "disabled" in response_data["detail"].lower()
 
     @pytest.mark.asyncio
     async def test_code_interpreter_attachment(self, file_server_base_url: str, fastapi_base_url: str):
@@ -392,17 +392,14 @@ class TestFastAPIFileProcessing:
         async with self.get_http_client(timeout_seconds=60) as client:
             response = await client.post(url, json=payload, headers=headers)
 
-        # The request should still return 200, but the response should indicate file issues
-        assert response.status_code == 200
+        # Invalid file URLs should return 404
+        assert response.status_code == 404
         response_data = response.json()
-
-        # The agent should mention it couldn't access the file
-        response_text = response_data["error"].lower()
-        assert "error downloading file from provided urls" in response_text
+        assert "detail" in response_data
 
     @pytest.mark.asyncio
     async def test_streaming_invalid_file_url(self, file_server_base_url: str, fastapi_base_url: str):
-        """Test that streaming endpoint properly handles invalid file URLs without hanging."""
+        """Test that streaming endpoint properly handles invalid file URLs with HTTP 404."""
         url = f"{fastapi_base_url}/test_agency/get_response_stream"
         payload = {
             "message": "Please process this file.",
@@ -410,27 +407,10 @@ class TestFastAPIFileProcessing:
         }
         headers = {}
 
-        collected_data = []
-        error_found = False
-
         async with self.get_http_client(timeout_seconds=60) as client:
-            async with client.stream("POST", url, json=payload, headers=headers) as response:
-                assert response.status_code == 200
-                async for line in response.aiter_lines():
-                    if line.strip():
-                        collected_data.append(line)
-                        # Check if this is an error event
-                        if line.startswith("data: "):
-                            try:
-                                import json
+            response = await client.post(url, json=payload, headers=headers)
 
-                                data = json.loads(line[6:])  # Remove "data: " prefix
-                                if "error" in data:
-                                    error_found = True
-                                    assert "error downloading file from provided urls" in data["error"].lower()
-                            except json.JSONDecodeError:
-                                pass  # Some lines might not be JSON
-
-        # Verify we received streaming data and found the error
-        assert len(collected_data) > 0, "Should have received streaming data"
-        assert error_found, "Should have received an error event for invalid file URL"
+        # Invalid file URLs should return 404
+        assert response.status_code == 404
+        response_data = response.json()
+        assert "detail" in response_data
