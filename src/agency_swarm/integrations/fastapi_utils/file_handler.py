@@ -112,7 +112,8 @@ def _file_uri_to_path(uri: str) -> Path:
     path = unquote(parsed.path or "")
 
     # Preserve UNC/host component if present
-    if parsed.netloc:
+    # Per RFC 8089, "localhost" is equivalent to empty host
+    if parsed.netloc and parsed.netloc.lower() != "localhost":
         if os.name == "nt" and len(parsed.netloc) == 2 and parsed.netloc[1] == ":":
             # file://C:/path/to/file.txt
             path = f"{parsed.netloc}{path}"
