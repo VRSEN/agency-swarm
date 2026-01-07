@@ -14,8 +14,6 @@ from agency_swarm.hooks import PersistenceHooks
 from agency_swarm.streaming.utils import EventStreamMerger
 from agency_swarm.tools import BaseTool
 from agency_swarm.tools.mcp_manager import default_mcp_manager
-
-# Import split module functions
 from agency_swarm.utils.files import get_external_caller_directory
 from agency_swarm.utils.thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
 
@@ -34,11 +32,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# --- Type Aliases ---
 AgencyChartEntry = Agent | list[Agent]
 AgencyChart = list[AgencyChartEntry]
-
-# Type aliases for agent communication flows
 CommunicationFlowEntry = (
     tuple[Agent, Agent]  # Basic (sender, receiver) pair
     | tuple[AgentFlow, type]  # Agent flow with tool class
@@ -145,12 +140,10 @@ class Agency:
         """
         logger.info("Initializing Agency...")
 
-        # --- Handle Deprecated Args ---
         final_load_threads_callback, final_save_threads_callback, deprecated_args_used = handle_deprecated_agency_args(
             load_threads_callback, save_threads_callback, **kwargs
         )
 
-        # --- Logic for new vs. old chart/flow definition ---
         _derived_entry_points: list[Agent] = []
         _derived_communication_flows: list[tuple[Agent, Agent]] = []
         _communication_tool_classes: dict[tuple[str, str], type] = {}  # (sender_name, receiver_name) -> tool_class
@@ -162,62 +155,45 @@ class Agency:
                 DeprecationWarning,
                 stacklevel=2,
             )
-            deprecated_args_used["agency_chart"] = agency_chart  # Log that it was used
+            deprecated_args_used["agency_chart"] = agency_chart
             if entry_point_agents or communication_flows is not None:
                 logger.warning(
                     "'agency_chart' was provided along with new 'entry_point_agents' or 'communication_flows'. "
                     "'agency_chart' will be used for backward compatibility, and the new parameters will be ignored."
                 )
-            # Parse the deprecated chart regardless if it was provided
             _derived_entry_points, _derived_communication_flows = parse_deprecated_agency_chart(self, agency_chart)
-            _communication_tool_classes = {}  # No custom tool classes in deprecated format
+            _communication_tool_classes = {}
 
         elif entry_point_agents or communication_flows is not None:
-            # Using new method
             _derived_entry_points = list(entry_point_agents)
-            # Validate entry point agents
             if not all(isinstance(ep, Agent) for ep in _derived_entry_points):
                 raise TypeError("All positional arguments (entry points) must be Agent instances.")
-
-            # Parse agent communication flows
             _derived_communication_flows, _communication_tool_classes = parse_agent_flows(
                 self, communication_flows or []
             )
         else:
-            # Neither old nor new method provided chart/flows
             raise ValueError(
                 "Agency structure not defined. Provide entry point agents as positional arguments and/or "
                 "use the 'communication_flows' keyword argument, or use the deprecated 'agency_chart' parameter."
             )
 
-        # --- Assign Core Attributes ---
         self.name = name
-
-        # Handle shared instructions - can be a string or a file path
         if shared_instructions:
-            # Check if it's a file path relative to the class location
             class_relative_path = os.path.join(get_external_caller_directory(), shared_instructions)
             if os.path.isfile(class_relative_path):
                 read_instructions(self, class_relative_path)
             elif os.path.isfile(shared_instructions):
-                # It's an absolute path or relative to CWD
                 read_instructions(self, shared_instructions)
             else:
-                # It's actual instruction text, not a file path
                 self.shared_instructions = shared_instructions
         else:
             self.shared_instructions = ""
-
         self.user_context = user_context or {}
         self.send_message_tool_class = send_message_tool_class
-
-        # Store shared resource parameters for later application to agents
         self.shared_tools = shared_tools
         self.shared_tools_folder = shared_tools_folder
         self.shared_files_folder = shared_files_folder
         self.shared_mcp_servers = shared_mcp_servers
-
-        # --- Initialize Core Components ---
         self.thread_manager = ThreadManager(
             load_threads_callback=final_load_threads_callback, save_threads_callback=final_save_threads_callback
         )
@@ -226,13 +202,9 @@ class Agency:
         if final_load_threads_callback and final_save_threads_callback:
             self.persistence_hooks = PersistenceHooks(final_load_threads_callback, final_save_threads_callback)
             logger.info("Persistence hooks enabled.")
-
-        # --- Register Agents and Set Entry Points ---
         self.agents = {}
-        self.entry_points = []  # Will be populated by register_all_agents_and_set_entry_points
+        self.entry_points = []
         register_all_agents_and_set_entry_points(self, _derived_entry_points, _derived_communication_flows)
-
-        # Initialize per-agent runtime storage (after agents are registered)
         self._agent_runtime_state = {}
         self._load_threads_callback = final_load_threads_callback
         self._save_threads_callback = final_save_threads_callback
@@ -242,27 +214,16 @@ class Agency:
             raise ValueError("Agency must contain at least one agent.")
         logger.info(f"Registered agents: {list(self.agents.keys())}")
         logger.info(f"Designated entry points: {[ep.name for ep in self.entry_points]}")
-
-        # --- Store communication flows for visualization ---
         self._derived_communication_flows = _derived_communication_flows
         self._communication_tool_classes = _communication_tool_classes
-
-        # --- Configure Agents & Communication ---
-        # configure_agents uses _derived_communication_flows determined above
         configure_agents(self, _derived_communication_flows)
-
-        # --- Apply Shared Resources ---
-        # Apply shared tools, files, folders, and MCP servers to all agents
         apply_shared_resources(self)
-
-        # Update agent contexts with communication flows
         logger.info("Agency initialization complete.")
 
         # Register MCP shutdown at process exit so persistent servers are cleaned in scripts
         if default_mcp_manager.mark_atexit_registered():
             atexit.register(default_mcp_manager.shutdown_sync)
 
-    # Private helper methods that were missed during split
     def get_agent_context(self, agent_name: str) -> AgencyContext:
         """Public accessor for the agency context associated with an agent."""
         if agent_name not in self._agent_runtime_state:
@@ -282,7 +243,6 @@ class Agency:
             raise ValueError(f"No runtime state found for agent: {agent_name}")
         return self._agent_runtime_state[agent_name]
 
-    # Import and bind methods from split modules with proper type hints
     async def get_response(
         self,
         message: str | list[TResponseInputItem],

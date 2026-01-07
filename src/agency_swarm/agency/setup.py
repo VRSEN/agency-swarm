@@ -297,37 +297,19 @@ def initialize_agent_runtime_state(agency: "Agency") -> None:
 
 
 def apply_shared_resources(agency: "Agency") -> None:
-    """
-    Apply shared tools, files, and MCP servers to all agents in the agency.
+    """Apply shared tools, files, and MCP servers to all agents.
 
-    This function processes:
-    - shared_tools: List of Tool instances added to all agents
-    - shared_tools_folder: Folder containing tool definitions loaded for all agents
-    - shared_files_folder: Folder containing files attached to all agents
-    - shared_mcp_servers: List of MCP servers added to all agents
-
-    Note: shared_instructions is NOT handled here. It is prepended to each agent's
-    instructions at execution time in execution_helpers.py (_build_effective_instructions).
+    Note: shared_instructions is handled at runtime in _build_effective_instructions.
     """
     if not agency.agents:
         return
-
-    # Apply shared tools to all agents
     _apply_shared_tools(agency)
-
-    # Apply shared files to all agents
     _apply_shared_files(agency)
-
-    # Apply shared MCP servers to all agents
     _apply_shared_mcp_servers(agency)
 
 
 def _apply_shared_tools(agency: "Agency") -> None:
-    """
-    Add shared tools to all agents.
-
-    Processes both shared_tools (list of Tool instances) and shared_tools_folder (folder path).
-    """
+    """Add shared tools from shared_tools list and shared_tools_folder to all agents."""
     tools_to_add: list[Any] = []
     caller_dir = Path(get_external_caller_directory())
 
@@ -394,9 +376,7 @@ def _apply_shared_tools(agency: "Agency") -> None:
 
 
 def _apply_shared_files(agency: "Agency") -> None:
-    """
-    Process shared files folder and attach the vector store to all agents.
-    """
+    """Process shared_files_folder and attach the vector store to all agents."""
     if not agency.shared_files_folder:
         return
 
