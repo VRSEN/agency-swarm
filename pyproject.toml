@@ -7,7 +7,7 @@ path = "hatch_build.py"
 
 [project]
 name = "agency-swarm"
-version = "1.5.0"
+version = "1.6.0"
 description = "Agency Swarm framework"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -15,7 +15,7 @@ license = "MIT"
 authors = [{ name = "Vrsen AI Solutions", email = "me@vrsen.ai" }]
 dependencies = [
     "openai>=2.2,<3",
-    "openai-agents==0.6.2",
+    "openai-agents==0.6.4",
     "datamodel-code-generator>=0.33.0,<0.34.0",
     "docstring-parser>=0.16,<1.0.0",
     "fastmcp>=2.13.1",

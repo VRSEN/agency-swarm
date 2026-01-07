@@ -76,18 +76,15 @@ print(result.final_output)
 
 ## Track Usage and Cost
 
-FastAPI responses include a `usage` object with token counts and cost when `ModelSettings(include_usage=True)` is enabled (default). For streaming, usage appears in the final `event: messages` payload. The payload shape is shown in [Observability](/additional-features/observability).
-
-<Note>
-For streaming usage with LiteLLM models, keep `ModelSettings(include_usage=True)` on your agents. It is enabled by default.
-</Note>
 <Tip>
 Use the `/cost` command in the terminal demo to see the current session usage and cost.
 </Tip>
 
 ![Terminal demo `/cost` output showing session usage and cost](/images/cost.png)
 
-**Implementation:** `src/agency_swarm/integrations/fastapi_utils/endpoint_handlers.py`
+To understand what's inside the `usage` object, see [Observability](/additional-features/observability#usage-payload).
+
+If you're running your agency as an HTTP API, see [Serving Agencies as APIs](/additional-features/fastapi-integration).
 
 ## Terminal Version
 

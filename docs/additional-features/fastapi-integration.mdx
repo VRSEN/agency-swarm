@@ -161,6 +161,28 @@ data: [DONE]
 
 </Accordion>
 
+<Accordion title="Usage tracking" defaultOpen={false}>
+
+Responses include a `usage` object with token counts and cost by default. For streaming, the final `event: messages` payload includes the same `usage` object.
+
+To understand what's inside `usage`, see [Observability](/additional-features/observability#usage-payload).
+
+Usage tracking is configured on the agent (not on FastAPI):
+
+```python
+from agency_swarm import Agent, ModelSettings
+
+agent = Agent(
+    name="Assistant",
+    instructions="You are a helpful assistant.",
+    model_settings=ModelSettings(include_usage=False),
+)
+```
+
+If you're using LiteLLM models and want usage in streaming responses, keep `include_usage=True`.
+
+</Accordion>
+
 <Note>
 Stream cancellation uses an in-memory registry per process. Use single-worker deployments (e.g., uvicorn `workers=1`) or sticky routing so cancel requests reach the same worker.
 </Note>
