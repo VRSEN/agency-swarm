@@ -5,13 +5,14 @@ import os
 import warnings
 from typing import TYPE_CHECKING, Any
 
-from agents import RunConfig, RunHooks, RunResult, TResponseInputItem
+from agents import RunConfig, RunHooks, RunResult, Tool, TResponseInputItem
 
 from agency_swarm.agent.agent_flow import AgentFlow
 from agency_swarm.agent.core import AgencyContext, Agent
 from agency_swarm.agent.execution_streaming import StreamingRunResponse
 from agency_swarm.hooks import PersistenceHooks
 from agency_swarm.streaming.utils import EventStreamMerger
+from agency_swarm.tools import BaseTool
 from agency_swarm.tools.mcp_manager import default_mcp_manager
 
 # Import split module functions
@@ -20,6 +21,7 @@ from agency_swarm.utils.thread import ThreadLoadCallback, ThreadManager, ThreadS
 
 from .helpers import handle_deprecated_agency_args, read_instructions, run_fastapi as run_fastapi_helper
 from .setup import (
+    apply_shared_resources,
     configure_agents,
     initialize_agent_runtime_state,
     parse_agent_flows,
@@ -71,6 +73,10 @@ class Agency:
     thread_manager: ThreadManager  # Legacy for backward compatibility
     persistence_hooks: PersistenceHooks | None
     shared_instructions: str | None
+    shared_tools: list[Tool | type[BaseTool]] | None  # Tools shared across all agents
+    shared_tools_folder: str | None  # Folder path containing tools for all agents
+    shared_files_folder: str | None  # Folder path containing files for all agents
+    shared_mcp_servers: list[Any] | None  # MCP servers shared across all agents
     user_context: dict[str, Any]  # Shared user context for MasterContext
     send_message_tool_class: type | None  # Fallback SendMessage tool class when flows have no override
 
@@ -86,6 +92,10 @@ class Agency:
         agency_chart: AgencyChart | None = None,
         name: str | None = None,
         shared_instructions: str | None = None,
+        shared_tools: list[Tool | type[BaseTool]] | None = None,
+        shared_tools_folder: str | None = None,
+        shared_files_folder: str | None = None,
+        shared_mcp_servers: list[Any] | None = None,
         send_message_tool_class: type | None = None,
         load_threads_callback: ThreadLoadCallback | None = None,
         save_threads_callback: ThreadSaveCallback | None = None,
@@ -116,6 +126,11 @@ class Agency:
             shared_instructions (str | None, optional): Either direct instruction text or a file path. If a path is
                 provided, the file is read (supports caller-relative, absolute, or CWD-relative paths) and its
                 contents are used as shared instructions prepended to all agents' system prompts.
+            shared_tools (list[Tool | type[BaseTool]] | None, optional): List of Tool instances or BaseTool
+                classes to add to all agents.
+            shared_tools_folder (str | None, optional): Path to folder containing tool definitions for all agents.
+            shared_files_folder (str | None, optional): Path to folder containing files to share with all agents.
+            shared_mcp_servers (list[MCPServer] | None, optional): List of MCP server instances to add to all agents.
             send_message_tool_class (type | None, optional): Fallback SendMessage tool for routes that do not specify
                 a tool via `communication_flows`. Agent-level overrides are deprecated; prefer per-flow configuration.
             load_threads_callback (ThreadLoadCallback | None, optional): Callable to load conversation threads.
@@ -196,6 +211,12 @@ class Agency:
         self.user_context = user_context or {}
         self.send_message_tool_class = send_message_tool_class
 
+        # Store shared resource parameters for later application to agents
+        self.shared_tools = shared_tools
+        self.shared_tools_folder = shared_tools_folder
+        self.shared_files_folder = shared_files_folder
+        self.shared_mcp_servers = shared_mcp_servers
+
         # --- Initialize Core Components ---
         self.thread_manager = ThreadManager(
             load_threads_callback=final_load_threads_callback, save_threads_callback=final_save_threads_callback
@@ -229,6 +250,10 @@ class Agency:
         # --- Configure Agents & Communication ---
         # configure_agents uses _derived_communication_flows determined above
         configure_agents(self, _derived_communication_flows)
+
+        # --- Apply Shared Resources ---
+        # Apply shared tools, files, folders, and MCP servers to all agents
+        apply_shared_resources(self)
 
         # Update agent contexts with communication flows
         logger.info("Agency initialization complete.")

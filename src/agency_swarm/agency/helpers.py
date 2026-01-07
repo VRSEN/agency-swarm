@@ -59,7 +59,7 @@ def handle_deprecated_agency_args(
     # --- Handle Other Deprecated Args ---
     if "shared_files" in kwargs:
         warnings.warn(
-            "'shared_files' parameter is deprecated and shared file handling is not currently implemented.",
+            "'shared_files' parameter is deprecated. Use 'shared_files_folder' instead.",
             DeprecationWarning,
             stacklevel=3,
         )
@@ -157,6 +157,10 @@ def run_fastapi(
             communication_flows=flows,
             name=agency.name,
             shared_instructions=agency.shared_instructions,
+            shared_tools=agency.shared_tools,
+            shared_tools_folder=agency.shared_tools_folder,
+            shared_files_folder=agency.shared_files_folder,
+            shared_mcp_servers=agency.shared_mcp_servers,
             send_message_tool_class=agency.send_message_tool_class,
             load_threads_callback=load_threads_callback,
             save_threads_callback=save_threads_callback,

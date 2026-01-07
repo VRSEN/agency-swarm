@@ -1,6 +1,12 @@
 # --- Agency setup and configuration functions ---
+import dataclasses
+import inspect
 import logging
-from typing import TYPE_CHECKING
+import os
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+from agents import FunctionTool
 
 if TYPE_CHECKING:
     from .core import Agency, AgencyChart, CommunicationFlowEntry
@@ -8,7 +14,9 @@ if TYPE_CHECKING:
 from agency_swarm.agent.agent_flow import AgentFlow
 from agency_swarm.agent.context_types import AgentRuntimeState
 from agency_swarm.agent.core import Agent
+from agency_swarm.tools import BaseTool, ToolFactory
 from agency_swarm.tools.send_message import SendMessage, SendMessageHandoff
+from agency_swarm.utils.files import get_external_caller_directory
 
 logger = logging.getLogger(__name__)
 
@@ -286,3 +294,219 @@ def initialize_agent_runtime_state(agency: "Agency") -> None:
     """Allocate runtime state containers for each agent in the agency."""
     for agent_name in agency.agents:
         agency._agent_runtime_state[agent_name] = AgentRuntimeState()
+
+
+def apply_shared_resources(agency: "Agency") -> None:
+    """
+    Apply shared tools, files, and MCP servers to all agents in the agency.
+
+    This function processes:
+    - shared_tools: List of Tool instances added to all agents
+    - shared_tools_folder: Folder containing tool definitions loaded for all agents
+    - shared_files_folder: Folder containing files attached to all agents
+    - shared_mcp_servers: List of MCP servers added to all agents
+
+    Note: shared_instructions is NOT handled here. It is prepended to each agent's
+    instructions at execution time in execution_helpers.py (_build_effective_instructions).
+    """
+    if not agency.agents:
+        return
+
+    # Apply shared tools to all agents
+    _apply_shared_tools(agency)
+
+    # Apply shared files to all agents
+    _apply_shared_files(agency)
+
+    # Apply shared MCP servers to all agents
+    _apply_shared_mcp_servers(agency)
+
+
+def _apply_shared_tools(agency: "Agency") -> None:
+    """
+    Add shared tools to all agents.
+
+    Processes both shared_tools (list of Tool instances) and shared_tools_folder (folder path).
+    """
+    tools_to_add: list[Any] = []
+    caller_dir = Path(get_external_caller_directory())
+
+    # Load tools from shared_tools_folder
+    if agency.shared_tools_folder:
+        folder_path = Path(agency.shared_tools_folder)
+        if not folder_path.is_absolute():
+            folder_path = caller_dir / folder_path
+
+        if not folder_path.is_dir():
+            logger.warning(f"Shared tools folder is not a directory: {folder_path}")
+        else:
+            for file in folder_path.iterdir():
+                if not file.is_file() or file.suffix != ".py" or file.name.startswith("_"):
+                    continue
+
+                loaded = ToolFactory.from_file(file)
+                for tool in loaded:
+                    if inspect.isclass(tool) and issubclass(tool, BaseTool):
+                        try:
+                            adapted_tool = ToolFactory.adapt_base_tool(tool)
+                            tools_to_add.append(adapted_tool)
+                        except Exception as e:
+                            logger.error(f"Error adapting shared tool from {file}: {e}")
+                    elif isinstance(tool, FunctionTool):
+                        tools_to_add.append(tool)
+                    else:
+                        logger.warning(f"Skipping unknown shared tool type: {type(tool)}")
+
+            if tools_to_add:
+                logger.info(f"Loaded {len(tools_to_add)} tools from shared_tools_folder: {folder_path}")
+
+    # Add explicit Tool instances/classes from shared_tools
+    if agency.shared_tools:
+        for shared_tool in agency.shared_tools:
+            if inspect.isclass(shared_tool) and issubclass(shared_tool, BaseTool):
+                try:
+                    adapted_tool = ToolFactory.adapt_base_tool(shared_tool)
+                    tools_to_add.append(adapted_tool)
+                except Exception as e:
+                    logger.error(f"Error adapting shared BaseTool {shared_tool.__name__}: {e}")
+            else:
+                # Tool instances (FunctionTool, FileSearchTool, etc.)
+                tools_to_add.append(shared_tool)
+
+    if not tools_to_add:
+        return
+
+    for agent_name, agent_instance in agency.agents.items():
+        for tool in tools_to_add:
+            try:
+                # FunctionTool instances must be copied so each agent gets its own guard
+                # closure (the guard captures the agent for concurrency management)
+                if isinstance(tool, FunctionTool):
+                    tool = dataclasses.replace(tool)
+                agent_instance.add_tool(tool)
+                logger.debug(f"Added shared tool '{getattr(tool, 'name', '(unknown)')}' to agent '{agent_name}'")
+            except Exception as e:
+                logger.warning(
+                    f"Could not add shared tool '{getattr(tool, 'name', '(unknown)')}' to agent '{agent_name}': {e}"
+                )
+
+    logger.info(f"Applied {len(tools_to_add)} shared tools to {len(agency.agents)} agents")
+
+
+def _apply_shared_files(agency: "Agency") -> None:
+    """
+    Process shared files folder and attach the vector store to all agents.
+    """
+    if not agency.shared_files_folder:
+        return
+
+    # Skip side-effectful OpenAI file/vector-store setup when DRY_RUN is enabled
+    dry_run_env = os.getenv("DRY_RUN", "")
+    if str(dry_run_env).strip().lower() in {"1", "true", "yes", "on"}:
+        logger.debug("DRY_RUN enabled; skipping shared files processing")
+        return
+
+    caller_dir = Path(get_external_caller_directory())
+    folder_path = Path(agency.shared_files_folder)
+    if not folder_path.is_absolute():
+        folder_path = caller_dir / folder_path
+
+    # Get the first agent's FileManager to access utility functions
+    first_agent = next(iter(agency.agents.values()))
+    file_manager = first_agent.file_manager
+    assert file_manager is not None  # Always initialized in Agent.__init__
+
+    # Save original agent state
+    original_files_folder_path = first_agent.files_folder_path
+    original_vs_id = first_agent._associated_vector_store_id
+
+    vs_id: str | None = None
+    code_interpreter_file_ids: list[str] = []
+    try:
+        # Use existing FileManager methods to discover/create vector store
+        # _select_vector_store_path finds renamed folders (e.g., data_test_vs_xxx)
+        selected_path, _candidates = file_manager._select_vector_store_path(folder_path)
+        if selected_path is None or not selected_path.exists() or not selected_path.is_dir():
+            logger.warning(f"Shared files folder does not exist or is not a directory: {folder_path}")
+            return
+
+        vs_id = file_manager._create_or_identify_vector_store(selected_path)
+        if not vs_id:
+            logger.warning(f"Could not create or identify vector store for: {selected_path}")
+            return
+
+        # Set the vector store ID so _upload_file_by_type associates files correctly
+        first_agent._associated_vector_store_id = vs_id
+
+        # files_folder_path is now set by _create_or_identify_vector_store
+        # Upload files from the folder using existing methods
+        pending_ingestions: list[tuple[str, str]] = []
+        shared_folder_path = first_agent.files_folder_path
+        if not shared_folder_path:
+            logger.error("Shared folder path not set after vector store creation")
+            return
+
+        for file in shared_folder_path.iterdir():
+            if file.is_file() and not file_manager._should_skip_file(file.name):
+                try:
+                    file_id = file_manager._upload_file_by_type(
+                        file,
+                        include_in_vs=True,
+                        wait_for_ingestion=False,
+                        pending_ingestions=pending_ingestions,
+                    )
+                    # Collect code interpreter file IDs (returned for .py, .csv, etc.)
+                    if file_id:
+                        code_interpreter_file_ids.append(file_id)
+                except Exception as e:
+                    logger.error(f"Error uploading shared file '{file.name}': {e}")
+
+        # Wait for all uploads to complete
+        if pending_ingestions:
+            file_manager._sync.wait_for_vector_store_files_ready(pending_ingestions)
+
+        logger.info(f"Processed shared files, vector store ID: {vs_id}")
+
+    finally:
+        # Restore original agent state
+        first_agent.files_folder_path = original_files_folder_path
+        first_agent._associated_vector_store_id = original_vs_id
+
+    if not vs_id:
+        return
+
+    # Attach shared vector store and code interpreter to all agents
+    for agent_name, agent_instance in agency.agents.items():
+        assert agent_instance.file_manager is not None  # Always initialized in Agent.__init__
+        try:
+            agent_instance.file_manager.add_file_search_tool(vs_id)
+            if code_interpreter_file_ids:
+                agent_instance.file_manager.add_code_interpreter_tool(code_interpreter_file_ids)
+            logger.debug(f"Attached shared files to agent '{agent_name}'")
+        except Exception as e:
+            logger.error(f"Error attaching shared files to agent '{agent_name}': {e}")
+
+
+def _apply_shared_mcp_servers(agency: "Agency") -> None:
+    """Add shared MCP servers to all agents."""
+    if not agency.shared_mcp_servers:
+        return
+
+    for agent_name, agent_instance in agency.agents.items():
+        # Ensure agent has mcp_servers list
+        if not hasattr(agent_instance, "mcp_servers") or agent_instance.mcp_servers is None:
+            agent_instance.mcp_servers = []
+
+        for server in agency.shared_mcp_servers:
+            # Check if server is already added (by name)
+            server_name = getattr(server, "name", None)
+            existing_names = [getattr(s, "name", None) for s in agent_instance.mcp_servers]
+
+            if server_name and server_name in existing_names:
+                logger.debug(f"MCP server '{server_name}' already exists for agent '{agent_name}'; skipping")
+                continue
+
+            agent_instance.mcp_servers.append(server)
+            logger.debug(f"Added shared MCP server '{server_name}' to agent '{agent_name}'")
+
+    logger.info(f"Applied {len(agency.shared_mcp_servers)} shared MCP servers to {len(agency.agents)} agents")
