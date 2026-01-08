@@ -19,7 +19,7 @@ except ImportError:
     _LITELLM_INSTALLED = False
 
 
-class OpenAIClientConfig(BaseModel):
+class ClientConfig(BaseModel):
     """Configuration for overriding the OpenAI client per-request."""
 
     base_url: str | None = Field(
@@ -77,9 +77,9 @@ class RunAgentInputCustom(RunAgentInput):
             "when the server is configured with allowed local file directories."
         ),
     )
-    openai_client_config: OpenAIClientConfig | None = Field(
+    client_config: ClientConfig | None = Field(
         default=None,
-        description="Override OpenAI client configuration (base_url, api_key) for this request only.",
+        description="Override client configuration (base_url, api_key, litellm_keys) for this request only.",
     )
 
 
@@ -111,9 +111,9 @@ class BaseRequest(BaseModel):
     generate_chat_name: bool | None = Field(
         default=False, description="Generate a fitting chat name for the user input."
     )
-    openai_client_config: OpenAIClientConfig | None = Field(
+    client_config: ClientConfig | None = Field(
         default=None,
-        description="Override OpenAI client configuration (base_url, api_key) for this request only.",
+        description="Override client configuration (base_url, api_key, litellm_keys) for this request only.",
     )
 
 

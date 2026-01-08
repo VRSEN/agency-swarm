@@ -38,7 +38,7 @@ from agency_swarm import (
 from agency_swarm.agent.execution_stream_response import StreamingRunResponse
 from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_urls
 from agency_swarm.integrations.fastapi_utils.logging_middleware import get_logs_endpoint_impl
-from agency_swarm.integrations.fastapi_utils.request_models import OpenAIClientConfig
+from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
 from agency_swarm.messages import MessageFilter, MessageFormatter
 from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
 from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
@@ -52,7 +52,7 @@ from agency_swarm.utils.usage_tracking import (
 logger = logging.getLogger(__name__)
 
 
-def apply_openai_client_config(agency: Agency, config: OpenAIClientConfig) -> None:
+def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
     """Apply custom OpenAI client configuration to all agents in the agency.
 
     Creates a new AsyncOpenAI client with the provided base_url and/or api_key,
@@ -63,7 +63,7 @@ def apply_openai_client_config(agency: Agency, config: OpenAIClientConfig) -> No
     ----------
     agency : Agency
         The agency instance to configure.
-    config : OpenAIClientConfig
+    config : ClientConfig
         Configuration containing base_url and/or api_key overrides.
     """
     if config.base_url is None and config.api_key is None and config.litellm_keys is None:
@@ -85,7 +85,7 @@ def _is_litellm_model(model_name: str) -> bool:
     return model_name.startswith("litellm/")
 
 
-def _apply_client_to_agent(agent: Agent, client: AsyncOpenAI, config: OpenAIClientConfig) -> None:
+def _apply_client_to_agent(agent: Agent, client: AsyncOpenAI, config: ClientConfig) -> None:
     """Apply a custom OpenAI client to an agent's model.
 
     For OpenAI models, wraps them in OpenAIResponsesModel with the custom client.
@@ -153,7 +153,7 @@ def _get_litellm_provider(model_name: str) -> str | None:
     return None
 
 
-def _apply_litellm_config(agent: Agent, model_name: str, config: OpenAIClientConfig) -> None:
+def _apply_litellm_config(agent: Agent, model_name: str, config: ClientConfig) -> None:
     """Apply config to a LiteLLM model by creating a new LitellmModel instance."""
     if not _LITELLM_AVAILABLE or LitellmModel is None:
         logger.warning(
@@ -275,8 +275,8 @@ def make_response_endpoint(
         agency_instance = agency_factory(load_threads_callback=load_callback)
 
         # Apply custom OpenAI client configuration if provided
-        if request.openai_client_config is not None:
-            apply_openai_client_config(agency_instance, request.openai_client_config)
+        if request.client_config is not None:
+            apply_openai_client_config(agency_instance, request.client_config)
 
         # Attach persistent MCP servers and ensure connections before handling the request
         await attach_persistent_mcp_servers(agency_instance)
@@ -370,8 +370,8 @@ def make_stream_endpoint(
         agency_instance = agency_factory(load_threads_callback=load_callback)
 
         # Apply custom OpenAI client configuration if provided
-        if request.openai_client_config is not None:
-            apply_openai_client_config(agency_instance, request.openai_client_config)
+        if request.client_config is not None:
+            apply_openai_client_config(agency_instance, request.client_config)
 
         await attach_persistent_mcp_servers(agency_instance)
 
@@ -604,8 +604,8 @@ def make_agui_chat_endpoint(
         agency = agency_factory(load_threads_callback=load_callback)
 
         # Apply custom OpenAI client configuration if provided
-        if request.openai_client_config is not None:
-            apply_openai_client_config(agency, request.openai_client_config)
+        if request.client_config is not None:
+            apply_openai_client_config(agency, request.client_config)
 
         await attach_persistent_mcp_servers(agency)
 
