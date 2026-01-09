@@ -1,11 +1,14 @@
 """Integration tests for Agency shared resources (shared_tools, shared_files_folder, shared_mcp_servers)."""
 
 import os
+import sys
+import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from agents import function_tool
+from agents.mcp.server import MCPServerStdio
 from pydantic import Field
 
 from agency_swarm import Agency, Agent
@@ -205,24 +208,38 @@ class TestSharedMCPServers:
     """Tests for shared_mcp_servers parameter."""
 
     def test_shared_mcp_servers_added_to_all_agents(self, basic_agents: tuple[Agent, Agent]):
-        """Shared MCP servers should be added to all agents' mcp_servers list."""
+        """Shared MCP servers should be converted into tools for all agents."""
         agent_a, agent_b = basic_agents
 
-        # Create a mock MCP server
-        mock_server = MagicMock()
-        mock_server.name = "test_mcp_server"
+        stdio_server_path = str(Path(__file__).parents[2] / "data" / "scripts" / "stdio_server.py")
+        server_name = f"shared_mcp_stdio_{os.getpid()}"
+        stdio_server = MCPServerStdio(
+            name=server_name,
+            params={
+                "command": sys.executable,
+                "args": [stdio_server_path],
+            },
+            client_session_timeout_seconds=15,
+        )
 
-        # MCP servers are added to agent.mcp_servers, not converted during init
-        # (lazy conversion happens when agent runs)
+        # shared_mcp_servers are attached during Agency init and converted into tools.
         agency = Agency(
             agent_a,
-            shared_mcp_servers=[mock_server],
+            shared_mcp_servers=[stdio_server],
             communication_flows=[(agent_a, agent_b)],
         )
 
-        # Both agents should have the MCP server in their mcp_servers list
-        assert mock_server in agency.agents["AgentA"].mcp_servers
-        assert mock_server in agency.agents["AgentB"].mcp_servers
+        agent_a_tool_names = [getattr(t, "name", None) for t in agency.agents["AgentA"].tools]
+        agent_b_tool_names = [getattr(t, "name", None) for t in agency.agents["AgentB"].tools]
+
+        assert "greet" in agent_a_tool_names
+        assert "add" in agent_a_tool_names
+        assert "greet" in agent_b_tool_names
+        assert "add" in agent_b_tool_names
+
+        # Conversion clears the server list after creating tools
+        assert agency.agents["AgentA"].mcp_servers == []
+        assert agency.agents["AgentB"].mcp_servers == []
 
 
 class TestFastAPIFactoryPassesSharedParams:
@@ -380,6 +397,64 @@ class TestSharedFilesFolderLive:
         # Extract VS ID and verify it's the same
         second_vs_id = vs_folders_after[0].name.split("_vs_")[1]
         assert first_vs_id == second_vs_id, "Vector store ID should be reused"
+
+    def test_shared_files_folder_hot_reload_uploads_new_files(self, temp_files_folder: Path):
+        """New files placed into the original folder path on hot reload should be uploaded."""
+        original_name = temp_files_folder.name
+
+        # First init creates VS folder by renaming original.
+        agent_a1, agent_b1 = _create_fresh_agents()
+        agency1 = Agency(
+            agent_a1,
+            shared_files_folder=str(temp_files_folder),
+            communication_flows=[(agent_a1, agent_b1)],
+        )
+
+        # Identify the VS folder and VS id
+        vs_folders = list(temp_files_folder.parent.glob(f"{original_name}_vs_*"))
+        assert len(vs_folders) == 1
+        vs_ids_1 = set()
+        for tool in agency1.agents["AgentA"].tools:
+            if getattr(tool, "name", None) == "file_search" and hasattr(tool, "vector_store_ids"):
+                vs_ids_1.update(tool.vector_store_ids)
+                break
+        assert len(vs_ids_1) == 1
+        first_vs_id = next(iter(vs_ids_1))
+
+        # Re-create the original folder path and add a brand new file.
+        # This simulates a common "hot reload" workflow where the user keeps writing into the original folder name.
+        temp_files_folder.mkdir(exist_ok=True)
+        new_filename = "new_hot_reload.txt"
+        (temp_files_folder / new_filename).write_text("hot reload new content")
+
+        # Second init should reuse the existing VS and upload the new file from the original folder.
+        agent_a2, agent_b2 = _create_fresh_agents()
+        agency2 = Agency(
+            agent_a2,
+            shared_files_folder=str(temp_files_folder),
+            communication_flows=[(agent_a2, agent_b2)],
+        )
+
+        # Confirm we're still using the same VS id
+        vs_ids = set()
+        for tool in agency2.agents["AgentA"].tools:
+            if getattr(tool, "name", None) == "file_search" and hasattr(tool, "vector_store_ids"):
+                vs_ids.update(tool.vector_store_ids)
+                break
+        assert vs_ids == {first_vs_id}
+
+        # Confirm the new file is in the vector store by filename
+        deadline = time.monotonic() + 30
+        filenames: list[str] = []
+        while time.monotonic() < deadline:
+            vs_files = agency2.agents["AgentA"].client_sync.vector_stores.files.list(vector_store_id=first_vs_id)
+            file_ids = [vf.id for vf in vs_files.data]
+            filenames = [agency2.agents["AgentA"].client_sync.files.retrieve(fid).filename for fid in file_ids]
+            if new_filename in filenames:
+                break
+            time.sleep(1)
+
+        assert new_filename in filenames
 
     @pytest.mark.asyncio
     async def test_shared_files_folder_file_search_works(self, temp_files_folder: Path):

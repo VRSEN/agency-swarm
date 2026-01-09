@@ -15,6 +15,7 @@ from agency_swarm.agent.agent_flow import AgentFlow
 from agency_swarm.agent.context_types import AgentRuntimeState
 from agency_swarm.agent.core import Agent
 from agency_swarm.tools import BaseTool, ToolFactory
+from agency_swarm.tools.mcp_manager import convert_mcp_servers_to_tools
 from agency_swarm.tools.send_message import SendMessage, SendMessageHandoff
 from agency_swarm.utils.files import get_external_caller_directory
 
@@ -396,6 +397,8 @@ def _apply_shared_files(agency: "Agency") -> None:
     file_manager = first_agent.file_manager
     assert file_manager is not None  # Always initialized in Agent.__init__
 
+    original_folder_path = folder_path
+
     # Save original agent state
     original_files_folder_path = first_agent.files_folder_path
     original_vs_id = first_agent._associated_vector_store_id
@@ -405,7 +408,7 @@ def _apply_shared_files(agency: "Agency") -> None:
     try:
         # Use existing FileManager methods to discover/create vector store
         # _select_vector_store_path finds renamed folders (e.g., data_test_vs_xxx)
-        selected_path, _candidates = file_manager._select_vector_store_path(folder_path)
+        selected_path, candidates = file_manager._select_vector_store_path(folder_path)
         if selected_path is None or not selected_path.exists() or not selected_path.is_dir():
             logger.warning(f"Shared files folder does not exist or is not a directory: {folder_path}")
             return
@@ -426,6 +429,11 @@ def _apply_shared_files(agency: "Agency") -> None:
             logger.error("Shared folder path not set after vector store creation")
             return
 
+        new_files: list[Path] = []
+        # Hot reload: also ingest new files from original folder when VS folder exists.
+        if candidates and original_folder_path.exists() and original_folder_path.is_dir():
+            new_files = file_manager._find_new_files_to_process(original_folder_path)
+
         for file in shared_folder_path.iterdir():
             if file.is_file() and not file_manager._should_skip_file(file.name):
                 try:
@@ -440,6 +448,19 @@ def _apply_shared_files(agency: "Agency") -> None:
                         code_interpreter_file_ids.append(file_id)
                 except Exception as e:
                     logger.error(f"Error uploading shared file '{file.name}': {e}")
+
+        for file in new_files:
+            try:
+                file_id = file_manager._upload_file_by_type(
+                    file,
+                    include_in_vs=True,
+                    wait_for_ingestion=False,
+                    pending_ingestions=pending_ingestions,
+                )
+                if file_id:
+                    code_interpreter_file_ids.append(file_id)
+            except Exception as e:
+                logger.error(f"Error uploading shared file '{file.name}': {e}")
 
         # Wait for all uploads to complete
         if pending_ingestions:
@@ -468,7 +489,7 @@ def _apply_shared_files(agency: "Agency") -> None:
 
 
 def _apply_shared_mcp_servers(agency: "Agency") -> None:
-    """Add shared MCP servers to all agents."""
+    """Add shared MCP servers to all agents and convert them into tools."""
     if not agency.shared_mcp_servers:
         return
 
@@ -477,6 +498,7 @@ def _apply_shared_mcp_servers(agency: "Agency") -> None:
         if not hasattr(agent_instance, "mcp_servers") or agent_instance.mcp_servers is None:
             agent_instance.mcp_servers = []
 
+        added_any = False
         for server in agency.shared_mcp_servers:
             # Check if server is already added (by identity or name)
             if server in agent_instance.mcp_servers:
@@ -490,6 +512,12 @@ def _apply_shared_mcp_servers(agency: "Agency") -> None:
                     continue
 
             agent_instance.mcp_servers.append(server)
+            added_any = True
             logger.debug(f"Added shared MCP server '{server_name}' to agent '{agent_name}'")
+
+        # Convert only if we actually attached at least one new server. Conversion will
+        # clear agent.mcp_servers after creating FunctionTool instances.
+        if added_any:
+            convert_mcp_servers_to_tools(agent_instance)
 
     logger.info(f"Applied {len(agency.shared_mcp_servers)} shared MCP servers to {len(agency.agents)} agents")

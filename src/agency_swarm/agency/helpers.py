@@ -2,6 +2,7 @@
 import logging
 import warnings
 from copy import deepcopy
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from agents import Agent as SDKAgent
@@ -11,6 +12,7 @@ if TYPE_CHECKING:
 
     from .core import Agency
 
+from agency_swarm.utils.files import get_external_caller_directory
 from agency_swarm.utils.thread import ThreadLoadCallback, ThreadSaveCallback
 
 logger = logging.getLogger(__name__)
@@ -145,6 +147,18 @@ def run_fastapi(
     from agency_swarm.integrations.fastapi import run_fastapi as run_fastapi_server
 
     agency_cls = agency.__class__
+    caller_dir = Path(get_external_caller_directory())
+    shared_tools_folder = agency.shared_tools_folder
+    if shared_tools_folder:
+        folder_path = Path(shared_tools_folder)
+        if not folder_path.is_absolute():
+            shared_tools_folder = str((caller_dir / folder_path).resolve())
+
+    shared_files_folder = agency.shared_files_folder
+    if shared_files_folder:
+        folder_path = Path(shared_files_folder)
+        if not folder_path.is_absolute():
+            shared_files_folder = str((caller_dir / folder_path).resolve())
 
     def agency_factory(*, load_threads_callback=None, save_threads_callback=None, **_: Any) -> "Agency":
         flows: list[Any] = []
@@ -158,8 +172,8 @@ def run_fastapi(
             name=agency.name,
             shared_instructions=agency.shared_instructions,
             shared_tools=agency.shared_tools,
-            shared_tools_folder=agency.shared_tools_folder,
-            shared_files_folder=agency.shared_files_folder,
+            shared_tools_folder=shared_tools_folder,
+            shared_files_folder=shared_files_folder,
             shared_mcp_servers=agency.shared_mcp_servers,
             send_message_tool_class=agency.send_message_tool_class,
             load_threads_callback=load_threads_callback,
