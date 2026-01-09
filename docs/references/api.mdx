@@ -19,6 +19,10 @@ class Agency:
         agency_chart: AgencyChart | None = None,
         name: str | None = None,
         shared_instructions: str | None = None,
+        shared_tools: list[Tool] | None = None,
+        shared_tools_folder: str | None = None,
+        shared_files_folder: str | None = None,
+        shared_mcp_servers: list[Any] | None = None,
         send_message_tool_class: type | None = None,
         load_threads_callback: ThreadLoadCallback | None = None,
         save_threads_callback: ThreadSaveCallback | None = None,
@@ -34,6 +38,10 @@ class Agency:
             agency_chart: [DEPRECATED] Legacy structure definition; takes precedence if provided
             name: Optional name for the agency
             shared_instructions: Instruction text or file path applied to every agent
+            shared_tools: Tool instances or BaseTool classes to add to all agents (each agent gets independent copies)
+            shared_tools_folder: Path to folder containing tool files to load and share with all agents
+            shared_files_folder: Path to folder of files to upload and share with all agents via a common vector store
+            shared_mcp_servers: MCP server instances to attach to all agents
             send_message_tool_class: Fallback SendMessage tool class when a communication flow does not define its own
             load_threads_callback: Callable used to load persisted conversation threads
             save_threads_callback: Callable used to save conversation threads
@@ -55,6 +63,10 @@ class Agency:
 - **`event_stream_merger`** (EventStreamMerger): Aggregates streaming events from concurrent agent runs
 - **`persistence_hooks`** (PersistenceHooks | None): Optional hooks for loading/saving thread state
 - **`shared_instructions`** (str | None): Instructions prepended to every agent's system prompt
+- **`shared_tools`** (list[Tool] | None): Tool instances or BaseTool classes shared with all agents
+- **`shared_tools_folder`** (str | None): Path to folder containing shared tool files
+- **`shared_files_folder`** (str | None): Path to folder of files shared via a common vector store
+- **`shared_mcp_servers`** (list[Any] | None): MCP server instances attached to all agents
 - **`user_context`** (dict[str, Any]): Shared user-defined context accessible within MasterContext
 - **`send_message_tool_class`** (type | None): Fallback SendMessage tool when no flow-specific tool is set
 
