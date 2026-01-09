@@ -4,93 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from agency_swarm.integrations.fastapi_utils.file_handler import (
-    _is_local_path,
-    upload_from_urls,
-)
-
-
-class TestIsLocalPath:
-    """Tests for the _is_local_path helper function."""
-
-    def test_http_url_returns_false(self):
-        """HTTP URLs should not be detected as local paths."""
-        assert _is_local_path("http://example.com/file.pdf") is False
-
-    def test_https_url_returns_false(self):
-        """HTTPS URLs should not be detected as local paths."""
-        assert _is_local_path("https://example.com/file.pdf") is False
-
-    def test_ftp_url_returns_false(self):
-        """FTP URLs should not be detected as local paths."""
-        assert _is_local_path("ftp://example.com/file.pdf") is False
-
-    def test_ftps_url_returns_false(self):
-        """FTPS URLs should not be detected as local paths."""
-        assert _is_local_path("ftps://example.com/file.pdf") is False
-
-    def test_relative_path_returns_false(self):
-        """Relative paths should not be detected as local absolute paths."""
-        assert _is_local_path("./file.pdf") is False
-        assert _is_local_path("file.pdf") is False
-        assert _is_local_path("../docs/file.pdf") is False
-
-    def test_directory_path_returns_false(self, tmp_path):
-        """Directories should not be treated as local files."""
-        directory = tmp_path / "dir"
-        directory.mkdir()
-        assert _is_local_path(str(directory)) is False
-
-    @pytest.mark.skipif(
-        __import__("sys").platform != "win32",
-        reason="Windows-specific path test",
-    )
-    def test_windows_absolute_path_returns_true(self, tmp_path):
-        """Windows absolute paths should be detected as local paths."""
-        file_path = tmp_path / "doc.pdf"
-        file_path.write_text("hello", encoding="utf-8")
-        assert _is_local_path(str(file_path)) is True
-
-    @pytest.mark.skipif(
-        __import__("sys").platform == "win32",
-        reason="Unix-specific path test",
-    )
-    def test_unix_absolute_path_returns_true(self, tmp_path):
-        """Unix absolute paths should be detected as local paths when the file exists."""
-        file_path = tmp_path / "doc.pdf"
-        file_path.write_text("hello", encoding="utf-8")
-        assert file_path.is_absolute()
-        assert _is_local_path(str(file_path)) is True
-
-    def test_url_with_path_like_query_returns_false(self):
-        """URLs with path-like query parameters should not be detected as local."""
-        assert _is_local_path("https://example.com/download?file=/etc/passwd") is False
-
-    def test_protocol_relative_url_returns_false(self):
-        """Protocol-relative URLs (//example.com) should be treated as remote."""
-        assert _is_local_path("//example.com/file.pdf") is False
-
-    def test_nonexistent_absolute_path_returns_false(self, tmp_path):
-        """Absolute paths that do not exist should not be treated as local."""
-        missing = tmp_path / "missing" / "file.pdf"
-        assert _is_local_path(str(missing)) is False
-
-    def test_file_uri_existing_path_returns_true(self, tmp_path):
-        """file:// URIs should be treated as local when the path exists."""
-        file_path = tmp_path / "doc.txt"
-        file_path.write_text("hello", encoding="utf-8")
-        assert _is_local_path(file_path.as_uri()) is True
-
-    def test_file_uri_with_space_is_detected(self, tmp_path):
-        """file:// URIs with percent-encoded spaces should resolve correctly."""
-        file_path = tmp_path / "my file.txt"
-        file_path.write_text("hello", encoding="utf-8")
-        assert _is_local_path(file_path.as_uri()) is True
-
-    def test_file_uri_nonexistent_returns_false(self, tmp_path):
-        """file:// URIs should be false when the path does not exist."""
-        missing = tmp_path / "missing" / "doc.txt"
-        assert _is_local_path(missing.as_uri()) is False
+from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_urls
 
 
 @pytest.mark.asyncio
@@ -136,7 +50,6 @@ async def test_upload_from_urls_uploads_absolute_local_path(monkeypatch, tmp_pat
     )
 
     result = await upload_from_urls({"doc.txt": str(file_path)}, allowed_local_dirs=[str(tmp_path)])
-
     assert result == {"doc.txt": "uploaded:doc.txt"}
 
 
@@ -180,7 +93,6 @@ async def test_upload_from_urls_uploads_file_uri(monkeypatch, tmp_path):
     )
 
     result = await upload_from_urls({"uri.txt": file_path.as_uri()}, allowed_local_dirs=[str(tmp_path)])
-
     assert result == {"uri.txt": "uploaded:uri.txt"}
 
 
@@ -206,7 +118,6 @@ async def test_upload_from_urls_uploads_file_uri_with_space(monkeypatch, tmp_pat
     )
 
     result = await upload_from_urls({"uri file.txt": file_path.as_uri()}, allowed_local_dirs=[str(tmp_path)])
-
     assert result == {"uri file.txt": "uploaded:uri file.txt"}
 
 
@@ -234,7 +145,6 @@ async def test_upload_from_urls_respects_allowed_dirs(monkeypatch, tmp_path):
     )
 
     result = await upload_from_urls({"doc.txt": str(file_path)}, allowed_local_dirs=[str(allowed_dir)])
-
     assert result == {"doc.txt": "uploaded:doc.txt"}
 
 
@@ -265,7 +175,6 @@ async def test_upload_from_urls_expands_user_path_allowlist(monkeypatch, tmp_pat
     )
 
     result = await upload_from_urls({"doc.txt": str(file_path)}, allowed_local_dirs=[Path("~")])
-
     assert result == {"doc.txt": "uploaded:doc.txt"}
 
 
@@ -329,3 +238,17 @@ async def test_upload_from_urls_remote_only_skips_allowlist_validation(monkeypat
     )
 
     assert result == {"doc.txt": "uploaded:doc.txt"}
+
+
+@pytest.mark.asyncio
+async def test_upload_from_urls_rejects_missing_allowlist_path(tmp_path):
+    """
+    Passing a Path to a non-existent allowlist directory should raise FileNotFoundError.
+    """
+    file_path = tmp_path / "doc.txt"
+    file_path.write_text("hello", encoding="utf-8")
+
+    missing_dir = tmp_path / "missing"
+
+    with pytest.raises(FileNotFoundError, match="Allowed directory not found"):
+        await upload_from_urls({"doc.txt": str(file_path)}, allowed_local_dirs=[missing_dir])

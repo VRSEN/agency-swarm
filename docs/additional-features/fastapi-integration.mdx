@@ -56,7 +56,7 @@ agency.run_fastapi()
   - `/your_agency_name/get_response_stream` (POST, streaming responses)
   - `/your_agency_name/cancel_response_stream` (POST; not registered when `enable_agui=True`)
   - `/your_agency_name/get_metadata` (GET)
-  - `/your_agency_name/get_logs` (GET; when `enable_logging=True`)
+  - `/get_logs` (GET; when `enable_logging=True`)
 - Tools registered via `tools=[...]` are available at `/tool/ToolClassName` (BaseTools) or `/tool/function_name` (function tools).
 - OpenAPI and interactive docs: `/openapi.json`, `/docs`, `/redoc`.
 
@@ -385,7 +385,7 @@ To support passing local filepaths in the `file_urls` field, set `allowed_local_
 run_fastapi(agencies=..., allowed_local_file_dirs=["/data/uploads"])
 ```
 
-Then pass file paths in `file_urls` (supports both local and absolute paths):
+Then pass file paths in `file_urls` (supports both relative and absolute paths):
 
 ```json
 {"file_urls": {"doc.pdf": "/data/uploads/doc.pdf"}}

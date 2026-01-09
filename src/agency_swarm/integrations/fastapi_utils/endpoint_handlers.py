@@ -123,7 +123,7 @@ def make_response_endpoint(
                 file_ids_map = await upload_from_urls(request.file_urls, allowed_local_dirs=allowed_local_dirs)
                 combined_file_ids = (combined_file_ids or []) + list(file_ids_map.values())
             except Exception as e:
-                raise HTTPException(status_code=404, detail=str(e)) from None
+                return {"error": f"Error downloading file from provided urls: {e}"}
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
         # Attach persistent MCP servers and ensure connections before handling the request
@@ -195,7 +195,25 @@ def make_stream_endpoint(
                 file_ids_map = await upload_from_urls(request.file_urls, allowed_local_dirs=allowed_local_dirs)
                 combined_file_ids = (combined_file_ids or []) + list(file_ids_map.values())
             except Exception as e:
-                raise HTTPException(status_code=404, detail=str(e)) from None
+                error_msg = str(e)
+
+                async def error_generator():
+                    yield (
+                        "data: "
+                        + json.dumps({"error": f"Error downloading file from provided urls: {error_msg}"})
+                        + "\n\n"
+                    )
+                    yield "event: end\ndata: [DONE]\n\n"
+
+                return StreamingResponse(
+                    error_generator(),
+                    media_type="text/event-stream",
+                    headers={
+                        "Cache-Control": "no-cache",
+                        "Connection": "keep-alive",
+                        "X-Accel-Buffering": "no",
+                    },
+                )
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
         await attach_persistent_mcp_servers(agency_instance)
