@@ -149,7 +149,12 @@
         "groups": [
           {
             "group": "Introduction",
-            "pages": ["platform/overview", "platform/pricing", "platform/how-credits-work"]
+            "pages": [
+              "platform/overview",
+              "platform/ai-gateway",
+              "platform/pricing",
+              "platform/how-credits-work"
+            ]
           },
           {
             "group": "Integrations",
