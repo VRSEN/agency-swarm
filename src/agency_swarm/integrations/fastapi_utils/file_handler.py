@@ -174,8 +174,14 @@ async def download_file(url: str, name: str, save_dir: str) -> str:
     base = os.path.splitext(name)[0]
     tmp_path = Path(save_dir) / f"{base}.tmp"
 
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        ),
+    }
     async with httpx.AsyncClient(timeout=30.0) as client:
-        async with client.stream("GET", url) as r:
+        async with client.stream("GET", url, headers=headers) as r:
             r.raise_for_status()
             async with aiofiles.open(tmp_path, "wb") as f:
                 async for chunk in r.aiter_bytes():
