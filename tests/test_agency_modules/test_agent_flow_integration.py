@@ -7,7 +7,7 @@ Tests the parsing and handling of AgentFlow objects in communication_flows.
 import pytest
 
 from agency_swarm import Agency, Agent
-from agency_swarm.tools.send_message import SendMessage, SendMessageHandoff
+from agency_swarm.tools.send_message import Handoff, SendMessage, SendMessageHandoff
 
 
 class CustomSendMessage(SendMessage):
@@ -31,7 +31,7 @@ def test_agency_with_mixed_communication_flows():
         communication_flows=[
             (agent1 > agent2 > agent3, CustomSendMessage),  # Chain with tool
             (agent1, agent4),  # Basic pair
-            (agent2, agent4, SendMessageHandoff),  # Pair with tool
+            (agent2, agent4, Handoff),  # Pair with tool
         ],
     )
 
@@ -41,7 +41,7 @@ def test_agency_with_mixed_communication_flows():
     tool_mappings = agency._communication_tool_classes
     assert tool_mappings[("Agent1", "Agent2")] == CustomSendMessage
     assert tool_mappings[("Agent2", "Agent3")] == CustomSendMessage
-    assert tool_mappings[("Agent2", "Agent4")] == SendMessageHandoff
+    assert tool_mappings[("Agent2", "Agent4")] == Handoff
 
 
 def test_agency_with_mixed_communication_flows_reverse():
@@ -82,7 +82,7 @@ def test_duplicate_flow_detection_with_chains():
 
 
 def test_agent_flow_with_handoff_tool():
-    """Test that SendMessageHandoff works with AgentFlow."""
+    """Test that Handoff works with AgentFlow."""
     agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5-mini")
     agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5-mini")
     agent3 = Agent(name="Agent3", instructions="Test agent 3", model="gpt-5-mini")
@@ -91,7 +91,7 @@ def test_agent_flow_with_handoff_tool():
     agency = Agency(
         agent1,
         communication_flows=[
-            (agent1 > agent2 > agent3, SendMessageHandoff),
+            (agent1 > agent2 > agent3, Handoff),
         ],
     )
 
@@ -106,3 +106,16 @@ def test_agent_flow_with_handoff_tool():
     assert "transfer_to_Agent2" in handoff_names_1
     assert "transfer_to_Agent3" in handoff_names_2
     assert not agency.get_agent_runtime_state("Agent3").handoffs
+
+
+def test_send_message_handoff_name_is_deprecated() -> None:
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5-mini")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5-mini")
+
+    with pytest.deprecated_call(match=r"SendMessageHandoff is deprecated; use Handoff instead\."):
+        Agency(
+            agent1,
+            communication_flows=[
+                (agent1 > agent2, SendMessageHandoff),
+            ],
+        )

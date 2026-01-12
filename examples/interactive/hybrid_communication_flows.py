@@ -42,7 +42,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 from pydantic import BaseModel, Field
 
 from agency_swarm import Agency, Agent, ModelSettings, function_tool
-from agency_swarm.tools.send_message import SendMessage, SendMessageHandoff
+from agency_swarm.tools.send_message import Handoff, SendMessage
 
 # Setup logging
 logging.basicConfig(level=logging.WARNING)
@@ -143,7 +143,7 @@ security_expert = Agent(
 agency = Agency(
     project_manager,
     communication_flows=[
-        (project_manager > developer > security_expert, SendMessageHandoff),
+        (project_manager > developer > security_expert, Handoff),
     ],
     shared_instructions="Focus on delivering secure, high-quality software. Use project context to prioritize work.",
 )

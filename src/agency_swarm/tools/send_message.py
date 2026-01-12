@@ -1,5 +1,5 @@
 """
-Defines the SendMessage and SendMessageHandoff tools for direct communication between agents.
+Defines the SendMessage and Handoff tools for agent communication and delegation.
 
 This module provides the `SendMessage` class, a specialized `FunctionTool` that
 allows one agent to send a message to another registered agent within the
@@ -527,7 +527,7 @@ class SendMessage(FunctionTool):
                         self._pending_per_thread.pop(thread_key, None)
 
 
-class SendMessageHandoff:
+class Handoff:
     """A handoff configuration class for defining agent handoffs."""
 
     add_reminder: bool = True  # Adds a reminder system message to the history on handoff
@@ -538,7 +538,7 @@ class SendMessageHandoff:
         legacy_override = getattr(self, "reminder_override", None)
         if legacy_override is not None:
             warnings.warn(
-                "SendMessageHandoff.reminder_override is deprecated; set Agent(..., handoff_reminder=...) instead.",
+                "Handoff.reminder_override is deprecated; set Agent(..., handoff_reminder=...) instead.",
                 DeprecationWarning,
                 stacklevel=2,
             )
@@ -608,3 +608,7 @@ class SendMessageHandoff:
 
             handoff_object.input_filter = message_filter
         return handoff_object
+
+
+class SendMessageHandoff(Handoff):
+    """Deprecated alias for `Handoff`. Prefer `Handoff`."""

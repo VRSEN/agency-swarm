@@ -12,7 +12,7 @@ from agents import ModelSettings
 from prompt_toolkit.document import Document
 
 from agency_swarm import Agency, Agent
-from agency_swarm.tools.send_message import SendMessageHandoff
+from agency_swarm.tools.send_message import Handoff
 from agency_swarm.ui.demos import terminal as terminal_module
 from agency_swarm.ui.demos.terminal import start_terminal
 
@@ -96,7 +96,7 @@ def agency():
         developer_agent,
         security_expert_agent,
         communication_flows=[
-            (security_expert_agent < test_agent > developer_agent, SendMessageHandoff),
+            (security_expert_agent < test_agent > developer_agent, Handoff),
         ],
         name="TestAgency",
         shared_instructions="This is a test agency. Keep all responses very brief.",

@@ -316,12 +316,12 @@ def separate_kwargs(kwargs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
     if "name" in base_agent_params:
         current_agent_params["name"] = base_agent_params["name"]
 
-    # Handoffs should be defined by providing SendMessageHandoff
+    # Handoffs should be defined by providing Handoff
     if "handoffs" in kwargs:
         logger.warning(
             "Manually setting the 'handoffs' parameter can lead to unexpected behavior. "
             "Handoffs are automatically managed by the Agency based on communication flows. "
-            "Use SendMessageHandoff to customize inter-agent communication instead."
+            "Use Handoff (preferred) to customize inter-agent handoffs instead."
         )
 
     if "handoff_description" in base_agent_params and "description" in current_agent_params:
