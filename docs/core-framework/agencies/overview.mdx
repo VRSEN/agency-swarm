@@ -41,6 +41,10 @@ Overview of parameters in the new `Agency` class:
 | Communication Flows *(optional)* | `communication_flows` | List of (sender, receiver) tuples defining allowed agent-to-agent message paths. Example: `[(ceo, dev), (ceo, va)]`. Default: `None` |
 | Name *(optional)* | `name` | A name for the agency instance. Default: `None` |
 | Shared Instructions *(optional)* | `shared_instructions` | Instructions prepended to all agents' system prompts in a string format or a path to markdown file. Default: `None` |
+| Shared Tools *(optional)* | `shared_tools` | List of tool instances or BaseTool classes to add to all agents. Default: `None` |
+| Shared Tools Folder *(optional)* | `shared_tools_folder` | Path to a folder containing tool files to load and share with all agents. Default: `None` |
+| Shared Files Folder *(optional)* | `shared_files_folder` | Path to a folder of files to upload and share with all agents via a common vector store. Default: `None` |
+| Shared MCP Servers *(optional)* | `shared_mcp_servers` | List of MCP server instances to attach to all agents. Default: `None` |
 | Send Message Tool Class *(optional)* | `send_message_tool_class` | Fallback SendMessage tool class when a `communication_flows` entry does not specify its own tool. Prefer configuring SendMessage variants directly through `communication_flows`. Default: `None` |
 | Load Threads Callback *(optional)* | `load_threads_callback` | A callable to load conversation threads for persistence. Default: `None` |
 | Save Threads Callback *(optional)* | `save_threads_callback` | A callable to save conversation threads for persistence. Default: `None` |
@@ -51,7 +55,8 @@ Overview of parameters in the new `Agency` class:
 Quick example of how to create an agency with 3 agents using the new structure:
 
 ```python
-from agency_swarm import Agency
+from datetime import datetime
+from agency_swarm import Agency, function_tool
 from .ceo import CEO
 from .developer import Developer
 from .virtual_assistant import VirtualAssistant
@@ -59,6 +64,11 @@ from .virtual_assistant import VirtualAssistant
 ceo = CEO()
 dev = Developer()
 va = VirtualAssistant()
+
+@function_tool
+def get_current_time() -> str:
+    """Get the current time."""
+    return datetime.now().isoformat()
 
 # New structure: entry points as positional args, communication flows as keyword arg
 agency = Agency(
@@ -69,6 +79,7 @@ agency = Agency(
         (dev, va)    # Developer can initiate communication with Virtual Assistant
     ],
     shared_instructions="./shared_instructions.md",
+    shared_tools=[get_current_time],  # Available to all agents
     user_context={"project_type": "web_application"}
 )
 ```
