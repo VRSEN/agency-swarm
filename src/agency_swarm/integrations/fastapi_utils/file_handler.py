@@ -150,7 +150,12 @@ async def upload_to_openai(file_path: str) -> str:
 async def _wait_for_file_processed(file_id: str, timeout: int = 60) -> None:
     client = _get_openai_client()
     for _ in range(timeout):
-        info = await client.files.retrieve(file_id)
+        try:
+            info = await client.files.retrieve(file_id)
+        except Exception as e:  # pragma: no cover - retry on any transient error
+            logger.warning("Error retrieving status for file %s: %s", file_id, e)
+            await asyncio.sleep(1)
+            continue
         if getattr(info, "status", None) == "processed":
             return
         if getattr(info, "status", None) == "error":
