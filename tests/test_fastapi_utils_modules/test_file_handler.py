@@ -1,5 +1,6 @@
 """Unit tests for fastapi_utils file_handler module."""
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -8,8 +9,9 @@ from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_url
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(sys.platform == "win32", reason="On Windows, // paths are treated as UNC")
 async def test_upload_from_urls_rejects_protocol_relative():
-    """Protocol-relative URLs should be rejected before download."""
+    """Protocol-relative URLs should be rejected before download (non-Windows only)."""
     with pytest.raises(ValueError, match="URL scheme is required"):
         await upload_from_urls({"file.pdf": "//example.com/file.pdf"})
 
@@ -252,3 +254,94 @@ async def test_upload_from_urls_rejects_missing_allowlist_path(tmp_path):
 
     with pytest.raises(FileNotFoundError, match="Allowed directory not found"):
         await upload_from_urls({"doc.txt": str(file_path)}, allowed_local_dirs=[missing_dir])
+
+
+@pytest.mark.asyncio
+async def test_upload_from_urls_rejects_relative_path():
+    """Relative paths should be rejected as unsupported scheme."""
+    with pytest.raises(ValueError, match="Unsupported URL scheme"):
+        await upload_from_urls({"file.pdf": "uploads/file.pdf"})
+
+
+@pytest.mark.asyncio
+async def test_upload_from_urls_rejects_relative_path_with_dot():
+    """Relative paths starting with ./ should be rejected."""
+    with pytest.raises(ValueError, match="Unsupported URL scheme"):
+        await upload_from_urls({"file.pdf": "./uploads/file.pdf"})
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(sys.platform == "win32", reason="file://localhost format differs on Windows")
+async def test_upload_from_urls_uploads_file_uri_localhost(monkeypatch, tmp_path):
+    """file://localhost/ URIs should work as local paths (RFC 8089)."""
+    file_path = tmp_path / "doc.txt"
+    file_path.write_text("hello", encoding="utf-8")
+
+    async def fake_upload(path):
+        return f"uploaded:{Path(path).name}"
+
+    async def fake_wait(_file_id):
+        return None
+
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.file_handler.upload_to_openai",
+        fake_upload,
+    )
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.file_handler._wait_for_file_processed",
+        fake_wait,
+    )
+
+    # file://localhost/path is equivalent to file:///path per RFC 8089 (POSIX only)
+    file_uri = f"file://localhost{file_path}"
+    result = await upload_from_urls({"doc.txt": file_uri}, allowed_local_dirs=[str(tmp_path)])
+    assert result == {"doc.txt": "uploaded:doc.txt"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(sys.platform != "win32", reason="UNC paths are Windows-specific")
+async def test_upload_from_urls_uploads_unc_path(monkeypatch, tmp_path):
+    """UNC paths (//server/share) should be treated as local on Windows."""
+    # Create a file in tmp_path and test that UNC-like path format is recognized
+    file_path = tmp_path / "doc.txt"
+    file_path.write_text("hello", encoding="utf-8")
+
+    async def fake_upload(path):
+        return f"uploaded:{Path(path).name}"
+
+    async def fake_wait(_file_id):
+        return None
+
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.file_handler.upload_to_openai",
+        fake_upload,
+    )
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.file_handler._wait_for_file_processed",
+        fake_wait,
+    )
+
+    # Test that UNC-style paths are recognized (using tmp_path as the "server/share")
+    # Convert tmp_path to UNC-like format for testing the recognition logic
+    unc_style = f"//{tmp_path.parts[0].rstrip(':')}/{'/'.join(tmp_path.parts[1:])}/doc.txt"
+
+    # This will fail validation but should NOT raise "URL scheme is required"
+    with pytest.raises((PermissionError, FileNotFoundError)):
+        await upload_from_urls({"doc.txt": unc_style}, allowed_local_dirs=[str(tmp_path)])
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(sys.platform == "win32", reason="On Windows, // paths are always UNC")
+async def test_upload_from_urls_protocol_relative_with_domain_rejected():
+    """Protocol-relative URLs with domain names should be rejected on non-Windows."""
+    with pytest.raises(ValueError, match="URL scheme is required"):
+        await upload_from_urls({"file.js": "//cdn.example.com/file.js"})
+
+
+@pytest.mark.asyncio
+async def test_upload_from_urls_rejects_nonexistent_local_file(tmp_path):
+    """Local paths to non-existent files should raise FileNotFoundError."""
+    file_path = tmp_path / "nonexistent.txt"
+
+    with pytest.raises(FileNotFoundError, match="Local file not found"):
+        await upload_from_urls({"doc.txt": str(file_path)}, allowed_local_dirs=[str(tmp_path)])

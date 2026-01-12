@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import sys
 import tempfile
 from collections.abc import Sequence
 from pathlib import Path
@@ -49,6 +50,14 @@ async def upload_from_urls(
 
     for name, path_or_url in file_map.items():
         parsed = urlparse(path_or_url)
+
+        # Windows UNC paths (//server/share or \\server\share) before protocol-relative check
+        if sys.platform == "win32" and path_or_url.startswith(("//", "\\\\")):
+            path = Path(path_or_url)
+            _ensure_path_allowed(path, _get_allowed_dirs())
+            _validate_local_file(path, path_or_url)
+            local_files[name] = path
+            continue
 
         # Protocol-relative URLs
         if parsed.netloc and not parsed.scheme:
