@@ -85,6 +85,22 @@ def _is_litellm_model(model_name: str) -> bool:
     return model_name.startswith("litellm/")
 
 
+def _is_openai_model_name(model_name: str) -> bool:
+    """Return True if a model name should be treated as OpenAI-compatible.
+
+    The Agents SDK's MultiProvider treats:
+    - no prefix (e.g. "gpt-4o") as OpenAI
+    - "openai/<model>" as OpenAI
+
+    For any other prefix (e.g. "anthropic/<model>"), we should NOT wrap into
+    OpenAIResponsesModel, since that would route through the OpenAI client.
+    """
+    if "/" not in model_name:
+        return True
+    prefix, _rest = model_name.split("/", 1)
+    return prefix == "openai"
+
+
 def _apply_client_to_agent(agent: Agent, client: AsyncOpenAI, config: ClientConfig) -> None:
     """Apply a custom OpenAI client to an agent's model.
 
@@ -96,18 +112,39 @@ def _apply_client_to_agent(agent: Agent, client: AsyncOpenAI, config: ClientConf
     if isinstance(model, str):
         if _is_litellm_model(model):
             _apply_litellm_config(agent, model, config)
+        elif not _is_openai_model_name(model):
+            logger.warning(
+                "Skipping client_config for agent '%s': custom model '%s' is not supported for "
+                "client override (only OpenAI models or 'litellm/' models are supported)",
+                agent.name,
+                model,
+            )
         else:
             # String model name - wrap in OpenAIResponsesModel with custom client
             agent.model = OpenAIResponsesModel(model=model, openai_client=client)
     elif isinstance(model, OpenAIResponsesModel):
         if _is_litellm_model(model.model):
             _apply_litellm_config(agent, model.model, config)
+        elif not _is_openai_model_name(model.model):
+            logger.warning(
+                "Skipping client_config for agent '%s': custom model '%s' is not supported for "
+                "client override (only OpenAI models or 'litellm/' models are supported)",
+                agent.name,
+                model.model,
+            )
         else:
             # Create new model instance with custom client, preserving model name
             agent.model = OpenAIResponsesModel(model=model.model, openai_client=client)
     elif isinstance(model, OpenAIChatCompletionsModel):
         if _is_litellm_model(model.model):
             _apply_litellm_config(agent, model.model, config)
+        elif not _is_openai_model_name(model.model):
+            logger.warning(
+                "Skipping client_config for agent '%s': custom model '%s' is not supported for "
+                "client override (only OpenAI models or 'litellm/' models are supported)",
+                agent.name,
+                model.model,
+            )
         else:
             # Create new model instance with custom client, preserving model name
             agent.model = OpenAIChatCompletionsModel(model=model.model, openai_client=client)
@@ -124,6 +161,13 @@ def _apply_client_to_agent(agent: Agent, client: AsyncOpenAI, config: ClientConf
         if isinstance(model_name, str):
             if _is_litellm_model(model_name):
                 _apply_litellm_config(agent, model_name, config)
+            elif not _is_openai_model_name(model_name):
+                logger.warning(
+                    "Skipping client_config for agent '%s': custom model '%s' is not supported for "
+                    "client override (only OpenAI models or 'litellm/' models are supported)",
+                    agent.name,
+                    model_name,
+                )
             else:
                 agent.model = OpenAIResponsesModel(model=model_name, openai_client=client)
         else:

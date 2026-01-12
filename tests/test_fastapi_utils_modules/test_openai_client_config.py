@@ -2,7 +2,13 @@
 
 import pytest
 from agents import OpenAIChatCompletionsModel, OpenAIResponsesModel
+from agents.handoffs import Handoff
+from agents.items import ModelResponse, TResponseInputItem, TResponseStreamEvent
+from agents.model_settings import ModelSettings
+from agents.models.interface import Model, ModelTracing
+from agents.tool import Tool
 from openai import AsyncOpenAI
+from openai.types.responses.response_prompt_param import ResponsePromptParam
 
 from agency_swarm import Agency, Agent
 from agency_swarm.integrations.fastapi_utils.endpoint_handlers import (
@@ -13,16 +19,16 @@ from agency_swarm.integrations.fastapi_utils.endpoint_handlers import (
 )
 from agency_swarm.integrations.fastapi_utils.request_models import (
     BaseRequest,
-    OpenAIClientConfig,
+    ClientConfig,
 )
 
 
-class TestOpenAIClientConfig:
-    """Tests for OpenAIClientConfig model."""
+class TestClientConfig:
+    """Tests for ClientConfig model."""
 
     def test_config_with_all_fields(self) -> None:
         """Config accepts both base_url and api_key."""
-        config = OpenAIClientConfig(
+        config = ClientConfig(
             base_url="https://custom.api.com",
             api_key="sk-custom-key",
         )
@@ -31,26 +37,26 @@ class TestOpenAIClientConfig:
 
     def test_config_with_only_base_url(self) -> None:
         """Config can specify only base_url."""
-        config = OpenAIClientConfig(base_url="https://custom.api.com")
+        config = ClientConfig(base_url="https://custom.api.com")
         assert config.base_url == "https://custom.api.com"
         assert config.api_key is None
 
     def test_config_with_only_api_key(self) -> None:
         """Config can specify only api_key."""
-        config = OpenAIClientConfig(api_key="sk-custom-key")
+        config = ClientConfig(api_key="sk-custom-key")
         assert config.base_url is None
         assert config.api_key == "sk-custom-key"
 
     def test_config_empty(self) -> None:
         """Config can be created with no overrides."""
-        config = OpenAIClientConfig()
+        config = ClientConfig()
         assert config.base_url is None
         assert config.api_key is None
         assert config.litellm_keys is None
 
     def test_config_with_litellm_keys(self) -> None:
         """Config accepts litellm_keys for provider-specific API keys."""
-        config = OpenAIClientConfig(
+        config = ClientConfig(
             litellm_keys={
                 "anthropic": "sk-ant-xxx",
                 "gemini": "AIza...",
@@ -62,35 +68,95 @@ class TestOpenAIClientConfig:
 
 
 class TestBaseRequestWithClientConfig:
-    """Tests for BaseRequest including openai_client_config."""
+    """Tests for BaseRequest including client_config."""
 
     def test_request_without_client_config(self) -> None:
         """Request works without client config."""
         request = BaseRequest(message="Hello")
-        assert request.openai_client_config is None
+        assert request.client_config is None
 
     def test_request_with_client_config(self) -> None:
         """Request accepts client config."""
         request = BaseRequest(
             message="Hello",
-            openai_client_config=OpenAIClientConfig(
+            client_config=ClientConfig(
                 base_url="https://custom.api.com",
                 api_key="sk-custom-key",
             ),
         )
-        assert request.openai_client_config is not None
-        assert request.openai_client_config.base_url == "https://custom.api.com"
-        assert request.openai_client_config.api_key == "sk-custom-key"
+        assert request.client_config is not None
+        assert request.client_config.base_url == "https://custom.api.com"
+        assert request.client_config.api_key == "sk-custom-key"
 
 
 class TestApplyClientToAgent:
     """Tests for _apply_client_to_agent function."""
 
+    def test_apply_does_not_wrap_non_openai_model_subclass(self) -> None:
+        """Non-OpenAI Model subclasses must not be rewrapped into OpenAIResponsesModel."""
+
+        class NonOpenAIModel(Model):
+            model = "anthropic/claude-sonnet-4"
+
+            async def get_response(
+                self,
+                system_instructions: str | None,
+                input: str | list[TResponseInputItem],
+                model_settings: ModelSettings,
+                tools: list[Tool],
+                output_schema,
+                handoffs: list[Handoff],
+                tracing: ModelTracing,
+                *,
+                previous_response_id: str | None,
+                conversation_id: str | None,
+                prompt: ResponsePromptParam | None,
+            ) -> ModelResponse:
+                raise RuntimeError("not used in this test")
+
+            async def stream_response(
+                self,
+                system_instructions: str | None,
+                input: str | list[TResponseInputItem],
+                model_settings: ModelSettings,
+                tools: list[Tool],
+                output_schema,
+                handoffs: list[Handoff],
+                tracing: ModelTracing,
+                *,
+                previous_response_id: str | None,
+                conversation_id: str | None,
+                prompt: ResponsePromptParam | None,
+            ):
+                if False:
+                    yield TResponseStreamEvent(type="response.completed")  # pragma: no cover
+                raise RuntimeError("not used in this test")
+
+        agent = Agent(name="TestAgent", instructions="Test", model=NonOpenAIModel())
+        original_model = agent.model
+        custom_client = AsyncOpenAI(api_key="test-key", base_url="https://test.api.com")
+        config = ClientConfig(api_key="test-key", base_url="https://test.api.com")
+
+        _apply_client_to_agent(agent, custom_client, config)
+
+        assert agent.model is original_model
+
+    def test_apply_does_not_wrap_non_openai_prefixed_string(self) -> None:
+        """Non-OpenAI prefixed model strings must not be routed via OpenAI client."""
+        agent = Agent(name="TestAgent", instructions="Test", model="anthropic/claude-sonnet-4")
+        original_model = agent.model
+        custom_client = AsyncOpenAI(api_key="test-key", base_url="https://test.api.com")
+        config = ClientConfig(api_key="test-key", base_url="https://test.api.com")
+
+        _apply_client_to_agent(agent, custom_client, config)
+
+        assert agent.model == original_model
+
     def test_apply_to_string_model(self) -> None:
         """String model gets wrapped in OpenAIResponsesModel with custom client."""
         agent = Agent(name="TestAgent", instructions="Test", model="gpt-4o")
         custom_client = AsyncOpenAI(api_key="test-key", base_url="https://test.api.com")
-        config = OpenAIClientConfig(api_key="test-key", base_url="https://test.api.com")
+        config = ClientConfig(api_key="test-key", base_url="https://test.api.com")
 
         _apply_client_to_agent(agent, custom_client, config)
 
@@ -106,7 +172,7 @@ class TestApplyClientToAgent:
             model=OpenAIResponsesModel(model="gpt-4o", openai_client=original_client),
         )
         custom_client = AsyncOpenAI(api_key="test-key", base_url="https://test.api.com")
-        config = OpenAIClientConfig(api_key="test-key", base_url="https://test.api.com")
+        config = ClientConfig(api_key="test-key", base_url="https://test.api.com")
 
         _apply_client_to_agent(agent, custom_client, config)
 
@@ -122,7 +188,7 @@ class TestApplyClientToAgent:
             model=OpenAIChatCompletionsModel(model="gpt-4o", openai_client=original_client),
         )
         custom_client = AsyncOpenAI(api_key="test-key", base_url="https://test.api.com")
-        config = OpenAIClientConfig(api_key="test-key", base_url="https://test.api.com")
+        config = ClientConfig(api_key="test-key", base_url="https://test.api.com")
 
         _apply_client_to_agent(agent, custom_client, config)
 
@@ -137,7 +203,7 @@ class TestApplyOpenAIClientConfig:
         """Config is applied to single-agent agency."""
         agent = Agent(name="TestAgent", instructions="Test", model="gpt-4o")
         agency = Agency(agent)
-        config = OpenAIClientConfig(
+        config = ClientConfig(
             base_url="https://custom.api.com",
             api_key="sk-custom-key",
         )
@@ -152,7 +218,7 @@ class TestApplyOpenAIClientConfig:
         agent1 = Agent(name="Agent1", instructions="Test1", model="gpt-4o")
         agent2 = Agent(name="Agent2", instructions="Test2", model="gpt-4o-mini")
         agency = Agency(agent1, agent2, communication_flows=[agent1 > agent2])
-        config = OpenAIClientConfig(
+        config = ClientConfig(
             base_url="https://custom.api.com",
             api_key="sk-custom-key",
         )
@@ -169,7 +235,7 @@ class TestApplyOpenAIClientConfig:
         agent = Agent(name="TestAgent", instructions="Test", model="gpt-4o")
         original_model = agent.model
         agency = Agency(agent)
-        config = OpenAIClientConfig()  # Both None
+        config = ClientConfig()  # Both None
 
         apply_openai_client_config(agency, config)
 
@@ -181,7 +247,7 @@ class TestApplyOpenAIClientConfig:
         """Config with only api_key still creates new client."""
         agent = Agent(name="TestAgent", instructions="Test", model="gpt-4o")
         agency = Agency(agent)
-        config = OpenAIClientConfig(api_key="sk-custom-key")
+        config = ClientConfig(api_key="sk-custom-key")
 
         apply_openai_client_config(agency, config)
 
@@ -191,7 +257,7 @@ class TestApplyOpenAIClientConfig:
         """Config with only base_url still creates new client."""
         agent = Agent(name="TestAgent", instructions="Test", model="gpt-4o")
         agency = Agency(agent)
-        config = OpenAIClientConfig(base_url="https://custom.api.com")
+        config = ClientConfig(base_url="https://custom.api.com")
 
         apply_openai_client_config(agency, config)
 
@@ -220,7 +286,7 @@ class TestLiteLLMModelDetection:
         )
         original_model = agent.model
         custom_client = AsyncOpenAI(api_key="test-key", base_url="https://test.api.com")
-        config = OpenAIClientConfig(api_key="test-key", base_url="https://test.api.com")
+        config = ClientConfig(api_key="test-key", base_url="https://test.api.com")
 
         # When litellm is not installed, model remains unchanged (with warning logged)
         _apply_client_to_agent(agent, custom_client, config)
@@ -242,7 +308,7 @@ class TestLiteLLMModelDetection:
             litellm_agent,
             communication_flows=[openai_agent > litellm_agent],
         )
-        config = OpenAIClientConfig(
+        config = ClientConfig(
             base_url="https://custom.api.com",
             api_key="sk-custom-key",
         )
@@ -283,7 +349,7 @@ class TestLiteLLMKeysConfig:
 
     def test_litellm_keys_in_config(self) -> None:
         """Config accepts litellm_keys for mixed provider setups."""
-        config = OpenAIClientConfig(
+        config = ClientConfig(
             base_url="https://proxy.example.com",
             litellm_keys={
                 "anthropic": "sk-ant-xxx",
@@ -303,6 +369,6 @@ class TestLiteLLMKeysConfig:
         monkeypatch.setattr(req_models, "_LITELLM_INSTALLED", False)
 
         with pytest.raises(ValueError, match="litellm_keys requires litellm to be installed"):
-            OpenAIClientConfig(
+            ClientConfig(
                 litellm_keys={"anthropic": "sk-ant-xxx"},
             )
