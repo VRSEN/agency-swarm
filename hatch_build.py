@@ -33,6 +33,12 @@ PRICING_FILE_URL = "https://raw.githubusercontent.com/BerriAI/litellm/main/model
 PRICING_FILE_RELATIVE_PATH = Path("src/agency_swarm/data/model_prices_and_context_window.json")
 
 
+def _warn_if_pricing_file_missing(pricing_file_path: Path) -> None:
+    if pricing_file_path.exists():
+        return
+    logger.error(f"Pricing file not found at {pricing_file_path}. Usage cost tracking may be unavailable at runtime.")
+
+
 def _get_git_branch(root: str) -> str | None:
     try:
         proc = subprocess.run(
@@ -64,6 +70,9 @@ class CustomBuildHook(BuildHookInterface):
 
             branch = _get_git_branch(str(self.root))
             if branch != "main":
+                # When builds skip the download (non-main branches or when git info isn't available),
+                # still validate the pricing file exists so cost tracking doesn't silently disappear.
+                _warn_if_pricing_file_missing(pricing_file_path)
                 logger.info(
                     "Skipping pricing data download (branch is not 'main'). "
                     "Set branch to 'main' to auto-refresh this file during builds."
@@ -93,11 +102,7 @@ class CustomBuildHook(BuildHookInterface):
             logger.warning(f"Failed to download pricing data: {e}. Build will continue with existing file if present.")
             # Don't fail the build if download fails - use existing file or handle gracefully
             pricing_file_path = Path(self.root) / PRICING_FILE_RELATIVE_PATH
-            if not pricing_file_path.exists():
-                logger.error(
-                    f"Pricing file not found at {pricing_file_path} and download failed. "
-                    "Some features may not work correctly."
-                )
+            _warn_if_pricing_file_missing(pricing_file_path)
 
 
 # Export the hook class for hatchling to discover
