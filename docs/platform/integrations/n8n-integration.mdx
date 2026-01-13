@@ -95,8 +95,7 @@ The Agencii node exposes a single operation designed to send messages to your ag
        - **Integration ID** *(required)* – paste the Integration ID from your Agencii n8n Platform integration.
        - **Message** *(required)* – the prompt or instruction you want your default agent to process.
        - **Session ID** *(optional)* – reuse the `sessionId` from a previous run to continue the same conversation; leave empty to start a new session.
-
-    
+       - **User Context** *(optional)* – a JSON object with structured data (user IDs, preferences, feature flags) passed to [Agency Context](/additional-features/agency-context). This data is accessible within your agent's tools but is **not** exposed to the LLM.
   </Step>
 
   <Step title="Understand the node output">

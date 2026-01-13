@@ -70,6 +70,10 @@ Zapier is a no-code automation platform that helps you connect over 7,000 apps a
       <ResponseField name="Chat ID" type="string">
         The identifier for an existing conversation. If not provided, the system will create a new chat.
       </ResponseField>
+
+      <ResponseField name="User Context" type="object">
+        A JSON object with structured data (user IDs, preferences, feature flags) passed to [Agency Context](/additional-features/agency-context). This data is accessible within your agent's tools but is **not** exposed to the LLM.
+      </ResponseField>
     </Expandable>
   </ResponseField>
   <ResponseField name="Action Output Properties">
