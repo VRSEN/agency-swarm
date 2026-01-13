@@ -67,11 +67,15 @@ You can control the widget from your site/app by dispatching a `CustomEvent` nam
 ```tsx
 interface WidgetControlEventDetail {
   /** Command name */
-  type: 'open-widget' | 'send-message-to-widget';
-  /** Command-specific payload */
-  data: boolean | string;
+  type: 'open-widget' | 'send-message-to-widget' | 'set-widget-context';
+  /** Command-specific payload (not used for set-widget-context) */
+  data?: boolean | string;
   /** Target widget instance */
   widgetId: string; // e.g., 'WIDGET_123'
+  /** Structured data passed to Agency Context */
+  userContext?: Record<string, unknown>;
+  /** Extra guidance for the agent */
+  additionalInstructions?: string;
 }
 
 ```
@@ -135,6 +139,37 @@ window.dispatchEvent(
 - Bind to a "Chat" / "Support" button to open the widget.
 - Close the widget after a route change or when a modal shows.
 
+### Set widget context
+
+Sets persistent context for **all future messages** — both programmatic (`send-message-to-widget`) and user-typed.
+
+**Type:** `set-widget-context`
+
+| Property | Type | Required | Description |
+| --- | --- | --- | --- |
+| `userContext` | object | No | Structured data (user IDs, preferences, feature flags) passed to [Agency Context](/additional-features/agency-context). Accessible within tools but **not** exposed to the LLM. |
+| `additionalInstructions` | string | No | Extra guidance for the agent on all subsequent requests. |
+
+**Example:**
+
+```jsx
+window.dispatchEvent(
+  new CustomEvent('widget-control', {
+    detail: {
+      type: 'set-widget-context',
+      widgetId: WIDGET_ID,
+      userContext: { customerId: '123' },
+      additionalInstructions: 'Be helpful',
+    },
+  })
+);
+
+```
+
+<Tip>
+Use `set-widget-context` once on page load to inject user-specific data (e.g., customer ID, subscription tier) so every conversation automatically has access to it.
+</Tip>
+
 ### Send a message to the widget
 
 Programmatically sends a text message into the widget (e.g., seed a greeting or pass context).
@@ -142,9 +177,13 @@ This event does not open the widget automatically, so dispatch an `open-widget` 
 
 **Type:** `send-message-to-widget`
 
-**Data:** `string` — the message body.
+| Property | Type | Required | Description |
+| --- | --- | --- | --- |
+| `data` | string | Yes | The message body to send. |
+| `userContext` | object | No | Structured data (user IDs, preferences, feature flags) passed to [Agency Context](/additional-features/agency-context). Accessible within tools but **not** exposed to the LLM. **Overrides** any context set via `set-widget-context`. |
+| `additionalInstructions` | string | No | Extra guidance for the agent on this specific request. **Overrides** any instructions set via `set-widget-context`. |
 
-**Example:**
+**Example — basic:**
 
 ```jsx
 window.dispatchEvent(
@@ -153,6 +192,23 @@ window.dispatchEvent(
       type: 'send-message-to-widget',
       data: 'Hi',
       widgetId: WIDGET_ID,
+    },
+  })
+);
+
+```
+
+**Example — with context and instructions:**
+
+```jsx
+window.dispatchEvent(
+  new CustomEvent('widget-control', {
+    detail: {
+      type: 'send-message-to-widget',
+      data: 'Hello world',
+      widgetId: WIDGET_ID,
+      userContext: { customerId: '123', tier: 'premium' },
+      additionalInstructions: 'Be extra helpful',
     },
   })
 );
