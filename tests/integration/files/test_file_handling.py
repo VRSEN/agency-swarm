@@ -578,6 +578,10 @@ async def test_agent_vision_capabilities(real_openai_client: AsyncOpenAI, tmp_pa
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    os.getenv("CI") == "true",
+    reason="Requires live OpenAI API; skipped on CI to avoid upstream flake.",
+)
 async def test_vector_store_cleanup_on_init(real_openai_client: AsyncOpenAI, tmp_path: Path):
     """Agent initialization synchronizes vector store with local files, removing orphaned files from VS and OpenAI."""
     source_file = Path("tests/data/files/favorite_books.txt")
@@ -648,8 +652,8 @@ async def test_vector_store_cleanup_on_init(real_openai_client: AsyncOpenAI, tmp
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    os.getenv("GITHUB_ACTIONS") == "true",
-    reason="Observed >60s runtime with real OpenAI; skip on GitHub to avoid flaky slowdowns.",
+    os.getenv("CI") == "true",
+    reason="Requires live OpenAI API; skipped on CI to avoid upstream flake.",
 )
 async def test_file_reupload_on_mtime_update(real_openai_client: AsyncOpenAI, tmp_path: Path):
     """Modifying local file triggers re-upload with a new file_id and VS update."""
