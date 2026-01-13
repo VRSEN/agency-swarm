@@ -143,6 +143,7 @@ class TestSharedTools:
 
         class SharedBaseTool(BaseTool):
             """A shared BaseTool class."""
+
             param: str = Field(..., description="A parameter")
 
             def run(self) -> str:
@@ -468,9 +469,7 @@ class TestSharedFilesFolderLive:
         )
 
         # Ask about content in the files
-        response = await agency.get_response(
-            "What is the secret code? Search the files to find it."
-        )
+        response = await agency.get_response("What is the secret code? Search the files to find it.")
 
         # The response should contain the secret from secrets.txt
         assert "ALPHA" in response.final_output or "BRAVO" in response.final_output, (
@@ -530,4 +529,3 @@ class TestSharedToolsEdgeCases:
         )
 
         assert agency is not None
-

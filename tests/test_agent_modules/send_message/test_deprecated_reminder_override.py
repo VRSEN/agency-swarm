@@ -5,7 +5,7 @@ import pytest
 from agents import ModelSettings
 
 from agency_swarm import Agent
-from agency_swarm.tools.send_message import SendMessageHandoff
+from agency_swarm.tools.send_message import Handoff
 
 
 class _DummyThreadManager:
@@ -46,7 +46,7 @@ class _DummyHandoffInputData:
         )
 
 
-class LegacyReminderHandoff(SendMessageHandoff):
+class LegacyReminderHandoff(Handoff):
     reminder_override = "Legacy reminder message"
 
 
@@ -59,7 +59,7 @@ async def test_legacy_reminder_override_warns_and_applies() -> None:
     )
 
     handoff = LegacyReminderHandoff()
-    with pytest.deprecated_call(match=r"SendMessageHandoff\.reminder_override is deprecated"):
+    with pytest.deprecated_call(match=r"Handoff\.reminder_override is deprecated"):
         handoff_obj = handoff.create_handoff(recipient)
 
     assert handoff_obj.input_filter is not None
@@ -75,7 +75,7 @@ async def test_legacy_reminder_override_warns_and_applies() -> None:
     assert filtered.input_history[-1]["content"] == "Legacy reminder message"
 
 
-class LegacyReminderWithAgentOverride(SendMessageHandoff):
+class LegacyReminderWithAgentOverride(Handoff):
     reminder_override = "Legacy reminder should not win"
 
 
@@ -89,7 +89,7 @@ async def test_agent_handoff_reminder_takes_precedence() -> None:
     )
 
     handoff = LegacyReminderWithAgentOverride()
-    with pytest.deprecated_call(match=r"SendMessageHandoff\.reminder_override is deprecated"):
+    with pytest.deprecated_call(match=r"Handoff\.reminder_override is deprecated"):
         handoff_obj = handoff.create_handoff(recipient)
 
     assert handoff_obj.input_filter is not None

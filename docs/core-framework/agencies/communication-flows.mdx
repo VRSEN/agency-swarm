@@ -31,7 +31,7 @@ Control transfers completely to another agent who takes over the interaction. Th
 
 ```python
 from agency_swarm import Agent
-from agency_swarm.tools import SendMessageHandoff
+from agency_swarm.tools import Handoff
 
 # Triage agent routes to specialists
 triage_agent = Agent(
@@ -54,8 +54,8 @@ technical_specialist = Agent(
 agency = Agency(
     triage_agent,
     communication_flows=[
-        (triage_agent, billing_specialist, SendMessageHandoff),      # Handoff to billing
-        (triage_agent, technical_specialist, SendMessageHandoff),    # Handoff to technical
+        (triage_agent, billing_specialist, Handoff),      # Handoff to billing
+        (triage_agent, technical_specialist, Handoff),    # Handoff to technical
     ]
 )
 ```
@@ -104,12 +104,12 @@ Communication flows are defined using tuples in the `communication_flows` parame
 
 ```python
 from agency_swarm import Agency
-from agency_swarm.tools import SendMessageHandoff
+from agency_swarm.tools import Handoff
 
 agency = Agency(
     ceo, dev,  # Entry points - agents that can communicate with users
     communication_flows=[
-        (ceo, dev, SendMessageHandoff),   # CEO can transfer the user to the developer
+        (ceo, dev, Handoff),   # CEO can transfer the user to the developer
         (ceo, dev), # CEO can assign tasks to developer
         (dev, va) # developer can assign tasks to virtual assistant
     ]

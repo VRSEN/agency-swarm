@@ -3,6 +3,7 @@ import dataclasses
 import inspect
 import logging
 import os
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -16,10 +17,11 @@ from agency_swarm.agent.context_types import AgentRuntimeState
 from agency_swarm.agent.core import Agent
 from agency_swarm.tools import BaseTool, ToolFactory
 from agency_swarm.tools.mcp_manager import convert_mcp_servers_to_tools
-from agency_swarm.tools.send_message import SendMessage, SendMessageHandoff
+from agency_swarm.tools.send_message import Handoff, SendMessage, SendMessageHandoff
 from agency_swarm.utils.files import get_external_caller_directory
 
 logger = logging.getLogger(__name__)
+_warned_deprecated_send_message_handoff = False
 
 
 def parse_deprecated_agency_chart(
@@ -257,9 +259,21 @@ def configure_agents(agency: "Agency", defined_communication_flows: list[tuple[A
                 )
 
                 try:
-                    if isinstance(effective_tool_class, SendMessageHandoff) or (
-                        isinstance(effective_tool_class, type) and issubclass(effective_tool_class, SendMessageHandoff)
+                    if isinstance(effective_tool_class, Handoff) or (
+                        isinstance(effective_tool_class, type) and issubclass(effective_tool_class, Handoff)
                     ):
+                        global _warned_deprecated_send_message_handoff
+                        if (
+                            not _warned_deprecated_send_message_handoff
+                            and isinstance(effective_tool_class, type)
+                            and issubclass(effective_tool_class, SendMessageHandoff)
+                        ):
+                            warnings.warn(
+                                "SendMessageHandoff is deprecated; use Handoff instead.",
+                                DeprecationWarning,
+                                stacklevel=3,
+                            )
+                            _warned_deprecated_send_message_handoff = True
                         handoff_instance = effective_tool_class().create_handoff(recipient_agent=recipient_agent)
                         runtime_state.handoffs.append(handoff_instance)
                         logger.debug(f"Added Handoff for {agent_name} -> {recipient_name}")

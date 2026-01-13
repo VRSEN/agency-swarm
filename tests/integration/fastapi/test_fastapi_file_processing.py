@@ -380,7 +380,7 @@ class TestFastAPIFileProcessing:
         async with self.get_http_client(timeout_seconds=60) as client:
             response = await client.post(url, json=payload, headers=headers)
 
-       # The request should still return 200, but the response should indicate file issues
+        # The request should still return 200, but the response should indicate file issues
         assert response.status_code == 200
         response_data = response.json()
         response_text = response_data["error"].lower()

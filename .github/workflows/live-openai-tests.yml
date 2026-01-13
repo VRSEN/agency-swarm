@@ -1,0 +1,29 @@
+name: Live OpenAI Tests
+
+on:
+  workflow_dispatch:
+
+env:
+  UV_FROZEN: "1"
+
+jobs:
+  live_openai_tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up uv (Python 3.13)
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: make sync
+
+      - name: Run tests with coverage (live OpenAI enabled)
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CI: "false"
+        run: make coverage

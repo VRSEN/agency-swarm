@@ -30,7 +30,7 @@ from openai.types.responses.tool_param import (
 from .base_tool import BaseTool
 from .built_in import LoadFileAttachment, PersistentShellTool
 from .concurrency import ToolConcurrencyManager
-from .send_message import SendMessage, SendMessageHandoff
+from .send_message import Handoff, SendMessage, SendMessageHandoff
 from .tool_factory import ToolFactory
 from .utils import (
     tool_output_file_from_file_id,
@@ -46,6 +46,7 @@ __all__ = [
     "ToolFactory",
     "ToolConcurrencyManager",
     "SendMessage",
+    "Handoff",
     "SendMessageHandoff",
     "validate_openapi_spec",
     "tool_output_image_from_path",

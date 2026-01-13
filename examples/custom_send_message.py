@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.join(examples_root, "src"))
 sys.path.insert(0, examples_root)
 
 from agency_swarm import Agency, Agent, ModelSettings, function_tool  # noqa: E402
-from agency_swarm.tools.send_message import SendMessage, SendMessageHandoff  # noqa: E402
+from agency_swarm.tools.send_message import Handoff, SendMessage  # noqa: E402
 from examples.utils import print_highlighted_send_message_args  # noqa: E402
 
 # Setup logging
@@ -109,7 +109,7 @@ agency = Agency(
     specialist,
     communication_flows=[
         (coordinator > specialist, SendMessageWithContext),
-        (specialist > coordinator, SendMessageHandoff),
+        (specialist > coordinator, Handoff),
     ],
     shared_instructions="Use key decisions to guide analysis tool selection.",
 )

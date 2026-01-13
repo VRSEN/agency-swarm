@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 # Public API
 # ============================================================
 
+
 async def upload_from_urls(
     file_map: dict[str, str],
     allowed_local_dirs: Sequence[str | Path] | None = None,
@@ -103,21 +104,14 @@ async def upload_from_urls(
     remote_file_ids: dict[str, str] = {}
     if remote_files:
         with tempfile.TemporaryDirectory() as tmp:
-            paths = await asyncio.gather(
-                *[
-                    download_file(url, name, tmp)
-                    for name, url in remote_files.items()
-                ]
-            )
+            paths = await asyncio.gather(*[download_file(url, name, tmp) for name, url in remote_files.items()])
             ids = await asyncio.gather(*[upload_to_openai(p) for p in paths])
             remote_file_ids = dict(zip(remote_files.keys(), ids, strict=True))
 
     # Upload local files
     local_file_ids: dict[str, str] = {}
     if local_files:
-        ids = await asyncio.gather(
-            *[upload_to_openai(str(p)) for p in local_files.values()]
-        )
+        ids = await asyncio.gather(*[upload_to_openai(str(p)) for p in local_files.values()])
         local_file_ids = dict(zip(local_files.keys(), ids, strict=True))
 
     all_ids = {**remote_file_ids, **local_file_ids}
@@ -131,6 +125,7 @@ async def upload_from_urls(
 # ============================================================
 # OpenAI helpers
 # ============================================================
+
 
 def _get_openai_client() -> AsyncOpenAI:
     return AsyncOpenAI()
@@ -167,6 +162,7 @@ async def _wait_for_file_processed(file_id: str, timeout: int = 60) -> None:
 # ============================================================
 # Download helpers
 # ============================================================
+
 
 def get_extension_from_name(name: str) -> str | None:
     ext = os.path.splitext(name)[1]
@@ -214,6 +210,7 @@ async def download_file(url: str, name: str, save_dir: str) -> str:
 # ============================================================
 # Path / allowlist helpers
 # ============================================================
+
 
 def _normalize_allowed_dirs(
     allowed_local_dirs: Sequence[str | Path] | None,

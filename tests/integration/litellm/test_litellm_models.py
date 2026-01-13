@@ -12,7 +12,7 @@ from agents import ModelSettings
 from agents.extensions.models.litellm_model import LitellmModel
 
 from agency_swarm import Agency, Agent
-from agency_swarm.tools.send_message import SendMessageHandoff
+from agency_swarm.tools.send_message import Handoff
 
 
 @pytest.fixture
@@ -28,7 +28,7 @@ def coordinator_agent():
         ),
         model_settings=ModelSettings(temperature=0.0),
         model=LitellmModel(model="openai/gpt-5.2", api_key=os.getenv("OPENAI_API_KEY")),
-        send_message_tool_class=SendMessageHandoff,
+        send_message_tool_class=Handoff,
     )
 
 
