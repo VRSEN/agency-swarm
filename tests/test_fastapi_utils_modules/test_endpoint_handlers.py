@@ -45,7 +45,7 @@ async def test_agui_file_urls_error_emits_lifecycle_events(tmp_path):
         RunStartedEvent(type=EventType.RUN_STARTED, thread_id="thread-1", run_id="run-1"),
         RunErrorEvent(
             type=EventType.RUN_ERROR,
-            message="Error downloading file from provided urls: Local file access is disabled for this server."
+            message="Error downloading file from provided urls: Local file access is disabled for this server.",
         ),
         RunFinishedEvent(type=EventType.RUN_FINISHED, thread_id="thread-1", run_id="run-1"),
     ]
@@ -53,4 +53,3 @@ async def test_agui_file_urls_error_emits_lifecycle_events(tmp_path):
 
     assert chunks == expected_chunks
     assert response.media_type == encoder.get_content_type()
-
