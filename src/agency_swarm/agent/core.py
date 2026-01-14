@@ -25,7 +25,7 @@ from agency_swarm.agent import (
     parse_schemas,
     separate_kwargs,
     setup_file_manager,
-    validate_hosted_tools,
+    validate_tools,
     wrap_input_guardrails,
 )
 from agency_swarm.agent.agent_flow import AgentFlow
@@ -170,8 +170,8 @@ class Agent(BaseAgent[MasterContext]):
 
         if "tools" in kwargs:
             tools_list = kwargs["tools"]
-            # Validate that hosted tools are properly initialized
-            validate_hosted_tools(tools_list)
+            # Validate that tools are properly initialized and supported
+            validate_tools(tools_list)
 
         # Remove description from base_agent_params if it was added for Swarm Agent
         base_agent_params.pop("description", None)
