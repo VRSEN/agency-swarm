@@ -30,4 +30,9 @@ if __name__ == "__main__":
     if not os.getenv("APP_TOKEN") or os.getenv("APP_TOKEN") == "":
         os.environ["APP_TOKEN"] = "test_token_123"
         print("APP_TOKEN not set, using default token: test_token_123")
-    run_mcp(tools=[GetSecretWordTool, list_directory], transport="sse")
+    run_mcp(
+        tools=[GetSecretWordTool, list_directory],
+        transport="sse",
+        # FastMCP defaults this to 0, which reliably produces a scary shutdown error log.
+        uvicorn_config={"timeout_graceful_shutdown": 1},
+    )

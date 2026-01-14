@@ -238,6 +238,25 @@ def test_mcp_stdio_with_auth_warning(caplog):
         del os.environ["TEST_STDIO_TOKEN"]
 
 
+def test_run_mcp_passes_uvicorn_config_to_fastmcp_run():
+    """Test run_mcp forwards uvicorn_config for HTTP/SSE transports."""
+
+    from agency_swarm import run_mcp
+
+    with patch("agency_swarm.integrations.mcp_server.FastMCP.run") as run_mock:
+        run_mcp(
+            tools=[sample_tool],
+            app_token_env="",  # no auth middleware
+            transport="sse",
+            uvicorn_config={"timeout_graceful_shutdown": 1},
+        )
+
+    run_mock.assert_called_once()
+    _, kwargs = run_mock.call_args
+    assert kwargs["transport"] == "sse"
+    assert kwargs["uvicorn_config"] == {"timeout_graceful_shutdown": 1}
+
+
 def test_mcp_unsupported_tool_type():
     """Test unsupported tool type error."""
 

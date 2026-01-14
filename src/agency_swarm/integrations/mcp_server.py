@@ -48,6 +48,7 @@ def run_mcp(
     server_name: str = "mcp-tools-server",
     return_app: bool = False,
     transport: Transport = "streamable-http",
+    uvicorn_config: dict[str, Any] | None = None,
 ):
     """
     Launch a FastMCP server exposing BaseTool and FunctionTool instances.
@@ -59,6 +60,7 @@ def run_mcp(
         server_name: Name identifier for the MCP server
         return_app: If True, returns the FastMCP instance instead of running it.
         transport: Mcp transport protocol to use.
+        uvicorn_config: Optional Uvicorn config overrides (HTTP/SSE transports only).
     Returns:
         FastMCP instance if return_app=True, otherwise None
     """
@@ -180,4 +182,4 @@ def run_mcp(
     if transport == "stdio":
         mcp.run(transport=transport)
     else:
-        mcp.run(transport=transport, host=host, port=port)
+        mcp.run(transport=transport, host=host, port=port, uvicorn_config=uvicorn_config)
