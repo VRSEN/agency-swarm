@@ -5,7 +5,7 @@ from typing import get_args, get_origin
 import pytest
 from agents import ComputerTool, FunctionTool, Tool
 
-from agency_swarm.agent.tools import validate_hosted_tools
+from agency_swarm.agent.tools import validate_hosted_tools, validate_tools
 from agency_swarm.tools import BaseTool
 
 
@@ -31,19 +31,19 @@ def test_validate_hosted_tools_rejects_uninitialized_hosted_tool_classes(tool_ty
         validate_hosted_tools([tool_type])
 
 
-def test_validate_hosted_tools_rejects_uninitialized_function_tool_class() -> None:
+def test_validate_tools_rejects_uninitialized_function_tool_class() -> None:
     """Uninitialized FunctionTool classes should raise TypeError."""
     with pytest.raises(TypeError):
-        validate_hosted_tools([FunctionTool])
+        validate_tools([FunctionTool])
 
 
-def test_validate_hosted_tools_rejects_invalid_tool_object() -> None:
+def test_validate_tools_rejects_invalid_tool_object() -> None:
     """Invalid tool entries should raise TypeError."""
     with pytest.raises(TypeError):
-        validate_hosted_tools([object()])
+        validate_tools([object()])
 
 
-def test_validate_hosted_tools_rejects_basetool_instance() -> None:
+def test_validate_tools_rejects_basetool_instance() -> None:
     """BaseTool instances should raise TypeError."""
 
     class SampleTool(BaseTool):
@@ -51,7 +51,17 @@ def test_validate_hosted_tools_rejects_basetool_instance() -> None:
             return "ok"
 
     with pytest.raises(TypeError):
-        validate_hosted_tools([SampleTool()])
+        validate_tools([SampleTool()])
+
+
+def test_validate_tools_accepts_basetool_class() -> None:
+    """BaseTool classes are valid Agent tool inputs and should be accepted."""
+
+    class SampleTool(BaseTool):
+        def run(self) -> str:
+            return "ok"
+
+    validate_tools([SampleTool])
 
 
 def test_validate_hosted_tools_accepts_initialized_computer_tool() -> None:

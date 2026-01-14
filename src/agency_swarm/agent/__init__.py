@@ -14,7 +14,7 @@ from .initialization import (
     wrap_input_guardrails,
 )
 from .subagents import register_subagent
-from .tools import add_tool, load_tools_from_folder, parse_schemas, validate_hosted_tools
+from .tools import add_tool, load_tools_from_folder, parse_schemas, validate_hosted_tools, validate_tools
 
 __all__ = [
     # Tool functions
@@ -22,6 +22,7 @@ __all__ = [
     "load_tools_from_folder",
     "parse_schemas",
     "validate_hosted_tools",
+    "validate_tools",
     # Subagent functions
     "register_subagent",
     # Initialization functions

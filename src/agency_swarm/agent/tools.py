@@ -151,10 +151,13 @@ def parse_schemas(agent: "Agent") -> None:
 
 def validate_hosted_tools(tools: list) -> None:
     """
-    Validates that all hosted tools in the tools list are properly initialized instances.
+    Validates that hosted tools in the tools list are properly initialized instances.
 
     Hosted tools are OpenAI's built-in tools like FileSearchTool, WebSearchTool, etc.
     These must be instantiated before being passed to the agent.
+
+    This function is intentionally *hosted-tools-only*. It does not validate non-hosted
+    tool entries; use validate_tools() for full validation of an Agent's `tools` list.
 
     Args:
         tools: List of tools to validate
@@ -162,13 +165,12 @@ def validate_hosted_tools(tools: list) -> None:
     Raises:
         TypeError: If any hosted tool class is passed uninitialized
     """
-
     tool_types = _runtime_tool_types()
     # Get all hosted tool types from the Tool union (excluding FunctionTool)
     hosted_tool_types = tuple(t for t in tool_types if t != FunctionTool)
 
     for tool in tools:
-        # Check if the tool is a class (uninitialized) rather than an instance
+        # Check if the tool is a class (uninitialized) rather than an instance.
         tool_class = tool if inspect.isclass(tool) else get_origin(tool)
         if tool_class in hosted_tool_types:
             tool_name = tool_class.__name__ if inspect.isclass(tool_class) else str(tool)
@@ -176,17 +178,43 @@ def validate_hosted_tools(tools: list) -> None:
                 f"Tool '{tool_name}' is a hosted tool class. Create an instance first, like {tool_name}(...),"
                 " then pass that to the agent."
             )
+
+
+def validate_tools(tools: list) -> None:
+    """
+    Validates the `tools` list passed to an Agent.
+
+    Responsibilities:
+    - Reject uninitialized hosted tool classes (delegates to validate_hosted_tools()).
+    - Reject FunctionTool classes (must be instances, created via @function_tool/ToolFactory).
+    - Reject BaseTool *instances* (must be passed as classes and adapted by initialization.py).
+    - Reject any non-Tool entries early with a clear error.
+    """
+    validate_hosted_tools(tools)
+
+    tool_types = _runtime_tool_types()
+
+    for tool in tools:
+        # BaseTool classes are valid inputs for Agent(tools=[...]); they are adapted
+        # to FunctionTool instances by initialization.handle_deprecated_parameters().
+        if inspect.isclass(tool) and issubclass(tool, BaseTool):
+            continue
+
         if inspect.isclass(tool) and issubclass(tool, FunctionTool):
             tool_name = tool.__name__
             raise TypeError(
                 f"Tool '{tool_name}' is a FunctionTool class. Use @function_tool or ToolFactory to create a tool."
             )
+
         if isinstance(tool, BaseTool):
             tool_name = type(tool).__name__
             raise TypeError(
                 f"Tool '{tool_name}' is a BaseTool instance. Pass the BaseTool class (like {tool_name}),"
                 f" not {tool_name}()."
             )
+
+        # At this point, BaseTool classes should already have been adapted upstream
+        # (see agency_swarm.agent.initialization.handle_deprecated_parameters()).
         if not isinstance(tool, tool_types):
             tool_name = tool.__name__ if inspect.isclass(tool) else type(tool).__name__
             raise TypeError(
