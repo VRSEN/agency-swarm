@@ -21,10 +21,13 @@ from agents import (
     handoff,
     strict_schema,
 )
+from agents.extensions.models.litellm_model import LitellmModel
+from agents.models.openai_responses import OpenAIResponsesModel
 from pydantic import BaseModel, ValidationError
 
 from ..context import MasterContext
 from ..messages import MessageFormatter
+from ..streaming.id_normalizer import StreamIdNormalizer
 from ..streaming.utils import add_agent_name_to_event
 from ..utils.model_utils import get_model_name
 
@@ -33,6 +36,136 @@ if TYPE_CHECKING:
     from ..agent.core import AgencyContext, Agent
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_handoff_ids(input_data: HandoffInputData, *, recipient_agent: "Agent | None" = None) -> HandoffInputData:
+    """Normalize placeholder IDs in handoff data for cross-provider compatibility.
+
+    Handles __fake_id__ from LiteLLM/Chat Completions and toolu_... from Anthropic.
+    """
+    from agents.items import RunItem
+    from agents.models.fake_id import FAKE_RESPONSES_ID
+
+    normalizer = StreamIdNormalizer()
+    result = input_data
+    drop_reasoning = False
+    strip_hosted_for_litellm = False
+    stripped_hosted_tool_types: set[str] = set()
+    if recipient_agent is not None and isinstance(getattr(recipient_agent, "model", None), OpenAIResponsesModel):
+        drop_reasoning = True
+    if recipient_agent is not None and isinstance(getattr(recipient_agent, "model", None), LitellmModel):
+        strip_hosted_for_litellm = True
+
+    # Normalize input_history (tuple/list of dicts)
+    history = input_data.input_history
+    if history and isinstance(history, tuple | list):
+        history_list: list[dict[str, Any]] = list(history)
+        if drop_reasoning:
+            history_list = [
+                msg
+                for msg in history_list
+                if not (isinstance(msg.get("type"), str) and "reasoning" in msg.get("type"))
+            ]
+        if strip_hosted_for_litellm:
+            kept: list[dict[str, Any]] = []
+            for msg in history_list:
+                msg_type = msg.get("type")
+                if msg_type in MessageFormatter._HOSTED_TOOL_ITEM_TYPES:
+                    if isinstance(msg_type, str):
+                        stripped_hosted_tool_types.add(msg_type)
+                    continue
+                kept.append(msg)
+            history_list = kept
+        normalized = normalizer.normalize_message_dicts(history_list)
+        result = result.clone(input_history=tuple(normalized))
+
+    if strip_hosted_for_litellm and stripped_hosted_tool_types:
+        removed = ", ".join(sorted(stripped_hosted_tool_types))
+        note = {
+            "role": "system",
+            "content": (
+                "NOTE: OpenAI hosted-tool call items were removed from the conversation history "
+                f"because the current model does not support hosted tools. Removed types: {removed}."
+            ),
+        }
+        if isinstance(result.input_history, tuple):
+            result = result.clone(input_history=(note, *result.input_history))
+
+    # Normalize IDs and fix schema incompatibilities in RunItem objects
+    def _normalize_run_item(item: RunItem, index: int) -> None:
+        """Mutate the raw_item to fix IDs and schema issues."""
+        raw = getattr(item, "raw_item", None)
+        if raw is None:
+            return
+
+        if isinstance(raw, dict):
+            item_type = str(raw.get("type", ""))
+            item_id = raw.get("id")
+        else:
+            item_type = getattr(raw, "type", "")
+            item_id = getattr(raw, "id", None)
+
+        # Normalize placeholder IDs
+        if isinstance(item_id, str) and (item_id == FAKE_RESPONSES_ID or item_id.startswith("toolu_")):
+            if "function_call" in item_type or "tool_call" in item_type:
+                prefix = "fc"
+            elif "reasoning" in item_type:
+                prefix = "rs"
+            else:
+                prefix = "msg"
+            new_id = f"{prefix}_handoff_{index:04d}"
+            if isinstance(raw, dict):
+                raw["id"] = new_id
+            else:
+                try:
+                    raw.id = new_id
+                except AttributeError:
+                    # Some SDK models can be immutable; replace raw_item with a copied model.
+                    try:
+                        item.raw_item = raw.model_copy(update={"id": new_id})  # type: ignore[attr-defined]
+                    except Exception:
+                        pass  # If we can't mutate or copy, skip.
+
+    pre_items = result.pre_handoff_items
+    new_items = result.new_items
+    if drop_reasoning:
+        pre_items = tuple(
+            item
+            for item in pre_items
+            if "reasoning" not in str(getattr(getattr(item, "raw_item", None), "type", ""))
+        )
+        new_items = tuple(
+            item
+            for item in new_items
+            if "reasoning" not in str(getattr(getattr(item, "raw_item", None), "type", ""))
+        )
+        result = result.clone(pre_handoff_items=pre_items, new_items=new_items)
+    if strip_hosted_for_litellm:
+        def _strip_run_items(items: tuple[RunItem, ...]) -> tuple[RunItem, ...]:
+            kept: list[RunItem] = []
+            for it in items:
+                raw = getattr(it, "raw_item", None)
+                if isinstance(raw, dict):
+                    rtype = raw.get("type")
+                else:
+                    rtype = getattr(raw, "type", None)
+                if rtype in MessageFormatter._HOSTED_TOOL_ITEM_TYPES:
+                    continue
+                kept.append(it)
+            return tuple(kept)
+
+        result = result.clone(
+            pre_handoff_items=_strip_run_items(result.pre_handoff_items),
+            new_items=_strip_run_items(result.new_items),
+        )
+
+    for i, item in enumerate(result.pre_handoff_items):
+        _normalize_run_item(item, i)
+    offset = len(result.pre_handoff_items)
+    for i, item in enumerate(result.new_items):
+        _normalize_run_item(item, offset + i)
+
+    return result
 
 
 class SendMessage(FunctionTool):
@@ -545,8 +678,9 @@ class Handoff:
                 ctx = input_data.run_context
                 new_handoff_input_data = input_data.clone()
 
-                if ctx and hasattr(ctx.context, "thread_manager"):
-                    all_messages = ctx.context.thread_manager.get_all_messages()
+                thread_manager = getattr(getattr(ctx, "context", None), "thread_manager", None)
+                if ctx and thread_manager is not None:
+                    all_messages = thread_manager.get_all_messages()
                     if all_messages:
                         last_message = all_messages[-1]
 
@@ -565,12 +699,13 @@ class Handoff:
                             "role": "system",
                             "content": reminder_content,
                         }
-                        if isinstance(input_data.input_history, tuple):
-                            new_input_history = input_data.input_history + (reminder_msg.copy(),)
+                        history = input_data.input_history
+                        if isinstance(history, tuple | list):
+                            # Preserve structured histories as a flat tuple of input items.
+                            new_input_history = tuple(history) + (reminder_msg.copy(),)
                         else:
-                            new_input_history = ({"role": "user", "content": input_data.input_history},) + (
-                                reminder_msg.copy(),
-                            )
+                            # Fallback: if caller supplies a string history, wrap it as a user message.
+                            new_input_history = ({"role": "user", "content": history},) + (reminder_msg.copy(),)
 
                         reminder_msg["message_origin"] = "handoff_reminder"
 
@@ -583,13 +718,23 @@ class Handoff:
                         if "timestamp" in reminder_msg and isinstance(reminder_msg["timestamp"], int | float):
                             reminder_msg["timestamp"] = reminder_msg["timestamp"] + 1
 
-                        ctx.context.thread_manager.add_message(reminder_msg)  # type: ignore[arg-type]
+                        thread_manager.add_message(reminder_msg)  # type: ignore[arg-type]
 
                         new_handoff_input_data = input_data.clone(input_history=new_input_history)
+
+                # Normalize placeholder IDs (e.g., __fake_id__, toolu_...) before passing to target agent
+                new_handoff_input_data = _normalize_handoff_ids(new_handoff_input_data, recipient_agent=recipient_agent)
 
                 return new_handoff_input_data
 
             handoff_object.input_filter = message_filter
+        else:
+            # Even without reminder, normalize IDs for cross-provider compatibility
+
+            async def normalize_only_filter(input_data: HandoffInputData) -> HandoffInputData:
+                return _normalize_handoff_ids(input_data, recipient_agent=recipient_agent)
+
+            handoff_object.input_filter = normalize_only_filter
         return handoff_object
 
 

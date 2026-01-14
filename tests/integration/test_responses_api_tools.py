@@ -12,7 +12,7 @@ from agents import (
     function_tool,
 )
 from agents.models.openai_responses import OpenAIResponsesModel
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, BadRequestError, NotFoundError
 from pydantic import BaseModel
 
 from agency_swarm import Agency, Agent as AgencySwarmAgent
@@ -406,3 +406,43 @@ Product Sales:
         )
 
         logger.info("✅ Hosted tool output preservation test completed successfully")
+
+
+@pytest.mark.asyncio
+async def test_openai_rejects_orphan_function_call_in_input_history():
+    """OpenAI Responses requires every function_call to have a matching function_call_output by call_id."""
+    client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+    with pytest.raises(BadRequestError) as excinfo:
+        await client.responses.create(
+            model="gpt-5.2",
+            input=[
+                {
+                    "type": "function_call",
+                    "id": "fc_test_orphan_1",
+                    "call_id": "call_orphan_1",
+                    "name": "noop",
+                    "arguments": "{}",
+                },
+                {"type": "message", "role": "user", "content": "Say OK."},
+            ],
+        )
+    assert "No tool output found for function call" in str(excinfo.value)
+
+
+@pytest.mark.asyncio
+async def test_openai_rejects_synthetic_reasoning_item_by_id():
+    """OpenAI Responses does not allow injecting arbitrary reasoning items by id into a conversation."""
+    client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+    with pytest.raises(NotFoundError) as excinfo:
+        await client.responses.create(
+            model="gpt-5.2",
+            input=[
+                {
+                    "type": "reasoning",
+                    "id": "rs_abc",
+                    "summary": [{"type": "summary_text", "text": "hello"}],
+                },
+                {"type": "message", "role": "user", "content": "Say OK."},
+            ],
+        )
+    assert "Item with id 'rs_abc' not found" in str(excinfo.value)

@@ -11,6 +11,8 @@ from agents import (
     ToolCallItem,
     TResponseInputItem,
 )
+from agents.extensions.models.litellm_model import LitellmModel
+from agents.models.openai_responses import OpenAIResponsesModel
 from openai.types.responses import (
     ResponseFileSearchToolCall,
     ResponseFunctionWebSearch,
@@ -18,6 +20,9 @@ from openai.types.responses import (
     ResponseOutputText,
 )
 from openai.types.responses.response_file_search_tool_call import Result as ResponseFileSearchResult
+
+from agency_swarm.messages.message_filter import MessageFilter
+from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
 
 if TYPE_CHECKING:
     from agency_swarm.agent.core import AgencyContext, Agent
@@ -27,6 +32,31 @@ logger = logging.getLogger(__name__)
 
 class MessageFormatter:
     """Handles message formatting and structure preparation."""
+
+    _HOSTED_TOOL_ITEM_TYPES = {
+        "web_search_call",
+        "file_search_call",
+        "computer_call",
+        "computer_call_output",
+        "code_interpreter_call",
+        "image_generation_call",
+        "shell_call",
+        "shell_call_output",
+        "local_shell_call",
+        "local_shell_call_output",
+        "custom_tool_call",
+        "custom_tool_call_output",
+        "apply_patch_call",
+        "apply_patch_call_output",
+        "mcp_list_tools",
+        "mcp_list_tools_item",
+        "mcp_approval_request",
+        "mcp_approval_request_item",
+        "mcp_approval_response",
+        "mcp_approval_response_item",
+        "mcp_call",
+        "mcp_call_item",
+    }
 
     metadata_fields: list[str] = [
         "agent",
@@ -129,9 +159,62 @@ class MessageFormatter:
         # Prepare history for runner (sanitize and ensure content safety)
         history_for_runner = MessageFormatter.sanitize_tool_calls_in_history(full_history)  # type: ignore[arg-type]
         history_for_runner = MessageFormatter.ensure_tool_calls_content_safety(history_for_runner)
+
+        # Drop reasoning items only when routing into OpenAI Responses.
+        #
+        # OpenAI can reject replayed / synthetic reasoning items (IDs and item linkage), while
+        # non-OpenAI models may still want the data retained for audit/debugging.
+        model_obj = getattr(agent, "model", None)
+        if isinstance(model_obj, OpenAIResponsesModel):
+            history_for_runner = [
+                msg
+                for msg in history_for_runner
+                if not (isinstance(msg.get("type"), str) and "reasoning" in msg.get("type"))
+            ]
+
+        stripped_hosted_tool_types: set[str] = set()
+        if isinstance(model_obj, LitellmModel):
+            history_for_runner, stripped_hosted_tool_types = MessageFormatter._strip_hosted_tool_items_for_litellm(
+                history_for_runner
+            )
+            if stripped_hosted_tool_types:
+                # Ensure the resulting history remains structurally valid after removal
+                history_for_runner = MessageFilter.remove_orphaned_messages(history_for_runner)  # type: ignore[arg-type]
+        # Normalize placeholder IDs BEFORE stripping metadata (needs agent_run_id for ID generation)
+        normalizer = StreamIdNormalizer()
+        history_for_runner = normalizer.normalize_message_dicts(history_for_runner)  # type: ignore[arg-type]
         # Strip agency metadata before sending to OpenAI
         history_for_runner = MessageFormatter.strip_agency_metadata(history_for_runner)
+
+        # Add an ephemeral system note so the model understands missing context.
+        # This message is not persisted (it is injected after history is loaded).
+        if stripped_hosted_tool_types:
+            removed = ", ".join(sorted(stripped_hosted_tool_types))
+            history_for_runner = [
+                {
+                    "role": "system",
+                    "content": (
+                        "NOTE: OpenAI hosted-tool call items were removed from the conversation history "
+                        f"because the current model does not support hosted tools. Removed types: {removed}."
+                    ),
+                },
+                *history_for_runner,
+            ]
         return history_for_runner  # type: ignore[return-value]
+
+    @staticmethod
+    def _strip_hosted_tool_items_for_litellm(
+        history: list[dict[str, Any]],
+    ) -> tuple[list[dict[str, Any]], set[str]]:
+        stripped: set[str] = set()
+        kept: list[dict[str, Any]] = []
+        for msg in history:
+            msg_type = msg.get("type")
+            if msg_type in MessageFormatter._HOSTED_TOOL_ITEM_TYPES:
+                stripped.add(msg_type)
+                continue
+            kept.append(msg)
+        return kept, stripped
 
     @staticmethod
     def strip_agency_metadata(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
