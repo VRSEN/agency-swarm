@@ -5,8 +5,6 @@ Tests the core BaseTool class including schema generation, context management,
 and configuration handling.
 """
 
-import warnings
-
 import pytest
 from agents import RunContextWrapper
 from pydantic import BaseModel
@@ -279,7 +277,7 @@ class TestBaseTool:
         assert tool.context is None
 
     def test_shared_state_property_deprecation_warning(self):
-        """Test that _shared_state property raises deprecation warning."""
+        """_shared_state was removed; tools should use .context instead."""
 
         class TestTool(BaseTool):
             def run(self):
@@ -287,18 +285,8 @@ class TestBaseTool:
 
         tool = TestTool()
 
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-
-            context = tool._shared_state
-
-            assert len(w) == 1
-            assert issubclass(w[0].category, DeprecationWarning)
-            assert "_shared_state is deprecated" in str(w[0].message)
-            assert "Use 'self.context' instead" in str(w[0].message)
-
-            # Should return same as context property
-            assert context is tool.context
+        with pytest.raises(AttributeError, match=r"_shared_state"):
+            _ = tool._shared_state
 
     def test_model_config_ignores_classproperty(self):
         """Test that model_config properly ignores classproperty types."""

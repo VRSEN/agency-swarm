@@ -22,12 +22,11 @@ def _resolve_send_message_class(agent: "Agent", requested_class: type["SendMessa
     """Determine the effective SendMessage tool class to instantiate."""
     from agency_swarm.tools.send_message import SendMessage
 
-    candidate = requested_class or getattr(agent, "send_message_tool_class", None)
-    if isinstance(candidate, type) and issubclass(candidate, SendMessage):
-        return candidate
+    if isinstance(requested_class, type) and issubclass(requested_class, SendMessage):
+        return requested_class
 
-    if isinstance(candidate, SendMessage):
-        return candidate.__class__
+    if isinstance(requested_class, SendMessage):
+        return requested_class.__class__
 
     return SendMessage
 
@@ -50,7 +49,7 @@ def register_subagent(
         agent: The agent that will be able to send messages
         recipient_agent: The agent instance to register as a recipient
         send_message_tool_class: Optional custom send message tool class to use for this specific
-                               agent-to-agent communication. If None, uses agent's default or SendMessage.
+                               agent-to-agent communication. If None, uses SendMessage.
 
     Raises:
         TypeError: If `recipient_agent` is not a valid `Agent` instance or lacks a name

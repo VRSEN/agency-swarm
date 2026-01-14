@@ -7,7 +7,6 @@ are fully supported approaches for tool creation.
 """
 
 import copy
-import warnings
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -157,22 +156,6 @@ class BaseTool(BaseModel, ABC, metaclass=BaseToolMeta):
         if self._context is not None:
             return self._context.context
         return None
-
-    @property
-    def _shared_state(self) -> MasterContext | None:
-        """
-        Backwards compatibility property that provides direct access to the context.
-
-        Usage:
-        - self._shared_state.set("key", "value")  # Set a value
-        - value = self._shared_state.get("key", "default")  # Get a value
-        """
-        warnings.warn(
-            "_shared_state is deprecated and will be removed in future versions. Use 'self.context' instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return self.context
 
     @abstractmethod
     def run(self):

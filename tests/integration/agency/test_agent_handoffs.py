@@ -10,7 +10,7 @@ Key Implementation Findings:
    - Control returns to the calling agent after receiving a response (orchestrator pattern)
 
 2. **Handoffs (via Handoff tool class)**:
-   - Handoffs are configured by setting `send_message_tool_class=Handoff` on Agent instances
+   - Handoffs are configured by setting `Handoff` as the flow tool class in `communication_flows`
    - Communication flows determine handoff targets (sender with Handoff can hand off to recipient)
    - Handoffs represent unidirectional transfer of control (agent B takes over from agent A)
 
@@ -56,7 +56,6 @@ def intermediate_agent():
             "immediately, without any questions."
         ),
         model_settings=ModelSettings(temperature=0.0),
-        send_message_tool_class=Handoff,
     )
 
 
@@ -80,7 +79,7 @@ def mixed_communication_agency(orchestrator_agent, intermediate_agent, specialis
         communication_flows=[
             orchestrator_agent > intermediate_agent,  # AgentA -> AgentB (regular SendMessage)
             orchestrator_agent > specialist_agent,  # AgentA -> AgentC (regular SendMessage)
-            intermediate_agent > specialist_agent,  # AgentB -> AgentC (Handoff - enables handoffs)
+            (intermediate_agent > specialist_agent, Handoff),  # AgentB -> AgentC (handoff)
         ],
         shared_instructions="Test agency for mixed communication patterns.",
     )
@@ -121,17 +120,8 @@ class TestHandoffsWithCommunicationFlows:
         assert len(recipient_names) == 2, f"Should have exactly 2 recipients, got: {recipient_names}"
 
     def test_handoff_configuration_via_sendmessage_tool_class(self, mixed_communication_agency):
-        """Test that handoffs are properly configured via Handoff tool class on AgentB."""
-        agent_b = mixed_communication_agency.agents["AgentB"]
+        """Test that handoffs are properly configured via flow tool class."""
         runtime_state_b = mixed_communication_agency.get_agent_runtime_state("AgentB")
-
-        # Handoffs in Agency Swarm are configured via Handoff tool class
-        # We verify that AgentB has the correct send_message_tool_class
-        assert hasattr(agent_b, "send_message_tool_class"), "AgentB should have send_message_tool_class attribute"
-        assert agent_b.send_message_tool_class == Handoff, (
-            f"AgentB should have Handoff as tool class, got: {agent_b.send_message_tool_class}"
-        )
-
         # Verify AgentB has handoff to AgentC in .handoffs attribute (not in .tools list)
         assert runtime_state_b.handoffs, "AgentB runtime state should contain handoffs"
         assert len(runtime_state_b.handoffs) == 1, f"AgentB should have 1 handoff, got: {len(runtime_state_b.handoffs)}"
@@ -143,16 +133,14 @@ class TestHandoffsWithCommunicationFlows:
     def test_agency_configuration_maintains_both_patterns(self, mixed_communication_agency):
         """Test that Agency maintains both communication flows and handoffs."""
         _ = mixed_communication_agency.agents["AgentA"]
-        agent_b = mixed_communication_agency.agents["AgentB"]
         _ = mixed_communication_agency.agents["AgentC"]
 
         # Verify agents are properly registered
         assert len(mixed_communication_agency.agents) == 3
         assert all(agent_name in mixed_communication_agency.agents for agent_name in ["AgentA", "AgentB", "AgentC"])
 
-        # Verify that handoff configuration is preserved via Handoff tool class
-        assert hasattr(agent_b, "send_message_tool_class"), "AgentB should have send_message_tool_class attribute"
-        assert agent_b.send_message_tool_class == Handoff, "AgentB should have Handoff as send_message_tool_class"
+        runtime_state_b = mixed_communication_agency.get_agent_runtime_state("AgentB")
+        assert runtime_state_b.handoffs, "AgentB should register handoffs at runtime"
 
     def test_tool_count_expectations(self, mixed_communication_agency):
         """Test that each agent has the expected number and type of tools."""
@@ -239,7 +227,7 @@ class TestComplexHandoffScenarios:
     def test_multiple_handoff_targets(self):
         """Test agent with multiple handoff targets via Handoff tool class."""
         agent_a = Agent(name="AgentA", instructions="Orchestrator")
-        agent_b = Agent(name="AgentB", instructions="Multi-handoff agent", send_message_tool_class=Handoff)
+        agent_b = Agent(name="AgentB", instructions="Multi-handoff agent")
         agent_c = Agent(name="AgentC", instructions="Specialist 1")
         agent_d = Agent(name="AgentD", instructions="Specialist 2")
 
@@ -247,16 +235,9 @@ class TestComplexHandoffScenarios:
             agent_a,
             communication_flows=[
                 agent_a > agent_b,
-                agent_b > agent_c,  # AgentB can hand off to AgentC
-                agent_b > agent_d,  # AgentB can hand off to AgentD
+                (agent_b > agent_c, Handoff),  # AgentB can hand off to AgentC
+                (agent_b > agent_d, Handoff),  # AgentB can hand off to AgentD
             ],
-        )
-
-        # Verify AgentB has Handoff tool class configured
-        agent_b_final = agency.agents["AgentB"]
-        assert hasattr(agent_b_final, "send_message_tool_class"), "AgentB should have send_message_tool_class attribute"
-        assert agent_b_final.send_message_tool_class == Handoff, (
-            f"AgentB should have Handoff as tool class, got: {agent_b_final.send_message_tool_class}"
         )
 
         runtime_state_b = agency.get_agent_runtime_state("AgentB")
@@ -272,11 +253,7 @@ class TestComplexHandoffScenarios:
     def test_bidirectional_communication_with_handoffs(self):
         """Test bidirectional communication flows combined with Handoff tool class."""
         agent_a = Agent(name="AgentA", instructions="Primary orchestrator")
-        agent_b = Agent(
-            name="AgentB",
-            instructions="Secondary orchestrator with handoffs",
-            send_message_tool_class=Handoff,
-        )
+        agent_b = Agent(name="AgentB", instructions="Secondary orchestrator with handoffs")
         agent_c = Agent(name="AgentC", instructions="Specialist")
 
         # Configure bidirectional communication between A and B, plus handoff capability from B to C
@@ -284,9 +261,9 @@ class TestComplexHandoffScenarios:
             agent_a,
             communication_flows=[
                 agent_a > agent_b,  # A can send to B
-                agent_b > agent_a,  # B can send to A (using Handoff tool class)
+                (agent_b > agent_a, Handoff),  # B can hand off to A
                 agent_a > agent_c,  # A can send to C
-                agent_b > agent_c,  # B can hand off to C (using Handoff tool class)
+                (agent_b > agent_c, Handoff),  # B can hand off to C
             ],
         )
 
@@ -307,13 +284,7 @@ class TestComplexHandoffScenarios:
         assert "AgentA" in handoff_targets, f"AgentB should have handoff to AgentA, got: {handoff_targets}"
         assert "AgentC" in handoff_targets, f"AgentB should have handoff to AgentC, got: {handoff_targets}"
 
-        # Verify AgentB has Handoff tool class configured
-        assert hasattr(agency.agents["AgentB"], "send_message_tool_class"), (
-            "AgentB should have send_message_tool_class attribute"
-        )
-        assert agency.agents["AgentB"].send_message_tool_class == Handoff, (
-            "AgentB should have Handoff as send_message_tool_class"
-        )
+        assert runtime_state_b.handoffs, "AgentB should register handoffs at runtime"
 
     def test_agency_flow_handoffs(self):
         """Test bidirectional communication flows combined with Handoff tool class."""
