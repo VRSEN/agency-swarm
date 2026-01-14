@@ -22,6 +22,7 @@ This directory contains runnable examples demonstrating key features of Agency S
 - **`agency_visualization.py`** – Interactive HTML visualization
 - **`interactive/terminal_demo.py`** – Terminal UI chat interface
 - **`interactive/copilot_demo.py`** – Copilot UI chat interface
+- **`map_coordinates_demo/index_with_widget.html`** – Agencii widget + map (coordinates passed via `additionalInstructions`)
 
 ## Integration & External Services
 - **`fastapi_integration/`** – FastAPI server and client examples
@@ -37,3 +38,16 @@ This directory contains runnable examples demonstrating key features of Agency S
 - **`observability.py`** – OpenAI, Langfuse and AgentOps tracing integration
 
 Run any file with `python examples/<name>.py` after setting your `OPENAI_API_KEY`.
+
+### Static HTML examples
+
+Some examples are static HTML and must be served over HTTP (not opened via `file://`).
+
+**Agencii widget + map:**
+
+```bash
+python -m http.server 8099 --directory examples/map_coordinates_demo
+# then open http://localhost:8099/index_with_widget.html
+```
+
+Before running it, open `examples/map_coordinates_demo/index_with_widget.html` and replace `WIDGET_ID` with your widget id from the Agencii dashboard.

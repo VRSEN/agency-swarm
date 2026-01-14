@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Map + Agencii Widget Demo</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        #map {
+            height: 100vh;
+            width: 100%;
+        }
+
+        /* The widget owns its UI, but the mount node must not be pushed off-screen by the map. */
+        #chat-container {
+            position: fixed;
+            right: 16px;
+            bottom: 16px;
+            z-index: 2147483647;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div id="chat-container"></div>
+
+    <script>
+        // Store the latest selected map coordinates for the widget to use.
+        // The widget receives this via its `additionalInstructions` parameter (3rd arg to widget.init).
+        window.__agenciiMapCoordinates = null;
+
+        const map = L.map('map').setView([37.7749, -122.4194], 13);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        let marker = null;
+
+        function updateMapCoordinates(lat, lng, zoom) {
+            window.__agenciiMapCoordinates = { lat, lng, zoom };
+            // Refresh widget additionalInstructions (request parameter) when available.
+            if (typeof window.__agenciiInitWidget === "function") {
+                window.__agenciiInitWidget();
+            }
+        }
+
+        // Initialize coordinates from the current map view so the widget has a location immediately.
+        const initialCenter = map.getCenter();
+        updateMapCoordinates(initialCenter.lat, initialCenter.lng, map.getZoom());
+
+        map.on('click', function(e) {
+            const lat = e.latlng.lat;
+            const lng = e.latlng.lng;
+            const zoom = map.getZoom();
+
+            if (marker) {
+                map.removeLayer(marker);
+            }
+            marker = L.marker([lat, lng]).addTo(map);
+
+            updateMapCoordinates(lat, lng, zoom);
+        });
+    </script>
+
+    <script type="module">
+      // Replace this with your widget id from the Agencii dashboard.
+      const WIDGET_ID = "7EeJV40PTL6jBBid3AtA";
+      let lastAdditionalInstructions = null;
+
+      function buildAdditionalInstructions() {
+        const coords = window.__agenciiMapCoordinates;
+        if (!coords) return "";
+        return `Use these map coordinates as the user's current location: latitude=${coords.lat}, longitude=${coords.lng}, zoom=${coords.zoom}.`;
+      }
+
+      // Expose a single initializer so the map script can refresh `additionalInstructions`.
+      // This keeps the context in request parameters (widget.init 3rd argument), not as a chat message.
+      window.__agenciiInitWidget = async function () {
+        const ADDITIONAL_INSTRUCTIONS = buildAdditionalInstructions();
+        if (!ADDITIONAL_INSTRUCTIONS) return;
+        if (lastAdditionalInstructions === ADDITIONAL_INSTRUCTIONS) return;
+        lastAdditionalInstructions = ADDITIONAL_INSTRUCTIONS;
+
+        try {
+          await import("https://agencii-widget.web.app/widget.js");
+          if (window?.widget?.init) {
+            await window.widget.init(WIDGET_ID, "#chat-container", ADDITIONAL_INSTRUCTIONS);
+          } else {
+            console.error("widget.init is not available after module load.");
+          }
+        } catch (err) {
+          console.error("Failed to load widget:", err);
+        }
+      };
+
+      // Boot the widget immediately using the current map coordinates (map center by default).
+      await window.__agenciiInitWidget();
+    </script>
+</body>
+</html>

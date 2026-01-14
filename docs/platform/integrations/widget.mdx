@@ -56,6 +56,20 @@ You can embed several widgets on the same page by using the embedding script mul
 If you are prototyping locally, temporarily add `http://localhost:3000` (or your dev origin) to the widget's allowed domains list if you are using the Allowed Domains feature.
 </Tip>
 
+## Next.js + Map (recommended)
+
+If your app is Next.js, embed the widget on the **client side** (App Router: a `use client` component) and render your map as normal.
+
+The simplest pattern is:
+
+- Render your map UI (Leaflet, Mapbox, Google Maps, etc.)
+- Paste the widget embed script into the same page/component
+- Build `additionalInstructions` from the selected coordinates and pass it as the **third argument** to `widget.init(...)`
+
+<Note>
+Do not test this from `file://...`. Run your Next.js dev server so your page has a real origin (like `http://localhost:3000`), and allow that origin in the widget settings if you use Allowed Domains.
+</Note>
+
 ## Widget Controls
 
 You can control the widget from your site/app by dispatching a `CustomEvent` named **"widget-control"** on `window` with a `detail` payload. The widget listens for this event and performs the requested action.
