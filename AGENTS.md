@@ -71,7 +71,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 
 - Every line must earn its place: Avoid redundant, unnecessary, or "nice to have" content. Each line should serve a clear purpose; each change should reduce or at least not increase codebase entropy (fewer ad‑hoc paths, clearer contracts, more reuse).
 - Every change must have a clear reason; do not edit formatting or whitespace without justification.
-- Performance is a key constraint: favor the fastest viable design when performance is at risk, and measure or call out regressions with data when practical.
+- Performance is a key constraint: favor the fastest viable design when performance is at risk, measure (if applicable) and call out any regressions with confirmed before/after evidence.
 - Clarity over verbosity: Use the fewest words necessary without loss of meaning. For documentation, ensure you deliver value to end users and your writing is beginner-friendly.
 - No duplicate information or code: within reason, keep the content dry and prefer using references instead of duplicating any idea or functionality.
 - Prefer updating and improving existing code/docs/tests/examples over adding new; add new when needed.
@@ -87,6 +87,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 ## Self-Improvement (High Priority)
 - If you keep seeing the same mistake, update this file with a better rule and follow it.
 - If you mess up or get feedback, update this file before you keep going so it does not happen again.
+- For any updates you make on your own initiative, request approval from the user after making the changes.
 
 ### Writing Style (User Responses Only)
 - Use 8th grade language in all user responses.
@@ -111,7 +112,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 #### Step 1: Proactive Analysis
 - Search for similar patterns; identify required related changes globally.
 - Prefer consistent fixes over piecemeal edits unless scope or risk suggests otherwise.
-- Before changing runtime code, check whether upstream libraries (e.g. `openai`, `openai-agents`) already ship concrete models and lean on them; prefer typed attribute access over speculative dynamic checks.
+- Before changing runtime code, check whether upstream libraries (e.g., openai, openai-agents) already provide typed primitives (models, enums, errors, helpers, protocols) you can reuse; prefer typed attribute access over speculative runtime checks.
 - Be clear on what you will change, why it is needed, and what evidence supports it; if you cannot articulate this plan, escalate to the user with clear blocking questions before continuing.
 - Validate external assumptions (servers, ports, tokens) with real probes when possible before citing them as causes or blockers.
 - Share findings promptly when failures/root causes are found; avoid silent fixes.
@@ -142,7 +143,7 @@ After each meaningful tool call or code edit, validate the result in 1-2 lines a
 
 
 ### 🔴 PROHIBITED PRACTICES
-- Ending your work without minimal validation when it is practical (running relevant tests and examples selectively)
+- Ending your work without minimal validation when applicable (running relevant tests and examples selectively)
 - Misstating test outcomes
 - Skipping key workflow safety steps without a reason
 - Introducing functional changes during refactoring without explicit request
