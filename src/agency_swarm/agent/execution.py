@@ -58,7 +58,6 @@ class Execution:
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
         run_config_override: RunConfig | None = None,
-        message_files: list[str] | None = None,
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
         agency_context: "AgencyContext | None" = None,
@@ -75,7 +74,6 @@ class Execution:
             context_override: Optional context data to override default MasterContext values
             hooks_override: Optional hooks to override default agent hooks
             run_config_override: Optional run configuration settings
-            message_files: DEPRECATED: Use file_ids instead. File IDs to attach to the message
             file_ids: List of OpenAI file IDs to attach to the message
             additional_instructions: Additional instructions to be appended to
                 the agent's instructions for this run only
@@ -98,7 +96,7 @@ class Execution:
             if self.agent.attachment_manager is None:
                 raise RuntimeError(f"attachment_manager not initialized for agent {self.agent.name}")
             processed_current_message_items = await self.agent.attachment_manager.process_message_and_files(
-                message, file_ids, message_files, kwargs, "get_response"
+                message, file_ids, kwargs, "get_response"
             )
             # Generate a unique run id for this agent execution (non-streaming)
             current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
@@ -264,7 +262,6 @@ class Execution:
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
         run_config_override: RunConfig | None = None,
-        message_files: list[str] | None = None,  # Backward compatibility
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
         agency_context: "AgencyContext | None" = None,
@@ -283,7 +280,6 @@ class Execution:
             context_override: Optional context data to override default MasterContext values
             hooks_override: Optional hooks to override default agent hooks
             run_config_override: Optional run configuration settings
-            message_files: DEPRECATED: Use file_ids instead. File IDs to attach to the message
             file_ids: List of OpenAI file IDs to attach to the message
             additional_instructions: Additional instructions to be appended to
                 the agent's instructions for this run only
@@ -326,7 +322,7 @@ class Execution:
                 if self.agent.attachment_manager is None:
                     raise RuntimeError(f"attachment_manager not initialized for agent {self.agent.name}")
                 processed_current_message_items = await self.agent.attachment_manager.process_message_and_files(
-                    message, file_ids, message_files, kwargs, "get_response_stream"
+                    message, file_ids, kwargs, "get_response_stream"
                 )
                 current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
 

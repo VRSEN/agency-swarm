@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 from agents import FunctionTool
 
 if TYPE_CHECKING:
-    from .core import Agency, AgencyChart, CommunicationFlowEntry
+    from .core import Agency, CommunicationFlowEntry
 
 from agency_swarm.agent.agent_flow import AgentFlow
 from agency_swarm.agent.context_types import AgentRuntimeState
@@ -22,53 +22,6 @@ from agency_swarm.utils.files import get_external_caller_directory
 
 logger = logging.getLogger(__name__)
 _warned_deprecated_send_message_handoff = False
-
-
-def parse_deprecated_agency_chart(
-    agency: "Agency", chart: "AgencyChart"
-) -> tuple[list[Agent], list[tuple[Agent, Agent]]]:
-    """
-    Parses the deprecated agency_chart to extract entry points and communication flows.
-    This method is for backward compatibility.
-    Returns tuple of (entry_points_list, communication_flows_list)
-    """
-    temp_entry_points: list[Agent] = []
-    temp_comm_flows: list[tuple[Agent, Agent]] = []
-    all_agents_in_chart: dict[int, Agent] = {}  # Use id to track unique instances
-
-    for entry in chart:
-        if isinstance(entry, list) and len(entry) == 2:
-            sender, receiver = entry
-            if not (isinstance(sender, Agent) and isinstance(receiver, Agent)):
-                raise TypeError(f"Invalid agent types in communication pair: {entry}")
-            temp_comm_flows.append((sender, receiver))
-            if id(sender) not in all_agents_in_chart:
-                all_agents_in_chart[id(sender)] = sender
-            if id(receiver) not in all_agents_in_chart:
-                all_agents_in_chart[id(receiver)] = receiver
-        elif isinstance(entry, Agent):
-            if entry not in temp_entry_points:  # Add unique instances to entry points
-                temp_entry_points.append(entry)
-            if id(entry) not in all_agents_in_chart:
-                all_agents_in_chart[id(entry)] = entry
-        else:
-            raise ValueError(f"Invalid agency_chart entry: {entry}")
-
-    # Fallback for entry points if none were standalone
-    if not temp_entry_points and all_agents_in_chart:  # all_agents_in_chart implies temp_comm_flows is not empty
-        logger.warning(
-            "No explicit entry points (standalone agents) found in deprecated 'agency_chart'. "
-            "For backward compatibility, unique sender agents from communication pairs "
-            "will be considered potential entry points."
-        )
-        # Collect unique senders from communication flows as entry points
-        unique_senders_as_entry_points: dict[int, Agent] = {}
-        for sender_agent, _ in temp_comm_flows:
-            if id(sender_agent) not in unique_senders_as_entry_points:
-                unique_senders_as_entry_points[id(sender_agent)] = sender_agent
-        temp_entry_points = list(unique_senders_as_entry_points.values())
-
-    return temp_entry_points, temp_comm_flows
 
 
 def parse_agent_flows(
@@ -254,9 +207,7 @@ def configure_agents(agency: "Agency", defined_communication_flows: list[tuple[A
                 custom_tool_class = agency._communication_tool_classes.get(pair_key)
 
                 # Determine which tool class to use
-                effective_tool_class = (
-                    custom_tool_class or agent_instance.send_message_tool_class or agency.send_message_tool_class
-                )
+                effective_tool_class = custom_tool_class or agency.send_message_tool_class
 
                 try:
                     if isinstance(effective_tool_class, Handoff) or (

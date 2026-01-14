@@ -1,5 +1,4 @@
 import logging
-import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -151,20 +150,11 @@ class AttachmentManager:
         self,
         processed_current_message_items: list[TResponseInputItem],
         file_ids: list[str] | None,
-        message_files: list[str] | None,
         kwargs: dict[str, Any],
     ) -> None:
         """Handle file attachments for messages."""
-        files_to_attach = file_ids or message_files or kwargs.get("file_ids") or kwargs.get("message_files")
+        files_to_attach = file_ids or kwargs.get("file_ids")
         if files_to_attach and isinstance(files_to_attach, list):
-            # Warn about deprecated message_files usage
-            if message_files or kwargs.get("message_files"):
-                warnings.warn(
-                    "'message_files' parameter is deprecated. Use 'file_ids' instead.",
-                    DeprecationWarning,
-                    stacklevel=3,
-                )
-
             # Add file items to the last user message content
             if processed_current_message_items:
                 last_message = processed_current_message_items[-1]
@@ -196,7 +186,6 @@ class AttachmentManager:
         self,
         message: str | list[TResponseInputItem],
         file_ids: list[str] | None,
-        message_files: list[str] | None,
         kwargs: dict[str, Any],
         method_name: str = "execution",
     ) -> list[TResponseInputItem]:
@@ -209,6 +198,6 @@ class AttachmentManager:
             raise AgentsException(f"Failed to process input message for agent {self.agent.name}") from e
 
         # Handle file attachments
-        await self.prepare_and_attach_files(processed_current_message_items, file_ids, message_files, kwargs)
+        await self.prepare_and_attach_files(processed_current_message_items, file_ids, kwargs)
 
         return processed_current_message_items

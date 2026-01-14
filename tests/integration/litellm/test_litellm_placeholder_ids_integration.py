@@ -36,7 +36,6 @@ def _build_agency() -> Agency:
         ),
         model_settings=ModelSettings(temperature=0.0),
         model=LitellmModel(model="anthropic/claude-sonnet-4-20250514"),
-        send_message_tool_class=Handoff,
         tools=[get_user_id],
     )
 
@@ -59,7 +58,10 @@ def _build_agency() -> Agency:
     return Agency(
         coordinator_agent,
         worker_agent,
-        communication_flows=[coordinator_agent > data_agent, worker_agent > data_agent],
+        communication_flows=[
+            (coordinator_agent > data_agent, Handoff),
+            (worker_agent > data_agent, Handoff),
+        ],
         shared_instructions="Test agency for agent-to-agent persistence verification.",
     )
 
