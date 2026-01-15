@@ -1,0 +1,61 @@
+[
+  {
+    "action": {
+      "commands": [
+        "echo 'hi'"
+      ],
+      "max_output_length": null,
+      "timeout_ms": null
+    },
+    "call_id": "call_5YpYSQiF400Qm1pFFiLEDjCG",
+    "environment": null,
+    "id": "sh_082293044ea583f000696606f9a71c8193994a7cf3333c696e",
+    "status": "completed",
+    "type": "shell_call"
+  },
+  {
+    "call_id": "call_5YpYSQiF400Qm1pFFiLEDjCG",
+    "output": [
+      {
+        "outcome": {
+          "exit_code": 0,
+          "type": "exit"
+        },
+        "stderr": "",
+        "stdout": "hi\n"
+      }
+    ],
+    "type": "shell_call_output"
+  },
+  {
+    "call_id": "call_3hDjFVybdm5bwfZp8zC8rKpv",
+    "id": "apc_082293044ea583f000696606faed9481939873470150147377",
+    "operation": {
+      "diff": "@@\n-old\n+new\n",
+      "path": "example.txt",
+      "type": "update_file"
+    },
+    "status": "completed",
+    "type": "apply_patch_call"
+  },
+  {
+    "call_id": "call_3hDjFVybdm5bwfZp8zC8rKpv",
+    "output": "applied",
+    "status": "completed",
+    "type": "apply_patch_call_output"
+  },
+  {
+    "content": [
+      {
+        "annotations": [],
+        "logprobs": [],
+        "text": "OK",
+        "type": "output_text"
+      }
+    ],
+    "id": "msg_082293044ea583f000696606fc3be881939bc22838d5e54593",
+    "role": "assistant",
+    "status": "completed",
+    "type": "message"
+  }
+]
