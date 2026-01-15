@@ -169,7 +169,7 @@ class MessageFormatter:
             history_for_runner = [
                 msg
                 for msg in history_for_runner
-                if not (isinstance(msg.get("type"), str) and "reasoning" in msg.get("type"))
+                if not (isinstance(msg.get("type"), str) and "reasoning" in str(msg.get("type")))
             ]
 
         stripped_hosted_tool_types: set[str] = set()
@@ -179,10 +179,10 @@ class MessageFormatter:
             )
             if stripped_hosted_tool_types:
                 # Ensure the resulting history remains structurally valid after removal
-                history_for_runner = MessageFilter.remove_orphaned_messages(history_for_runner)  # type: ignore[arg-type]
+                history_for_runner = MessageFilter.remove_orphaned_messages(history_for_runner)  # type: ignore[arg-type,assignment]
         # Normalize placeholder IDs BEFORE stripping metadata (needs agent_run_id for ID generation)
         normalizer = StreamIdNormalizer()
-        history_for_runner = normalizer.normalize_message_dicts(history_for_runner)  # type: ignore[arg-type]
+        history_for_runner = normalizer.normalize_message_dicts(history_for_runner)  # type: ignore[arg-type,assignment]
         # Strip agency metadata before sending to OpenAI
         history_for_runner = MessageFormatter.strip_agency_metadata(history_for_runner)
 

@@ -22,6 +22,8 @@ from agents import (
     strict_schema,
 )
 from agents.extensions.models.litellm_model import LitellmModel
+from agents.items import RunItem
+from agents.models.fake_id import FAKE_RESPONSES_ID
 from agents.models.openai_responses import OpenAIResponsesModel
 from pydantic import BaseModel, ValidationError
 
@@ -43,9 +45,6 @@ def _normalize_handoff_ids(input_data: HandoffInputData, *, recipient_agent: "Ag
 
     Handles __fake_id__ from LiteLLM/Chat Completions and toolu_... from Anthropic.
     """
-    from agents.items import RunItem
-    from agents.models.fake_id import FAKE_RESPONSES_ID
-
     normalizer = StreamIdNormalizer()
     result = input_data
     drop_reasoning = False
@@ -59,12 +58,12 @@ def _normalize_handoff_ids(input_data: HandoffInputData, *, recipient_agent: "Ag
     # Normalize input_history (tuple/list of dicts)
     history = input_data.input_history
     if history and isinstance(history, tuple | list):
-        history_list: list[dict[str, Any]] = list(history)
+        history_list: list[dict[str, Any]] = list(history)  # type: ignore[arg-type]
         if drop_reasoning:
             history_list = [
                 msg
                 for msg in history_list
-                if not (isinstance(msg.get("type"), str) and "reasoning" in msg.get("type"))
+                if not (isinstance(msg.get("type"), str) and "reasoning" in str(msg.get("type")))
             ]
         if strip_hosted_for_litellm:
             kept: list[dict[str, Any]] = []
@@ -76,7 +75,7 @@ def _normalize_handoff_ids(input_data: HandoffInputData, *, recipient_agent: "Ag
                     continue
                 kept.append(msg)
             history_list = kept
-        normalized = normalizer.normalize_message_dicts(history_list)
+        normalized = normalizer.normalize_message_dicts(history_list)  # type: ignore[arg-type]
         result = result.clone(input_history=tuple(normalized))
 
     if strip_hosted_for_litellm and stripped_hosted_tool_types:

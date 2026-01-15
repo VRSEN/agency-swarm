@@ -1,10 +1,10 @@
+from agents.models.openai_responses import OpenAIResponsesModel
 from openai import AsyncOpenAI
 
 from agency_swarm import Agent
 from agency_swarm.agent.context_types import AgencyContext
 from agency_swarm.messages.message_formatter import MessageFormatter
 from agency_swarm.utils.thread import ThreadManager
-from agents.models.openai_responses import OpenAIResponsesModel
 
 
 def test_prepare_history_for_runner_drops_reasoning_items():
