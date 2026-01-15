@@ -317,6 +317,36 @@ def valid_tool() -> str:
     assert len(tool_names) == 1
 
 
+@pytest.mark.asyncio
+async def test_tools_folder_supports_relative_imports(tmp_path):
+    """Tools that use relative imports should load correctly from tools_folder."""
+    tools_dir = tmp_path / "tools"
+    tools_dir.mkdir()
+
+    # Helper module imported relatively by the tool
+    (tools_dir / "helpers.py").write_text(
+        "def greet(name: str) -> str:\n"
+        "    return f'hello {name}'\n"
+    )
+
+    # Tool that relies on relative import
+    (tools_dir / "RelativeTool.py").write_text(
+        "from pydantic import Field\n"
+        "from agency_swarm.tools import BaseTool\n"
+        "from .helpers import greet\n\n"
+        "class RelativeTool(BaseTool):\n"
+        "    name: str = Field(description='Name to greet')\n\n"
+        "    def run(self):\n"
+        "        return greet(self.name)\n"
+    )
+
+    agent = Agent(name="test", instructions="test", tools_folder=str(tools_dir))
+    tool = next(t for t in agent.tools if t.name == "RelativeTool")
+
+    result = await tool.on_invoke_tool(None, json.dumps({"name": "Ada"}))
+    assert result == "hello Ada"
+
+
 @pytest.mark.parametrize("folder", [None, "/nonexistent/path"])
 def test_tools_folder_missing(folder: str | None):
     """Agent should handle missing or invalid tools_folder gracefully."""
