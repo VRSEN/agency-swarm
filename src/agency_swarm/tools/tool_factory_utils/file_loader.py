@@ -6,6 +6,7 @@ import logging
 import sys
 import uuid
 from pathlib import Path
+from types import ModuleType
 
 from agents import FunctionTool
 
@@ -22,10 +23,18 @@ def from_file(file_path: str | Path) -> list[type[BaseTool] | FunctionTool]:
     module_name = file.stem
     module = None
     try:
-        spec = importlib.util.spec_from_file_location(module_name, file)
+        # Use a stable namespace per tools folder so shared helpers are imported once.
+        package_name = _stable_package_name(file.parent)
+        full_module_name = f"{package_name}.{module_name}"
+
+        package_module = _get_or_create_namespace_package(package_name, file.parent)
+        sys.modules.setdefault(package_name, package_module)
+
+        spec = importlib.util.spec_from_file_location(full_module_name, file)
         if spec and spec.loader:
             module = importlib.util.module_from_spec(spec)
-            sys.modules[f"{module_name}_{uuid.uuid4().hex}"] = module
+            module.__package__ = package_name
+            sys.modules[full_module_name] = module
             spec.loader.exec_module(module)
         else:  # pragma: no cover - defensive logging
             logger.error("Unable to import tool module %s", file)
@@ -47,3 +56,37 @@ def from_file(file_path: str | Path) -> list[type[BaseTool] | FunctionTool]:
             tools.append(obj)
 
     return tools
+
+
+_namespace_cache: dict[Path, str] = {}
+
+
+def _stable_package_name(folder: Path) -> str:
+    """Derive a stable namespace package name per tools folder."""
+    folder = folder.resolve()
+    if folder in _namespace_cache:
+        return _namespace_cache[folder]
+    # Use a UUID5 based on the absolute folder path to keep it deterministic.
+    # Use hex to avoid hyphens, keeping the package name identifier-safe.
+    uid_hex = uuid.uuid5(uuid.NAMESPACE_URL, str(folder)).hex
+    namespace = f"_agency_swarm_tools_{uid_hex}"
+    _namespace_cache[folder] = namespace
+    return namespace
+
+
+def _get_or_create_namespace_package(package_name: str, folder: Path) -> ModuleType:
+    """Create or reuse a namespace package for a tools folder."""
+    existing = sys.modules.get(package_name)
+    if isinstance(existing, ModuleType):
+        return existing
+
+    package_module = ModuleType(package_name)
+    package_spec = importlib.util.spec_from_loader(package_name, loader=None, is_package=True)
+    if package_spec:
+        package_spec.submodule_search_locations = [str(folder)]
+        package_module.__spec__ = package_spec
+        package_module.__path__ = package_spec.submodule_search_locations
+    else:
+        package_module.__path__ = [str(folder)]
+    package_module.__package__ = package_name
+    return package_module
