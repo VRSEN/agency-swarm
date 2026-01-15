@@ -1,0 +1,34 @@
+---
+title: "Latency and Limits"
+description: "Keep responses fast and reliable."
+icon: "gauge"
+---
+
+```json
+{
+  "model": "gpt-5.1",
+  "input": "Summarize this in one sentence.",
+  "stream": true
+}
+```
+
+## What affects latency
+
+- **Model choice**: larger models usually take longer to respond.
+- **Input size**: longer prompts and large context windows add time.
+- **Provider routing**: some providers respond faster for specific models.
+
+## Recommended best practices
+
+- Enable **streaming** to see output as it is generated.
+- Keep prompts focused and avoid sending unnecessary context.
+- Reuse your HTTP client and keep connections warm.
+
+<Note>
+If latency falls short for your workload, contact support so we can review provider routing and limits.
+</Note>
+
+## Rate and size limits
+
+If you hit limits, the gateway returns a clear error message.
+If you need higher limits, contact support to discuss your workload.
