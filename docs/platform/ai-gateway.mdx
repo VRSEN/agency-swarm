@@ -5,55 +5,72 @@ icon: "server"
 description: "OpenAI-compatible Responses API proxy with Agencii auth."
 ---
 
-## What it is (and isn’t)
-- **It is**: a single, OpenAI-compatible **Responses API** endpoint you can call from your app.
-- **It isn’t**: a billing/pricing service. The gateway records normalized usage metadata; pricing + credits gating live in `system/`.
+Use a single endpoint to call OpenAI models with OpenAI Responses-compatible requests.
 
-## Quick start (recommended: OpenAI SDK)
-Point the OpenAI SDK at your gateway `.../openai` base URL, then pass your **Agencii API key** via `X-Agencii-Api-Key`.
+## Model providers
+
+<CardGroup cols={2}>
+  <Card title="OpenAI" icon="sparkles">
+    https://ai-gateway.agencii.ai/openai
+  </Card>
+  <Card title="Claude" icon="clock">
+    Coming soon...
+  </Card>
+</CardGroup>
 
 <CodeGroup>
 ```python OpenAI Python SDK
 from openai import OpenAI
+
 client = OpenAI(
-    base_url="https://<your-domain>/openai",
+    base_url="https://ai-gateway.agencii.ai/openai",
     api_key="unused",
     default_headers={"X-Agencii-Api-Key": "sk-agencii-REPLACE_ME"},
 )
+
 resp = client.responses.create(
     model="gpt-5.1",
     input="Tell me a three sentence bedtime story about a unicorn.",
 )
+
 print(resp.id)
 print(resp.output_text)
 ```
 
 ```ts OpenAI Node SDK
 import OpenAI from "openai";
+
 const client = new OpenAI({
-  baseURL: "https://<your-domain>/openai",
+  baseURL: "https://ai-gateway.agencii.ai/openai",
   apiKey: "unused",
-  defaultHeaders: { "X-Agencii-Api-Key": "sk-agencii-REPLACE_ME" },
+  defaultHeaders: { "X-Agencii-Api-Key": "sk-agencii-************************" },
 });
+
 const resp = await client.responses.create({
   model: "gpt-5.1",
   input: "Tell me a three sentence bedtime story about a unicorn.",
 });
+
 console.log(resp.id);
 console.log(resp.output_text);
 ```
 </CodeGroup>
 
-## HTTP API
+## Base URL and endpoints
 
 Use the `/openai` base URL for SDK compatibility.
 
-- **Base URL**: `.../openai`
+- **Base URL**: `https://ai-gateway.agencii.ai/openai`
 - **Endpoint**: `POST /v1/responses`
 - **Also accepted**:
   - `POST /responses`
   - `POST /openai/v1/responses`
   - `POST /openai/responses`
+
+<Note>
+If you use a raw HTTP client, you can call the same endpoint without the `/openai` prefix.
+Use `https://ai-gateway.agencii.ai/v1/responses`.
+</Note>
 
 ### Authentication (caller → gateway)
 
@@ -72,57 +89,10 @@ When possible, keep platform auth on `X-Agencii-Api-Key` and reserve `Authorizat
 </Note>
 
 ## Streaming (SSE)
+
 Set `"stream": true` in the request payload. The gateway returns **SSE** (`Content-Type: text/event-stream`).
 
-## cURL example
-```bash
-curl -sS \
-  -X POST "https://<your-domain>/openai/v1/responses" \
-  -H "Content-Type: application/json" \
-  -H "X-Agencii-Api-Key: sk-agencii-REPLACE_ME" \
-  -d '{
-    "model": "gpt-5.1",
-    "input": "Tell me a three sentence bedtime story about a unicorn."
-  }'
-```
+## Response metadata
 
 - **Response header**: `X-Run-Id: <string>` (when available, used for log/usage correlation)
 
-<Accordion title="Advanced: idempotency keys" defaultOpen={false}>
-- **Header**: `X-Idempotency-Key: <string>`
-  - If omitted, the gateway generates a UUID
-  - Used for usage item dedupe downstream
-</Accordion>
-
-<Accordion title="Advanced: provider selection" defaultOpen={false}>
-You can override which upstream provider handles a request:
-- **Header**: `X-Agencii-Provider: <provider>`
-- **Body**: `provider`
-
-If multiple are set, provider can be selected in this order:
-
-1. `payload.provider`
-2. `X-Agencii-Provider` header
-3. `?provider=` query param
-4. default: `openai`
-</Accordion>
-
-<Accordion title="Advanced: agency attribution (usage metadata)" defaultOpen={false}>
-- `metadata.agencyId` / `metadata.agency_id` / `agencyId` / `agency_id`
-  - Associates usage items to an agency
-  - Falls back to the caller user uid when omitted
-</Accordion>
-
-<Accordion title="Self-hosting: upstream provider keys" defaultOpen={false}>
-If you’re self-hosting the gateway, it needs an **upstream provider key** configured at runtime.
-**OpenAI**
-```bash
-export APP_AI_GATEWAY_SERVICE_OPENAI_PROVIDER_INTERNAL_KEY="sk-proj-REPLACE_ME"
-```
-If this env var is missing, the gateway returns an OpenAI-style configuration error response.
-</Accordion>
-
-## Notes
-
-- The gateway records normalized **usage items** (token counts + metadata). **Billing/pricing/credits gating live in `system/`.**
-- Never commit real API keys. Use placeholders in examples and local env vars.
