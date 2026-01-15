@@ -151,7 +151,16 @@
             "group": "Introduction",
             "pages": [
               "platform/overview",
-              "platform/ai-gateway",
+              {
+                "group": "AI Gateway",
+                "icon": "server",
+                "pages": [
+                  "platform/ai-gateway",
+                  "platform/ai-gateway/quickstart",
+                  "platform/ai-gateway/credits-and-pricing",
+                  "platform/ai-gateway/latency-and-limits"
+                ]
+              },
               "platform/pricing",
               "platform/how-credits-work"
             ]
