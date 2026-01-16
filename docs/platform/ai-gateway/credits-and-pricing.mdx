@@ -1,0 +1,43 @@
+---
+title: "Credits and Pricing"
+description: "How AI Gateway usage is priced and deducted."
+icon: "circle-dollar"
+---
+
+```bash
+curl -sS \
+  -X POST "https://ai-gateway.agencii.ai/openai/v1/responses" \
+  -H "Content-Type: application/json" \
+  -H "X-Agencii-Api-Key: sk-agencii-REPLACE_ME" \
+  -d '{
+    "model": "gpt-5.1",
+    "input": "Summarize this paragraph in one sentence."
+  }'
+```
+
+## How credits are calculated
+
+AI Gateway charges credits based on:
+
+- **Model pricing**
+- **Input and output token counts**
+
+Your usage is calculated from the response and deducted from your balance at cost.
+
+<Note>
+Credit deductions follow the same balance rules as the rest of the Agencii platform.
+See [How Credits Work](/platform/how-credits-work) for details.
+</Note>
+
+## Low balance behavior
+
+If your balance is too low to run a request, the gateway returns an error telling you to refill credits.
+
+## Track your usage
+
+Review AI Gateway usage and balance in your Agencii dashboard billing page.
+
+## Related pricing details
+
+- [Platform pricing](/platform/pricing)
+- [How credits work](/platform/how-credits-work)

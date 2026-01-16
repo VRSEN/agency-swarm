@@ -1,0 +1,81 @@
+---
+title: "Quickstart"
+description: "Send your first AI Gateway request in minutes."
+icon: "bolt"
+---
+
+<CodeGroup>
+```python OpenAI Python SDK
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://ai-gateway.agencii.ai/openai",
+    api_key="unused",
+    default_headers={"X-Agencii-Api-Key": "sk-agencii-REPLACE_ME"},
+)
+
+resp = client.responses.create(
+    model="gpt-5.1",
+    input="Write a three sentence welcome message for a new user.",
+)
+
+print(resp.output_text)
+```
+
+```ts OpenAI Node SDK
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: "https://ai-gateway.agencii.ai/openai",
+  apiKey: "unused",
+  defaultHeaders: { "X-Agencii-Api-Key": "sk-agencii-REPLACE_ME" },
+});
+
+const resp = await client.responses.create({
+  model: "gpt-5.1",
+  input: "Write a three sentence welcome message for a new user.",
+});
+
+console.log(resp.output_text);
+```
+</CodeGroup>
+
+## Steps
+
+<Steps>
+  <Step title="Create an Agencii API key">
+    Get your key from the Agencii dashboard and keep it private.
+  </Step>
+  <Step title="Pick a model">
+    Use a model name your account has access to (OpenAI).
+  </Step>
+  <Step title="Send the request">
+    Use the OpenAI SDK or send a direct HTTP POST to `/v1/responses`.
+  </Step>
+</Steps>
+
+## Direct HTTP example
+
+```bash
+curl -sS \
+  -X POST "https://ai-gateway.agencii.ai/openai/v1/responses" \
+  -H "Content-Type: application/json" \
+  -H "X-Agencii-Api-Key: sk-agencii-REPLACE_ME" \
+  -d '{
+    "model": "gpt-5.1",
+    "input": "Write a three sentence welcome message for a new user."
+  }'
+```
+
+## Auth options
+
+- **Preferred**: `X-Agencii-Api-Key: <your_agencii_api_key>`
+- **SDK compatibility**: `Authorization: Bearer <your_agencii_api_key>`
+
+## Optional request headers
+
+- `X-Idempotency-Key: <string>` (helps dedupe repeat requests)
+
+## Streaming
+
+Set `"stream": true` in the request payload to receive SSE responses.
