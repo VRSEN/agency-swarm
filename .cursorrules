@@ -292,8 +292,7 @@ To create an agent:
        instructions="./instructions.md",
        tools_folder="./tools",
        model_settings=ModelSettings(
-           model="gpt-4o",
-           temperature=0.5,
+           model="gpt-5",
            max_completion_tokens=25000,
        ),
    )

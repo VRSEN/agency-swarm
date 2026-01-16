@@ -78,13 +78,13 @@ def test_serialize_handles_nested_models_and_mocks():
     nested = Model(number=7)
     agent = MagicMock()
     agent.name = "Coach"
-    agent.model = "gpt-4"
+    agent.model = "gpt-5"
 
     serialized = serialize({"nested": nested, "agent": agent})
 
     assert serialized["nested"] == {"number": "7"}
     assert serialized["agent"]["name"] == "Coach"
-    assert serialized["agent"]["model"] == "gpt-4"
+    assert serialized["agent"]["model"] == "gpt-5"
     assert "method_calls" in serialized["agent"]
 
 

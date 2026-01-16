@@ -122,9 +122,9 @@ def test_agent_with_reasoning_model_gpt51():
     assert "reasoning" in capabilities
 
 
-def test_agent_with_gpt4_not_reasoning():
-    """Agent with gpt-4 model does NOT have 'reasoning' capability."""
-    agent = Agent(name="GPT4Agent", instructions="Test", model="gpt-4o")
+def test_agent_with_non_reasoning_model():
+    """Agent with a non-reasoning model does NOT have 'reasoning' capability."""
+    agent = Agent(name="NonReasoningAgent", instructions="Test", model="gpt-4.1")
     capabilities = get_agent_capabilities(agent)
     assert "reasoning" not in capabilities
 
