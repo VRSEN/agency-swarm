@@ -9,6 +9,47 @@ except ModuleNotFoundError as exc:
         "ag_ui.core is required for the OpenAI→AG-UI adapter. Install with `pip install ag-ui-protocol`."
     ) from exc
 
+# Use LiteLLM's provider enum for validation when available
+try:
+    from litellm import LlmProviders as LiteLLMProvider
+
+    _LITELLM_INSTALLED = True
+except ImportError:
+    LiteLLMProvider = str  # type: ignore[misc, assignment]
+    _LITELLM_INSTALLED = False
+
+
+class ClientConfig(BaseModel):
+    """Configuration for overriding the OpenAI client per-request."""
+
+    base_url: str | None = Field(
+        default=None,
+        description="OpenAI-compatible API base URL override.",
+    )
+    api_key: str | None = Field(
+        default=None,
+        description="OpenAI API key override.",
+    )
+    litellm_keys: dict[LiteLLMProvider, str] | None = Field(
+        default=None,
+        description=(
+            "Provider-specific API keys for LiteLLM models. "
+            "Key = provider from model path (e.g., 'anthropic', 'gemini', 'azure', 'xai'). "
+            "Falls back to 'api_key' if provider not found."
+        ),
+    )
+
+    @field_validator("litellm_keys")
+    @classmethod
+    def validate_litellm_installed(cls, v: dict | None) -> dict | None:
+        """Raise error if litellm_keys provided but litellm not installed."""
+        if v is not None and not _LITELLM_INSTALLED:
+            raise ValueError(
+                "litellm_keys requires litellm to be installed. "
+                "Install with: pip install 'openai-agents[litellm]'"
+            )
+        return v
+
 
 # Extended version of the ag-ui RunAgentInput with additional fields
 class RunAgentInputCustom(RunAgentInput):
@@ -35,6 +76,10 @@ class RunAgentInputCustom(RunAgentInput):
             "Supports http(s) URLs and absolute local paths (e.g., '/home/user/doc.pdf') "
             "when the server is configured with allowed local file directories."
         ),
+    )
+    client_config: ClientConfig | None = Field(
+        default=None,
+        description="Override client configuration (base_url, api_key, litellm_keys) for this request only.",
     )
 
 
@@ -65,6 +110,10 @@ class BaseRequest(BaseModel):
     )
     generate_chat_name: bool | None = Field(
         default=False, description="Generate a fitting chat name for the user input."
+    )
+    client_config: ClientConfig | None = Field(
+        default=None,
+        description="Override client configuration (base_url, api_key, litellm_keys) for this request only.",
     )
 
 

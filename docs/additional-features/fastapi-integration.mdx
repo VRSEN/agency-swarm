@@ -255,6 +255,10 @@ import requests
 agency_url = "http://127.0.0.1:8000/test_agency_1/get_response"
 payload = {
     "message": "Hello",
+    "client_config": {
+        "base_url": "https://my-openai-gateway.example.com/v1",
+        "api_key": "sk-...",  # override per request
+    },
 }
 
 headers = {
@@ -277,11 +281,56 @@ print("Response:", agency_response.json())
 | `file_urls` | object | No | `{filename: url_or_absolute_path}` map. Local paths require `allowed_local_file_dirs` on `run_fastapi`. |
 | `additional_instructions` | string | No | Extra guidance for the current request. |
 | `user_context` | object | No | Structured data passed to [Agency Context](/additional-features/agency-context) without exposing it to the LLM. |
+| `client_config` | object | No | Override `base_url` / `api_key` for this request (and optional `litellm_keys` for `litellm/` models). |
 
 ### How user_context is applied
 - Merges with any `user_context` set on the agency instance.
 - Useful for structured data (ids, preferences, feature flags) you do not want in the prompt.
 - Accessible within tools for the duration of the run. See [Agency Context](/additional-features/agency-context).
+
+### How client_config is applied
+- Applies only to **OpenAI models** (no prefix or `openai/...`) and **LiteLLM models** (`litellm/...`).
+- **Custom Model subclasses** are not modified; the request still runs, but the override is skipped.
+- For LiteLLM, you can provide `litellm_keys` to pass different keys per provider. Requires LiteLLM installed.
+
+### client_config fields
+
+- `base_url` (string, optional): Override the API base URL for this request.
+- `api_key` (string, optional): Override the API key for this request.
+- `litellm_keys` (object, optional): Only for `litellm/...` models.
+  - Map `provider_name` → `api_key`.
+  - Example: `{"anthropic": "...", "gemini": "..."}`
+
+<Accordion title="client_config examples" defaultOpen={false}>
+
+**OpenAI model override (gpt-4o):**
+
+```json
+{
+  "message": "Hello",
+  "client_config": {
+    "base_url": "https://my-openai-gateway.example.com/v1",
+    "api_key": "sk-..."
+  }
+}
+```
+
+**LiteLLM mixed providers (requires `openai-agents[litellm]`):**
+
+```json
+{
+  "message": "Hello",
+  "client_config": {
+    "base_url": "https://my-litellm-proxy.example.com",
+    "litellm_keys": {
+      "anthropic": "sk-ant-...",
+      "gemini": "AIza..."
+    }
+  }
+}
+```
+
+</Accordion>
 
 </Accordion>
 
