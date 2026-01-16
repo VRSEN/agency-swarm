@@ -137,7 +137,7 @@ def test_agency_rejects_global_model(mock_agent):
     """Global model parameter is deprecated and must raise an error."""
     with pytest.raises(TypeError, match="Agency no longer accepts a global 'model'"):
         with pytest.warns(DeprecationWarning, match="'model' parameter is deprecated"):
-            Agency(mock_agent, model="gpt-4o")
+            Agency(mock_agent, model="gpt-5")
 
 
 class _CustomSendMessage(SendMessage):

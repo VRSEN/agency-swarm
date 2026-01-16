@@ -324,10 +324,7 @@ async def test_tools_folder_supports_relative_imports(tmp_path):
     tools_dir.mkdir()
 
     # Helper module imported relatively by the tool
-    (tools_dir / "helpers.py").write_text(
-        "def greet(name: str) -> str:\n"
-        "    return f'hello {name}'\n"
-    )
+    (tools_dir / "helpers.py").write_text("def greet(name: str) -> str:\n    return f'hello {name}'\n")
 
     # Tool that relies on relative import
     (tools_dir / "RelativeTool.py").write_text(
