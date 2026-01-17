@@ -291,9 +291,9 @@ To create an agent:
        description="Responsible for client communication, task planning and management.",
        instructions="./instructions.md",
        tools_folder="./tools",
+       model="gpt-5",
        model_settings=ModelSettings(
-           model="gpt-5",
-           max_completion_tokens=25000,
+           max_tokens=25000,
        ),
    )
    ```
