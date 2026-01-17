@@ -3,6 +3,7 @@
 import json
 import logging
 import time
+from copy import deepcopy
 from typing import TYPE_CHECKING, Any
 
 from agents import (
@@ -131,7 +132,19 @@ class MessageFormatter:
         history_for_runner = MessageFormatter.ensure_tool_calls_content_safety(history_for_runner)
         # Strip agency metadata before sending to OpenAI
         history_for_runner = MessageFormatter.strip_agency_metadata(history_for_runner)
+        history_for_runner = MessageFormatter._prepend_examples(history_for_runner, agent)
         return history_for_runner  # type: ignore[return-value]
+
+    @staticmethod
+    def _prepend_examples(history: list[dict[str, Any]], agent: "Agent") -> list[dict[str, Any]]:
+        """Insert the agent's few-shot examples ahead of the current history."""
+        raw_examples = getattr(agent, "_few_shot_examples", ())
+        if not raw_examples:
+            return history
+
+        prefixed_history = [deepcopy(example) for example in raw_examples]
+        prefixed_history.extend(history)
+        return prefixed_history
 
     @staticmethod
     def strip_agency_metadata(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
