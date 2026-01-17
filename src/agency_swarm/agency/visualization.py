@@ -45,6 +45,14 @@ def get_agency_graph(agency: "Agency", include_tools: bool = True) -> dict[str, 
             "capabilities": get_agent_capabilities(agent),
         }
 
+        conversation_starters = getattr(agent, "conversation_starters", None)
+        if conversation_starters:
+            agent_data["conversationStarters"] = conversation_starters
+
+        quick_replies = getattr(agent, "quick_replies", None)
+        if quick_replies:
+            agent_data["quickReplies"] = quick_replies
+
         node = {
             "id": agent_name,
             "data": agent_data,

@@ -166,6 +166,44 @@ def test_metadata_capabilities_empty_for_basic_agent():
     assert basic_agent is not None
     assert "capabilities" in basic_agent["data"]
     assert basic_agent["data"]["capabilities"] == []
+    assert "conversationStarters" not in basic_agent["data"]
+    assert "quickReplies" not in basic_agent["data"]
+
+
+def test_metadata_includes_conversation_starters_and_quick_replies():
+    """Verify metadata includes conversation starters and quick replies for agents."""
+
+    starters = [
+        "Help me plan a team offsite agenda.",
+        "Summarize our Q4 goals in plain language.",
+    ]
+    quick_replies = [
+        {"prompt": "What can you do?", "response": "I can help you plan, write, and summarize."},
+        {"prompt": "Share pricing", "response": "Plans start at $49/month with usage-based tiers."},
+    ]
+
+    def create_agency(load_threads_callback=None, save_threads_callback=None):
+        agent = Agent(
+            name="StarterAgent",
+            instructions="Return metadata",
+            conversation_starters=starters,
+            quick_replies=quick_replies,
+        )
+        return Agency(agent, load_threads_callback=load_threads_callback, save_threads_callback=save_threads_callback)
+
+    app = run_fastapi(agencies={"test_agency": create_agency}, return_app=True, app_token_env="")
+    client = TestClient(app)
+
+    response = client.get("/test_agency/get_metadata")
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    nodes = payload.get("nodes", [])
+    starter_agent = next((n for n in nodes if n["id"] == "StarterAgent"), None)
+    assert starter_agent is not None
+    assert starter_agent["data"]["conversationStarters"] == starters
+    assert starter_agent["data"]["quickReplies"] == quick_replies
 
 
 def test_tool_endpoint_handles_nested_schema():
