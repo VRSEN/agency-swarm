@@ -141,7 +141,7 @@ def test_run_fastapi_normalizes_relative_shared_folders_for_factory_calls(mocker
         from agency_swarm import Agency, Agent
         from agency_swarm.agency.helpers import run_fastapi as helpers_run_fastapi
 
-        a = Agent(name="A", instructions="test", model="gpt-4o-mini")
+        a = Agent(name="A", instructions="test", model="gpt-5-mini")
         agency = Agency(a, shared_tools_folder="shared_tools")
         helpers_run_fastapi(agency)
         """

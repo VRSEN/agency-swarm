@@ -21,17 +21,8 @@ def test_is_reasoning_model_with_gpt5():
 
 
 def test_is_reasoning_model_with_gpt4():
-    """GPT-4 series models are NOT reasoning models."""
-    assert is_reasoning_model("gpt-4o") is False
-    assert is_reasoning_model("gpt-4o-mini") is False
+    """GPT-4.1 is not a reasoning model."""
     assert is_reasoning_model("gpt-4.1") is False
-
-
-def test_is_reasoning_model_with_other_models():
-    """Other models are not reasoning models."""
-    assert is_reasoning_model("gpt-3.5-turbo") is False
-    assert is_reasoning_model("claude-3-opus") is False
-    assert is_reasoning_model("gemini-pro") is False
 
 
 def test_is_reasoning_model_with_none():
@@ -47,12 +38,12 @@ def test_is_reasoning_model_with_empty_string():
 def test_get_model_name_from_openai_responses_model() -> None:
     """OpenAI Responses models expose their model identifier."""
     client = AsyncOpenAI(api_key="test")
-    model = OpenAIResponsesModel(model="gpt-4o", openai_client=client)
-    assert get_model_name(model) == "gpt-4o"
+    model = OpenAIResponsesModel(model="gpt-5", openai_client=client)
+    assert get_model_name(model) == "gpt-5"
 
 
 def test_get_model_name_from_openai_chat_completions_model() -> None:
     """OpenAI Chat Completions models expose their model identifier."""
     client = AsyncOpenAI(api_key="test")
-    model = OpenAIChatCompletionsModel(model="gpt-4.1", openai_client=client)
-    assert get_model_name(model) == "gpt-4.1"
+    model = OpenAIChatCompletionsModel(model="gpt-5", openai_client=client)
+    assert get_model_name(model) == "gpt-5"

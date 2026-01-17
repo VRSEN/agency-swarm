@@ -127,6 +127,51 @@ async def test_send_message_pending_state_isolated_per_thread_manager():
 
 
 @pytest.mark.asyncio
+async def test_pending_blocks_duplicate_recipient_call():
+    """SendMessage blocks a second call to the same recipient while the first is pending."""
+    gate = asyncio.Event()
+    sender = Agent(
+        name="Coordinator",
+        instructions="Coordinate tasks",
+        model="gpt-5-mini",
+        model_settings=ModelSettings(reasoning=Reasoning(effort="minimal")),
+    )
+    recipient = Agent(
+        name="Worker",
+        instructions="Echo back messages",
+        model="gpt-5-mini",
+        model_settings=ModelSettings(reasoning=Reasoning(effort="minimal")),
+    )
+
+    async def waiting_response(self, **_kwargs):
+        await gate.wait()
+        return SimpleNamespace(final_output="Worker result")
+
+    recipient.get_response = MethodType(waiting_response, recipient)
+
+    agency = _make_agency(sender, recipient)
+    runtime_state = agency.get_agent_runtime_state(sender.name)
+    send_tool = next(iter(runtime_state.send_message_tools.values()))
+
+    wrapper = _make_wrapper(agency)
+    payload = {
+        "recipient_agent": recipient.name,
+        "message": "Task",
+        "additional_instructions": "",
+    }
+
+    first_task = asyncio.create_task(send_tool.on_invoke_tool(wrapper, json.dumps(payload)))
+    await asyncio.sleep(0)
+    second_result = await send_tool.on_invoke_tool(wrapper, json.dumps(payload))
+
+    assert "Cannot send another message" in second_result
+
+    gate.set()
+    first_result = await first_task
+    assert first_result == "Worker result"
+
+
+@pytest.mark.asyncio
 async def test_module_level_agent_reuse_isolated_recipients():
     """
     Verify that agent recipient lists are isolated per agency (currently failing).

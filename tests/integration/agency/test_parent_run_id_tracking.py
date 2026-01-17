@@ -12,7 +12,6 @@ import logging
 from typing import Any
 
 import pytest
-from agents import ModelSettings
 
 from agency_swarm import Agency, Agent
 
@@ -33,8 +32,7 @@ def three_level_agency():
     worker = Agent(
         name="Worker",
         instructions="You are a Worker. When asked to do work, respond with 'Work completed by Worker'.",
-        model="gpt-4o-mini",
-        model_settings=ModelSettings(temperature=0),
+        model="gpt-5-mini",
     )
 
     # Create Manager agent (middle layer - orchestrates Worker)
@@ -45,8 +43,7 @@ def three_level_agency():
             "Use send_message to ask Worker to 'Please do the work'. "
             "After receiving Worker's response, summarize as 'Manager coordinated: [Worker's response]'."
         ),
-        model="gpt-4o-mini",
-        model_settings=ModelSettings(temperature=0),
+        model="gpt-5-mini",
     )
 
     # Create CEO agent (top layer - orchestrates Manager)
@@ -57,8 +54,7 @@ def three_level_agency():
             "Use send_message to ask Manager to 'Please manage this task'. "
             "After receiving Manager's response, summarize as 'CEO executed: [Manager's response]'."
         ),
-        model="gpt-4o-mini",
-        model_settings=ModelSettings(temperature=0),
+        model="gpt-5-mini",
     )
 
     # Create agency with orchestration flows

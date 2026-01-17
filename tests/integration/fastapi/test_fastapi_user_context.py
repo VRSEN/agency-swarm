@@ -88,7 +88,7 @@ class TrackingAgent(Agent):
             _last_agent=self,
         )
         # Enables cost fallback calculation in calculate_usage_with_cost(...)
-        typing.cast(_HasMainAgentModel, run_result)._main_agent_model = "gpt-4o"
+        typing.cast(_HasMainAgentModel, run_result)._main_agent_model = "gpt-5"
         return run_result
 
     def get_response_stream(
@@ -134,7 +134,7 @@ class TrackingAgent(Agent):
             _current_agent_output_schema=None,
             trace=None,
         )
-        typing.cast(_HasMainAgentModel, final_result)._main_agent_model = "gpt-4o"
+        typing.cast(_HasMainAgentModel, final_result)._main_agent_model = "gpt-5"
 
         stream_ref: dict[str, StreamingRunResponse] = {}
 
