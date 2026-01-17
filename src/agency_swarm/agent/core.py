@@ -3,7 +3,7 @@ import logging
 import os
 import warnings
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, TypedDict, TypeVar
 
 from agents import (
     Agent as BaseAgent,
@@ -49,6 +49,11 @@ T = TypeVar("T", bound="Agent")
 """AgencyContext moved to agency_swarm.agent.context_types (no behavior change)."""
 
 
+class QuickReply(TypedDict):
+    prompt: str
+    response: str
+
+
 class Agent(BaseAgent[MasterContext]):
     """
     Agency Swarm Agent: Extends the base `agents.Agent` with capabilities for
@@ -68,6 +73,8 @@ class Agent(BaseAgent[MasterContext]):
     files_folder: str | Path | None
     tools_folder: str | Path | None  # Directory path for automatic tool discovery and loading
     description: str | None
+    conversation_starters: list[str] | None
+    quick_replies: list[QuickReply] | None
     output_type: type[Any] | None
     send_message_tool_class: type | None  # DEPRECATED: configure SendMessage tools via communication_flows
     include_search_results: bool = False
@@ -103,6 +110,8 @@ class Agent(BaseAgent[MasterContext]):
                 {"schema_filename.json": {"header_name": "header_value"}}.
             api_params (dict[str, dict[str, Any]] | None): Per-schema parameters for OpenAPI tools. Format:
                 {"schema_filename.json": {"param_name": "param_value"}}.
+            conversation_starters (list[str] | None): Conversation starters for this agent.
+            quick_replies (list[dict[str, str]] | None): Quick replies (prompt/response) for this agent.
             send_message_tool_class (type | None): DEPRECATED. Configure SendMessage tool classes via
                 `communication_flows` on `Agency` instead of setting this per agent.
             include_search_results (bool): Include search results in FileSearchTool output for citation extraction.
@@ -186,6 +195,8 @@ class Agent(BaseAgent[MasterContext]):
         self.api_headers = current_agent_params.get("api_headers", {})
         self.api_params = current_agent_params.get("api_params", {})
         self.description = current_agent_params.get("description")
+        self.conversation_starters = current_agent_params.get("conversation_starters")
+        self.quick_replies = current_agent_params.get("quick_replies")
         self.send_message_tool_class = current_agent_params.get("send_message_tool_class")
         self.include_search_results = current_agent_params.get("include_search_results", False)
         self.validation_attempts = int(current_agent_params.get("validation_attempts", 1))
