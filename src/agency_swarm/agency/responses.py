@@ -27,7 +27,6 @@ async def get_response(
     context_override: dict[str, Any] | None = None,
     hooks_override: RunHooks | None = None,
     run_config: RunConfig | None = None,
-    message_files: list[str] | None = None,
     file_ids: list[str] | None = None,
     additional_instructions: str | None = None,
     **kwargs: Any,
@@ -47,7 +46,6 @@ async def get_response(
         hooks_override (RunHooks | None, optional): Specific hooks to use for this run, overriding
                                                    agency-level persistence hooks.
         run_config (RunConfig | None, optional): Configuration for the agent run.
-        message_files (list[str] | None, optional): Backward compatibility parameter.
         file_ids (list[str] | None, optional): Additional file IDs for the agent run.
         additional_instructions (str | None, optional): Additional instructions to be appended to the recipient
             agent's instructions for this run only.
@@ -92,7 +90,6 @@ async def get_response(
         context_override=context_override,
         hooks_override=effective_hooks,
         run_config_override=run_config,
-        message_files=message_files,
         file_ids=file_ids,
         additional_instructions=additional_instructions,
         agency_context=agency_context,  # Pass stateless context
@@ -107,7 +104,6 @@ def get_response_sync(
     context_override: dict[str, Any] | None = None,
     hooks_override: RunHooks | None = None,
     run_config: RunConfig | None = None,
-    message_files: list[str] | None = None,
     file_ids: list[str] | None = None,
     additional_instructions: str | None = None,
     **kwargs: Any,
@@ -122,7 +118,6 @@ def get_response_sync(
             context_override=context_override,
             hooks_override=hooks_override,
             run_config=run_config,
-            message_files=message_files,
             file_ids=file_ids,
             additional_instructions=additional_instructions,
             **kwargs,
@@ -160,7 +155,6 @@ def get_response_stream(
     context_override: dict[str, Any] | None = None,
     hooks_override: RunHooks | None = None,
     run_config_override: RunConfig | None = None,
-    message_files: list[str] | None = None,
     file_ids: list[str] | None = None,
     additional_instructions: str | None = None,
     **kwargs: Any,
@@ -179,7 +173,6 @@ def get_response_stream(
         context_override (dict[str, Any] | None, optional): Additional context for the run.
         hooks_override (RunHooks | None, optional): Specific hooks for this run.
         run_config_override (RunConfig | None, optional): Specific run configuration for this run.
-        message_files (list[str] | None, optional): Backward compatibility parameter.
         file_ids (list[str] | None, optional): Additional file IDs for the agent run.
         additional_instructions (str | None, optional): Additional instructions to be appended to the recipient
             agent's instructions for this run only.
@@ -229,7 +222,6 @@ def get_response_stream(
                     context_override=enhanced_context,
                     hooks_override=effective_hooks,
                     run_config_override=run_config_override,
-                    message_files=message_files,
                     file_ids=file_ids,
                     additional_instructions=additional_instructions,
                     agency_context=agency_context,

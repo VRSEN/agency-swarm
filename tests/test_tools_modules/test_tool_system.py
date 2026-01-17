@@ -324,10 +324,7 @@ async def test_tools_folder_supports_relative_imports(tmp_path):
     tools_dir.mkdir()
 
     # Helper module imported relatively by the tool
-    (tools_dir / "helpers.py").write_text(
-        "def greet(name: str) -> str:\n"
-        "    return f'hello {name}'\n"
-    )
+    (tools_dir / "helpers.py").write_text("def greet(name: str) -> str:\n    return f'hello {name}'\n")
 
     # Tool that relies on relative import
     (tools_dir / "RelativeTool.py").write_text(
@@ -362,8 +359,9 @@ async def test_shared_state_property(mock_run_context_wrapper):
 
     tool = TestTool()
     tool._context = mock_run_context_wrapper
-    with pytest.deprecated_call():
-        assert tool._shared_state is mock_run_context_wrapper.context
+    with pytest.raises(AttributeError, match=r"_shared_state"):
+        _ = tool._shared_state
+    assert tool.context is mock_run_context_wrapper.context
 
 
 # --- one_call_at_a_time Tests ---

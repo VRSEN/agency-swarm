@@ -28,7 +28,6 @@ def coordinator_agent():
         ),
         model_settings=ModelSettings(temperature=0.0),
         model=LitellmModel(model="openai/gpt-5.2", api_key=os.getenv("OPENAI_API_KEY")),
-        send_message_tool_class=Handoff,
     )
 
 
@@ -61,7 +60,10 @@ def coordinator_worker_agency(coordinator_agent, worker_agent, data_agent) -> Ag
     return Agency(
         coordinator_agent,
         worker_agent,
-        communication_flows=[coordinator_agent > data_agent, worker_agent > data_agent],
+        communication_flows=[
+            (coordinator_agent > data_agent, Handoff),
+            (worker_agent > data_agent, Handoff),
+        ],
         shared_instructions="Test agency for agent-to-agent persistence verification.",
     )
 
