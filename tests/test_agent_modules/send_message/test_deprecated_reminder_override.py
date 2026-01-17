@@ -39,11 +39,16 @@ class _DummyHandoffInputData:
     def __init__(self, run_context: _DummyRunContext, input_history: tuple[dict[str, object], ...]) -> None:
         self.run_context = run_context
         self.input_history = input_history
+        self.pre_handoff_items: list = []
+        self.new_items: list = []
 
     def clone(self, input_history: tuple[dict[str, object], ...] | None = None) -> Self:
-        return _DummyHandoffInputData(
+        result = _DummyHandoffInputData(
             self.run_context, input_history if input_history is not None else self.input_history
         )
+        result.pre_handoff_items = self.pre_handoff_items
+        result.new_items = self.new_items
+        return result
 
 
 class LegacyReminderHandoff(Handoff):

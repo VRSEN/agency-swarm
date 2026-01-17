@@ -149,39 +149,95 @@ class StreamIdNormalizer:
         return event
 
     def normalize_message_dicts(self, messages: list[TResponseInputItem]) -> list[TResponseInputItem]:
-        """Rewrite placeholder ids in serialized message items.
+        """Rewrite placeholder or provider-specific IDs to OpenAI-compatible format.
 
         This is used both for API payloads (`new_messages`) and for normalizing messages before
         persistence when the upstream model supplies placeholder IDs.
+
+        Handles:
+        - FAKE_RESPONSES_ID ("__fake_id__") from LiteLLM/Chat Completions bridge
+        - Anthropic-style IDs ("toolu_...") that OpenAI rejects
         """
         seq_by_agent_run_id: dict[str, int] = {}
         normalized: list[TResponseInputItem] = []
         for idx, msg in enumerate(messages):
             msg_id = msg.get("id")
-            if msg_id != FAKE_RESPONSES_ID:
+            msg_type = msg.get("type")
+
+            # Check if ID needs normalization
+            needs_normalization = self._needs_id_normalization(msg_id, msg_type)
+            # If an explicit id field exists but is empty/invalid, force normalization so we don't
+            # send id="" / id=None through to strict OpenAI validators.
+            if "id" in msg and (msg_id is None or msg_id == "" or not isinstance(msg_id, str)):
+                needs_normalization = True
+            if not needs_normalization:
                 normalized.append(msg)
                 continue
 
             msg_copy: Any = dict(msg)
 
+            # For function calls, try to use call_id if valid
             call_id = msg_copy.get("call_id")
-            if isinstance(call_id, str) and call_id and call_id != FAKE_RESPONSES_ID:
+            if isinstance(call_id, str) and call_id and self._is_valid_openai_id(call_id, msg_type):
                 msg_copy["id"] = call_id
                 normalized.append(msg_copy)
                 continue
 
+            # Generate a new ID based on agent_run_id or index
             agent_run_id = msg_copy.get("agent_run_id")
             if isinstance(agent_run_id, str) and agent_run_id:
                 seq = seq_by_agent_run_id.get(agent_run_id, 0)
                 seq_by_agent_run_id[agent_run_id] = seq + 1
-                msg_copy["id"] = f"msg_{agent_run_id}_{seq}"
+                prefix = self._get_id_prefix(msg_type)
+                msg_copy["id"] = f"{prefix}_{agent_run_id}_{seq}"
                 normalized.append(msg_copy)
                 continue
 
-            msg_copy["id"] = f"msg_{idx}"
+            prefix = self._get_id_prefix(msg_type)
+            msg_copy["id"] = f"{prefix}_{idx}"
             normalized.append(msg_copy)
 
         return normalized
+
+    @staticmethod
+    def _needs_id_normalization(msg_id: Any, msg_type: Any) -> bool:
+        """Check if an ID needs to be normalized for OpenAI compatibility."""
+        if msg_id == FAKE_RESPONSES_ID:
+            return True
+        if not isinstance(msg_id, str) or not msg_id:
+            return False
+        # Anthropic tool call IDs start with "toolu_"
+        if msg_id.startswith("toolu_"):
+            return True
+        # Check if the ID matches expected OpenAI format for the item type
+        return not StreamIdNormalizer._is_valid_openai_id(msg_id, msg_type)
+
+    @staticmethod
+    def _is_valid_openai_id(msg_id: str, msg_type: Any) -> bool:
+        """Check if an ID is valid for OpenAI's expected format."""
+        if not isinstance(msg_id, str) or not msg_id:
+            return False
+        # Function calls should start with fc_ or call_
+        if isinstance(msg_type, str) and "function_call" in msg_type:
+            return msg_id.startswith(("fc_", "call_"))
+        # Reasoning items should start with rs_
+        if isinstance(msg_type, str) and "reasoning" in msg_type:
+            return msg_id.startswith("rs_")
+        # Messages should start with msg_
+        if msg_type == "message":
+            return msg_id.startswith("msg_")
+        # For other types, accept if not obviously invalid
+        return not msg_id.startswith("toolu_")
+
+    @staticmethod
+    def _get_id_prefix(msg_type: Any) -> str:
+        """Get the appropriate ID prefix for a message type."""
+        if isinstance(msg_type, str):
+            if "function_call" in msg_type:
+                return "fc"
+            if "reasoning" in msg_type:
+                return "rs"
+        return "msg"
 
     def _resolve_item_id(
         self, agent_run_id: str, output_index: int, data_type: Any, *, kind: str | None
