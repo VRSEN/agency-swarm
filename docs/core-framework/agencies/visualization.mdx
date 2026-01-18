@@ -119,12 +119,12 @@ def get_agency_graph(
 
 ## Frontend Integration
 
-Use the JSON directly in React:
+Expose `get_agency_graph()` in your API, then use the JSON directly in React:
 
 ```tsx
 import ReactFlow from 'reactflow';
 
-const agencyData = await fetch('/api/agency-graph').then(r => r.json());
+const agencyData = await fetch('/your-graph-endpoint').then(r => r.json());
 
 function AgencyVisualization() {
   return (
