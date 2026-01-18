@@ -45,8 +45,7 @@ class ClientConfig(BaseModel):
         """Raise error if litellm_keys provided but litellm not installed."""
         if v is not None and not _LITELLM_INSTALLED:
             raise ValueError(
-                "litellm_keys requires litellm to be installed. "
-                "Install with: pip install 'openai-agents[litellm]'"
+                "litellm_keys requires litellm to be installed. Install with: pip install 'openai-agents[litellm]'"
             )
         return v
 

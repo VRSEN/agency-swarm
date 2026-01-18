@@ -291,13 +291,13 @@ class TestAgencyVisualizationIntegration:
             with pytest.raises(ImportError, match="Visualization module not available"):
                 sample_agency.visualize(open_browser=False)
 
-    def test_get_agency_structure_basic(self, sample_agency):
-        """Test basic agency structure generation."""
-        structure = sample_agency.get_agency_structure()
+    def test_get_agency_graph_basic(self, sample_agency):
+        """Test basic agency graph generation."""
+        structure = sample_agency.get_agency_graph()
 
         assert "nodes" in structure
         assert "edges" in structure
-        assert "metadata" in structure
+        assert "metadata" not in structure
 
         # Check nodes
         nodes = structure["nodes"]
@@ -311,20 +311,15 @@ class TestAgencyVisualizationIntegration:
         communication_edges = [e for e in edges if e["type"] == "communication"]
         assert len(communication_edges) >= 2  # CEO->Manager, Manager->Worker
 
-        # Check metadata contains full agents list and entry points
-        meta = structure["metadata"]
-        assert set(meta["agents"]) == {"CEO", "Manager", "Worker"}
-        assert set(meta["entryPoints"]) == {"CEO"}
-
-    def test_get_agency_structure_with_tools(self, sample_agency):
-        """Test agency structure generation with tools included."""
+    def test_get_agency_graph_with_tools(self, sample_agency):
+        """Test agency graph generation with tools included."""
         # Test that the method works with include_tools=True
         # We'll test the structure without actually adding tools to avoid tool type complications
-        structure = sample_agency.get_agency_structure(include_tools=True)
+        structure = sample_agency.get_agency_graph(include_tools=True)
 
         assert "nodes" in structure
         assert "edges" in structure
-        assert "metadata" in structure
+        assert "metadata" not in structure
 
         # Check that the structure is valid even when no tools are present
         agent_nodes = [n for n in structure["nodes"] if n["type"] == "agent"]
@@ -338,9 +333,9 @@ class TestAgencyVisualizationIntegration:
         assert isinstance(tool_nodes, list)
         assert isinstance(tool_edges, list)
 
-    def test_get_agency_structure_without_tools(self, sample_agency):
-        """Test agency structure generation without tools."""
-        structure = sample_agency.get_agency_structure(include_tools=False)
+    def test_get_agency_graph_without_tools(self, sample_agency):
+        """Test agency graph generation without tools."""
+        structure = sample_agency.get_agency_graph(include_tools=False)
 
         # Should only have agent nodes
         tool_nodes = [n for n in structure["nodes"] if n["type"] == "tool"]
@@ -350,10 +345,10 @@ class TestAgencyVisualizationIntegration:
         tool_edges = [e for e in structure["edges"] if e["type"] == "tool"]
         assert len(tool_edges) == 0
 
-    def test_get_agency_structure_hierarchical_layout(self, sample_agency):
-        """Test hierarchical layout in get_agency_structure."""
+    def test_get_agency_graph_hierarchical_layout(self, sample_agency):
+        """Test hierarchical layout in get_agency_graph."""
         # Test hierarchical layout
-        structure = sample_agency.get_agency_structure()
+        structure = sample_agency.get_agency_graph()
 
         # Check that nodes have positions
         for node in structure["nodes"]:
@@ -397,7 +392,7 @@ class TestAgencyVisualizationIntegration:
 
 
 class TestMetadataDetails:
-    def test_get_agency_structure_rich_metadata(self):
+    def test_get_metadata_rich_metadata(self):
         """Ensure metadata includes tool details and agency info."""
         from agents import function_tool
 
@@ -409,15 +404,15 @@ class TestMetadataDetails:
         agent = Agent(name="ToolAgent", instructions="Use the tool", tools=[sample_tool])
         agency = Agency(agent, name="ToolAgency", shared_instructions="shared.md")
 
-        structure = agency.get_agency_structure()
+        payload = agency.get_metadata()
 
-        agent_node = next(n for n in structure["nodes"] if n["id"] == "ToolAgent")
+        agent_node = next(n for n in payload["nodes"] if n["id"] == "ToolAgent")
         data = agent_node["data"]
         assert data["toolCount"] == 1
         assert data["tools"][0]["name"] == "sample_tool"
         assert data["instructions"].startswith("shared.md")
 
-        meta = structure["metadata"]
+        meta = payload["metadata"]
         assert meta["agencyName"] == "ToolAgency"
         assert meta["layoutAlgorithm"] == "hierarchical"
         # Full agents list must include the single ToolAgent
@@ -451,13 +446,18 @@ class TestMetadataDetails:
         )
 
         agency = Agency(agent)
-        structure = agency.get_agency_structure()
+        structure = agency.get_agency_graph()
 
         tool_nodes = [n for n in structure["nodes"] if n["type"] == "tool"]
         ids = [n["id"] for n in tool_nodes]
         assert len(ids) == len(set(ids))
         labels = [n["data"]["label"] for n in tool_nodes]
         assert "tavily-server" in labels and "youtube-server" in labels
+
+    def test_get_agency_structure_deprecated_alias(self, sample_agency):
+        with pytest.warns(DeprecationWarning, match="get_agency_structure"):
+            structure = sample_agency.get_agency_structure()
+        assert structure == sample_agency.get_agency_graph()
 
 
 def test_copilot_demo_launcher_sets_client_facing_backend_url():

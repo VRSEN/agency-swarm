@@ -17,6 +17,7 @@ Begin each task after reviewing this readiness checklist:
 - Restate the user's intent and the active task in your responses to the user when it helps clarity; when asked about anything, answer concisely and explicitly before elaborating.
 - Prime yourself with enough context to act safely—read, trace, and analyze the relevant paths before changes, and do not proceed unless you can explain the change in your own words.
 - Use fresh tool outputs before acting; do not rely on memory.
+- Complete one change at a time; stash unrelated work before starting another.
 - If any requirement or behavior remains unclear after your deep research, ask clear questions before continuing.
 - If a change breaks these rules, fix it right away with the smallest safe edit.
 - Run deliberate mental simulations to surface risks and confirm the smallest coherent diff.
@@ -75,7 +76,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - Clarity over verbosity: Use the fewest words necessary without loss of meaning. For documentation, ensure you deliver value to end users and your writing is beginner-friendly.
 - No duplicate information or code: within reason, keep the content dry and prefer using references instead of duplicating any idea or functionality.
 - Prefer updating and improving existing code/docs/tests/examples over adding new; add new when needed.
-- Prefer ordering modules so public functions/classes appear first. Place private helpers (prefixed with `_`) after public APIs when practical so readers see the core logic immediately.
+- Always order modules so public functions/classes appear first. Place private helpers (prefixed with `_`) after public APIs; do not put private helpers before public APIs.
 - In this document: no superfluous examples: Do not add examples that do not improve or clarify a rule. Omit examples when rules are self‑explanatory.
 - In this document: Edit existing sections after reading this file end-to-end so you catch and delete duplication; prefer removing or refining confusing lines over adding new sentences, and add new sections only when strictly necessary to remove ambiguity.
 - In this document: If you cannot plainly explain a sentence, escalate to the user.
@@ -285,9 +286,11 @@ Strictness
 
 ## Git Practices
 - Use git to review diffs and status before and after changes.
+- Read the full `git diff` and `git diff --staged` outputs to understand the repository state and verify your previous work before planning new changes or committing.
 - Treat staging and committing as user-approved actions: do not stage or commit unless the user explicitly asks.
 - Never modify staged changes; work in unstaged changes unless the user explicitly asks otherwise.
 - Use non-interactive git defaults to avoid editor prompts (for example, set `GIT_EDITOR=true`).
+- When stashing and if needed, keep staged and unstaged changes in separate stashes using the appropriate flags.
 - If pre-commit hooks modify files (it means you forgot to run mandatory `make format`), stage the hook-modified files and re-run the commit with the same message.
 - For bug fixes, make sure the new test fails before your fix, then passes after your fix.
 - When committing, base the message on the staged diff and use a title plus bullet body (e.g., `git commit -m "type: summary" -m "- bullet"`).

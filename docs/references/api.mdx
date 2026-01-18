@@ -191,19 +191,35 @@ def run_fastapi(
     """
 ```
 
-```python get_agency_structure
-def get_agency_structure(
+```python get_agency_graph
+def get_agency_graph(
     self,
     include_tools: bool = True,
 ) -> dict[str, Any]:
     """
-    Returns a ReactFlow-compatible JSON structure representing the agency's organization.
+    Returns a ReactFlow-compatible JSON graph representing the agency's organization.
 
     Parameters:
         include_tools: Whether to include agent tools as separate nodes
 
     Returns:
         dict: ReactFlow-compatible structure with nodes and edges
+    """
+```
+
+```python get_metadata
+def get_metadata(
+    self,
+    include_tools: bool = True,
+) -> dict[str, Any]:
+    """
+    Returns combined graph data and summary metadata for the agency.
+
+    Parameters:
+        include_tools: Whether to include agent tools as separate nodes
+
+    Returns:
+        dict: Graph data plus metadata fields like agencyName, totalAgents, totalTools, agents, entryPoints
     """
 ```
 
