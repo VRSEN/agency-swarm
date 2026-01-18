@@ -1,5 +1,6 @@
 # --- Agency visualization and demo methods ---
 import logging
+import warnings
 from typing import TYPE_CHECKING, Any
 
 from agency_swarm.ui.demos.copilot import CopilotDemoLauncher
@@ -13,22 +14,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _describe_model(model: Any) -> str:
-    """Return a sanitized model representation suitable for visualization."""
-    if model is None:
-        return ""
-    if isinstance(model, str):
-        return model
-
-    model_name = getattr(model, "model", None)
-    if isinstance(model_name, str):
-        return model_name
-
-    return model.__class__.__name__
-
-
-def get_agency_structure(agency: "Agency", include_tools: bool = True) -> dict[str, Any]:
-    """Return a ReactFlow-compatible JSON structure describing the agency."""
+def get_agency_graph(agency: "Agency", include_tools: bool = True) -> dict[str, Any]:
+    """Return a ReactFlow-compatible JSON graph describing the agency."""
     from agency_swarm.ui.core.layout_algorithms import LayoutAlgorithms
 
     nodes: list[dict[str, Any]] = []
@@ -123,21 +110,27 @@ def get_agency_structure(agency: "Agency", include_tools: bool = True) -> dict[s
             }
         )
 
-    # Create metadata
-    metadata = {
-        "agencyName": getattr(agency, "name", None) or "Unnamed Agency",
-        "totalAgents": len(agency.agents),
-        "totalTools": sum(len(a.tools) if a.tools else 0 for a in agency.agents.values()),
-        "agents": list(agency.agents.keys()),
-        "entryPoints": [ep.name for ep in agency.entry_points],
-        "sharedInstructions": agency.shared_instructions or "",
-        "layoutAlgorithm": "hierarchical",
-    }
-
-    agency_data = {"nodes": nodes, "edges": edges, "metadata": metadata}
+    agency_data = {"nodes": nodes, "edges": edges}
 
     layout = LayoutAlgorithms()
     return layout.apply_layout(agency_data)
+
+
+def get_metadata(agency: "Agency", include_tools: bool = True) -> dict[str, Any]:
+    """Return combined graph data and summary metadata."""
+    agency_data = get_agency_graph(agency, include_tools)
+    agency_data["metadata"] = _build_agency_metadata(agency)
+    return agency_data
+
+
+def get_agency_structure(agency: "Agency", include_tools: bool = True) -> dict[str, Any]:
+    """Deprecated: use get_agency_graph instead."""
+    warnings.warn(
+        "get_agency_structure is deprecated; use get_agency_graph instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return get_agency_graph(agency, include_tools)
 
 
 def visualize(
@@ -189,3 +182,29 @@ def copilot_demo(
     Run a copilot demo of the agency.
     """
     CopilotDemoLauncher.start(agency, host=host, port=port, frontend_port=frontend_port, cors_origins=cors_origins)
+
+
+def _describe_model(model: Any) -> str:
+    """Return a sanitized model representation suitable for visualization."""
+    if model is None:
+        return ""
+    if isinstance(model, str):
+        return model
+
+    model_name = getattr(model, "model", None)
+    if isinstance(model_name, str):
+        return model_name
+
+    return model.__class__.__name__
+
+
+def _build_agency_metadata(agency: "Agency") -> dict[str, Any]:
+    return {
+        "agencyName": getattr(agency, "name", None) or "Unnamed Agency",
+        "totalAgents": len(agency.agents),
+        "totalTools": sum(len(a.tools) if a.tools else 0 for a in agency.agents.values()),
+        "agents": list(agency.agents.keys()),
+        "entryPoints": [ep.name for ep in agency.entry_points],
+        "sharedInstructions": agency.shared_instructions or "",
+        "layoutAlgorithm": "hierarchical",
+    }

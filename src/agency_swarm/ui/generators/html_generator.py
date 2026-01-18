@@ -25,14 +25,16 @@ class HTMLVisualizationGenerator:
         agency_data: dict[str, Any],
         output_file: str = "agency_visualization.html",
         open_browser: bool = True,
+        agency_name: str | None = None,
     ) -> str:
         """
         Generate a complete interactive HTML visualization.
 
         Args:
-            agency_data: The agency structure data from get_agency_structure()
+            agency_data: The agency graph data from get_agency_graph()
             output_file: Path to save the HTML file
             open_browser: Whether to automatically open in browser
+            agency_name: Optional name to show in the HTML title
 
         Returns:
             Path to the generated HTML file
@@ -48,11 +50,13 @@ class HTMLVisualizationGenerator:
         js_content = self._load_template("visualization.js")
 
         # Prepare template variables
-        agency_name = positioned_data.get("metadata", {}).get("agencyName", "Agency Swarm Visualization")
+        resolved_agency_name = agency_name or positioned_data.get("metadata", {}).get(
+            "agencyName", "Agency Swarm Visualization"
+        )
         agency_json = json.dumps(positioned_data, indent=2)
 
         # Replace placeholders in HTML template
-        html_content = html_template.replace("{{ agency_name }}", agency_name)
+        html_content = html_template.replace("{{ agency_name }}", resolved_agency_name)
         html_content = html_content.replace("{AGENCY_DATA_PLACEHOLDER}", agency_json)
 
         # Embed CSS and JS directly for standalone HTML file
@@ -78,13 +82,15 @@ class HTMLVisualizationGenerator:
         self,
         agency_data: dict[str, Any],
         output_dir: str = "agency_visualization",
+        agency_name: str | None = None,
     ) -> dict[str, str]:
         """
         Generate separate HTML, CSS, and JS files for web development.
 
         Args:
-            agency_data: The agency structure data
+            agency_data: The agency graph data
             output_dir: Directory to save the files
+            agency_name: Optional name to show in the HTML title
 
         Returns:
             Dictionary with paths to generated files
@@ -103,10 +109,12 @@ class HTMLVisualizationGenerator:
 
         # HTML file
         html_template = self._load_template("visualization.html")
-        agency_name = positioned_data.get("metadata", {}).get("agencyName", "Agency Swarm Visualization")
+        resolved_agency_name = agency_name or positioned_data.get("metadata", {}).get(
+            "agencyName", "Agency Swarm Visualization"
+        )
         agency_json = json.dumps(positioned_data, indent=2)
 
-        html_content = html_template.replace("{{ agency_name }}", agency_name)
+        html_content = html_template.replace("{{ agency_name }}", resolved_agency_name)
         html_content = html_content.replace("{AGENCY_DATA_PLACEHOLDER}", agency_json)
 
         html_file = output_path / "index.html"
@@ -166,8 +174,8 @@ class HTMLVisualizationGenerator:
         Returns:
             Path to the generated HTML file
         """
-        # Get agency structure data
-        agency_data = agency.get_agency_structure(include_tools=include_tools)
+        # Get agency graph data
+        agency_data = agency.get_agency_graph(include_tools=include_tools)
 
         # Generate HTML
         generator = HTMLVisualizationGenerator()
@@ -175,4 +183,5 @@ class HTMLVisualizationGenerator:
             agency_data=agency_data,
             output_file=output_file,
             open_browser=open_browser,
+            agency_name=getattr(agency, "name", None) or None,
         )

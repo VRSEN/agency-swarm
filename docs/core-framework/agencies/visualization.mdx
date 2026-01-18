@@ -7,7 +7,7 @@ icon: "chart-network"
 Agency Swarm provides two visualization methods:
 
 1. **`visualize()`** - Creates interactive HTML files
-2. **`get_agency_structure()`** - Returns ReactFlow-compatible JSON
+2. **`get_agency_graph()`** - Returns ReactFlow-compatible JSON
 
 <Tabs>
 <Tab title="HTML Visualization">
@@ -68,12 +68,12 @@ print(f"Saved to: {html_file}")
 </Tab>
 <Tab title="ReactFlow Integration">
 
-## `get_agency_structure()`
+## `get_agency_graph()`
 
 Returns ReactFlow-compatible JSON data for custom frontend integration.
 
 ```python
-def get_agency_structure(
+def get_agency_graph(
     self,
     include_tools: bool = True
 ) -> dict[str, Any]
@@ -103,13 +103,7 @@ def get_agency_structure(
             "target": "Analyst",
             "type": "communication"
         }
-    ],
-    "metadata": {
-        "agencyName": "Analysis Agency",
-        "totalAgents": 2,
-        "totalTools": 1,
-        "entryPoints": ["Manager"]
-    }
+    ]
 }
 ```
 
@@ -125,12 +119,12 @@ def get_agency_structure(
 
 ## Frontend Integration
 
-Use the JSON directly in React:
+Expose `get_agency_graph()` in your API, then use the JSON directly in React:
 
 ```tsx
 import ReactFlow from 'reactflow';
 
-const agencyData = await fetch('/api/agency-structure').then(r => r.json());
+const agencyData = await fetch('/your-graph-endpoint').then(r => r.json());
 
 function AgencyVisualization() {
   return (

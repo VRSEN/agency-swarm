@@ -139,7 +139,7 @@ def run_fastapi(
             preview_instance = agency_factory(load_threads_callback=lambda: [])
             AGENT_INSTANCES: dict[str, Agent] = dict(preview_instance.agents.items())
             AgencyRequest = add_agent_validator(BaseRequest, AGENT_INSTANCES)
-            agency_metadata = preview_instance.get_agency_structure()
+            agency_metadata = preview_instance.get_metadata()
 
             if enable_agui:
                 app.add_api_route(

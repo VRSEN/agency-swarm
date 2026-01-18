@@ -433,11 +433,26 @@ class Agency:
         """
         return run_fastapi_helper(self, host, port, app_token_env, cors_origins, enable_agui)
 
-    def get_agency_structure(self, include_tools: bool = True) -> dict[str, Any]:
-        """Return a ReactFlow-compatible JSON structure describing the agency."""
-        from .visualization import get_agency_structure
+    def get_agency_graph(self, include_tools: bool = True) -> dict[str, Any]:
+        """Return a ReactFlow-compatible JSON graph describing the agency."""
+        from .visualization import get_agency_graph
 
-        return get_agency_structure(self, include_tools)
+        return get_agency_graph(self, include_tools)
+
+    def get_metadata(self, include_tools: bool = True) -> dict[str, Any]:
+        """Return combined graph data and summary metadata."""
+        from .visualization import get_metadata
+
+        return get_metadata(self, include_tools)
+
+    def get_agency_structure(self, include_tools: bool = True) -> dict[str, Any]:
+        """Deprecated: use get_agency_graph instead."""
+        warnings.warn(
+            "get_agency_structure is deprecated; use get_agency_graph instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.get_agency_graph(include_tools)
 
     def visualize(
         self,
