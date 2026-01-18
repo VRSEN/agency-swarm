@@ -651,7 +651,7 @@ async def test_streaming_persists_hosted_tool_outputs(
 
     mock_runner_run_streamed_patch.side_effect = _run_streamed_stub
 
-    hosted_message = MessageFormatter.add_agency_metadata(
+    hosted_message = MessageFormatter.attach_internal_metadata(
         {
             "role": "system",
             "content": "[SEARCH_RESULTS] Tool Call ID: call-123",

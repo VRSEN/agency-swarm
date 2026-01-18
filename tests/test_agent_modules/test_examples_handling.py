@@ -25,7 +25,7 @@ def test_examples_parameter_is_stored_and_prefixed_on_runs() -> None:
 
     thread_manager = ThreadManager()
     context = AgencyContext(agency_instance=None, thread_manager=thread_manager)
-    system_message = MessageFormatter.add_agency_metadata(
+    system_message = MessageFormatter.attach_internal_metadata(
         {"role": "system", "content": "System instructions"},
         agent=agent.name,
         caller_agent=None,

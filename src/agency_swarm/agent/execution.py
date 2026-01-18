@@ -207,7 +207,7 @@ class Execution:
                         MessageFormatter.add_citations_to_message(run_item_obj, item_dict, citations_by_message)
 
                         # Add agency metadata to the response items
-                        formatted_item = MessageFormatter.add_agency_metadata(
+                        formatted_item = MessageFormatter.attach_internal_metadata(
                             item_dict,
                             agent=current_agent_name,
                             caller_agent=sender_name,

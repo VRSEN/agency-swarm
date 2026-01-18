@@ -174,7 +174,7 @@ def _persist_run_item_if_needed(
 
     item_dict = cast(
         TResponseInputItem,
-        MessageFormatter.strip_agency_metadata([run_item_obj.to_input_item()])[0],
+        MessageFormatter.strip_internal_metadata([run_item_obj.to_input_item()])[0],
     )
     if item_dict and isinstance(run_item_obj, MessageOutputItem):
         single_citation_map = extract_direct_file_annotations([run_item_obj], agent_name=agent.name)
@@ -182,7 +182,7 @@ def _persist_run_item_if_needed(
 
     caller_for_event = _resolve_caller_agent(event, sender_name)
 
-    formatted_item = MessageFormatter.add_agency_metadata(
+    formatted_item = MessageFormatter.attach_internal_metadata(
         item_dict,  # type: ignore[arg-type]
         agent=current_stream_agent_name,
         caller_agent=caller_for_event,
@@ -355,7 +355,7 @@ def _persist_streamed_items(
         if isinstance(run_item, MessageOutputItem):
             MessageFormatter.add_citations_to_message(run_item, item_payload, citations_by_message, is_streaming=True)
 
-        formatted_item: TResponseInputItem = MessageFormatter.add_agency_metadata(
+        formatted_item: TResponseInputItem = MessageFormatter.attach_internal_metadata(
             item_payload,
             agent=current_agent_name,
             caller_agent=caller_name,

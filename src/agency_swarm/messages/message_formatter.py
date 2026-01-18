@@ -3,6 +3,7 @@
 import json
 import logging
 import time
+import warnings
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any
 
@@ -29,7 +30,7 @@ logger = logging.getLogger(__name__)
 class MessageFormatter:
     """Handles message formatting and structure preparation."""
 
-    metadata_fields: list[str] = [
+    internal_metadata_fields: list[str] = [
         "agent",
         "callerAgent",
         "timestamp",
@@ -39,10 +40,11 @@ class MessageFormatter:
         "message_origin",
         "run_trace_id",
     ]
+    metadata_fields: list[str] = internal_metadata_fields
 
     @staticmethod
-    def add_agency_metadata(
-        message: TResponseInputItem,
+    def attach_internal_metadata(
+        payload: TResponseInputItem,
         agent: str,
         caller_agent: str | None = None,
         agent_run_id: str | None = None,
@@ -50,21 +52,20 @@ class MessageFormatter:
         run_trace_id: str | None = None,
         timestamp: int | None = None,
     ) -> TResponseInputItem:
-        """Add agency-specific metadata to a message.
+        """Attach internal metadata for thread storage and tracing.
 
         Args:
-            message: The message dictionary to enhance
-            agent: The recipient agent name
-            caller_agent: The sender agent name (None for user)
-            agent_run_id: The current agent's execution ID
-            parent_run_id: The calling agent's execution ID
-            timestamp: Optional timestamp in microseconds.
-                If None, either preserves existing timestamp or generates a new one.
+            payload: Input item that will be stored in the thread history.
+            agent: Recipient agent name for internal routing.
+            caller_agent: Sender agent name (None for user).
+            agent_run_id: Current agent execution ID.
+            parent_run_id: Calling agent execution ID.
+            timestamp: Optional timestamp in microseconds. If None, a new one is generated.
 
         Returns:
-            dict[str, Any]: Message with added metadata
+            dict[str, Any]: Input item with internal metadata attached.
         """
-        modified_message = message.copy()  # type: ignore[arg-type]
+        modified_message = payload.copy()  # type: ignore[arg-type]
         modified_message["agent"] = agent  # type: ignore[typeddict-unknown-key]
         modified_message["callerAgent"] = caller_agent  # type: ignore[typeddict-unknown-key]
         if agent_run_id is not None:
@@ -91,6 +92,32 @@ class MessageFormatter:
         return modified_message
 
     @staticmethod
+    def add_agency_metadata(
+        message: TResponseInputItem,
+        agent: str,
+        caller_agent: str | None = None,
+        agent_run_id: str | None = None,
+        parent_run_id: str | None = None,
+        run_trace_id: str | None = None,
+        timestamp: int | None = None,
+    ) -> TResponseInputItem:
+        """Deprecated alias for attach_internal_metadata()."""
+        warnings.warn(
+            "MessageFormatter.add_agency_metadata is deprecated; use attach_internal_metadata instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return MessageFormatter.attach_internal_metadata(
+            message,
+            agent=agent,
+            caller_agent=caller_agent,
+            agent_run_id=agent_run_id,
+            parent_run_id=parent_run_id,
+            run_trace_id=run_trace_id,
+            timestamp=timestamp,
+        )
+
+    @staticmethod
     def prepare_history_for_runner(
         processed_current_message_items: list[TResponseInputItem],
         agent: "Agent",
@@ -107,10 +134,10 @@ class MessageFormatter:
 
         thread_manager = agency_context.thread_manager
 
-        # Add agency metadata to incoming messages
+        # Attach internal metadata to incoming messages
         messages_to_save: list[TResponseInputItem] = []
         for msg in processed_current_message_items:
-            formatted_msg = MessageFormatter.add_agency_metadata(
+            formatted_msg = MessageFormatter.attach_internal_metadata(
                 msg,  # type: ignore[arg-type]
                 agent=agent.name,
                 caller_agent=sender_name,
@@ -130,8 +157,8 @@ class MessageFormatter:
         # Prepare history for runner (sanitize and ensure content safety)
         history_for_runner = MessageFormatter.sanitize_tool_calls_in_history(full_history)  # type: ignore[arg-type]
         history_for_runner = MessageFormatter.ensure_tool_calls_content_safety(history_for_runner)
-        # Strip agency metadata before sending to OpenAI
-        history_for_runner = MessageFormatter.strip_agency_metadata(history_for_runner)
+        # Strip internal metadata before sending to OpenAI
+        history_for_runner = MessageFormatter.strip_internal_metadata(history_for_runner)
         history_for_runner = MessageFormatter._prepend_examples(history_for_runner, agent)
         return history_for_runner  # type: ignore[return-value]
 
@@ -156,21 +183,31 @@ class MessageFormatter:
         return [*history[:insert_after], *examples, *history[insert_after:]]
 
     @staticmethod
-    def strip_agency_metadata(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Remove agency-specific metadata fields before sending to OpenAI.
+    def strip_internal_metadata(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Remove internal metadata fields before sending to the model.
 
         Args:
-            messages: List of messages with agency metadata
+            messages: List of messages with internal metadata
 
         Returns:
-            list[dict[str, Any]]: Messages without agency metadata fields
+            list[dict[str, Any]]: Messages without internal metadata fields
         """
         cleaned = []
         for msg in messages:
-            # Create a copy without agency fields (including citations which OpenAI doesn't accept)
-            clean_msg = {k: v for k, v in msg.items() if k not in MessageFormatter.metadata_fields}
+            # Create a copy without internal fields (including citations which OpenAI doesn't accept)
+            clean_msg = {k: v for k, v in msg.items() if k not in MessageFormatter.internal_metadata_fields}
             cleaned.append(clean_msg)
         return cleaned
+
+    @staticmethod
+    def strip_agency_metadata(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Deprecated alias for strip_internal_metadata()."""
+        warnings.warn(
+            "MessageFormatter.strip_agency_metadata is deprecated; use strip_internal_metadata instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return MessageFormatter.strip_internal_metadata(messages)
 
     @staticmethod
     def sanitize_tool_calls_in_history(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -324,7 +361,7 @@ class MessageFormatter:
                         timestamps_by_tool_id.get(tool_call.id) if timestamps_by_tool_id and tool_call.id else None
                     )
                     synthetic_outputs.append(
-                        MessageFormatter.add_agency_metadata(
+                        MessageFormatter.attach_internal_metadata(
                             {  # type: ignore[arg-type]
                                 "role": "system",
                                 "content": search_results_content,
@@ -378,7 +415,7 @@ class MessageFormatter:
                         timestamps_by_tool_id.get(tool_call.id) if timestamps_by_tool_id and tool_call.id else None
                     )
                     synthetic_outputs.append(
-                        MessageFormatter.add_agency_metadata(
+                        MessageFormatter.attach_internal_metadata(
                             {  # type: ignore[arg-type]
                                 "role": "system",
                                 "content": search_results_content,

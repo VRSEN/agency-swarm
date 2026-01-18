@@ -575,7 +575,7 @@ class Handoff:
                         reminder_msg["message_origin"] = "handoff_reminder"
 
                         # Copy metadata from handoff call to keep track of the CallerAgent correctly
-                        for property_name in MessageFormatter.metadata_fields:
+                        for property_name in MessageFormatter.internal_metadata_fields:
                             if property_name in last_message:
                                 reminder_msg[property_name] = last_message[property_name]  # type: ignore[literal-required]
 
