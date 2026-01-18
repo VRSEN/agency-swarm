@@ -93,7 +93,7 @@ def append_guardrail_feedback(
         if include_assistant:
             for item in assistant_output:
                 to_persist.append(
-                    MessageFormatter.add_agency_metadata(
+                    MessageFormatter.attach_internal_metadata(
                         item,
                         agent=agent.name,
                         caller_agent=sender_name,
@@ -122,7 +122,7 @@ def append_guardrail_feedback(
             "message_origin": origin,  # type: ignore[typeddict-unknown-key]
         }
         to_persist.append(
-            MessageFormatter.add_agency_metadata(
+            MessageFormatter.attach_internal_metadata(
                 guidance_msg,
                 agent=agent.name,
                 caller_agent=sender_name,
