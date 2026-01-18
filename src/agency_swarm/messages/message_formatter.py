@@ -142,9 +142,18 @@ class MessageFormatter:
         if not raw_examples:
             return history
 
-        prefixed_history = [deepcopy(example) for example in raw_examples]
-        prefixed_history.extend(history)
-        return prefixed_history
+        examples = [deepcopy(example) for example in raw_examples]
+
+        insert_after = None
+        for index, message in enumerate(history):
+            if message.get("role") == "system":
+                insert_after = index + 1
+                break
+
+        if insert_after is None:
+            return [*examples, *history]
+
+        return [*history[:insert_after], *examples, *history[insert_after:]]
 
     @staticmethod
     def strip_agency_metadata(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:

@@ -25,6 +25,12 @@ def test_examples_parameter_is_stored_and_prefixed_on_runs() -> None:
 
     thread_manager = ThreadManager()
     context = AgencyContext(agency_instance=None, thread_manager=thread_manager)
+    system_message = MessageFormatter.add_agency_metadata(
+        {"role": "system", "content": "System instructions"},
+        agent=agent.name,
+        caller_agent=None,
+    )
+    thread_manager.add_messages([system_message])
     history = MessageFormatter.prepare_history_for_runner(
         processed_current_message_items=[{"role": "user", "content": "Newest"}],
         agent=agent,
@@ -35,9 +41,12 @@ def test_examples_parameter_is_stored_and_prefixed_on_runs() -> None:
         run_trace_id="trace-1",
     )
 
-    assert history[:2] == expected_examples
-    assert history[2]["role"] == "user"
-    assert history[2]["content"] == "Newest"
+    assert history[0]["role"] == "system"
+    assert history[1:3] == expected_examples
+    assert history[3]["role"] == "user"
+    assert history[3]["content"] == "Newest"
     # Only the live message should be stored in the thread manager (examples are synthetic)
     stored_messages = thread_manager.get_conversation_history(agent.name, None)
-    assert len(stored_messages) == 1
+    assert len(stored_messages) == 2
+    assert stored_messages[0]["role"] == "system"
+    assert stored_messages[1]["role"] == "user"

@@ -64,7 +64,7 @@ You can add few-shot examples to your agent during initialization:
 </Tabs>
 
 <Note>
-The agent keeps these examples and automatically prepends them to every conversation at run time, so the model always sees them immediately after your core instructions.
+Examples must use the multi-message format (a list of role/content dictionaries). The agent inserts them right after the system message at run time.
 </Note>
 
 See more advanced features in [Agent Class](/core-framework/agents/advanced-configuration)
