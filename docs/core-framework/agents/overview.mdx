@@ -78,6 +78,8 @@ In agency swarm, to create an agent, you need to instantiate the `Agent` class.
 | Throw Input Guardrail Error *(optional)* | `throw_input_guardrail_error` | If set to `True`, input guardrail errors raise an exception. If set to `False`, the guardrail message is returned as the agent's response. Default: `False` |
 | Handoff Reminder *(optional)* | `handoff_reminder` | Replaces the default handoff reminder system message with a given string. Default: "Transfer completed. You are [recipient_agent_name]. Please continue the task." |
 | Include Search Results *(optional)* | `include_search_results` | Include search results in FileSearchTool output for citation extraction. Default: `False` |
+| Conversation Starters *(optional)* | `conversation_starters` | List of short user prompts for UIs. Each starter must be a non-empty string. Default: `None` |
+| Quick Replies *(optional)* | `quick_replies` | List of `{prompt, response}` pairs. If a user message matches a prompt exactly (trimmed, case-insensitive), the agent returns the response without calling the model. Default: `None` |
 
   </Tab>
 </Tabs>

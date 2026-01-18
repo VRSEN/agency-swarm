@@ -1,7 +1,7 @@
 import logging
 import os
 from pathlib import Path
-from typing import Any, TypedDict, TypeVar
+from typing import Annotated, Any, TypedDict, TypeVar
 
 from agents import (
     Agent as BaseAgent,
@@ -13,6 +13,7 @@ from agents import (
     TResponseInputItem,
 )
 from openai import AsyncOpenAI, OpenAI
+from pydantic import BaseModel, ConfigDict, StringConstraints, TypeAdapter, ValidationError
 
 from agency_swarm.agent import (
     Execution,
@@ -182,8 +183,10 @@ class Agent(BaseAgent[MasterContext]):
         self.api_headers = current_agent_params.get("api_headers", {})
         self.api_params = current_agent_params.get("api_params", {})
         self.description = current_agent_params.get("description")
-        self.conversation_starters = current_agent_params.get("conversation_starters")
-        self.quick_replies = current_agent_params.get("quick_replies")
+        conversation_starters = current_agent_params.get("conversation_starters")
+        self.conversation_starters = _validate_conversation_starters(conversation_starters)
+        quick_replies = current_agent_params.get("quick_replies")
+        self.quick_replies = _validate_quick_replies(quick_replies)
         self.send_message_tool_class = current_agent_params.get("send_message_tool_class")
         self.include_search_results = current_agent_params.get("include_search_results", False)
         self.validation_attempts = int(current_agent_params.get("validation_attempts", 1))
@@ -482,3 +485,36 @@ class Agent(BaseAgent[MasterContext]):
         from agency_swarm.utils.files import get_external_caller_directory
 
         return get_external_caller_directory()
+
+
+_NON_EMPTY_STR = Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
+
+
+class _QuickReplyModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    prompt: _NON_EMPTY_STR
+    response: _NON_EMPTY_STR
+
+
+_CONVERSATION_STARTERS_ADAPTER = TypeAdapter(list[_NON_EMPTY_STR])
+_QUICK_REPLIES_ADAPTER = TypeAdapter(list[_QuickReplyModel])
+
+
+def _validate_conversation_starters(value: Any) -> list[str] | None:
+    if value is None:
+        return None
+    try:
+        return _CONVERSATION_STARTERS_ADAPTER.validate_python(value)
+    except ValidationError as exc:
+        raise ValueError("conversation_starters must be a list of non-empty strings") from exc
+
+
+def _validate_quick_replies(value: Any) -> list[QuickReply] | None:
+    if value is None:
+        return None
+    try:
+        parsed = _QUICK_REPLIES_ADAPTER.validate_python(value)
+    except ValidationError as exc:
+        raise ValueError("quick_replies must be a list of {'prompt': str, 'response': str} objects") from exc
+    return [{"prompt": reply.prompt, "response": reply.response} for reply in parsed]
