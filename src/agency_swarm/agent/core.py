@@ -1,9 +1,9 @@
-import json
 import logging
 import os
 import warnings
+from copy import deepcopy
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 from agents import (
     Agent as BaseAgent,
@@ -146,16 +146,20 @@ class Agent(BaseAgent[MasterContext]):
         # Apply framework defaults (e.g., truncation="auto")
         apply_framework_defaults(kwargs)
 
-        # examples are appended to instructions
-        if "examples" in kwargs:
-            examples = kwargs.pop("examples")
-            if examples and isinstance(examples, list):
-                try:
-                    examples_str = "\n\nExamples:\n" + "\n".join(f"- {json.dumps(ex)}" for ex in examples)
-                    current_instructions = kwargs.get("instructions", "")
-                    kwargs["instructions"] = current_instructions + examples_str
-                except Exception:
-                    logger.exception("Failed to append examples to instructions")
+        examples_param = kwargs.pop("examples", None)
+        normalized_examples: tuple[TResponseInputItem, ...] = ()
+        if examples_param is not None:
+            if not isinstance(examples_param, list):
+                raise TypeError("'examples' must be provided as a list of message dictionaries")
+            normalized_list: list[TResponseInputItem] = []
+            for index, example in enumerate(examples_param):
+                if not isinstance(example, dict):
+                    raise TypeError(
+                        "Each entry in 'examples' must be a dict matching the OpenAI message schema; "
+                        f"received {type(example).__name__} at index {index}."
+                    )
+                normalized_list.append(cast(TResponseInputItem, deepcopy(example)))
+            normalized_examples = tuple(normalized_list)
 
         # Separate kwargs into base agent params and agency swarm params
         base_agent_params, current_agent_params = separate_kwargs(kwargs)
@@ -178,6 +182,9 @@ class Agent(BaseAgent[MasterContext]):
 
         # Initialize base agent
         super().__init__(**base_agent_params)
+
+        # Persist few-shot examples for reuse on every run
+        self._few_shot_examples: tuple[TResponseInputItem, ...] = normalized_examples
 
         # Initialize Agency Swarm specific attributes
         self.files_folder = current_agent_params.get("files_folder")
@@ -265,6 +272,11 @@ class Agent(BaseAgent[MasterContext]):
             model_info = str(self.model)
 
         return f"<Agent name={self.name!r} desc={self.description!r} model={model_info!r}>"
+
+    @property
+    def few_shot_examples(self) -> tuple[TResponseInputItem, ...]:
+        """Return the configured few-shot examples as independent copies."""
+        return tuple(deepcopy(example) for example in self._few_shot_examples)
 
     @property
     def client(self) -> AsyncOpenAI:

@@ -129,4 +129,3 @@ def test_client_config_overrides_openai_client_base_url_and_key(openai_stub_base
     assert len(seen) == 1
     assert seen[0]["path"] == "/v1/chat/completions"
     assert seen[0]["authorization"] == "Bearer sk-test"
-

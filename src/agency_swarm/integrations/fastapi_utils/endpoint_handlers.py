@@ -772,7 +772,7 @@ async def generate_chat_name(new_messages: list[TResponseInputItem]):
             tripwire_triggered=tripwire_triggered,
         )
 
-    formatted_messages = str(MessageFormatter.strip_agency_metadata(new_messages))  # type: ignore[arg-type]
+    formatted_messages = str(MessageFormatter.strip_internal_metadata(new_messages))  # type: ignore[arg-type]
     if len(formatted_messages) > 1000:
         formatted_messages = "HISTORY TRUNCATED TO 1000 CHARACTERS:\n" + formatted_messages[:1000]
 

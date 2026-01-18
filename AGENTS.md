@@ -298,6 +298,8 @@ Strictness
 - `docs/migration/guide.mdx` – Breaking changes
 - `tests/integration/` – Real-world behaviors
 - `/docs/` – Framework documentation
+- `references/` – Primary source of truth; consult first and clone missing sources here
+- Agents SDK repo: https://github.com/openai/openai-agents-python (mirrored at `references/openai-agents-python`)
 
 ## Quick Commands
 `find src/ -name "*.py" | grep -v __pycache__ | sort`  # Initial structure
@@ -312,6 +314,7 @@ Strictness
 ## Search Discipline
 - After changes, search for and clean up related patterns when they are in scope.
 - Always search examples, docs, and references if you need more context and usage examples.
+- Avoid installed packages or web sources when `references/` provides the needed context.
 
 ## End-of-Task Checklist
 - All requirements in this document respected
