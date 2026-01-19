@@ -23,7 +23,8 @@ async def test_concurrent_messages_to_same_agent():
     coordinator = Agent(
         name="Coordinator",
         instructions=(
-            "When asked to test, send two messages to Worker using the send_message tool. "
+            "When asked to test, immediately send TWO messages to Worker "
+            "using send_message tool at the same time without waiting between calls. "
             "Message 1: 'First task', Message 2: 'Second task'"
         ),
         model="gpt-5-mini",
@@ -41,15 +42,16 @@ async def test_concurrent_messages_to_same_agent():
         save_threads_callback=save_callback,
     )
 
-    await agency.get_response("Test sequential calls to same agent")
+    await agency.get_response("Test concurrent calls to same agent")
 
-    outputs = [str(msg.get("output", "")) for msg in messages if msg.get("type") == "function_call_output"]
-    assert not any(
-        "Cannot send another message to 'Worker' while the previous message is still being processed" in output
-        for output in outputs
-    ), "Unexpected blocking error when sending sequential messages to same agent"
-    received = [output for output in outputs if "Received:" in output]
-    assert len(received) >= 2, "Expected two Worker responses"
+    blocking_error_found = any(
+        "Cannot send another message to 'Worker' while the previous message is still being processed"
+        in str(msg.get("output", ""))
+        for msg in messages
+        if msg.get("type") == "function_call_output"
+    )
+
+    assert blocking_error_found, "Expected blocking error when sending concurrent messages to same agent"
 
 
 @pytest.mark.asyncio
