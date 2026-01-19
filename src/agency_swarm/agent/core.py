@@ -1,7 +1,7 @@
 import logging
 import os
 from pathlib import Path
-from typing import Annotated, Any, TypedDict, TypeVar
+from typing import Annotated, Any, TypeVar
 
 from agents import (
     Agent as BaseAgent,
@@ -32,6 +32,7 @@ from agency_swarm.agent.agent_flow import AgentFlow
 from agency_swarm.agent.attachment_manager import AttachmentManager
 from agency_swarm.agent.execution_streaming import StreamingRunResponse
 from agency_swarm.agent.file_manager import AgentFileManager
+from agency_swarm.agent.quick_replies import QuickReply
 from agency_swarm.agent.tools import _attach_one_call_guard
 from agency_swarm.context import MasterContext
 from agency_swarm.tools.concurrency import ToolConcurrencyManager
@@ -47,11 +48,6 @@ T = TypeVar("T", bound="Agent")
 
 
 """AgencyContext moved to agency_swarm.agent.context_types (no behavior change)."""
-
-
-class QuickReply(TypedDict):
-    prompt: str
-    response: str
 
 
 class Agent(BaseAgent[MasterContext]):

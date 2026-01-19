@@ -13,15 +13,8 @@ from agents import (
     RunResultStreaming,
     TResponseInputItem,
 )
-from agents.items import MessageOutputItem
-from agents.stream_events import RawResponsesStreamEvent, StreamEvent
-from openai.types.responses import (
-    ResponseOutputItemAddedEvent,
-    ResponseOutputItemDoneEvent,
-    ResponseOutputMessage,
-    ResponseOutputText,
-    ResponseTextDeltaEvent,
-)
+from agents.items import MessageOutputItem, RunItem
+from agents.stream_events import RunItemStreamEvent, StreamEvent
 
 from agency_swarm.agent.execution_helpers import (
     cleanup_execution,
@@ -32,7 +25,17 @@ from agency_swarm.agent.execution_helpers import (
     run_with_guardrails,
     setup_execution,
 )
+from agency_swarm.agent.execution_stream_persistence import (
+    StreamMetadataStore,
+    _persist_run_item_if_needed,
+    _persist_streamed_items,
+)
 from agency_swarm.agent.execution_streaming import StreamingRunResponse, run_stream_with_guardrails
+from agency_swarm.agent.quick_replies import (
+    build_quick_reply_item,
+    resolve_quick_reply,
+    stream_quick_reply_events,
+)
 from agency_swarm.messages import (
     MessageFilter,
     MessageFormatter,
@@ -137,7 +140,8 @@ class Execution:
             if agency_context and agency_context.agency_instance:
                 agency_name = getattr(agency_context.agency_instance, "name", None) or agency_name
 
-            quick_reply = self._resolve_quick_reply(processed_current_message_items, sender_name)
+            # Quick replies are author-provided and bypass the LLM/guardrails entirely.
+            quick_reply = resolve_quick_reply(processed_current_message_items, sender_name, self.agent.quick_replies)
             if quick_reply is None:
                 run_result, master_context_for_run = await run_with_guardrails(
                     agent=self.agent,
@@ -157,7 +161,9 @@ class Execution:
                 )
             else:
                 assistant_message_id = f"msg_{uuid.uuid4().hex}"
-                assistant_item = self._build_quick_reply_item(quick_reply, assistant_message_id)
+                assistant_item = build_quick_reply_item(
+                    agent=self.agent, response_text=quick_reply, message_id=assistant_message_id
+                )
                 run_result = RunResult(
                     input=history_for_runner,
                     new_items=[assistant_item],
@@ -372,7 +378,10 @@ class Execution:
                     len(history_for_runner),
                 )
 
-                quick_reply = self._resolve_quick_reply(processed_current_message_items, sender_name)
+                # Quick replies are author-provided and bypass the LLM/guardrails entirely.
+                quick_reply = resolve_quick_reply(
+                    processed_current_message_items, sender_name, self.agent.quick_replies
+                )
                 if quick_reply is not None:
                     master_context_for_run = prepare_master_context(self.agent, context_override, agency_context)
                     try:
@@ -382,7 +391,9 @@ class Execution:
                         pass
 
                     assistant_message_id = f"msg_{uuid.uuid4().hex}"
-                    assistant_item = self._build_quick_reply_item(quick_reply, assistant_message_id)
+                    assistant_item = build_quick_reply_item(
+                        agent=self.agent, response_text=quick_reply, message_id=assistant_message_id
+                    )
                     run_result = RunResult(
                         input=history_for_runner,
                         new_items=[assistant_item],
@@ -400,24 +411,74 @@ class Execution:
                     if main_model_name:
                         typing.cast(_UsageTrackingRunResult, run_result)._main_agent_model = main_model_name
 
-                    if agency_context:
-                        self._persist_quick_reply_message(
-                            agency_context=agency_context,
-                            run_item=assistant_item,
-                            sender_name=sender_name,
-                            agent_run_id=current_agent_run_id,
-                            parent_run_id=parent_run_id,
-                            run_trace_id=run_trace_id,
-                        )
+                    initial_saved_count = 0
+                    if agency_context and agency_context.thread_manager:
+                        try:
+                            initial_saved_count = len(agency_context.thread_manager.get_all_messages())
+                        except Exception:
+                            initial_saved_count = 0
 
-                    async for quick_reply_event in self._stream_quick_reply_events(
+                    metadata_store = StreamMetadataStore()
+                    collected_items: list[RunItem] = [assistant_item]
+                    id_normalizer = StreamIdNormalizer()
+                    response_id = f"resp_{uuid.uuid4().hex}"
+                    response_id = f"resp_{uuid.uuid4().hex}"
+
+                    async for quick_reply_event in stream_quick_reply_events(
                         response_text=quick_reply,
                         message_id=assistant_message_id,
+                        response_id=response_id,
+                        created_at=None,
+                        model_name=main_model_name,
+                        agent_name=self.agent.name,
                         sender_name=sender_name,
                         agent_run_id=current_agent_run_id,
                         parent_run_id=parent_run_id,
                     ):
-                        yield quick_reply_event
+                        yield id_normalizer.normalize_stream_event(quick_reply_event)
+
+                    run_item_event = RunItemStreamEvent(
+                        name="message_output_created",
+                        item=assistant_item,
+                        type="run_item_stream_event",
+                    )
+                    run_item_event = add_agent_name_to_event(
+                        run_item_event,
+                        self.agent.name,
+                        sender_name,
+                        agent_run_id=current_agent_run_id,
+                        parent_run_id=parent_run_id,
+                    )
+                    run_item_event = typing.cast(
+                        RunItemStreamEvent, id_normalizer.normalize_stream_event(run_item_event)
+                    )
+                    if agency_context:
+                        _persist_run_item_if_needed(
+                            run_item_event,
+                            agent=self.agent,
+                            sender_name=sender_name,
+                            parent_run_id=parent_run_id,
+                            run_trace_id=run_trace_id,
+                            current_stream_agent_name=self.agent.name,
+                            current_agent_run_id=current_agent_run_id,
+                            agency_context=agency_context,
+                            metadata_store=metadata_store,
+                        )
+                    yield run_item_event
+
+                    if agency_context and agency_context.thread_manager:
+                        _persist_streamed_items(
+                            streaming_result=run_result,
+                            metadata_store=metadata_store,
+                            collected_items=collected_items,
+                            agent=self.agent,
+                            sender_name=sender_name,
+                            parent_run_id=parent_run_id,
+                            run_trace_id=run_trace_id,
+                            fallback_agent_run_id=current_agent_run_id,
+                            agency_context=agency_context,
+                            initial_saved_count=initial_saved_count,
+                        )
 
                     wrapper._resolve_final_result(typing.cast(RunResultStreaming, run_result))
                     return
@@ -472,167 +533,3 @@ class Execution:
 
         wrapper = StreamingRunResponse(_stream())
         return wrapper
-
-    @staticmethod
-    def _normalize_quick_reply_text(text: str) -> str:
-        return text.strip().casefold()
-
-    @classmethod
-    def _extract_user_text(cls, items: list[TResponseInputItem]) -> str | None:
-        for item in reversed(items):
-            if not isinstance(item, dict):
-                continue
-            if item.get("role") != "user":
-                continue
-            content = item.get("content")
-            if isinstance(content, str):
-                return content
-            if isinstance(content, list):
-                text_chunks: list[str] = []
-                for content_item in content:
-                    if not isinstance(content_item, dict):
-                        continue
-                    if content_item.get("type") != "input_text":
-                        continue
-                    text_value = content_item.get("text")
-                    if isinstance(text_value, str):
-                        text_chunks.append(text_value)
-                if text_chunks:
-                    return "".join(text_chunks)
-        return None
-
-    def _resolve_quick_reply(self, items: list[TResponseInputItem], sender_name: str | None) -> str | None:
-        if sender_name is not None:
-            return None
-        quick_replies = self.agent.quick_replies
-        if not quick_replies:
-            return None
-        message_text = self._extract_user_text(items)
-        if message_text is None:
-            return None
-        normalized_message = self._normalize_quick_reply_text(message_text)
-        if not normalized_message:
-            return None
-        for reply in quick_replies:
-            prompt = reply["prompt"]
-            if normalized_message == self._normalize_quick_reply_text(prompt):
-                return reply["response"]
-        return None
-
-    def _build_quick_reply_item(self, response_text: str, message_id: str) -> MessageOutputItem:
-        output_message = ResponseOutputMessage(
-            id=message_id,
-            content=[ResponseOutputText(text=response_text, type="output_text", annotations=[])],
-            role="assistant",
-            status="completed",
-            type="message",
-        )
-        return MessageOutputItem(raw_item=output_message, type="message_output_item", agent=self.agent)
-
-    async def _stream_quick_reply_events(
-        self,
-        *,
-        response_text: str,
-        message_id: str,
-        sender_name: str | None,
-        agent_run_id: str | None,
-        parent_run_id: str | None,
-    ) -> AsyncGenerator[StreamEvent]:
-        sequence_number = 1
-        start_message = ResponseOutputMessage(
-            id=message_id,
-            content=[ResponseOutputText(text="", type="output_text", annotations=[])],
-            role="assistant",
-            status="in_progress",
-            type="message",
-        )
-        added_event = ResponseOutputItemAddedEvent(
-            item=start_message,
-            output_index=0,
-            sequence_number=sequence_number,
-            type="response.output_item.added",
-        )
-        sequence_number += 1
-        raw_added = RawResponsesStreamEvent(data=added_event)
-        yield add_agent_name_to_event(
-            raw_added,
-            self.agent.name,
-            sender_name,
-            agent_run_id=agent_run_id,
-            parent_run_id=parent_run_id,
-        )
-
-        for delta in response_text:
-            text_event = ResponseTextDeltaEvent(
-                content_index=0,
-                delta=delta,
-                item_id=message_id,
-                logprobs=[],
-                output_index=0,
-                sequence_number=sequence_number,
-                type="response.output_text.delta",
-            )
-            sequence_number += 1
-            raw_delta = RawResponsesStreamEvent(data=text_event)
-            yield add_agent_name_to_event(
-                raw_delta,
-                self.agent.name,
-                sender_name,
-                agent_run_id=agent_run_id,
-                parent_run_id=parent_run_id,
-            )
-
-        completed_message = ResponseOutputMessage(
-            id=message_id,
-            content=[ResponseOutputText(text=response_text, type="output_text", annotations=[])],
-            role="assistant",
-            status="completed",
-            type="message",
-        )
-        done_event = ResponseOutputItemDoneEvent(
-            item=completed_message,
-            output_index=0,
-            sequence_number=sequence_number,
-            type="response.output_item.done",
-        )
-        raw_done = RawResponsesStreamEvent(data=done_event)
-        yield add_agent_name_to_event(
-            raw_done,
-            self.agent.name,
-            sender_name,
-            agent_run_id=agent_run_id,
-            parent_run_id=parent_run_id,
-        )
-
-    def _persist_quick_reply_message(
-        self,
-        *,
-        agency_context: "AgencyContext",
-        run_item: MessageOutputItem,
-        sender_name: str | None,
-        agent_run_id: str | None,
-        parent_run_id: str | None,
-        run_trace_id: str,
-    ) -> None:
-        if not agency_context.thread_manager:
-            return
-        item_dict = run_item_to_tresponse_input_item(run_item)
-        if not item_dict:
-            return
-
-        citations_by_message = extract_direct_file_annotations([run_item], agent_name=self.agent.name)
-        MessageFormatter.add_citations_to_message(run_item, item_dict, citations_by_message)
-        formatted_item = MessageFormatter.add_agency_metadata(
-            item_dict,
-            agent=self.agent.name,
-            caller_agent=sender_name,
-            agent_run_id=agent_run_id,
-            parent_run_id=parent_run_id,
-            run_trace_id=run_trace_id,
-        )
-        filtered_items = MessageFilter.filter_messages([formatted_item])
-        if not filtered_items:
-            return
-        normalizer = StreamIdNormalizer()
-        normalized_items = normalizer.normalize_message_dicts(filtered_items)
-        agency_context.thread_manager.add_messages(normalized_items)
