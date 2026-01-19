@@ -288,6 +288,9 @@ class Execution:
             else:
                 # Ensure instructions are restored even if context was not prepared
                 self.agent.instructions = original_instructions
+            if self.agent.attachment_manager is None:
+                raise RuntimeError(f"attachment_manager not initialized for agent {self.agent.name}")
+            self.agent.attachment_manager.attachments_cleanup()
 
     def get_response_stream(
         self,
