@@ -1,3 +1,5 @@
+import asyncio
+import json
 import logging
 import os
 from pathlib import Path
@@ -13,7 +15,7 @@ from agents import (
     TResponseInputItem,
 )
 from openai import AsyncOpenAI, OpenAI
-from pydantic import BaseModel, ConfigDict, StringConstraints, TypeAdapter, ValidationError
+from pydantic import StringConstraints, TypeAdapter, ValidationError
 
 from agency_swarm.agent import (
     Execution,
@@ -30,9 +32,14 @@ from agency_swarm.agent import (
 )
 from agency_swarm.agent.agent_flow import AgentFlow
 from agency_swarm.agent.attachment_manager import AttachmentManager
+from agency_swarm.agent.conversation_starters_cache import (
+    compute_starter_cache_fingerprint,
+    load_cached_starter,
+    load_cached_starters,
+    normalize_starter_text,
+)
 from agency_swarm.agent.execution_streaming import StreamingRunResponse
 from agency_swarm.agent.file_manager import AgentFileManager
-from agency_swarm.agent.quick_replies import QuickReply
 from agency_swarm.agent.tools import _attach_one_call_guard
 from agency_swarm.context import MasterContext
 from agency_swarm.tools.concurrency import ToolConcurrencyManager
@@ -70,7 +77,7 @@ class Agent(BaseAgent[MasterContext]):
     tools_folder: str | Path | None  # Directory path for automatic tool discovery and loading
     description: str | None
     conversation_starters: list[str] | None
-    quick_replies: list[QuickReply] | None
+    cache_conversation_starters: bool = False
     output_type: type[Any] | None
     include_search_results: bool = False
     validation_attempts: int = 1
@@ -84,6 +91,9 @@ class Agent(BaseAgent[MasterContext]):
     file_manager: AgentFileManager | None = None  # Initialized in setup_file_manager()
     attachment_manager: AttachmentManager | None = None  # Initialized in setup_file_manager()
     _tool_concurrency_manager: ToolConcurrencyManager
+    _conversation_starters_cache: dict[str, Any]
+    _conversation_starters_fingerprint: str | None
+    _conversation_starters_warmup_started: bool
 
     # --- SDK Agent Compatibility ---
     # Re-declare attributes from BaseAgent for clarity and potential overrides
@@ -106,7 +116,7 @@ class Agent(BaseAgent[MasterContext]):
             api_params (dict[str, dict[str, Any]] | None): Per-schema parameters for OpenAPI tools. Format:
                 {"schema_filename.json": {"param_name": "param_value"}}.
             conversation_starters (list[str] | None): Conversation starters for this agent.
-            quick_replies (list[dict[str, str]] | None): Quick replies (prompt/response) for this agent.
+            cache_conversation_starters (bool): Enable cached conversation starters from .agency_swarm.
             send_message_tool_class (type | None): DEPRECATED. Configure SendMessage tool classes via
                 `communication_flows` on `Agency` instead of setting this per agent.
             include_search_results (bool): Include search results in FileSearchTool output for citation extraction.
@@ -181,8 +191,8 @@ class Agent(BaseAgent[MasterContext]):
         self.description = current_agent_params.get("description")
         conversation_starters = current_agent_params.get("conversation_starters")
         self.conversation_starters = _validate_conversation_starters(conversation_starters)
-        quick_replies = current_agent_params.get("quick_replies")
-        self.quick_replies = _validate_quick_replies(quick_replies)
+        cache_enabled = current_agent_params.get("cache_conversation_starters", False)
+        self.cache_conversation_starters = _validate_cache_conversation_starters(cache_enabled)
         self.send_message_tool_class = current_agent_params.get("send_message_tool_class")
         self.include_search_results = current_agent_params.get("include_search_results", False)
         self.validation_attempts = int(current_agent_params.get("validation_attempts", 1))
@@ -193,6 +203,9 @@ class Agent(BaseAgent[MasterContext]):
         self._openai_client = None
         self._openai_client_sync = None
         self._tool_concurrency_manager = ToolConcurrencyManager()
+        self._conversation_starters_cache = {}
+        self._conversation_starters_fingerprint = None
+        self._conversation_starters_warmup_started = False
 
         # Initialize execution handler
         self._execution = Execution(self)
@@ -221,6 +234,14 @@ class Agent(BaseAgent[MasterContext]):
             self.file_manager.parse_files_folder_for_vs_id()
         parse_schemas(self)
         load_tools_from_folder(self)
+
+        if self.cache_conversation_starters and self.conversation_starters:
+            self._conversation_starters_fingerprint = compute_starter_cache_fingerprint(self)
+            self._conversation_starters_cache = load_cached_starters(
+                self.name,
+                self.conversation_starters,
+                expected_fingerprint=self._conversation_starters_fingerprint,
+            )
 
         # Wrap input guardrails
         wrap_input_guardrails(self)
@@ -267,9 +288,9 @@ class Agent(BaseAgent[MasterContext]):
         """Include agency-scoped runtime tools alongside static tools."""
         base_tools = await super().get_all_tools(run_context)
 
-        master_context = getattr(run_context, "context", None)
+        master_context = run_context.context
         runtime_tools: list[Tool] = []
-        if master_context and getattr(master_context, "agent_runtime_state", None):
+        if master_context:
             runtime_state = master_context.agent_runtime_state.get(self.name)
             if runtime_state:
                 runtime_tools = list(runtime_state.send_message_tools.values())
@@ -416,23 +437,47 @@ class Agent(BaseAgent[MasterContext]):
             **kwargs,
         )
 
+    async def warm_conversation_starters_cache(self, agency_context: AgencyContext | None = None) -> None:
+        """Populate missing conversation starters cache entries using the model."""
+        if not self.cache_conversation_starters:
+            return
+        if not self.conversation_starters:
+            return
+        if self._conversation_starters_warmup_started:
+            return
+        self._conversation_starters_warmup_started = True
+
+        cache_map = self._conversation_starters_cache
+        fingerprint = self._conversation_starters_fingerprint
+        missing: list[str] = []
+        for starter in self.conversation_starters:
+            normalized = normalize_starter_text(starter)
+            if normalized and normalized not in cache_map:
+                cached = load_cached_starter(self.name, starter, expected_fingerprint=fingerprint)
+                if cached:
+                    cache_map[normalized] = cached
+                else:
+                    missing.append(starter)
+
+        if not missing:
+            return
+
+        await asyncio.gather(
+            *(
+                self.get_response(
+                    message=starter,
+                    sender_name=None,
+                    agency_context=self._create_minimal_context(
+                        agency_instance=agency_context.agency_instance if agency_context else None,
+                        shared_instructions=agency_context.shared_instructions if agency_context else None,
+                    ),
+                )
+                for starter in missing
+            )
+        )
+
     # --- Helper Methods ---
     # _validate_response removed - use output_guardrails instead
-
-    def _create_minimal_context(self) -> AgencyContext:
-        """Create a minimal context for standalone agent usage (no agency)."""
-        from ..utils.thread import ThreadManager
-
-        thread_manager = ThreadManager()
-        runtime_state = AgentRuntimeState(self._tool_concurrency_manager)
-        return AgencyContext(
-            agency_instance=None,
-            thread_manager=thread_manager,
-            runtime_state=runtime_state,
-            load_threads_callback=None,
-            save_threads_callback=None,
-            shared_instructions=None,
-        )
 
     def __gt__(self, other: "Agent") -> "AgentFlow":
         """
@@ -482,19 +527,31 @@ class Agent(BaseAgent[MasterContext]):
 
         return get_external_caller_directory()
 
+    def _create_minimal_context(
+        self,
+        *,
+        agency_instance: Any | None = None,
+        shared_instructions: str | None = None,
+    ) -> AgencyContext:
+        """Create a minimal context for standalone agent usage (no agency)."""
+        from ..utils.thread import ThreadManager
+
+        thread_manager = ThreadManager()
+        runtime_state = AgentRuntimeState(self._tool_concurrency_manager)
+        return AgencyContext(
+            agency_instance=agency_instance,
+            thread_manager=thread_manager,
+            runtime_state=runtime_state,
+            load_threads_callback=None,
+            save_threads_callback=None,
+            shared_instructions=shared_instructions,
+        )
+
 
 _NON_EMPTY_STR = Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
 
 
-class _QuickReplyModel(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    prompt: _NON_EMPTY_STR
-    response: _NON_EMPTY_STR
-
-
 _CONVERSATION_STARTERS_ADAPTER = TypeAdapter(list[_NON_EMPTY_STR])
-_QUICK_REPLIES_ADAPTER = TypeAdapter(list[_QuickReplyModel])
 
 
 def _validate_conversation_starters(value: Any) -> list[str] | None:
@@ -506,11 +563,9 @@ def _validate_conversation_starters(value: Any) -> list[str] | None:
         raise ValueError("conversation_starters must be a list of non-empty strings") from exc
 
 
-def _validate_quick_replies(value: Any) -> list[QuickReply] | None:
+def _validate_cache_conversation_starters(value: Any) -> bool:
     if value is None:
-        return None
-    try:
-        parsed = _QUICK_REPLIES_ADAPTER.validate_python(value)
-    except ValidationError as exc:
-        raise ValueError("quick_replies must be a list of {'prompt': str, 'response': str} objects") from exc
-    return [{"prompt": reply.prompt, "response": reply.response} for reply in parsed]
+        return False
+    if isinstance(value, bool):
+        return value
+    raise ValueError("cache_conversation_starters must be a boolean")

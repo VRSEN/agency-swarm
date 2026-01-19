@@ -1,7 +1,9 @@
 # --- Core Agency class definition ---
+import asyncio
 import atexit
 import logging
 import os
+import threading
 import warnings
 from typing import TYPE_CHECKING, Any
 
@@ -13,7 +15,7 @@ from agency_swarm.agent.execution_streaming import StreamingRunResponse
 from agency_swarm.hooks import PersistenceHooks
 from agency_swarm.streaming.utils import EventStreamMerger
 from agency_swarm.tools import BaseTool
-from agency_swarm.tools.mcp_manager import default_mcp_manager
+from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers, default_mcp_manager
 from agency_swarm.utils.files import get_external_caller_directory
 from agency_swarm.utils.thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
 
@@ -178,6 +180,7 @@ class Agency:
         self._load_threads_callback = load_threads_callback
         self._save_threads_callback = save_threads_callback
         initialize_agent_runtime_state(self)
+        self._starter_cache_warmup_started = False
 
         if not self.agents:
             raise ValueError("Agency must contain at least one agent.")
@@ -188,6 +191,7 @@ class Agency:
         configure_agents(self, _derived_communication_flows)
         apply_shared_resources(self)
         logger.info("Agency initialization complete.")
+        self._schedule_starter_cache_warmup()
 
         # Register MCP shutdown at process exit so persistent servers are cleaned in scripts
         if default_mcp_manager.mark_atexit_registered():
@@ -229,6 +233,7 @@ class Agency:
         This method resolves the target agent, validates if it's a designated entry point
         (logs warning if not), determines the appropriate hooks (user override or agency default
         persistence hooks), and delegates the actual execution to the target agent's `get_response` method.
+        This method is latency-sensitive; conversation starter warmup is triggered during agency initialization.
 
         Args:
             message (str | list[dict[str, Any]]): The input message for the agent.
@@ -303,6 +308,7 @@ class Agency:
 
         Returns a :class:`StreamingRunResponse` wrapper that mirrors
         :func:`agency_swarm.agency.responses.get_response_stream`.
+        This method is latency-sensitive; conversation starter warmup is triggered during agency initialization.
 
         Args:
             message (str | list[dict[str, Any]]): The input message for the agent.
@@ -421,3 +427,38 @@ class Agency:
         from .visualization import copilot_demo
 
         return copilot_demo(self, host, port, frontend_port, cors_origins)
+
+    def _schedule_starter_cache_warmup(self) -> None:
+        if self._starter_cache_warmup_started:
+            return
+        warmup_agents = [
+            agent for agent in self.agents.values() if agent.cache_conversation_starters and agent.conversation_starters
+        ]
+        if not warmup_agents:
+            return
+        self._starter_cache_warmup_started = True
+
+        async def _warm_conversation_starters() -> None:
+            await attach_persistent_mcp_servers(self)
+            await asyncio.gather(
+                *(agent.warm_conversation_starters_cache(self.get_agent_context(agent.name)) for agent in warmup_agents)
+            )
+
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            asyncio.run(_warm_conversation_starters())
+            return
+
+        def _run_warmup_thread() -> None:
+            try:
+                asyncio.run(_warm_conversation_starters())
+            except Exception:
+                logger.exception("Starter cache warmup failed")
+
+        thread = threading.Thread(
+            target=_run_warmup_thread,
+            name="agency-starter-cache-warmup",
+            daemon=True,
+        )
+        thread.start()

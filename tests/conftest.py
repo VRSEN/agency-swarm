@@ -1,58 +1,12 @@
-from collections.abc import AsyncIterator
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from agents import AgentOutputSchemaBase, Handoff, Model, ModelResponse, ModelSettings, ModelTracing, Tool
-from agents.items import TResponseInputItem, TResponseStreamEvent
 from dotenv import load_dotenv
-from openai.types.responses import ResponsePromptParam
 
 from agency_swarm import Agency, AgencyContext, Agent
 from agency_swarm.utils.thread import ThreadManager
 
 load_dotenv()
-
-
-class BlockedModel(Model):
-    def __init__(self, model: str = "gpt-5") -> None:
-        self.model = model
-
-    async def get_response(
-        self,
-        system_instructions: str | None,
-        input: str | list[TResponseInputItem],
-        model_settings: ModelSettings,
-        tools: list[Tool],
-        output_schema: AgentOutputSchemaBase | None,
-        handoffs: list[Handoff],
-        tracing: ModelTracing,
-        *,
-        previous_response_id: str | None,
-        conversation_id: str | None,
-        prompt: ResponsePromptParam | None,
-    ) -> ModelResponse:
-        raise RuntimeError("Model should not be called for quick replies")
-
-    def stream_response(
-        self,
-        system_instructions: str | None,
-        input: str | list[TResponseInputItem],
-        model_settings: ModelSettings,
-        tools: list[Tool],
-        output_schema: AgentOutputSchemaBase | None,
-        handoffs: list[Handoff],
-        tracing: ModelTracing,
-        *,
-        previous_response_id: str | None,
-        conversation_id: str | None,
-        prompt: ResponsePromptParam | None,
-    ) -> AsyncIterator[TResponseStreamEvent]:
-        raise RuntimeError("Model stream should not be called for quick replies")
-
-
-@pytest.fixture
-def blocked_model() -> BlockedModel:
-    return BlockedModel()
 
 
 @pytest.fixture

@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from agents import RunConfig, RunHooks
 
-from agency_swarm import Agency, Agent
+from agency_swarm import Agent
 from agency_swarm.agent.core import AgencyContext
 
 # --- Core Response Tests ---
@@ -120,63 +120,3 @@ async def test_get_response_missing_thread_manager():
         result = await agent.get_response("Test message")
 
         assert result is not None
-
-
-@pytest.mark.asyncio
-async def test_get_response_short_circuits_quick_replies(blocked_model):
-    agent = Agent(
-        name="QuickReplyAgent",
-        instructions="Test",
-        quick_replies=[{"prompt": "Hello", "response": "Hi there!"}],
-        model=blocked_model,
-    )
-    agency = Agency(agent)
-
-    result = await agency.get_response("  heLLo ")
-
-    assert result.final_output == "Hi there!"
-    messages = agency.thread_manager.get_all_messages()
-    assert len(messages) == 2
-    assert messages[0]["role"] == "user"
-    assert messages[1]["role"] == "assistant"
-
-
-class _FakeAttachmentManager:
-    def __init__(self) -> None:
-        self.cleaned = False
-        self.processed = False
-
-    async def process_message_and_files(
-        self,
-        message,
-        file_ids,
-        message_files,
-        kwargs,
-        method_name,
-    ):
-        del file_ids, message_files, kwargs, method_name
-        self.processed = True
-        if isinstance(message, list):
-            return message
-        return [{"role": "user", "content": message}]
-
-    def attachments_cleanup(self) -> None:
-        self.cleaned = True
-
-
-@pytest.mark.asyncio
-async def test_get_response_quick_reply_cleans_attachments(blocked_model):
-    agent = Agent(
-        name="QuickReplyAgent",
-        instructions="Test",
-        quick_replies=[{"prompt": "Hello", "response": "Hi there!"}],
-        model=blocked_model,
-    )
-    fake_attachments = _FakeAttachmentManager()
-    agent.attachment_manager = fake_attachments
-
-    result = await agent.get_response("Hello", file_ids=["file-123"])
-
-    assert result.final_output == "Hi there!"
-    assert fake_attachments.processed is True
-    assert fake_attachments.cleaned is True

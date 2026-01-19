@@ -1,6 +1,5 @@
 from unittest.mock import MagicMock
 
-import pytest
 from agents import FunctionTool, ModelSettings, StopAtTools
 from pydantic import BaseModel, Field
 
@@ -150,45 +149,6 @@ def test_agent_initialization_with_all_parameters():
         assert agent.output_type == TaskOutput
         assert str(temp_dir) in str(agent.files_folder)  # Should contain the temp directory path
         assert agent.description == "A complete test agent"
-
-
-@pytest.mark.parametrize(
-    "conversation_starters",
-    [
-        "not-a-list",
-        [123],
-        ["   "],
-    ],
-)
-def test_agent_initialization_rejects_invalid_conversation_starters(conversation_starters):
-    with pytest.raises(ValueError):
-        Agent(
-            name="BadConversationStarters",
-            instructions="Test",
-            conversation_starters=conversation_starters,
-        )
-
-
-@pytest.mark.parametrize(
-    "quick_replies",
-    [
-        "not-a-list",
-        ["not-a-dict"],
-        [{"prompt": "Hi"}],
-        [{"response": "Hi"}],
-        [{"prompt": "", "response": "Hello"}],
-        [{"prompt": "Hi", "response": ""}],
-        [{"prompt": 123, "response": "Hello"}],
-        [{"prompt": "Hi", "response": 456}],
-    ],
-)
-def test_agent_initialization_rejects_invalid_quick_replies(quick_replies):
-    with pytest.raises(ValueError):
-        Agent(
-            name="BadQuickReplies",
-            instructions="Test",
-            quick_replies=quick_replies,
-        )
 
 
 # --- Instruction File Loading Tests ---

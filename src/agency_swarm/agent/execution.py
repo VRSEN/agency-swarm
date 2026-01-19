@@ -13,9 +13,24 @@ from agents import (
     RunResultStreaming,
     TResponseInputItem,
 )
-from agents.items import MessageOutputItem, RunItem
-from agents.stream_events import RunItemStreamEvent, StreamEvent
+from agents.items import MessageOutputItem
+from agents.stream_events import StreamEvent
 
+from agency_swarm.agent.conversation_starters_cache import (
+    build_run_items_from_cached,
+    extract_final_output_text,
+    extract_starter_segment,
+    filter_replay_items,
+    is_simple_text_message,
+    load_cached_starter,
+    match_conversation_starter,
+    normalize_starter_text,
+    parse_cached_output,
+    prepare_cached_items_for_replay,
+    reorder_cached_items_for_tools,
+    save_cached_starter,
+)
+from agency_swarm.agent.conversation_starters_streaming import stream_cached_items_events
 from agency_swarm.agent.execution_helpers import (
     cleanup_execution,
     extract_hosted_tool_results_if_needed,
@@ -25,23 +40,12 @@ from agency_swarm.agent.execution_helpers import (
     run_with_guardrails,
     setup_execution,
 )
-from agency_swarm.agent.execution_stream_persistence import (
-    StreamMetadataStore,
-    _persist_run_item_if_needed,
-    _persist_streamed_items,
-)
 from agency_swarm.agent.execution_streaming import StreamingRunResponse, run_stream_with_guardrails
-from agency_swarm.agent.quick_replies import (
-    build_quick_reply_item,
-    resolve_quick_reply,
-    stream_quick_reply_events,
-)
 from agency_swarm.messages import (
     MessageFilter,
     MessageFormatter,
 )
 from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
-from agency_swarm.streaming.utils import add_agent_name_to_event
 from agency_swarm.utils.citation_extractor import extract_direct_file_annotations
 from agency_swarm.utils.model_utils import get_model_name
 
@@ -116,6 +120,14 @@ class Execution:
 
             run_trace_id = get_run_trace_id(run_config_override, agency_context)
 
+            initial_saved_count = 0
+            if agency_context and agency_context.thread_manager:
+                try:
+                    initial_saved_count = len(agency_context.thread_manager.get_all_messages())
+                except Exception:
+                    initial_saved_count = 0
+            is_first_message = initial_saved_count == 0
+
             # Prepare history for runner, persisting initiating messages with agent_run_id and parent_run_id
             history_for_runner = MessageFormatter.prepare_history_for_runner(
                 processed_current_message_items,
@@ -137,12 +149,40 @@ class Execution:
                 pass
 
             agency_name = "Unnamed Agency"
-            if agency_context and agency_context.agency_instance:
-                agency_name = getattr(agency_context.agency_instance, "name", None) or agency_name
+            if agency_context and agency_context.agency_instance is not None:
+                from agency_swarm.agency.core import Agency
 
-            # Quick replies are author-provided and bypass the LLM/guardrails entirely.
-            quick_reply = resolve_quick_reply(processed_current_message_items, sender_name, self.agent.quick_replies)
-            if quick_reply is None:
+                agency_instance = agency_context.agency_instance
+                if isinstance(agency_instance, Agency):
+                    agency_instance_name = agency_instance.name
+                    if isinstance(agency_instance_name, str):
+                        agency_name = agency_instance_name
+
+            matched_starter: str | None = None
+            cached_starter = None
+            if (
+                sender_name is None
+                and self.agent.cache_conversation_starters
+                and is_first_message
+                and is_simple_text_message(processed_current_message_items)
+            ):
+                matched_starter = match_conversation_starter(
+                    processed_current_message_items, self.agent.conversation_starters
+                )
+                if matched_starter:
+                    normalized = normalize_starter_text(matched_starter)
+                    cache_map = self.agent._conversation_starters_cache
+                    cached_starter = cache_map.get(normalized)
+                    if cached_starter is None:
+                        cached_starter = load_cached_starter(
+                            self.agent.name,
+                            matched_starter,
+                            expected_fingerprint=self.agent._conversation_starters_fingerprint,
+                        )
+                        if cached_starter is not None:
+                            cache_map[normalized] = cached_starter
+
+            if cached_starter is None:
                 run_result, master_context_for_run = await run_with_guardrails(
                     agent=self.agent,
                     history_for_runner=history_for_runner,
@@ -156,19 +196,24 @@ class Execution:
                     current_agent_run_id=current_agent_run_id,
                     parent_run_id=parent_run_id,
                     run_trace_id=run_trace_id,
-                    validation_attempts=int(getattr(self.agent, "validation_attempts", 1) or 0),
-                    throw_input_guardrail_error=getattr(self.agent, "throw_input_guardrail_error", False),
+                    validation_attempts=int(self.agent.validation_attempts or 0),
+                    throw_input_guardrail_error=self.agent.throw_input_guardrail_error,
                 )
             else:
-                assistant_message_id = f"msg_{uuid.uuid4().hex}"
-                assistant_item = build_quick_reply_item(
-                    agent=self.agent, response_text=quick_reply, message_id=assistant_message_id
+                replay_items = prepare_cached_items_for_replay(
+                    cached_starter.items,
+                    run_trace_id=run_trace_id,
+                    parent_run_id=parent_run_id,
                 )
+                replay_items = filter_replay_items(replay_items)
+                run_items = build_run_items_from_cached(self.agent, replay_items)
+                final_output_text = extract_final_output_text(replay_items)
+                final_output = parse_cached_output(final_output_text, self.agent.output_type)
                 run_result = RunResult(
                     input=history_for_runner,
-                    new_items=[assistant_item],
+                    new_items=run_items,
                     raw_responses=[],
-                    final_output=quick_reply,
+                    final_output=final_output,
                     input_guardrail_results=[],
                     output_guardrail_results=[],
                     tool_input_guardrail_results=[],
@@ -255,7 +300,7 @@ class Execution:
                         )
 
                         # If this item indicates a handoff, update current agent for subsequent items
-                        if getattr(run_item_obj, "type", None) == "handoff_output_item":
+                        if run_item_obj.type == "handoff_output_item":
                             target = MessageFormatter.extract_handoff_target_name(run_item_obj)
                             if target:
                                 current_agent_name = target
@@ -269,13 +314,46 @@ class Execution:
                 agency_context.thread_manager.add_messages(normalized_items)  # type: ignore[arg-type] # Save filtered items to flat storage
                 logger.debug(f"Saved {len(filtered_items)} items to storage (filtered from {len(items_to_save)}).")
 
+            if (
+                matched_starter
+                and cached_starter is None
+                and self.agent.cache_conversation_starters
+                and is_first_message
+                and agency_context
+                and agency_context.thread_manager
+            ):
+                try:
+                    all_messages = agency_context.thread_manager.get_all_messages()
+                    new_messages = all_messages[initial_saved_count:]
+                    segment = extract_starter_segment(new_messages, matched_starter) or new_messages
+                    if segment and extract_final_output_text(segment):
+                        segment = reorder_cached_items_for_tools(segment, self.agent.name)
+                        cached = save_cached_starter(
+                            self.agent.name,
+                            matched_starter,
+                            segment,
+                            metadata={"source": "live_run"},
+                            fingerprint=self.agent._conversation_starters_fingerprint,
+                        )
+                        cache_map = self.agent._conversation_starters_cache
+                        cache_map[normalize_starter_text(matched_starter)] = cached
+                except Exception as e:
+                    logger.debug(f"Failed to cache conversation starter: {e}")
+
             # Sync back context changes if we used a merged context due to override
-            if context_override and agency_context and agency_context.agency_instance:
-                base_user_context = getattr(agency_context.agency_instance, "user_context", {})
+            if context_override and agency_context and agency_context.agency_instance is not None:
+                from agency_swarm.agency.core import Agency
+
+                agency_instance = agency_context.agency_instance
+                if isinstance(agency_instance, Agency):
+                    base_user_context = agency_instance.user_context
+                else:
+                    base_user_context = None
                 # Sync back any new keys that weren't part of the original override
-                for key, value in master_context_for_run.user_context.items():
-                    if key not in context_override:  # Don't sync back override keys
-                        base_user_context[key] = value
+                if base_user_context is not None:
+                    for key, value in master_context_for_run.user_context.items():
+                        if key not in context_override:  # Don't sync back override keys
+                            base_user_context[key] = value
 
             return run_result
 
@@ -365,6 +443,14 @@ class Execution:
 
                 run_trace_id = get_run_trace_id(run_config_override, agency_context)
 
+                initial_saved_count = 0
+                if agency_context and agency_context.thread_manager:
+                    try:
+                        initial_saved_count = len(agency_context.thread_manager.get_all_messages())
+                    except Exception:
+                        initial_saved_count = 0
+                is_first_message = initial_saved_count == 0
+
                 history_for_runner = MessageFormatter.prepare_history_for_runner(
                     processed_current_message_items,
                     self.agent,
@@ -381,11 +467,31 @@ class Execution:
                     len(history_for_runner),
                 )
 
-                # Quick replies are author-provided and bypass the LLM/guardrails entirely.
-                quick_reply = resolve_quick_reply(
-                    processed_current_message_items, sender_name, self.agent.quick_replies
-                )
-                if quick_reply is not None:
+                matched_starter: str | None = None
+                cached_starter = None
+                if (
+                    sender_name is None
+                    and self.agent.cache_conversation_starters
+                    and is_first_message
+                    and is_simple_text_message(processed_current_message_items)
+                ):
+                    matched_starter = match_conversation_starter(
+                        processed_current_message_items, self.agent.conversation_starters
+                    )
+                    if matched_starter:
+                        normalized = normalize_starter_text(matched_starter)
+                        cache_map = self.agent._conversation_starters_cache
+                        cached_starter = cache_map.get(normalized)
+                        if cached_starter is None:
+                            cached_starter = load_cached_starter(
+                                self.agent.name,
+                                matched_starter,
+                                expected_fingerprint=self.agent._conversation_starters_fingerprint,
+                            )
+                            if cached_starter is not None:
+                                cache_map[normalized] = cached_starter
+
+                if cached_starter is not None:
                     master_context_for_run = prepare_master_context(self.agent, context_override, agency_context)
                     try:
                         master_context_for_run._current_agent_run_id = current_agent_run_id
@@ -393,15 +499,23 @@ class Execution:
                     except Exception:
                         pass
 
-                    assistant_message_id = f"msg_{uuid.uuid4().hex}"
-                    assistant_item = build_quick_reply_item(
-                        agent=self.agent, response_text=quick_reply, message_id=assistant_message_id
+                    replay_items = prepare_cached_items_for_replay(
+                        cached_starter.items,
+                        run_trace_id=run_trace_id,
+                        parent_run_id=parent_run_id,
                     )
+                    replay_items = filter_replay_items(replay_items)
+                    if agency_context and agency_context.thread_manager:
+                        agency_context.thread_manager.add_messages(replay_items)
+
+                    run_items = build_run_items_from_cached(self.agent, replay_items)
+                    final_output_text = extract_final_output_text(replay_items)
+                    final_output = parse_cached_output(final_output_text, self.agent.output_type)
                     run_result = RunResult(
                         input=history_for_runner,
-                        new_items=[assistant_item],
+                        new_items=run_items,
                         raw_responses=[],
-                        final_output=quick_reply,
+                        final_output=final_output,
                         input_guardrail_results=[],
                         output_guardrail_results=[],
                         tool_input_guardrail_results=[],
@@ -414,81 +528,21 @@ class Execution:
                     if main_model_name:
                         typing.cast(_UsageTrackingRunResult, run_result)._main_agent_model = main_model_name
 
-                    initial_saved_count = 0
-                    if agency_context and agency_context.thread_manager:
-                        try:
-                            initial_saved_count = len(agency_context.thread_manager.get_all_messages())
-                        except Exception:
-                            initial_saved_count = 0
-
-                    metadata_store = StreamMetadataStore()
-                    collected_items: list[RunItem] = [assistant_item]
-                    id_normalizer = StreamIdNormalizer()
-                    response_id = f"resp_{uuid.uuid4().hex}"
-                    response_id = f"resp_{uuid.uuid4().hex}"
-
-                    async for quick_reply_event in stream_quick_reply_events(
-                        response_text=quick_reply,
-                        message_id=assistant_message_id,
-                        response_id=response_id,
-                        created_at=None,
-                        model_name=main_model_name,
-                        agent_name=self.agent.name,
-                        sender_name=sender_name,
-                        agent_run_id=current_agent_run_id,
-                        parent_run_id=parent_run_id,
-                    ):
-                        yield id_normalizer.normalize_stream_event(quick_reply_event)
-
-                    run_item_event = RunItemStreamEvent(
-                        name="message_output_created",
-                        item=assistant_item,
-                        type="run_item_stream_event",
-                    )
-                    run_item_event = add_agent_name_to_event(
-                        run_item_event,
-                        self.agent.name,
-                        sender_name,
-                        agent_run_id=current_agent_run_id,
-                        parent_run_id=parent_run_id,
-                    )
-                    run_item_event = typing.cast(
-                        RunItemStreamEvent, id_normalizer.normalize_stream_event(run_item_event)
-                    )
-                    if agency_context:
-                        _persist_run_item_if_needed(
-                            run_item_event,
-                            agent=self.agent,
-                            sender_name=sender_name,
-                            parent_run_id=parent_run_id,
-                            run_trace_id=run_trace_id,
-                            current_stream_agent_name=self.agent.name,
-                            current_agent_run_id=current_agent_run_id,
-                            agency_context=agency_context,
-                            metadata_store=metadata_store,
-                        )
-                    yield run_item_event
-
-                    if agency_context and agency_context.thread_manager:
-                        _persist_streamed_items(
-                            streaming_result=run_result,
-                            metadata_store=metadata_store,
-                            collected_items=collected_items,
-                            agent=self.agent,
-                            sender_name=sender_name,
-                            parent_run_id=parent_run_id,
-                            run_trace_id=run_trace_id,
-                            fallback_agent_run_id=current_agent_run_id,
-                            agency_context=agency_context,
-                            initial_saved_count=initial_saved_count,
-                        )
+                    async for cached_event in stream_cached_items_events(items=replay_items, agent=self.agent):
+                        yield cached_event
 
                     wrapper._resolve_final_result(typing.cast(RunResultStreaming, run_result))
                     return
 
                 agency_name = "Unnamed Agency"
-                if agency_context and agency_context.agency_instance:
-                    agency_name = getattr(agency_context.agency_instance, "name", None) or agency_name
+                if agency_context and agency_context.agency_instance is not None:
+                    from agency_swarm.agency.core import Agency
+
+                    agency_instance = agency_context.agency_instance
+                    if isinstance(agency_instance, Agency):
+                        agency_instance_name = agency_instance.name
+                        if isinstance(agency_instance_name, str):
+                            agency_name = agency_instance_name
 
                 master_context_for_run = prepare_master_context(self.agent, context_override, agency_context)
 
@@ -505,8 +559,8 @@ class Execution:
                     current_agent_run_id=current_agent_run_id,
                     parent_run_id=parent_run_id,
                     run_trace_id=run_trace_id,
-                    validation_attempts=int(getattr(self.agent, "validation_attempts", 1) or 0),
-                    throw_input_guardrail_error=getattr(self.agent, "throw_input_guardrail_error", False),
+                    validation_attempts=int(self.agent.validation_attempts or 0),
+                    throw_input_guardrail_error=self.agent.throw_input_guardrail_error,
                 )
 
                 if isinstance(stream_handle, StreamingRunResponse):
@@ -527,6 +581,31 @@ class Execution:
                     )
                 else:
                     self.agent.instructions = original_instructions
+                if (
+                    matched_starter
+                    and cached_starter is None
+                    and self.agent.cache_conversation_starters
+                    and is_first_message
+                    and agency_context
+                    and agency_context.thread_manager
+                ):
+                    try:
+                        all_messages = agency_context.thread_manager.get_all_messages()
+                        new_messages = all_messages[initial_saved_count:]
+                        segment = extract_starter_segment(new_messages, matched_starter) or new_messages
+                        if segment and extract_final_output_text(segment):
+                            segment = reorder_cached_items_for_tools(segment, self.agent.name)
+                            cached = save_cached_starter(
+                                self.agent.name,
+                                matched_starter,
+                                segment,
+                                metadata={"source": "live_stream"},
+                                fingerprint=self.agent._conversation_starters_fingerprint,
+                            )
+                            cache_map = self.agent._conversation_starters_cache
+                            cache_map[normalize_starter_text(matched_starter)] = cached
+                    except Exception as e:
+                        logger.debug(f"Failed to cache conversation starter: {e}")
                 if self.agent.attachment_manager is None:
                     raise RuntimeError(f"attachment_manager not initialized for agent {self.agent.name}")
                 self.agent.attachment_manager.attachments_cleanup()

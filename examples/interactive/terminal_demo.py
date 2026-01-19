@@ -34,6 +34,13 @@ def create_demo_agency():
         instructions="You are the CEO.",
         model="gpt-5-mini",
         model_settings=ModelSettings(reasoning=Reasoning(effort="low", summary="auto")),
+        conversation_starters=[
+            "What is the weather in London?",
+            "What is the weather in Paris?",
+            "What is the weather in Tokyo?",
+            "What is the weather in New York?",
+        ],
+        cache_conversation_starters=True,
     )
 
     worker = Agent(

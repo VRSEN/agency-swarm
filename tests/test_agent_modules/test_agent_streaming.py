@@ -226,29 +226,6 @@ async def test_agency_stream_propagates_final_output(mock_runner_run_streamed):
     assert stream.final_output == final_output_text
 
 
-@pytest.mark.asyncio
-async def test_get_response_stream_short_circuits_quick_replies(blocked_model):
-    agent = Agent(
-        name="QuickReplyAgent",
-        instructions="Test",
-        quick_replies=[{"prompt": "Hello", "response": "Hi there!"}],
-        model=blocked_model,
-    )
-
-    stream = agent.get_response_stream(" hello ")
-    deltas = []
-
-    async for event in stream:
-        if isinstance(event, RawResponsesStreamEvent) and event.data.type == "response.output_text.delta":
-            deltas.append(event.data.delta)
-
-    result = await stream.wait_final_result()
-    assert result is not None
-    assert "".join(deltas) == "Hi there!"
-    assert result.final_output == "Hi there!"
-    assert stream.final_output == "Hi there!"
-
-
 def test_get_response_stream_initialization_without_event_loop():
     agent = Agent(name="TestAgent", instructions="Prepare response")
     stream = agent.get_response_stream("Hello")
