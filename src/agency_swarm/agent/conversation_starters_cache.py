@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, cast
 from agents import TResponseInputItem
 from agents.agent_output import AgentOutputSchema, AgentOutputSchemaBase
 from agents.handoffs import Handoff as AgentsHandoff
-from agents.items import MessageOutputItem, ReasoningItem, ToolCallItem, ToolCallOutputItem
+from agents.items import HandoffOutputItem, MessageOutputItem, ReasoningItem, ToolCallItem, ToolCallOutputItem
 from agents.tool import (
     ApplyPatchTool,
     CodeInterpreterTool,
@@ -429,6 +429,16 @@ def build_run_items_from_cached(agent: Any, items: list[TResponseInputItem]) -> 
             continue
         if msg_type in MessageFilter.CALL_ID_CALL_TYPES:
             run_items.append(ToolCallItem(raw_item=item_dict, agent=agent))
+            continue
+        if msg_type == "handoff_output_item":
+            run_items.append(
+                HandoffOutputItem(
+                    agent=agent,
+                    raw_item=cast(TResponseInputItem, item_dict),
+                    source_agent=agent,
+                    target_agent=agent,
+                )
+            )
             continue
         if msg_type in MessageFilter.CALL_ID_OUTPUT_TYPES:
             output_value = item_dict.get("output")

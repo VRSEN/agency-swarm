@@ -1,6 +1,11 @@
+from agents.items import HandoffOutputItem
+
 from agency_swarm import Agent, GuardrailFunctionOutput, RunContextWrapper, input_guardrail, output_guardrail
 from agency_swarm.agent.context_types import AgentRuntimeState
-from agency_swarm.agent.conversation_starters_cache import compute_starter_cache_fingerprint
+from agency_swarm.agent.conversation_starters_cache import (
+    build_run_items_from_cached,
+    compute_starter_cache_fingerprint,
+)
 from agency_swarm.tools.send_message import Handoff
 
 
@@ -76,3 +81,23 @@ def test_starter_cache_fingerprint_includes_runtime_handoffs() -> None:
     fingerprint_after = compute_starter_cache_fingerprint(sender, runtime_state=runtime_state)
 
     assert fingerprint_before != fingerprint_after
+
+
+def test_cached_handoff_output_preserves_type() -> None:
+    agent = Agent(
+        name="CacheAgent",
+        instructions="You are helpful.",
+        model="gpt-5-mini",
+    )
+    items = [
+        {
+            "type": "handoff_output_item",
+            "call_id": "call_handoff_1",
+            "output": '{"assistant": "Worker"}',
+        }
+    ]
+
+    run_items = build_run_items_from_cached(agent, items)
+
+    assert len(run_items) == 1
+    assert isinstance(run_items[0], HandoffOutputItem)

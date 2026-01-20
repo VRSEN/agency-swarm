@@ -8,7 +8,7 @@ from collections.abc import AsyncGenerator
 from typing import Any, cast
 
 from agents import TResponseInputItem
-from agents.items import MessageOutputItem, ReasoningItem, ToolCallItem, ToolCallOutputItem
+from agents.items import HandoffOutputItem, MessageOutputItem, ReasoningItem, ToolCallItem, ToolCallOutputItem
 from agents.stream_events import RawResponsesStreamEvent, RunItemStreamEvent, StreamEvent
 from openai.types.responses import (
     Response,
@@ -395,7 +395,16 @@ async def stream_cached_items_events(
 
         if msg_type in MessageFilter.CALL_ID_OUTPUT_TYPES:
             output_value = item_dict.get("output")
-            output_item = ToolCallOutputItem(raw_item=item_dict, output=output_value, agent=agent)
+            output_item: ToolCallOutputItem | HandoffOutputItem
+            if msg_type == "handoff_output_item":
+                output_item = HandoffOutputItem(
+                    agent=agent,
+                    raw_item=cast(TResponseInputItem, item_dict),
+                    source_agent=agent,
+                    target_agent=agent,
+                )
+            else:
+                output_item = ToolCallOutputItem(raw_item=item_dict, output=output_value, agent=agent)
             run_item_event = RunItemStreamEvent(
                 name="tool_output",
                 item=output_item,
