@@ -234,8 +234,6 @@ class Agent(BaseAgent[MasterContext]):
         parse_schemas(self)
         load_tools_from_folder(self)
 
-        self.refresh_conversation_starters_cache()
-
         # Wrap input guardrails
         wrap_input_guardrails(self)
 
@@ -245,6 +243,9 @@ class Agent(BaseAgent[MasterContext]):
 
         # Convert MCP servers to tools and add them to the agent
         convert_mcp_servers_to_tools(self)
+
+        # Refresh after MCP conversion so fingerprint includes MCP-converted tools
+        self.refresh_conversation_starters_cache()
 
     # --- Properties ---
     def __repr__(self) -> str:
