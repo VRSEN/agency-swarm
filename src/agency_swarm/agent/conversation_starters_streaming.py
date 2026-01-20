@@ -470,23 +470,6 @@ async def stream_cached_items_events(
                 continue
 
             sequence_number = 0
-            added_event = ResponseOutputItemAddedEvent(
-                item=reasoning_item,
-                output_index=output_index,
-                sequence_number=sequence_number,
-                type="response.output_item.added",
-            )
-            sequence_number += 1
-            wrapped_added = add_agent_name_to_event(
-                RawResponsesStreamEvent(data=added_event),
-                agent_name,
-                caller_agent if isinstance(caller_agent, str) else None,
-                agent_run_id=agent_run_id if isinstance(agent_run_id, str) else None,
-                parent_run_id=parent_run_id if isinstance(parent_run_id, str) else None,
-            )
-            yield _normalize_event(id_normalizer, wrapped_added)
-            await _sleep_between_events()
-
             summaries = reasoning_item.summary or []
             for summary_index, summary in enumerate(summaries):
                 summary_text = summary.text
@@ -571,22 +554,6 @@ async def stream_cached_items_events(
                 )
                 yield _normalize_event(id_normalizer, wrapped_part_done)
                 await _sleep_between_events()
-
-            done_event = ResponseOutputItemDoneEvent(
-                item=reasoning_item,
-                output_index=output_index,
-                sequence_number=sequence_number,
-                type="response.output_item.done",
-            )
-            wrapped_done = add_agent_name_to_event(
-                RawResponsesStreamEvent(data=done_event),
-                agent_name,
-                caller_agent if isinstance(caller_agent, str) else None,
-                agent_run_id=agent_run_id if isinstance(agent_run_id, str) else None,
-                parent_run_id=parent_run_id if isinstance(parent_run_id, str) else None,
-            )
-            yield _normalize_event(id_normalizer, wrapped_done)
-            await _sleep_between_events()
 
             reasoning_run_item = ReasoningItem(raw_item=reasoning_item, agent=agent)
             run_item_event = RunItemStreamEvent(

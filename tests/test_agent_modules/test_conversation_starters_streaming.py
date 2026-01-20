@@ -51,3 +51,27 @@ async def test_stream_cached_items_emits_response_envelope_for_tool_calls() -> N
     assert raw_types
     assert raw_types[0] == "response.created"
     assert raw_types[-1] == "response.completed"
+
+
+@pytest.mark.asyncio
+async def test_stream_cached_items_emits_reasoning_summary_only_once() -> None:
+    agent = Agent(
+        name="StreamAgent",
+        instructions="You are helpful.",
+        model="gpt-5-mini",
+    )
+    items = [
+        {
+            "type": "reasoning",
+            "id": "rs_test",
+            "summary": [{"text": "Thinking", "type": "summary_text"}],
+        }
+    ]
+
+    events = [event async for event in stream_cached_items_events(items=items, agent=agent)]
+    raw_events = [event for event in events if isinstance(event, RawResponsesStreamEvent)]
+    raw_types = [event.data.type for event in raw_events if hasattr(event.data, "type")]
+
+    assert any(event_type.startswith("response.reasoning_summary_") for event_type in raw_types)
+    assert "response.output_item.added" not in raw_types
+    assert "response.output_item.done" not in raw_types
