@@ -236,7 +236,6 @@ async def test_runtime_send_message_respects_one_call_guard_across_recipients():
         name="Coordinator",
         instructions="Coordinate tasks sequentially.",
         model="gpt-5-mini",
-        send_message_tool_class=SequentialSendMessage,
     )
     worker_a = Agent(
         name="WorkerA",
@@ -261,8 +260,8 @@ async def test_runtime_send_message_respects_one_call_guard_across_recipients():
 
     runtime_state = AgentRuntimeState(ToolConcurrencyManager())
 
-    register_subagent(sender, worker_a, runtime_state=runtime_state)
-    register_subagent(sender, worker_b, runtime_state=runtime_state)
+    register_subagent(sender, worker_a, send_message_tool_class=SequentialSendMessage, runtime_state=runtime_state)
+    register_subagent(sender, worker_b, send_message_tool_class=SequentialSendMessage, runtime_state=runtime_state)
 
     send_tool = next(iter(runtime_state.send_message_tools.values()))
 

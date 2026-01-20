@@ -17,13 +17,12 @@ from agency_swarm.tools.mcp_manager import default_mcp_manager
 from agency_swarm.utils.files import get_external_caller_directory
 from agency_swarm.utils.thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
 
-from .helpers import handle_deprecated_agency_args, read_instructions, run_fastapi as run_fastapi_helper
+from .helpers import read_instructions, run_fastapi as run_fastapi_helper
 from .setup import (
     apply_shared_resources,
     configure_agents,
     initialize_agent_runtime_state,
     parse_agent_flows,
-    parse_deprecated_agency_chart,
     register_all_agents_and_set_entry_points,
 )
 
@@ -32,8 +31,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-AgencyChartEntry = Agent | list[Agent]
-AgencyChart = list[AgencyChartEntry]
 CommunicationFlowEntry = (
     tuple[Agent, Agent]  # Basic (sender, receiver) pair
     | tuple[AgentFlow, type]  # Agent flow with tool class
@@ -52,7 +49,6 @@ class Agency:
 
     Attributes:
         agents (dict[str, Agent]): A dictionary mapping agent names to their instances.
-        chart (AgencyChart): The structure defining agents and their communication paths.
         entry_points (list[Agent]): A list of agents identified as entry points for external interaction
         thread_manager (ThreadManager): The manager responsible for handling conversation threads.
         persistence_hooks (PersistenceHooks | None): Optional hooks for loading/saving thread state.
@@ -63,7 +59,6 @@ class Agency:
     """
 
     agents: dict[str, Agent]
-    chart: AgencyChart
     entry_points: list[Agent]
     thread_manager: ThreadManager  # Legacy for backward compatibility
     persistence_hooks: PersistenceHooks | None
@@ -84,7 +79,6 @@ class Agency:
         self,
         *entry_point_agents: Agent,
         communication_flows: list[CommunicationFlowEntry] | None = None,
-        agency_chart: AgencyChart | None = None,
         name: str | None = None,
         shared_instructions: str | None = None,
         shared_tools: list[Tool | type[BaseTool]] | None = None,
@@ -95,13 +89,12 @@ class Agency:
         load_threads_callback: ThreadLoadCallback | None = None,
         save_threads_callback: ThreadSaveCallback | None = None,
         user_context: dict[str, Any] | None = None,
-        **kwargs: Any,
     ):
         """
         Initializes the Agency object.
 
-        Sets up agents based on the provided structure (either new positional entry points
-        and keyword communication_flows, or the deprecated agency_chart), initializes the
+        Sets up agents based on the provided structure (positional entry points
+        and keyword communication_flows), initializes the
         `ThreadManager`, configures persistence hooks if callbacks are provided, applies
         shared instructions, and establishes communication pathways between agents.
 
@@ -115,8 +108,6 @@ class Agency:
                 - tuple[AgentFlow, type]: Agent flow with custom send_message_tool_class
                   (e.g., agent1 > agent2 > agent3, CustomSendMessageTool)
                 Defaults to None.
-            agency_chart (AgencyChart | None, optional): Deprecated structure definition; if provided, it takes
-                precedence over `entry_point_agents` and `communication_flows` (a warning is issued). Defaults to None.
             name (str | None, optional): Display name for the agency.
             shared_instructions (str | None, optional): Either direct instruction text or a file path. If a path is
                 provided, the file is read (supports caller-relative, absolute, or CWD-relative paths) and its
@@ -127,44 +118,22 @@ class Agency:
             shared_files_folder (str | None, optional): Path to folder containing files to share with all agents.
             shared_mcp_servers (list[MCPServer] | None, optional): List of MCP server instances to add to all agents.
             send_message_tool_class (type | None, optional): Fallback SendMessage tool for routes that do not specify
-                a tool via `communication_flows`. Agent-level overrides are deprecated; prefer per-flow configuration.
+                a tool via `communication_flows`. Prefer per-flow configuration.
             load_threads_callback (ThreadLoadCallback | None, optional): Callable to load conversation threads.
             save_threads_callback (ThreadSaveCallback | None, optional): Callable to save conversation threads.
             user_context (dict[str, Any] | None, optional): Initial shared context accessible to all agents.
-            **kwargs: Catches other deprecated parameters, issuing warnings if used.
 
         Raises:
-            ValueError: If the agency structure is not defined (neither new nor deprecated methods used),
-                        or if agent names are duplicated, or chart contains invalid entries.
+            ValueError: If the agency structure is not defined, or if agent names are duplicated.
             TypeError: If entries in the structure are not `Agent` instances or valid tuples/lists.
         """
         logger.info("Initializing Agency...")
-
-        final_load_threads_callback, final_save_threads_callback, deprecated_args_used = handle_deprecated_agency_args(
-            load_threads_callback, save_threads_callback, **kwargs
-        )
 
         _derived_entry_points: list[Agent] = []
         _derived_communication_flows: list[tuple[Agent, Agent]] = []
         _communication_tool_classes: dict[tuple[str, str], type] = {}  # (sender_name, receiver_name) -> tool_class
 
-        if agency_chart is not None:
-            warnings.warn(
-                "'agency_chart' parameter is deprecated. Use positional arguments for entry points and the "
-                "'communication_flows' keyword argument for defining communication paths.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            deprecated_args_used["agency_chart"] = agency_chart
-            if entry_point_agents or communication_flows is not None:
-                logger.warning(
-                    "'agency_chart' was provided along with new 'entry_point_agents' or 'communication_flows'. "
-                    "'agency_chart' will be used for backward compatibility, and the new parameters will be ignored."
-                )
-            _derived_entry_points, _derived_communication_flows = parse_deprecated_agency_chart(self, agency_chart)
-            _communication_tool_classes = {}
-
-        elif entry_point_agents or communication_flows is not None:
+        if entry_point_agents or communication_flows is not None:
             _derived_entry_points = list(entry_point_agents)
             if not all(isinstance(ep, Agent) for ep in _derived_entry_points):
                 raise TypeError("All positional arguments (entry points) must be Agent instances.")
@@ -174,7 +143,7 @@ class Agency:
         else:
             raise ValueError(
                 "Agency structure not defined. Provide entry point agents as positional arguments and/or "
-                "use the 'communication_flows' keyword argument, or use the deprecated 'agency_chart' parameter."
+                "use the 'communication_flows' keyword argument."
             )
 
         self.name = name
@@ -195,19 +164,19 @@ class Agency:
         self.shared_files_folder = shared_files_folder
         self.shared_mcp_servers = shared_mcp_servers
         self.thread_manager = ThreadManager(
-            load_threads_callback=final_load_threads_callback, save_threads_callback=final_save_threads_callback
+            load_threads_callback=load_threads_callback, save_threads_callback=save_threads_callback
         )
         self.event_stream_merger = EventStreamMerger()
         self.persistence_hooks = None
-        if final_load_threads_callback and final_save_threads_callback:
-            self.persistence_hooks = PersistenceHooks(final_load_threads_callback, final_save_threads_callback)
+        if load_threads_callback and save_threads_callback:
+            self.persistence_hooks = PersistenceHooks(load_threads_callback, save_threads_callback)
             logger.info("Persistence hooks enabled.")
         self.agents = {}
         self.entry_points = []
         register_all_agents_and_set_entry_points(self, _derived_entry_points, _derived_communication_flows)
         self._agent_runtime_state = {}
-        self._load_threads_callback = final_load_threads_callback
-        self._save_threads_callback = final_save_threads_callback
+        self._load_threads_callback = load_threads_callback
+        self._save_threads_callback = save_threads_callback
         initialize_agent_runtime_state(self)
 
         if not self.agents:
@@ -250,7 +219,6 @@ class Agency:
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
         run_config: RunConfig | None = None,
-        message_files: list[str] | None = None,
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
         **kwargs: Any,
@@ -270,7 +238,6 @@ class Agency:
             hooks_override (RunHooks | None, optional): Specific hooks to use for this run, overriding
                                                        agency-level persistence hooks.
             run_config (RunConfig | None, optional): Configuration for the agent run.
-            message_files (list[str] | None, optional): Backward compatibility parameter.
             file_ids (list[str] | None, optional): Additional file IDs for the agent run.
             additional_instructions (str | None, optional): Additional instructions to be appended to the recipient
                 agent's instructions for this run only.
@@ -289,7 +256,6 @@ class Agency:
             context_override,
             hooks_override,
             run_config,
-            message_files,
             file_ids,
             additional_instructions,
             **kwargs,
@@ -302,7 +268,6 @@ class Agency:
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
         run_config: RunConfig | None = None,
-        message_files: list[str] | None = None,
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
         **kwargs: Any,
@@ -317,7 +282,6 @@ class Agency:
             context_override,
             hooks_override,
             run_config,
-            message_files,
             file_ids,
             additional_instructions,
             **kwargs,
@@ -330,7 +294,6 @@ class Agency:
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
         run_config_override: RunConfig | None = None,
-        message_files: list[str] | None = None,
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
         **kwargs: Any,
@@ -348,7 +311,6 @@ class Agency:
             context_override (dict[str, Any] | None, optional): Additional context for the run.
             hooks_override (RunHooks | None, optional): Specific hooks for this run.
             run_config_override (RunConfig | None, optional): Specific run configuration for this run.
-            message_files (list[str] | None, optional): Backward compatibility parameter.
             file_ids (list[str] | None, optional): Additional file IDs for the agent run.
             additional_instructions (str | None, optional): Additional instructions to be appended to the recipient
                 agent's instructions for this run only.
@@ -367,51 +329,10 @@ class Agency:
             context_override,
             hooks_override,
             run_config_override,
-            message_files,
             file_ids,
             additional_instructions,
             **kwargs,
         )
-
-    def get_completion(
-        self,
-        message: str,
-        message_files: list[str] | None = None,
-        yield_messages: bool = False,
-        recipient_agent: str | Agent | None = None,
-        additional_instructions: str | None = None,
-        attachments: list[dict] | None = None,
-        tool_choice: dict | None = None,
-        verbose: bool = False,
-        response_format: dict | None = None,
-        **kwargs: Any,
-    ) -> str:
-        """
-        [DEPRECATED] Use get_response instead. Returns final text output.
-        """
-        from .completions import get_completion
-
-        return get_completion(
-            self,
-            message,
-            message_files,
-            yield_messages,
-            recipient_agent,
-            additional_instructions,
-            attachments,
-            tool_choice,
-            verbose,
-            response_format,
-            **kwargs,
-        )
-
-    def get_completion_stream(self, *args: Any, **kwargs: Any):
-        """
-        [DEPRECATED] Use get_response_stream instead. Yields all events from the modern streaming API.
-        """
-        from .completions import get_completion_stream
-
-        return get_completion_stream(self, *args, **kwargs)
 
     def run_fastapi(
         self,

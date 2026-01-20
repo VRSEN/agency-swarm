@@ -1,7 +1,5 @@
-import json
 import logging
 import os
-import warnings
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -20,11 +18,12 @@ from agency_swarm.agent import (
     Execution,
     add_tool,
     apply_framework_defaults,
-    handle_deprecated_parameters,
     load_tools_from_folder,
+    normalize_agent_tool_definitions,
     parse_schemas,
     separate_kwargs,
     setup_file_manager,
+    validate_no_deprecated_agent_kwargs,
     validate_tools,
     wrap_input_guardrails,
 )
@@ -56,7 +55,7 @@ class Agent(BaseAgent[MasterContext]):
 
     This class manages agent-specific parameters like file folders, response validation,
     and handles the registration of subagents to enable communication within the agency
-    structure defined by an `AgencyChart`. It relies on the underlying `agents` SDK
+    structure defined by entry points and communication flows. It relies on the underlying `agents` SDK
     for core execution logic via the `Runner`.
 
     Agents are stateless. Agency-specific resources like thread managers,
@@ -69,7 +68,6 @@ class Agent(BaseAgent[MasterContext]):
     tools_folder: str | Path | None  # Directory path for automatic tool discovery and loading
     description: str | None
     output_type: type[Any] | None
-    send_message_tool_class: type | None  # DEPRECATED: configure SendMessage tools via communication_flows
     include_search_results: bool = False
     validation_attempts: int = 1
     throw_input_guardrail_error: bool = False
@@ -103,8 +101,6 @@ class Agent(BaseAgent[MasterContext]):
                 {"schema_filename.json": {"header_name": "header_value"}}.
             api_params (dict[str, dict[str, Any]] | None): Per-schema parameters for OpenAPI tools. Format:
                 {"schema_filename.json": {"param_name": "param_value"}}.
-            send_message_tool_class (type | None): DEPRECATED. Configure SendMessage tool classes via
-                `communication_flows` on `Agency` instead of setting this per agent.
             include_search_results (bool): Include search results in FileSearchTool output for citation extraction.
                 Defaults to False.
             validation_attempts (int): Number of retries when an output guardrail trips. Defaults to 1.
@@ -140,22 +136,11 @@ class Agent(BaseAgent[MasterContext]):
                     calls result in a final output.
             reset_tool_choice (bool | None): Whether to reset tool choice after tool calls.
         """
-        # Handle deprecated parameters
-        handle_deprecated_parameters(kwargs)
+        validate_no_deprecated_agent_kwargs(kwargs)
+        normalize_agent_tool_definitions(kwargs)
 
         # Apply framework defaults (e.g., truncation="auto")
         apply_framework_defaults(kwargs)
-
-        # examples are appended to instructions
-        if "examples" in kwargs:
-            examples = kwargs.pop("examples")
-            if examples and isinstance(examples, list):
-                try:
-                    examples_str = "\n\nExamples:\n" + "\n".join(f"- {json.dumps(ex)}" for ex in examples)
-                    current_instructions = kwargs.get("instructions", "")
-                    kwargs["instructions"] = current_instructions + examples_str
-                except Exception:
-                    logger.exception("Failed to append examples to instructions")
 
         # Separate kwargs into base agent params and agency swarm params
         base_agent_params, current_agent_params = separate_kwargs(kwargs)
@@ -186,7 +171,6 @@ class Agent(BaseAgent[MasterContext]):
         self.api_headers = current_agent_params.get("api_headers", {})
         self.api_params = current_agent_params.get("api_params", {})
         self.description = current_agent_params.get("description")
-        self.send_message_tool_class = current_agent_params.get("send_message_tool_class")
         self.include_search_results = current_agent_params.get("include_search_results", False)
         self.validation_attempts = int(current_agent_params.get("validation_attempts", 1))
         self.throw_input_guardrail_error = bool(current_agent_params.get("throw_input_guardrail_error", False))
@@ -234,25 +218,6 @@ class Agent(BaseAgent[MasterContext]):
 
         # Convert MCP servers to tools and add them to the agent
         convert_mcp_servers_to_tools(self)
-
-    # --- Deprecated Compatibility ---
-    @property
-    def return_input_guardrail_errors(self) -> bool:  # pragma: no cover - deprecated
-        warnings.warn(
-            "'return_input_guardrail_errors' is deprecated; use 'throw_input_guardrail_error'",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return not self.throw_input_guardrail_error
-
-    @return_input_guardrail_errors.setter
-    def return_input_guardrail_errors(self, value: bool) -> None:  # pragma: no cover - deprecated
-        warnings.warn(
-            "'return_input_guardrail_errors' is deprecated; use 'throw_input_guardrail_error'",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        self.throw_input_guardrail_error = not value
 
     # --- Properties ---
     def __repr__(self) -> str:
@@ -349,7 +314,6 @@ class Agent(BaseAgent[MasterContext]):
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
         run_config_override: RunConfig | None = None,
-        message_files: list[str] | None = None,  # Backward compatibility
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
         agency_context: AgencyContext | None = None,  # Context from agency, or None for standalone
@@ -368,7 +332,6 @@ class Agent(BaseAgent[MasterContext]):
             context_override: Optional context data to override default MasterContext values
             hooks_override: Optional hooks to override default agent hooks
             run_config_override: Optional run configuration settings
-            message_files: DEPRECATED: Use file_ids instead. File IDs to attach to the message
             file_ids: List of OpenAI file IDs to attach to the message
             additional_instructions: Additional instructions to be appended to the agent's
                                     instructions for this run only
@@ -388,7 +351,6 @@ class Agent(BaseAgent[MasterContext]):
             context_override=context_override,
             hooks_override=hooks_override,
             run_config_override=run_config_override,
-            message_files=message_files,
             file_ids=file_ids,
             additional_instructions=additional_instructions,
             agency_context=agency_context,
@@ -402,7 +364,6 @@ class Agent(BaseAgent[MasterContext]):
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
         run_config_override: RunConfig | None = None,
-        message_files: list[str] | None = None,
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
         agency_context: AgencyContext | None = None,  # Context from agency, or None for standalone
@@ -418,7 +379,6 @@ class Agent(BaseAgent[MasterContext]):
             run_config_override: Optional run configuration
             additional_instructions: Additional instructions to be appended to the agent's
                                     instructions for this run only
-            message_files: DEPRECATED: Use file_ids instead. File IDs to attach to the message
             file_ids: List of OpenAI file IDs to attach to the message
             agency_context: AgencyContext for this execution (provided by Agency, or None for standalone use)
             **kwargs: Additional keyword arguments
@@ -437,7 +397,6 @@ class Agent(BaseAgent[MasterContext]):
             context_override=context_override,
             hooks_override=hooks_override,
             run_config_override=run_config_override,
-            message_files=message_files,
             file_ids=file_ids,
             additional_instructions=additional_instructions,
             agency_context=agency_context,
@@ -496,7 +455,6 @@ class Agent(BaseAgent[MasterContext]):
         Args:
             recipient_agent (Agent): The `Agent` instance to register as a recipient.
             send_message_tool_class: Optional custom SendMessage tool for this specific communication.
-                               Deprecated—prefer assigning tool classes via `communication_flows`.
             runtime_state: Optional runtime state container injected by the owning Agency
         """
         # Import to avoid circular dependency

@@ -13,7 +13,6 @@ def mock_agent():
     """Provides a mocked Agent instance for testing."""
     agent = MagicMock(spec=Agent)
     agent.name = "MockAgent"
-    agent.send_message_tool_class = None  # Add missing attribute
     return agent
 
 
@@ -22,7 +21,6 @@ def mock_agent2():
     """Provides a second mocked Agent instance for testing."""
     agent = MagicMock(spec=Agent)
     agent.name = "MockAgent2"
-    agent.send_message_tool_class = None  # Add missing attribute
     return agent
 
 
@@ -30,21 +28,16 @@ def mock_agent2():
 
 
 def test_agency_minimal_initialization(mock_agent):
-    """Test Agency initialization with minimal parameters using deprecated agency_chart."""
-    chart = [mock_agent]
-    agency = Agency(agency_chart=chart)
+    """Test Agency initialization with minimal parameters."""
+    agency = Agency(mock_agent)
     assert agency.agents == {"MockAgent": mock_agent}
     assert agency.shared_instructions is None or agency.shared_instructions == ""
     assert agency.persistence_hooks is None
 
 
 def test_agency_initialization_with_flows(mock_agent, mock_agent2):
-    """Test Agency initialization with communication flows using deprecated agency_chart."""
-    chart = [
-        mock_agent,
-        [mock_agent, mock_agent2],  # mock_agent can communicate with mock_agent2
-    ]
-    agency = Agency(agency_chart=chart)
+    """Test Agency initialization with communication flows."""
+    agency = Agency(mock_agent, communication_flows=[(mock_agent, mock_agent2)])
     assert agency.agents == {"MockAgent": mock_agent, "MockAgent2": mock_agent2}
     # Check that agents are properly registered
     assert len(agency.agents) == 2
@@ -134,10 +127,9 @@ def test_agency_shared_instructions_none():
 
 
 def test_agency_rejects_global_model(mock_agent):
-    """Global model parameter is deprecated and must raise an error."""
-    with pytest.raises(TypeError, match="Agency no longer accepts a global 'model'"):
-        with pytest.warns(DeprecationWarning, match="'model' parameter is deprecated"):
-            Agency(mock_agent, model="gpt-5")
+    """Global model parameter is not supported."""
+    with pytest.raises(TypeError, match=r"unexpected keyword argument 'model'"):
+        Agency(mock_agent, model="gpt-4o")
 
 
 class _CustomSendMessage(SendMessage):
@@ -146,6 +138,7 @@ class _CustomSendMessage(SendMessage):
 
 def test_agency_send_message_tool_class_does_not_mutate_agent(mock_agent):
     """Agency-level SendMessage fallback should not mutate Agent state."""
-    assert mock_agent.send_message_tool_class is None
+    sentinel = object()
+    mock_agent.send_message_tool_class = sentinel
     Agency(mock_agent, send_message_tool_class=_CustomSendMessage)
-    assert mock_agent.send_message_tool_class is None
+    assert mock_agent.send_message_tool_class is sentinel

@@ -120,6 +120,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - Validate external assumptions (servers, ports, tokens) with real probes when possible before citing them as causes or blockers.
 - Share findings promptly when failures/root causes are found; avoid silent fixes.
 - Debug with systematic source analysis, logging, and minimal unit testing.
+- MANDATORY: Before fixing any error, reproduce it locally first. Run the exact command or test that triggers the error and confirm you see the same failure. Never apply a fix without first observing the error yourself.
 - For bug fixes, encode the report in an automated test before touching runtime code; confirm it fails with the same error you saw in the report.
 - Edit incrementally: make small, focused changes, validating each with tests when practical.
 - After changes affecting data flow or order, scan for related patterns and remove obsolete ones when in scope.

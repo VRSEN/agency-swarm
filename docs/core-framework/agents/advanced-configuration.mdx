@@ -33,17 +33,20 @@ Use `output_guardrails` on the `Agent` to validate outputs. See the detailed gui
 
 ### Few‑Shot Examples
 
-Few‑shot examples are supported and appended to `instructions` at initialization. The format follows the [message object format](https://platform.openai.com/docs/api-reference/messages/createMessage).
+You can include few‑shot examples in `instructions` as plain text or pass message history to `get_response` / `get_response_stream`.
 
 ```python
 from agency_swarm import Agent
+
+agent = Agent(name="MyAgent", instructions="You are a helpful assistant.")
 
 examples = [
     {"role": "user", "content": "Hi!"},
     {"role": "assistant", "content": "Hello!"},
 ]
+new_message = {"role": "user", "content": "Can you help me write a short summary?"}
 
-agent = Agent(name="MyAgent", examples=examples)
+response = await agent.get_response(examples + [new_message])
 ```
 
 See also: [Few‑Shot Examples](/additional-features/few-shot-examples).

@@ -162,10 +162,10 @@ agent = Agent(
 ```python v1.x
 agent = Agent(
     name="MyAgent",
+    model="gpt-4.1",
     model_settings=ModelSettings(
         temperature=0.7,
-        max_tokens=1000,  # legacy max_prompt_tokens/max_completion_tokens map here automatically
-        model="gpt-4o"
+        max_tokens=1000,
     ),
     output_guardrails=[my_guardrail]
 )
@@ -287,10 +287,8 @@ result = await agency.get_response("Analyze this data")
 
 <CodeGroup>
 ```python v0.x
-# Synchronous (still works but deprecated)
+# Removed in v1.x
 result = agency.get_completion("Hello")
-
-# Streaming (removed)
 stream = agency.get_completion_stream("Hello")
 ```
 
@@ -391,7 +389,8 @@ analyst = Agent(
     tools=[data_processor],
     output_type=AnalysisResult,
     output_guardrails=[validate_analysis],
-    model_settings=ModelSettings(temperature=0.7, model="gpt-4o")
+    model="gpt-4.1",
+    model_settings=ModelSettings(temperature=0.7),
 )
 
 agency = Agency(
@@ -416,28 +415,28 @@ asyncio.run(main())
 
 | v0.x | Status | v1.x alternative |
 |:----:|:------:|:----------------:|
-| `get_completion()` | ✅ Backward compatible | `get_response()` (async) |
+| `get_completion()` | ❌ Removed | `get_response()` (async) |
 | `get_completion_stream()` | ❌ Removed | `get_response_stream()` (async) |
-| `agency_chart` | ⚠️ Deprecated | Positional args + `communication_flows` |
-| `model` (global default) | ❌ Removed | Configure each `Agent` via `model_settings` |
+| `agency_chart` | ❌ Removed | Positional args + `communication_flows` |
+| `model` (global default) | ❌ Removed | Configure each `Agent` via `model` |
 | `threads_callbacks` | ❌ Breaking change | `load_threads_callback` + `save_threads_callback` |
 
 ### Agent Parameters
 
 | v0.x | Status | v1.x alternative |
 |:----:|:------:|:----------------:|
-| `temperature`, `top_p`, etc. | ⚠️ Individual params deprecated | `model_settings=ModelSettings(...)` |
+| `temperature`, `top_p`, etc. | ❌ Removed | `model_settings=ModelSettings(...)` |
 | `response_validator` | ❌ Removed | `output_guardrails`, `input_guardrails` |
 | `response_format` | ❌ Removed | `output_type` |
-| `examples` | ⚠️ Deprecated | Auto-prepended to `instructions` |
+| `examples` | ❌ Removed | Include in `instructions` or pass message history to `get_response` / `get_response_stream` |
 
 ### Tools
 
 | v0.x | Status | v1.x alternative |
 |:----:|:------:|:----------------:|
-| `BaseTool` classes | ⚠️ BaseTool still works | `@function_tool` decorator (recommended) |
+| `BaseTool` classes | ✅ Supported | `@function_tool` decorator (recommended) |
 | `run()` method | ✅ Simplified | Direct function body implementation |
-| `_shared_state` | ✅ Enhanced | `ctx.context` |
+| `_shared_state` | ❌ Removed | `ctx.context` |
 </Accordion>
 
 ## Getting Help

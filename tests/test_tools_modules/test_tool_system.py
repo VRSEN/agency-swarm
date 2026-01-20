@@ -359,8 +359,9 @@ async def test_shared_state_property(mock_run_context_wrapper):
 
     tool = TestTool()
     tool._context = mock_run_context_wrapper
-    with pytest.deprecated_call():
-        assert tool._shared_state is mock_run_context_wrapper.context
+    with pytest.raises(AttributeError, match=r"_shared_state"):
+        _ = tool._shared_state
+    assert tool.context is mock_run_context_wrapper.context
 
 
 # --- one_call_at_a_time Tests ---

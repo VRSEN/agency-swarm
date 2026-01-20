@@ -97,6 +97,22 @@ class TestAttachmentManager:
         with pytest.raises(AgentsException, match="Unsupported file extension: .xyz for file test.xyz"):
             await attachment_manager.sort_file_attachments(["file-123"])
 
+    @pytest.mark.asyncio
+    async def test_prepare_and_attach_files_rejects_message_files(self):
+        """Test prepare_and_attach_files rejects deprecated message_files usage."""
+        mock_agent = Mock()
+        mock_agent.name = "TestAgent"
+        mock_agent.file_manager = Mock()
+
+        attachment_manager = AttachmentManager(mock_agent)
+
+        with pytest.raises(TypeError, match="message_files"):
+            await attachment_manager.prepare_and_attach_files(
+                [{"role": "user", "content": "hello"}],
+                None,
+                {"message_files": ["file-123"]},
+            )
+
     def test_attachments_cleanup_code_interpreter_files(self):
         """Test attachments_cleanup with temporary code interpreter files."""
         mock_agent = Mock()

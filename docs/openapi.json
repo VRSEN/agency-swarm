@@ -42,9 +42,9 @@
         },
         "required": ["type"]
       },
-      "GetCompletionRequest": {
+      "GetResponseRequest": {
         "type": "object",
-        "description": "Request body for the /get_completion endpoint.",
+        "description": "Request body for the /get_response endpoint.",
         "properties": {
           "message": { "type": "string", "description": "The message content to be processed by the agent. Example: \"Hey! How are you?\"" },
           "apiIntegrationId": { "type": "string", "description": "The unique identifier for the API integration being used. Example: \"dpCD7snQ0tCWrdtp6UhZ\"" },
@@ -60,9 +60,9 @@
         },
         "required": ["message", "apiIntegrationId"]
       },
-      "GetCompletionResponse": {
+      "GetResponseResponse": {
         "type": "object",
-        "description": "Response body for the /get_completion endpoint when textOnly mode is disabled.",
+        "description": "Response body for the /get_response endpoint when textOnly mode is disabled.",
         "properties": {
           "chatId": { "type": "string", "description": "The unique identifier for the chat session. Example: \"FVfA971B3fnBH4S1OKlo\"" },
           "createdAt": { "type": "string", "format": "date-time", "description": "The timestamp when the response was created (ISO 8601 format). Example: \"2024-08-06T02:02:37.533913\"" },
@@ -167,15 +167,15 @@
         "security": [ { "BearerAuth": [] } ]
       }
     },
-    "/get_completion": {
+    "/get_response": {
       "post": {
-        "summary": "Get completion",
-        "description": "Processes a message using the specified API integration and returns a completion from the agent. Requires a valid platform token. Ensure the apiIntegrationId is valid. Supports continuing existing chats via chatId or aliasChatId and attaching files with tools.",
+        "summary": "Get response",
+        "description": "Processes a message using the specified API integration and returns a response from the agent. Requires a valid platform token. Ensure the apiIntegrationId is valid. Supports continuing existing chats via chatId or aliasChatId and attaching files with tools.",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/GetCompletionRequest" }
+              "schema": { "$ref": "#/components/schemas/GetResponseRequest" }
             }
           }
         },
@@ -184,7 +184,7 @@
             "description": "Successful response. The format varies depending on the `textOnly` mode configured for the API Integration. If `textOnly` is enabled, the response is plain text. Otherwise, it's application/json.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/GetCompletionResponse" }
+                "schema": { "$ref": "#/components/schemas/GetResponseResponse" }
               },
               "text/plain": {
                 "schema": { "type": "string", "example": "This is a final message response from the bot." }

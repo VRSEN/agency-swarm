@@ -255,6 +255,10 @@ async def test_tool_output_conversion_bug_two_turn_conversation():
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    os.getenv("CI") == "true",
+    reason="Requires live OpenAI API; skipped on CI to avoid upstream flake.",
+)
 async def test_hosted_tool_output_preservation_multi_turn():
     """
     Integration test for hosted tool output preservation in multi-turn conversations.

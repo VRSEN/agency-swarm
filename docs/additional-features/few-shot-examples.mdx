@@ -15,52 +15,60 @@ icon: "clone"
 
 ## Defining Few-Shot Examples
 
-In the **Agency Swarm** framework, few-shot examples are structured using the [OpenAI message object format](https://platform.openai.com/docs/api-reference/messages/createMessage), including the `role` and `content` fields.
+In **Agency Swarm**, few-shot examples are earlier messages that show the style you want. Put them in `instructions` as plain text or pass them as message history to `get_response` / `get_response_stream`.
 
-**Example**: Technical Support Agent:
-
-```python
-examples = [
-    {
-        "role": "user",
-        "content": "My device won't turn on.",
-    },
-    {
-        "role": "assistant",
-        "content": "I'm sorry to hear that. Let's try some troubleshooting steps. First, please press and hold the power button for at least 10 seconds.",
-    },
-    {
-        "role": "user",
-        "content": "I tried that, but it still won't turn on.",
-    },
-    {
-        "role": "assistant",
-        "content": "Thank you for trying that. Please connect your device to a charger and check if any lights appear. Let me know what you observe.",
-    }
-]
-```
-
-The optional fields `attachments` and `metadata` can be included if needed but are not required for basic examples.
+Optional fields like `attachments` and `metadata` can be included in message history but are not required for basic examples.
 
 ## Using Few-Shot Examples
 
-You can add few-shot examples to your agent during initialization:
+Pick one of these ways:
 
 <Tabs>
-    <Tab title="During Initialization">
+    <Tab title="Message History (Scalable)">
+
+    ```python
+    from agency_swarm import Agency, Agent
+
+    support_agent = Agent(
+        name="CustomerSupportAgent",
+        instructions="You assist customers with troubleshooting.",
+    )
+    agency = Agency(support_agent)
+
+    examples = [
+        {"role": "user", "content": "My device won't turn on."},
+        {"role": "assistant", "content": "Please hold the power button for 10 seconds to restart the device."},
+    ]
+    new_message = {"role": "user", "content": "It still won't start."}
+
+    response = await agency.get_response(examples + [new_message])
+    ```
+
+    </Tab>
+
+    <Tab title="Instructions (Simple)">
 
     ```python
     from agency_swarm import Agent
 
+    instructions = """
+    You assist customers with troubleshooting.
+
+    Example:
+    User: My device won't turn on.
+    Assistant: Please hold the power button for 10 seconds to restart the device.
+    """
+
     agent = Agent(
         name="CustomerSupportAgent",
-        description="Assists customers with inquiries and provides detailed information.",
-        examples=examples
+        instructions=instructions,
     )
     ```
 
     </Tab>
 
 </Tabs>
+
+Message history is more scalable. Instructions are best for short examples.
 
 See more advanced features in [Agent Class](/core-framework/agents/advanced-configuration)

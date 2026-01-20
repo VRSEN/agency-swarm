@@ -115,8 +115,7 @@ agency = Agency(
 )
 
 # If you want a default communication tool for flows without explicit overrides, set
-# send_message_tool_class on the Agency instead of on individual agents (agent-level
-# configuration is deprecated).
+# send_message_tool_class on the Agency.
 # agency = Agency(
 #     coordinator,
 #     specialist,
