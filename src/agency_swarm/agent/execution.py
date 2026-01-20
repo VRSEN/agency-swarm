@@ -165,6 +165,7 @@ class Execution:
                 and self.agent.cache_conversation_starters
                 and is_first_message
                 and is_simple_text_message(processed_current_message_items)
+                and not additional_instructions  # Skip cache when per-run instructions provided
             ):
                 matched_starter = match_conversation_starter(
                     processed_current_message_items, self.agent.conversation_starters
@@ -474,6 +475,7 @@ class Execution:
                     and self.agent.cache_conversation_starters
                     and is_first_message
                     and is_simple_text_message(processed_current_message_items)
+                    and not additional_instructions  # Skip cache when per-run instructions provided
                 ):
                     matched_starter = match_conversation_starter(
                         processed_current_message_items, self.agent.conversation_starters
