@@ -153,6 +153,8 @@ class AttachmentManager:
         kwargs: dict[str, Any],
     ) -> None:
         """Handle file attachments for messages."""
+        if "message_files" in kwargs:
+            raise TypeError("message_files is not supported. Use file_ids instead.")
         files_to_attach = file_ids or kwargs.get("file_ids")
         if files_to_attach and isinstance(files_to_attach, list):
             # Add file items to the last user message content
