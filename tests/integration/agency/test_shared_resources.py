@@ -56,12 +56,12 @@ def basic_agents() -> tuple[Agent, Agent]:
     agent_a = Agent(
         name="AgentA",
         instructions="You are Agent A. Use file_search when asked about documents.",
-        model="gpt-4o-mini",
+        model="gpt-5-mini",
     )
     agent_b = Agent(
         name="AgentB",
         instructions="You are Agent B. Use file_search when asked about documents.",
-        model="gpt-4o-mini",
+        model="gpt-5-mini",
     )
     return agent_a, agent_b
 
@@ -71,12 +71,12 @@ def _create_fresh_agents() -> tuple[Agent, Agent]:
     agent_a = Agent(
         name="AgentA",
         instructions="You are Agent A. Use file_search when asked about documents.",
-        model="gpt-4o-mini",
+        model="gpt-5-mini",
     )
     agent_b = Agent(
         name="AgentB",
         instructions="You are Agent B. Use file_search when asked about documents.",
-        model="gpt-4o-mini",
+        model="gpt-5-mini",
     )
     return agent_a, agent_b
 
@@ -466,6 +466,23 @@ class TestSharedFilesFolderLive:
             agent_a,
             shared_files_folder=str(temp_files_folder),
             communication_flows=[(agent_a, agent_b)],
+        )
+
+        vs_id = agent_a._associated_vector_store_id
+        assert vs_id is not None
+        deadline = time.monotonic() + 90
+        filenames: list[str] = []
+        while time.monotonic() < deadline:
+            vs_files = agent_a.client_sync.vector_stores.files.list(vector_store_id=vs_id)
+            file_ids = [vf.id for vf in vs_files.data]
+            filenames = [agent_a.client_sync.files.retrieve(fid).filename for fid in file_ids]
+            if "secrets.txt" in filenames:
+                break
+            time.sleep(1)
+        assert "secrets.txt" in filenames
+        agent_a.file_manager._sync.wait_for_vector_store_files_ready(
+            [(vs_id, file_id) for file_id in file_ids],
+            timeout_seconds=180.0,
         )
 
         # Ask about content in the files

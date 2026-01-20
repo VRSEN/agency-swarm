@@ -109,7 +109,7 @@ def test_extract_usage_from_run_result_extracts_reasoning_and_sums_subagent_reas
 
     run_result = _make_run_result(usage=main_usage)
     typing.cast(_HasSubAgentResponsesWithModel, run_result)._sub_agent_responses_with_model = [
-        ("gpt-4o", ModelResponse(output=[], usage=sub_usage, response_id=None))
+        ("gpt-5-mini", ModelResponse(output=[], usage=sub_usage, response_id=None))
     ]
 
     stats = extract_usage_from_run_result(run_result)

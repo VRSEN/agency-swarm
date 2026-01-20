@@ -46,7 +46,7 @@ def test_integrations_fastapi_imports_without_optional_dependencies(caplog):
 
 
 def test_run_fastapi_creates_new_agency_instance(mocker):
-    agent = Agent(name="HelperAgent", instructions="test", model="gpt-5.2")
+    agent = Agent(name="HelperAgent", instructions="test", model="gpt-5-mini")
     agency = Agency(agent)
 
     captured = {}
@@ -78,8 +78,8 @@ class CustomSendMessage(SendMessage):
 
 
 def test_run_fastapi_preserves_custom_tool_mappings(mocker):
-    sender = Agent(name="A", instructions="test", model="gpt-5.2")
-    recipient = Agent(name="B", instructions="test", model="gpt-5.2")
+    sender = Agent(name="A", instructions="test", model="gpt-5-mini")
+    recipient = Agent(name="B", instructions="test", model="gpt-5-mini")
     agency = Agency(sender, recipient, communication_flows=[(sender, recipient, CustomSendMessage)])
 
     captured = {}
@@ -141,7 +141,7 @@ def test_run_fastapi_normalizes_relative_shared_folders_for_factory_calls(mocker
         from agency_swarm import Agency, Agent
         from agency_swarm.agency.helpers import run_fastapi as helpers_run_fastapi
 
-        a = Agent(name="A", instructions="test", model="gpt-4o-mini")
+        a = Agent(name="A", instructions="test", model="gpt-5-mini")
         agency = Agency(a, shared_tools_folder="shared_tools")
         helpers_run_fastapi(agency)
         """

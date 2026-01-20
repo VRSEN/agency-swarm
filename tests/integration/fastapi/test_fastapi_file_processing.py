@@ -19,8 +19,6 @@ from pathlib import Path
 import httpx
 import pytest
 import uvicorn
-from agents import ModelSettings
-from openai.types.shared import Reasoning
 
 from agency_swarm import Agency, Agent, run_fastapi
 
@@ -59,10 +57,7 @@ class TestFastAPIFileProcessing:
                 alternative text. If multiple phrases appear, include them all exactly as written.
                 """,
                 description="Agent that processes and analyzes file content",
-                model="gpt-5.2",
-                model_settings=ModelSettings(
-                    reasoning=Reasoning(effort="low"),
-                ),
+                model="gpt-5-mini",
             )
 
             return Agency(
