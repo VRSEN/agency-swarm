@@ -27,6 +27,40 @@ To force sequential execution for a specific tool regardless of that setting, se
 
 If your `files_folder` ends with `_vs_<vector_store_id>`, Agency Swarm automatically associates files with that Vector Store and adds `FileSearchTool` to the Agent. The `include_search_results` behavior can be toggled via the Agent’s `include_search_results` flag.
 
+### Conversation starters cache
+
+Conversation starters are the suggested prompts you see in the chat UI.
+Cache makes the first reply instant without calling the LLM.
+
+```python
+from agency_swarm import Agent
+
+agent = Agent(
+    name="SupportAgent",
+    instructions="You are helpful.",
+    model="gpt-5-mini",
+    conversation_starters=["Support: I need help with billing"],
+    cache_conversation_starters=True,
+)
+```
+
+In this example:
+- The UI shows the starter prompt “Support: I need help with billing”.
+- The FastAPI `/get_metadata` response exposes it as `conversationStarters` for UI rendering.
+- With `cache_conversation_starters=True`, picking that prompt can return a saved reply without calling the LLM.
+<Info>
+Streaming the cached reply includes events for text, tool calls, reasoning, and handoffs.
+</Info>
+
+If you change key agent settings (like instructions, tools, or model), cached starters are rebuilt.
+
+<Note>
+Cache files live under `AGENCY_SWARM_CHATS_DIR` (defaults to `.agency_swarm`) in `starter_cache/`.
+In production, point `AGENCY_SWARM_CHATS_DIR` at persistent storage to keep instant replies across restarts.
+</Note>
+
+See also: [Agent Overview](/core-framework/agents/overview), [FastAPI Integration](/additional-features/fastapi-integration).
+
 ### Output Validation
 
 Use `output_guardrails` on the `Agent` to validate outputs. See the detailed guide: [Guardrails](/additional-features/guardrails).

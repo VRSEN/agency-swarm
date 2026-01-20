@@ -131,6 +131,7 @@ data: [DONE]
       "data": {
         "label": "Assistant",
         "description": "Main assistant agent",
+        "conversationStarters": ["Support: I need help with billing"],
         "isEntryPoint": true,
         "toolCount": 2,
         "tools": [{"name": "example_tool", "type": "function", "description": "..."}]
@@ -150,6 +151,8 @@ data: [DONE]
   "agency_swarm_version": "1.0.0"
 }
 ```
+
+Conversation starters appear under `data.conversationStarters` on each agent node when configured. See [Conversation starters cache](/core-framework/agents/advanced-configuration#conversation-starters-cache).
 
 **Tool (`/tool/<name>`):**
 

@@ -79,7 +79,7 @@ In agency swarm, to create an agent, you need to instantiate the `Agent` class.
 | Handoff Reminder *(optional)* | `handoff_reminder` | Replaces the default handoff reminder system message with a given string. Default: "Transfer completed. You are [recipient_agent_name]. Please continue the task." |
 | Include Search Results *(optional)* | `include_search_results` | Include search results in FileSearchTool output for citation extraction. Default: `False` |
 | Conversation Starters *(optional)* | `conversation_starters` | List of short user prompts for UIs. Each starter must be a non-empty string. Default: `None` |
-| Starter Cache *(optional)* | `cache_conversation_starters` | If `True`, use cached conversation starter runs from `AGENCY_SWARM_CHATS_DIR` (defaults to `.agency_swarm`). Default: `False` |
+| Starter Cache *(optional)* | `cache_conversation_starters` | If `True`, speed up first responses by replaying cached starter replies. See [Advanced Configuration](/core-framework/agents/advanced-configuration#conversation-starters-cache). Default: `False` |
 
   </Tab>
 </Tabs>
