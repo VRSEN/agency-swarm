@@ -65,6 +65,8 @@ def compute_starter_cache_fingerprint(agent: Agent) -> str:
         "prompt": _serialize_value(agent.prompt),
         "model": model_name,
         "model_settings": _serialize_value(agent.model_settings),
+        "input_guardrails": _serialize_value(agent.input_guardrails),
+        "output_guardrails": _serialize_value(agent.output_guardrails),
         "tools": tools,
         "tool_use_behavior": _serialize_value(agent.tool_use_behavior),
         "reset_tool_choice": agent.reset_tool_choice,
