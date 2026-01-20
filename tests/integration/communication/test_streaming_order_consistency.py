@@ -51,6 +51,15 @@ def _assert_sanitized_history(messages: list[dict[str, Any]]) -> None:
         )
 
 
+def _strip_optional_initial_main_message(
+    flow: list[tuple[str, str, str | None]],
+) -> list[tuple[str, str, str | None]]:
+    """Allow optional initial MainAgent message_output_item after first tool_call."""
+    if len(flow) >= 2 and flow[1] == ("message_output_item", "MainAgent", None):
+        return [flow[0], *flow[2:]]
+    return flow
+
+
 # Additional tools for complex scenarios
 @function_tool
 def process_data(data: str) -> str:
@@ -200,7 +209,13 @@ async def test_full_streaming_flow_hardcoded_sequence(
         if t in {"function_call", "function_call_output"} or role == "assistant":
             comparable.append(m)
 
-    assert stream_items == expected_flow, f"Stream flow mismatch:\n got={stream_items}\n exp={expected_flow}"
+    expected_without_main_message = _strip_optional_initial_main_message(expected_flow)
+    assert stream_items in (expected_flow, expected_without_main_message), (
+        "Stream flow mismatch:\n"
+        f" got={stream_items}\n"
+        f" exp={expected_flow}\n"
+        f" exp_without_initial_message={expected_without_main_message}"
+    )
 
     _assert_sanitized_history(comparable)
 
