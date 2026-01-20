@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from agents import TResponseInputItem
 from agents.agent_output import AgentOutputSchema, AgentOutputSchemaBase
+from agents.handoffs import Handoff as AgentsHandoff
 from agents.items import MessageOutputItem, ReasoningItem, ToolCallItem, ToolCallOutputItem
 from agents.tool import (
     ApplyPatchTool,
@@ -34,6 +35,7 @@ from agency_swarm.utils.files import get_chats_dir
 from agency_swarm.utils.model_utils import get_model_name
 
 if TYPE_CHECKING:
+    from agency_swarm.agent.context_types import AgentRuntimeState
     from agency_swarm.agent.core import Agent
 
 _CACHE_DIR_NAME = "starter_cache"
@@ -51,9 +53,13 @@ def normalize_starter_text(text: str) -> str:
     return text.strip().casefold()
 
 
-def compute_starter_cache_fingerprint(agent: Agent) -> str:
+def compute_starter_cache_fingerprint(agent: Agent, runtime_state: AgentRuntimeState | None = None) -> str:
     model_name = get_model_name(agent.model)
     tools = [_tool_signature(tool) for tool in agent.tools]
+    runtime_tools = _runtime_tool_signatures(runtime_state)
+    if runtime_tools:
+        tools.extend(runtime_tools)
+    handoffs = _handoff_signatures(agent, runtime_state)
     mcp_servers = [{"type": type(server).__name__, "name": server.name} for server in (agent.mcp_servers or [])]
     mcp_config = agent.mcp_config
     if isinstance(mcp_config, dict):
@@ -72,6 +78,7 @@ def compute_starter_cache_fingerprint(agent: Agent) -> str:
         "reset_tool_choice": agent.reset_tool_choice,
         "mcp_servers": mcp_servers,
         "mcp_config": sanitized_mcp_config,
+        "handoffs": handoffs,
         "output_type": _output_type_signature(agent.output_type),
     }
     digest = json.dumps(payload, sort_keys=True, separators=(",", ":"))
@@ -434,6 +441,47 @@ def build_run_items_from_cached(agent: Any, items: list[TResponseInputItem]) -> 
                 continue
             run_items.append(ReasoningItem(raw_item=raw_reasoning, agent=agent))
     return run_items
+
+
+def _signature_sort_key(signature: dict[str, Any]) -> str:
+    return json.dumps(signature, sort_keys=True, separators=(",", ":"))
+
+
+def _unique_sorted_signatures(signatures: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen: set[str] = set()
+    unique: list[dict[str, Any]] = []
+    for signature in signatures:
+        key = _signature_sort_key(signature)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(signature)
+    return sorted(unique, key=_signature_sort_key)
+
+
+def _runtime_tool_signatures(runtime_state: AgentRuntimeState | None) -> list[dict[str, Any]]:
+    if runtime_state is None:
+        return []
+    signatures = [_tool_signature(tool) for tool in runtime_state.send_message_tools.values()]
+    return _unique_sorted_signatures(signatures)
+
+
+def _handoff_signature(handoff: AgentsHandoff) -> dict[str, Any]:
+    schema = handoff.input_json_schema
+    serialized_schema = _sanitize_mapping(schema) if isinstance(schema, dict) else _serialize_value(schema)
+    return {
+        "tool_name": handoff.tool_name,
+        "agent_name": handoff.agent_name,
+        "input_json_schema": serialized_schema,
+    }
+
+
+def _handoff_signatures(agent: Agent, runtime_state: AgentRuntimeState | None) -> list[dict[str, Any]]:
+    handoffs = [handoff for handoff in agent.handoffs if isinstance(handoff, AgentsHandoff)]
+    if runtime_state is not None:
+        handoffs.extend([handoff for handoff in runtime_state.handoffs if isinstance(handoff, AgentsHandoff)])
+    signatures = [_handoff_signature(handoff) for handoff in handoffs]
+    return _unique_sorted_signatures(signatures)
 
 
 def _hash_string(value: str) -> str:

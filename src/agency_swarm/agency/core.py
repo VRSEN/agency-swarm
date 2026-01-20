@@ -190,6 +190,9 @@ class Agency:
         self._communication_tool_classes = _communication_tool_classes
         configure_agents(self, _derived_communication_flows)
         apply_shared_resources(self)
+        for agent_name, agent_instance in self.agents.items():
+            runtime_state = self._agent_runtime_state.get(agent_name)
+            agent_instance.refresh_conversation_starters_cache(runtime_state=runtime_state)
         logger.info("Agency initialization complete.")
         self._schedule_starter_cache_warmup()
 

@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 import os
 from pathlib import Path
@@ -235,13 +234,7 @@ class Agent(BaseAgent[MasterContext]):
         parse_schemas(self)
         load_tools_from_folder(self)
 
-        if self.cache_conversation_starters and self.conversation_starters:
-            self._conversation_starters_fingerprint = compute_starter_cache_fingerprint(self)
-            self._conversation_starters_cache = load_cached_starters(
-                self.name,
-                self.conversation_starters,
-                expected_fingerprint=self._conversation_starters_fingerprint,
-            )
+        self.refresh_conversation_starters_cache()
 
         # Wrap input guardrails
         wrap_input_guardrails(self)
@@ -435,6 +428,24 @@ class Agent(BaseAgent[MasterContext]):
             additional_instructions=additional_instructions,
             agency_context=agency_context,
             **kwargs,
+        )
+
+    def refresh_conversation_starters_cache(self, runtime_state: AgentRuntimeState | None = None) -> None:
+        """Recompute conversation starter cache fingerprint and reload cached entries."""
+        if not self.cache_conversation_starters:
+            return
+        if not self.conversation_starters:
+            return
+
+        fingerprint = compute_starter_cache_fingerprint(self, runtime_state=runtime_state)
+        if fingerprint == self._conversation_starters_fingerprint and self._conversation_starters_cache:
+            return
+
+        self._conversation_starters_fingerprint = fingerprint
+        self._conversation_starters_cache = load_cached_starters(
+            self.name,
+            self.conversation_starters,
+            expected_fingerprint=fingerprint,
         )
 
     async def warm_conversation_starters_cache(self, agency_context: AgencyContext | None = None) -> None:
