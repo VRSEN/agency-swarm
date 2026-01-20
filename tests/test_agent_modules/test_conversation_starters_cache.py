@@ -1,13 +1,16 @@
+import pytest
 from agents.items import HandoffOutputItem
 
-from agency_swarm import Agent, GuardrailFunctionOutput, RunContextWrapper, input_guardrail, output_guardrail
+from agency_swarm import Agency, Agent, GuardrailFunctionOutput, RunContextWrapper, input_guardrail, output_guardrail
 from agency_swarm.agent.context_types import AgentRuntimeState
 from agency_swarm.agent.conversation_starters_cache import (
     build_run_items_from_cached,
     compute_starter_cache_fingerprint,
     is_simple_text_message,
+    load_cached_starter,
 )
 from agency_swarm.tools.send_message import Handoff
+from tests.deterministic_model import DeterministicModel
 
 
 @input_guardrail(name="RequireSupportPrefix")
@@ -38,6 +41,41 @@ def test_is_simple_text_message_rejects_multiple_user_items() -> None:
     ]
 
     assert is_simple_text_message(items) is False
+
+
+@pytest.mark.asyncio
+async def test_warm_conversation_starters_cache_uses_runtime_tools(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AGENCY_SWARM_CHATS_DIR", str(tmp_path))
+    starter = "Send a message to Worker: hello"
+    sender = Agent(
+        name="Sender",
+        instructions="Send messages to Worker when asked.",
+        model=DeterministicModel(default_response="NO_TOOL"),
+        conversation_starters=[starter],
+        cache_conversation_starters=False,
+    )
+    worker = Agent(
+        name="Worker",
+        instructions="A helpful worker.",
+        model=DeterministicModel(default_response="OK"),
+    )
+    agency = Agency(sender, communication_flows=[(sender, worker)])
+
+    sender.cache_conversation_starters = True
+    sender.refresh_conversation_starters_cache(runtime_state=agency.get_agent_runtime_state(sender.name))
+    await sender.warm_conversation_starters_cache(agency.get_agent_context(sender.name))
+
+    cached = load_cached_starter(
+        sender.name,
+        starter,
+        expected_fingerprint=sender._conversation_starters_fingerprint,
+    )
+
+    assert cached is not None
+    assert any(
+        isinstance(item, dict) and item.get("type") == "function_call" and item.get("name") == "send_message"
+        for item in cached.items
+    )
 
 
 def test_starter_cache_fingerprint_includes_guardrails() -> None:

@@ -481,6 +481,7 @@ class Agent(BaseAgent[MasterContext]):
                     agency_context=self._create_minimal_context(
                         agency_instance=agency_context.agency_instance if agency_context else None,
                         shared_instructions=agency_context.shared_instructions if agency_context else None,
+                        runtime_state=agency_context.runtime_state if agency_context else None,
                     ),
                 )
                 for starter in missing
@@ -543,16 +544,17 @@ class Agent(BaseAgent[MasterContext]):
         *,
         agency_instance: Any | None = None,
         shared_instructions: str | None = None,
+        runtime_state: AgentRuntimeState | None = None,
     ) -> AgencyContext:
         """Create a minimal context for standalone agent usage (no agency)."""
         from ..utils.thread import ThreadManager
 
         thread_manager = ThreadManager()
-        runtime_state = AgentRuntimeState(self._tool_concurrency_manager)
+        resolved_runtime_state = runtime_state or AgentRuntimeState(self._tool_concurrency_manager)
         return AgencyContext(
             agency_instance=agency_instance,
             thread_manager=thread_manager,
-            runtime_state=runtime_state,
+            runtime_state=resolved_runtime_state,
             load_threads_callback=None,
             save_threads_callback=None,
             shared_instructions=shared_instructions,

@@ -1,5 +1,12 @@
+from collections.abc import AsyncIterator
+
 import pytest
-from agents import ModelSettings
+from agents import ModelSettings, Tool
+from agents.agent_output import AgentOutputSchemaBase
+from agents.handoffs import Handoff
+from agents.items import ModelResponse, TResponseInputItem, TResponseStreamEvent
+from agents.models.interface import Model, ModelTracing
+from openai.types.responses.response_prompt_param import ResponsePromptParam
 
 from agency_swarm import Agency, Agent
 from agency_swarm.tools.send_message import SendMessage
@@ -15,6 +22,48 @@ def _make_agent(name: str) -> Agent:
         model=DeterministicModel(),
         model_settings=ModelSettings(temperature=0.0),
     )
+
+
+class _FailingModel(Model):
+    def __init__(self, model: str = "test-failing") -> None:
+        self.model = model
+
+    async def get_response(
+        self,
+        system_instructions: str | None,
+        input: str | list[TResponseInputItem],
+        model_settings: ModelSettings,
+        tools: list[Tool],
+        output_schema: AgentOutputSchemaBase | None,
+        handoffs: list[Handoff],
+        tracing: ModelTracing,
+        *,
+        previous_response_id: str | None,
+        conversation_id: str | None,
+        prompt: ResponsePromptParam | None,
+    ) -> ModelResponse:
+        raise RuntimeError("Warmup failure")
+
+    def stream_response(
+        self,
+        system_instructions: str | None,
+        input: str | list[TResponseInputItem],
+        model_settings: ModelSettings,
+        tools: list[Tool],
+        output_schema: AgentOutputSchemaBase | None,
+        handoffs: list[Handoff],
+        tracing: ModelTracing,
+        *,
+        previous_response_id: str | None,
+        conversation_id: str | None,
+        prompt: ResponsePromptParam | None,
+    ) -> AsyncIterator[TResponseStreamEvent]:
+        async def _stream() -> AsyncIterator[TResponseStreamEvent]:
+            if False:
+                yield {}  # pragma: no cover
+            return
+
+        return _stream()
 
 
 @pytest.fixture
@@ -151,3 +200,17 @@ def test_agency_send_message_tool_class_does_not_mutate_agent(mock_agent):
     mock_agent.send_message_tool_class = sentinel
     Agency(mock_agent, send_message_tool_class=_CustomSendMessage)
     assert mock_agent.send_message_tool_class is sentinel
+
+
+def test_agency_warmup_failure_does_not_abort_initialization(tmp_path, monkeypatch) -> None:
+    """Warmup failures should be best-effort during sync init."""
+    monkeypatch.setenv("AGENCY_SWARM_CHATS_DIR", str(tmp_path))
+    agent = Agent(
+        name="WarmupFailAgent",
+        instructions="You are a test agent.",
+        model=_FailingModel(),
+        conversation_starters=["Hello"],
+        cache_conversation_starters=True,
+    )
+
+    Agency(agent)

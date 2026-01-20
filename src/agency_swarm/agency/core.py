@@ -450,7 +450,10 @@ class Agency:
         try:
             asyncio.get_running_loop()
         except RuntimeError:
-            asyncio.run(_warm_conversation_starters())
+            try:
+                asyncio.run(_warm_conversation_starters())
+            except Exception:
+                logger.exception("Starter cache warmup failed")
             return
 
         def _run_warmup_thread() -> None:
