@@ -10,6 +10,7 @@ from typing import Any, cast
 from agents import TResponseInputItem
 
 from agency_swarm import Agency
+from agency_swarm.utils.files import get_chats_dir as _get_chats_dir
 from agency_swarm.utils.usage_tracking import UsageStatsDict
 
 _CHATS_DIR: str | None = None
@@ -30,9 +31,7 @@ def set_chats_dir(path: str) -> None:
 
 
 def get_chats_dir() -> str:
-    base = _CHATS_DIR or os.environ.get("AGENCY_SWARM_CHATS_DIR") or str(Path.cwd() / ".agency_swarm")
-    Path(base).mkdir(parents=True, exist_ok=True)
-    return base
+    return str(_get_chats_dir(override=_CHATS_DIR))
 
 
 def chat_file_path(chat_id: str) -> str:

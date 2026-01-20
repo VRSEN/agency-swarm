@@ -7,6 +7,8 @@ AGENT_PARAMS = {
     "api_headers",
     "api_params",
     "description",
+    "conversation_starters",
+    "cache_conversation_starters",
     "include_search_results",
     "validation_attempts",
     "throw_input_guardrail_error",

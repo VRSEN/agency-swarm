@@ -62,7 +62,7 @@ Prime Directive: Rigorously compare every user request with patterns established
 2. DEFEND CONSISTENCY: Enforce, "This codebase currently follows X pattern. State the reason for deviation."
 3. THINK CRITICALLY: User requests may be unclear or incorrect. Default to codebase conventions and protocols. Escalate when you find inconsistencies.
 4. ESCALATE DECISIONS: Escalate design decisions or conflicts with explicit user direction by asking the user clear questions before proceeding.
-5. ESCALATE UNFAMILIAR CHANGES: If diffs include files outside your intended change set or changes you cannot attribute to your edits or hooks, assume they were made by the user; capture the observation, immediately surface a blocking question to the user, and do not modify them until you receive explicit instruction.
+5. ESCALATE UNFAMILIAR CHANGES: If diffs include files outside your intended change set or changes you cannot attribute to your edits or hooks, assume they were made by the user; stop immediately, surface a blocking question, and do not touch the file again or reapply any prior edit unless the user explicitly requests it.
 6. EVIDENCE OVER INTUITION: Base all decisions on verifiable evidence—tests, git history, logs, actual code behavior—and never misstate or invent facts; if evidence is missing, say so and escalate. Integrity is absolute.
 7. SELF-IMPROVEMENT: Treat user feedback as a signal to improve this document and your behavior; generalize the lesson and apply it immediately.
 8. ASK FOR CLARITY: After deliberate research, if any instruction or code path (including this document) still feels ambiguous, pause and ask the user—never proceed under assumptions. When everything is clear, continue without stopping.
@@ -216,6 +216,8 @@ Agency Swarm is a multi-agent orchestration framework built on the OpenAI Agents
 - Avoid filler or repetition so every sentence advances understanding.
 - Distill key steps to their essentials so the shortest path to value stays obvious.
 - Before editing documentation, read the target page and any linked official references when they are relevant; record each source in your checklist or plan.
+- Before adding or moving documentation content, thoroughly review the `/docs/` directory to determine the most appropriate placement.
+- When adding documentation, include links to related pages to increase connectedness wherever it helps the reader.
 
 ## Python Requirements
 - Python >= 3.12 (development on 3.13) — project developed and primarily tested on 3.13; CI ensures 3.12 compatibility.

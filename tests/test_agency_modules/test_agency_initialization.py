@@ -1,27 +1,81 @@
-from unittest.mock import MagicMock
+from collections.abc import AsyncIterator
 
 import pytest
+from agents import ModelSettings, Tool
+from agents.agent_output import AgentOutputSchemaBase
+from agents.handoffs import Handoff
+from agents.items import ModelResponse, TResponseInputItem, TResponseStreamEvent
+from agents.models.interface import Model, ModelTracing
+from openai.types.responses.response_prompt_param import ResponsePromptParam
 
 from agency_swarm import Agency, Agent
 from agency_swarm.tools.send_message import SendMessage
+from tests.deterministic_model import DeterministicModel
 
 # --- Fixtures ---
 
 
+def _make_agent(name: str) -> Agent:
+    return Agent(
+        name=name,
+        instructions="You are a test agent.",
+        model=DeterministicModel(),
+        model_settings=ModelSettings(temperature=0.0),
+    )
+
+
+class _FailingModel(Model):
+    def __init__(self, model: str = "test-failing") -> None:
+        self.model = model
+
+    async def get_response(
+        self,
+        system_instructions: str | None,
+        input: str | list[TResponseInputItem],
+        model_settings: ModelSettings,
+        tools: list[Tool],
+        output_schema: AgentOutputSchemaBase | None,
+        handoffs: list[Handoff],
+        tracing: ModelTracing,
+        *,
+        previous_response_id: str | None,
+        conversation_id: str | None,
+        prompt: ResponsePromptParam | None,
+    ) -> ModelResponse:
+        raise RuntimeError("Warmup failure")
+
+    def stream_response(
+        self,
+        system_instructions: str | None,
+        input: str | list[TResponseInputItem],
+        model_settings: ModelSettings,
+        tools: list[Tool],
+        output_schema: AgentOutputSchemaBase | None,
+        handoffs: list[Handoff],
+        tracing: ModelTracing,
+        *,
+        previous_response_id: str | None,
+        conversation_id: str | None,
+        prompt: ResponsePromptParam | None,
+    ) -> AsyncIterator[TResponseStreamEvent]:
+        async def _stream() -> AsyncIterator[TResponseStreamEvent]:
+            if False:
+                yield {}  # pragma: no cover
+            return
+
+        return _stream()
+
+
 @pytest.fixture
 def mock_agent():
-    """Provides a mocked Agent instance for testing."""
-    agent = MagicMock(spec=Agent)
-    agent.name = "MockAgent"
-    return agent
+    """Provides an Agent instance for testing."""
+    return _make_agent("MockAgent")
 
 
 @pytest.fixture
 def mock_agent2():
-    """Provides a second mocked Agent instance for testing."""
-    agent = MagicMock(spec=Agent)
-    agent.name = "MockAgent2"
-    return agent
+    """Provides a second Agent instance for testing."""
+    return _make_agent("MockAgent2")
 
 
 # --- Agency Initialization Tests ---
@@ -52,22 +106,26 @@ def test_agency_initialization_shared_instructions(mock_agent):
 
 def test_agency_initialization_persistence_hooks(mock_agent):
     """Test Agency initialization with persistence hooks."""
-    mock_load_cb = MagicMock()
-    mock_save_cb = MagicMock()
+    saved_messages = []
+
+    def mock_load_cb():
+        return []
+
+    def mock_save_cb(messages):
+        saved_messages.append(messages)
+
     agency = Agency(mock_agent, load_threads_callback=mock_load_cb, save_threads_callback=mock_save_cb)
     assert agency.persistence_hooks is not None
     # The callbacks are passed to ThreadManager and PersistenceHooks, not stored directly
+    assert saved_messages == []
 
 
 def test_agency_duplicate_agent_names_forbidden():
     """Test that Agency raises ValueError when trying to register two agents with
     the same name but different instances."""
     # Create two different mock agents with the same name
-    agent1 = MagicMock(spec=Agent)
-    agent1.name = "DuplicateName"
-
-    agent2 = MagicMock(spec=Agent)
-    agent2.name = "DuplicateName"
+    agent1 = _make_agent("DuplicateName")
+    agent2 = _make_agent("DuplicateName")
 
     # Verify they are different instances
     assert id(agent1) != id(agent2)
@@ -142,3 +200,17 @@ def test_agency_send_message_tool_class_does_not_mutate_agent(mock_agent):
     mock_agent.send_message_tool_class = sentinel
     Agency(mock_agent, send_message_tool_class=_CustomSendMessage)
     assert mock_agent.send_message_tool_class is sentinel
+
+
+def test_agency_warmup_failure_does_not_abort_initialization(tmp_path, monkeypatch) -> None:
+    """Warmup failures should be best-effort during sync init."""
+    monkeypatch.setenv("AGENCY_SWARM_CHATS_DIR", str(tmp_path))
+    agent = Agent(
+        name="WarmupFailAgent",
+        instructions="You are a test agent.",
+        model=_FailingModel(),
+        conversation_starters=["Hello"],
+        cache_conversation_starters=True,
+    )
+
+    Agency(agent)
