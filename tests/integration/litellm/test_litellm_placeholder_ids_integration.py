@@ -42,7 +42,7 @@ def _build_agency() -> Agency:
 
     worker_agent = Agent(
         name="Worker",
-        instructions="You perform tasks. When you receive a task, ",
+        instructions="You perform tasks.",
         model_settings=ModelSettings(temperature=0.0),
         model=LitellmModel(model="anthropic/claude-sonnet-4-20250514"),
     )

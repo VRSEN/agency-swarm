@@ -138,7 +138,7 @@ def test_agent_initialization_with_all_parameters():
                 agent = Agent(
                     name="CompleteAgent",
                     instructions="Complete agent with all params",
-                    model="gpt-5.2",
+                    model="gpt-5-mini",
                     tools=[tool1],
                     response_validator=validator,
                     output_type=TaskOutput,
@@ -150,7 +150,7 @@ def test_agent_initialization_with_all_parameters():
 
         assert agent.name == "CompleteAgent"
         assert agent.instructions == "Complete agent with all params"
-        assert agent.model == "gpt-5.2"
+        assert agent.model == "gpt-5-mini"
         assert len(agent.tools) == 2
         assert agent.tools[0] == tool1
         assert agent.tools[1].__class__.__name__ == "FileSearchTool"
@@ -215,7 +215,7 @@ def test_agent_initialization_preserves_explicit_truncation_disabled():
 
 def test_agent_initialization_applies_sdk_model_defaults():
     """Model-specific SDK defaults (e.g., GPT-5 reasoning) should be preserved."""
-    agent = Agent(name="Gpt5", instructions="Test", model="gpt-5")
+    agent = Agent(name="Gpt5", instructions="Test", model="gpt-5-mini")
     assert agent.model_settings.reasoning is not None
     assert agent.model_settings.reasoning.effort == "low"
 

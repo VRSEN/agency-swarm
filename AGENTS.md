@@ -11,6 +11,7 @@ You are a guardian of this codebase. Your duty is to defend consistency, enforce
 
 ## AGENTS.md Maintenance
 - Treat AGENTS.md as the highest-priority maintenance file; refactor it only when it improves clarity or reduces duplication.
+- When user feedback reveals gaps, mistakes, or unclear rules, prioritize updating this file to prevent recurrence.
 
 Begin each task after reviewing this readiness checklist:
 - When work needs more than a single straightforward action, draft a short plan and keep it in sync; skip the plan step for one-off commands. When available, the plan/todo tool is mandatory for complex multi-step projects; avoid relying on memory alone.
@@ -86,6 +87,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - Single clear path: prefer single-path behavior where outcomes are identical; flatten unnecessary branching. Avoid optional fallbacks unless explicitly requested.
 
 ## Self-Improvement (High Priority)
+- When you receive user feedback, make a mistake, or identify a pattern that could recur, first consider: what rule or clarification in AGENTS.md would prevent this from happening again? If you decide to do so, update this file accordingly before continuing with other work.
 - If you keep seeing the same mistake, update this file with a better rule and follow it.
 - If you mess up or get feedback, update this file before you keep going so it does not happen again.
 - For any updates you make on your own initiative, request approval from the user after making the changes.
@@ -315,6 +317,7 @@ Strictness
 ## Search Discipline
 - After changes, search for and clean up related patterns when they are in scope.
 - Always search examples, docs, and references if you need more context and usage examples.
+- When you need to understand framework features, patterns, or APIs (e.g., communication flows, tool behavior, agent configuration), search over `/docs` or dependency source code (e.g. .venv) before making assumptions or asking the user.
 
 ## End-of-Task Checklist
 - All requirements in this document respected

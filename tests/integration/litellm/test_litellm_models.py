@@ -12,7 +12,7 @@ from agents import ModelSettings
 from agents.extensions.models.litellm_model import LitellmModel
 
 from agency_swarm import Agency, Agent
-from agency_swarm.tools.send_message import Handoff
+from agency_swarm.tools.send_message import Handoff, SendMessage
 
 
 @pytest.fixture
@@ -20,15 +20,10 @@ def coordinator_agent():
     return Agent(
         name="Coordinator",
         instructions=(
-            "You are a coordinator agent. Your job is to receive tasks and delegate them either via "
-            "When you receive a task, use the `send_message` tool and select 'Worker' as the recipient "
-            "to ask the Worker agent to perform the task. Always include the full "
-            "task details in your message. "
-            "When delegating, only relay the exact task text and never include unrelated user information."
+            "For any user question about the user, call `transfer_to_DataAgent`. Always use the handoff tool to answer."
         ),
-        model_settings=ModelSettings(temperature=0.0),
-        model=LitellmModel(model="openai/gpt-5.2", api_key=os.getenv("OPENAI_API_KEY")),
-        send_message_tool_class=Handoff,
+        model_settings=ModelSettings(tool_choice="required"),
+        model=LitellmModel(model="openai/gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
     )
 
 
@@ -36,9 +31,12 @@ def coordinator_agent():
 def worker_agent():
     return Agent(
         name="Worker",
-        instructions=("You perform tasks. When you receive a task, "),
-        model_settings=ModelSettings(temperature=0.0),
-        model=LitellmModel(model="openai/gpt-5.2", api_key=os.getenv("OPENAI_API_KEY")),
+        instructions=(
+            "For any user question about the user, use the `send_message` tool to ask DataAgent. "
+            "Always use the tool to answer."
+        ),
+        model_settings=ModelSettings(tool_choice="required"),
+        model=LitellmModel(model="openai/gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
     )
 
 
@@ -46,12 +44,9 @@ def worker_agent():
 def data_agent():
     return Agent(
         name="DataAgent",
-        instructions=(
-            "You are a DataAgent that provides information about the user. User name is John Doe. User age is 30."
-        ),
+        instructions="User name is John Doe. User age is 30. Answer with just the facts.",
         description="Has information about the user.",
-        model_settings=ModelSettings(temperature=0.0),
-        model=LitellmModel(model="openai/gpt-5.2", api_key=os.getenv("OPENAI_API_KEY")),
+        model=LitellmModel(model="openai/gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
     )
 
 
@@ -61,7 +56,10 @@ def coordinator_worker_agency(coordinator_agent, worker_agent, data_agent) -> Ag
     return Agency(
         coordinator_agent,
         worker_agent,
-        communication_flows=[coordinator_agent > data_agent, worker_agent > data_agent],
+        communication_flows=[
+            (coordinator_agent > data_agent, Handoff),
+            (worker_agent > data_agent, SendMessage),
+        ],
         shared_instructions="Test agency for agent-to-agent persistence verification.",
     )
 
@@ -72,32 +70,44 @@ class TestLitellmModels:
     @pytest.mark.asyncio
     async def test_agent_to_agent_messages(self, coordinator_worker_agency: Agency, worker_agent: Agent):
         """
-        Verify all types of communication with patched agents
+        Verify handoff communication works with litellm-patched agents.
+        Coordinator uses transfer_to_DataAgent and Worker uses send_message.
         """
-        user_message = "Say hi to the data agent."
-        # Step 1: Use a send message to check if it'll cause problems on handoff
-        await coordinator_worker_agency.get_response(message=user_message, recipient_agent="Worker")
-
-        user_message = "What is my name and age?"
-        response = await coordinator_worker_agency.get_response(message=user_message, recipient_agent="Coordinator")
-        processed_response = str(response.final_output).lower()
+        worker_response = await coordinator_worker_agency.get_response(
+            message="What is my name and age?",
+            recipient_agent="Worker",
+        )
+        processed_response = str(worker_response.final_output).lower()
         assert "john" in processed_response and "doe" in processed_response, "Response should contain the user's name"
         assert "30" in processed_response or "thirty" in processed_response, "Response should contain the user's age"
 
-        # Both agents will have user-facing messages, but will not have any agent-to-agent messages
-        data_agent_messages = coordinator_worker_agency.thread_manager.get_conversation_history("DataAgent", None)
-        coordinator_messages = coordinator_worker_agency.thread_manager.get_conversation_history("Coordinator", None)
-        assert len(data_agent_messages) > 0, "Agent-to-agent messages should be created after communication"
-        assert len(coordinator_messages) > 0, "Agent-to-agent messages should be created after communication"
+        coordinator_response = await coordinator_worker_agency.get_response(
+            message="What is my name and age?",
+            recipient_agent="Coordinator",
+        )
+        processed_response = str(coordinator_response.final_output).lower()
+        assert "john" in processed_response and "doe" in processed_response, "Response should contain the user's name"
+        assert "30" in processed_response or "thirty" in processed_response, "Response should contain the user's age"
 
-        for i, item in enumerate(coordinator_messages):
-            print(
-                f"  Message {i + 1}: role={item.get('role')}, agent={item.get('agent')}, "
-                f"callerAgent={item.get('callerAgent')}, content_preview={str(item)}..."
-            )
+        # Verify conversation history was created for both paths
+        handoff_messages = coordinator_worker_agency.thread_manager.get_conversation_history("DataAgent", None)
+        send_message_messages = coordinator_worker_agency.thread_manager.get_conversation_history(
+            "DataAgent",
+            "Worker",
+        )
+        handoff_data_agent_messages = [msg for msg in handoff_messages if msg.get("agent") == "DataAgent"]
+        send_message_data_agent_messages = [msg for msg in send_message_messages if msg.get("agent") == "DataAgent"]
+        assert len(handoff_data_agent_messages) > 0, "DataAgent should have messages after handoff"
+        assert len(send_message_data_agent_messages) > 0, "DataAgent should have messages after send_message"
 
-        # Should contain a a transfer call
-        function_calls = [msg for msg in coordinator_messages if msg.get("type") == "function_call"]
-        assert len(function_calls) > 0, "Should have a function call to DataAgent"
-        assistant_messages = [msg for msg in function_calls if "transfer_to_" in msg.get("name")]
-        assert len(assistant_messages) > 0, "Should have at least one handoff"
+        # Verify tool calls were created by both agents
+        all_messages = coordinator_worker_agency.thread_manager.get_all_messages()
+        function_calls = [msg for msg in all_messages if msg.get("type") == "function_call"]
+        worker_send_messages = [
+            msg for msg in function_calls if msg.get("agent") == "Worker" and msg.get("name") == "send_message"
+        ]
+        coordinator_handoffs = [
+            msg for msg in function_calls if msg.get("agent") == "Coordinator" and "transfer_to_" in msg.get("name", "")
+        ]
+        assert len(worker_send_messages) > 0, "Worker should have at least one send_message call"
+        assert len(coordinator_handoffs) > 0, "Coordinator should have at least one handoff"
