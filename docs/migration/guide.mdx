@@ -162,10 +162,10 @@ agent = Agent(
 ```python v1.x
 agent = Agent(
     name="MyAgent",
+    model="gpt-4.1",
     model_settings=ModelSettings(
         temperature=0.7,
-        max_tokens=1000,  # legacy max_prompt_tokens/max_completion_tokens map here automatically
-        model="gpt-4o"
+        max_tokens=1000,
     ),
     output_guardrails=[my_guardrail]
 )
@@ -389,7 +389,8 @@ analyst = Agent(
     tools=[data_processor],
     output_type=AnalysisResult,
     output_guardrails=[validate_analysis],
-    model_settings=ModelSettings(temperature=0.7, model="gpt-4o")
+    model="gpt-4.1",
+    model_settings=ModelSettings(temperature=0.7),
 )
 
 agency = Agency(
@@ -417,7 +418,7 @@ asyncio.run(main())
 | `get_completion()` | ❌ Removed | `get_response()` (async) |
 | `get_completion_stream()` | ❌ Removed | `get_response_stream()` (async) |
 | `agency_chart` | ❌ Removed | Positional args + `communication_flows` |
-| `model` (global default) | ❌ Removed | Configure each `Agent` via `model_settings` |
+| `model` (global default) | ❌ Removed | Configure each `Agent` via `model` |
 | `threads_callbacks` | ❌ Breaking change | `load_threads_callback` + `save_threads_callback` |
 
 ### Agent Parameters
@@ -427,7 +428,7 @@ asyncio.run(main())
 | `temperature`, `top_p`, etc. | ❌ Removed | `model_settings=ModelSettings(...)` |
 | `response_validator` | ❌ Removed | `output_guardrails`, `input_guardrails` |
 | `response_format` | ❌ Removed | `output_type` |
-| `examples` | ❌ Removed | Include examples directly in `instructions` |
+| `examples` | ❌ Removed | Include in `instructions` or pass message history to `get_response` / `get_response_stream` |
 
 ### Tools
 

@@ -3,10 +3,17 @@
 import asyncio
 from collections.abc import Sequence
 
-from agents.model_settings import ModelSettings
 from pydantic import BaseModel
 
-from agency_swarm import Agency, Agent, GuardrailFunctionOutput, RunContextWrapper, input_guardrail
+from agency_swarm import (
+    Agency,
+    Agent,
+    GuardrailFunctionOutput,
+    ModelSettings,
+    Reasoning,
+    RunContextWrapper,
+    input_guardrail,
+)
 
 
 class RelevanceDecision(BaseModel):
@@ -22,7 +29,7 @@ guardrail_agent = Agent(
         "Flag any other unrelated requests as irrelevant."
     ),
     model="gpt-5-nano",
-    model_settings=ModelSettings(reasoning_effort="minimal"),
+    model_settings=ModelSettings(reasoning=Reasoning(effort="minimal")),
     output_type=RelevanceDecision,
 )
 
@@ -58,7 +65,7 @@ support_agent = Agent(
         "Be concise and always offer a clear next step."
     ),
     model="gpt-5-mini",
-    model_settings=ModelSettings(reasoning_effort="minimal"),
+    model_settings=ModelSettings(reasoning=Reasoning(effort="minimal")),
     input_guardrails=[require_support_topic],
     throw_input_guardrail_error=False,  # Friendly mode: guidance returned as assistant message
 )

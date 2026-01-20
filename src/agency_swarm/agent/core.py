@@ -55,7 +55,7 @@ class Agent(BaseAgent[MasterContext]):
 
     This class manages agent-specific parameters like file folders, response validation,
     and handles the registration of subagents to enable communication within the agency
-    structure defined by an `AgencyChart`. It relies on the underlying `agents` SDK
+    structure defined by entry points and communication flows. It relies on the underlying `agents` SDK
     for core execution logic via the `Runner`.
 
     Agents are stateless. Agency-specific resources like thread managers,
