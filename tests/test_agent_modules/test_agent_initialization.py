@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock
 
+import pytest
 from agents import FunctionTool, ModelSettings, StopAtTools
 from pydantic import BaseModel, Field
 

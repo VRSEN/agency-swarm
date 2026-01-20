@@ -1,27 +1,32 @@
-from unittest.mock import MagicMock
-
 import pytest
+from agents import ModelSettings
 
 from agency_swarm import Agency, Agent
 from agency_swarm.tools.send_message import SendMessage
+from tests.deterministic_model import DeterministicModel
 
 # --- Fixtures ---
 
 
+def _make_agent(name: str) -> Agent:
+    return Agent(
+        name=name,
+        instructions="You are a test agent.",
+        model=DeterministicModel(),
+        model_settings=ModelSettings(temperature=0.0),
+    )
+
+
 @pytest.fixture
 def mock_agent():
-    """Provides a mocked Agent instance for testing."""
-    agent = MagicMock(spec=Agent)
-    agent.name = "MockAgent"
-    return agent
+    """Provides an Agent instance for testing."""
+    return _make_agent("MockAgent")
 
 
 @pytest.fixture
 def mock_agent2():
-    """Provides a second mocked Agent instance for testing."""
-    agent = MagicMock(spec=Agent)
-    agent.name = "MockAgent2"
-    return agent
+    """Provides a second Agent instance for testing."""
+    return _make_agent("MockAgent2")
 
 
 # --- Agency Initialization Tests ---
@@ -52,22 +57,26 @@ def test_agency_initialization_shared_instructions(mock_agent):
 
 def test_agency_initialization_persistence_hooks(mock_agent):
     """Test Agency initialization with persistence hooks."""
-    mock_load_cb = MagicMock()
-    mock_save_cb = MagicMock()
+    saved_messages = []
+
+    def mock_load_cb():
+        return []
+
+    def mock_save_cb(messages):
+        saved_messages.append(messages)
+
     agency = Agency(mock_agent, load_threads_callback=mock_load_cb, save_threads_callback=mock_save_cb)
     assert agency.persistence_hooks is not None
     # The callbacks are passed to ThreadManager and PersistenceHooks, not stored directly
+    assert saved_messages == []
 
 
 def test_agency_duplicate_agent_names_forbidden():
     """Test that Agency raises ValueError when trying to register two agents with
     the same name but different instances."""
     # Create two different mock agents with the same name
-    agent1 = MagicMock(spec=Agent)
-    agent1.name = "DuplicateName"
-
-    agent2 = MagicMock(spec=Agent)
-    agent2.name = "DuplicateName"
+    agent1 = _make_agent("DuplicateName")
+    agent2 = _make_agent("DuplicateName")
 
     # Verify they are different instances
     assert id(agent1) != id(agent2)
