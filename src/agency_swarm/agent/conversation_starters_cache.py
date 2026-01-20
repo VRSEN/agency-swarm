@@ -114,21 +114,29 @@ def extract_user_text(items: list[TResponseInputItem]) -> str | None:
 
 
 def is_simple_text_message(items: list[TResponseInputItem]) -> bool:
+    user_items: list[dict[str, Any]] = []
     for item in items:
         if not isinstance(item, dict):
-            continue
+            return False
         if item.get("role") != "user":
-            continue
-        content = item.get("content")
-        if isinstance(content, str):
-            return True
-        if isinstance(content, list):
-            for part in content:
-                if not isinstance(part, dict):
-                    return False
-                if part.get("type") != "input_text":
-                    return False
-            return True
+            return False
+        if item.get("callerAgent") is not None:
+            return False
+        user_items.append(cast(dict[str, Any], item))
+
+    if len(user_items) != 1:
+        return False
+
+    content = user_items[0].get("content")
+    if isinstance(content, str):
+        return True
+    if isinstance(content, list):
+        for part in content:
+            if not isinstance(part, dict):
+                return False
+            if part.get("type") != "input_text":
+                return False
+        return True
     return False
 
 

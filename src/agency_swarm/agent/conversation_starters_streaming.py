@@ -84,33 +84,35 @@ async def stream_text_response_events(
     agent_run_id: str | None,
     parent_run_id: str | None,
     output_index: int,
+    emit_response_events: bool = True,
 ) -> AsyncGenerator[StreamEvent]:
     sequence_number = 0
     resolved_model_name = model_name or "cached-response"
     resolved_created_at = created_at if created_at is not None else time.time()
     tokens = tokenize_text(response_text)
 
-    created_response = build_cached_response(
-        response_id=response_id,
-        created_at=resolved_created_at,
-        model_name=resolved_model_name,
-        output=[],
-        usage=None,
-    )
-    created_event = ResponseCreatedEvent(
-        response=created_response,
-        sequence_number=sequence_number,
-        type="response.created",
-    )
-    sequence_number += 1
-    yield add_agent_name_to_event(
-        RawResponsesStreamEvent(data=created_event),
-        agent_name,
-        sender_name,
-        agent_run_id=agent_run_id,
-        parent_run_id=parent_run_id,
-    )
-    await _sleep_between_events()
+    if emit_response_events:
+        created_response = build_cached_response(
+            response_id=response_id,
+            created_at=resolved_created_at,
+            model_name=resolved_model_name,
+            output=[],
+            usage=None,
+        )
+        created_event = ResponseCreatedEvent(
+            response=created_response,
+            sequence_number=sequence_number,
+            type="response.created",
+        )
+        sequence_number += 1
+        yield add_agent_name_to_event(
+            RawResponsesStreamEvent(data=created_event),
+            agent_name,
+            sender_name,
+            agent_run_id=agent_run_id,
+            parent_run_id=parent_run_id,
+        )
+        await _sleep_between_events()
 
     start_message = ResponseOutputMessage(
         id=message_id,
@@ -245,33 +247,34 @@ async def stream_text_response_events(
     )
     await _sleep_between_events()
 
-    usage = ResponseUsage(
-        input_tokens=0,
-        input_tokens_details=InputTokensDetails(cached_tokens=0),
-        output_tokens=len(tokens),
-        output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
-        total_tokens=len(tokens),
-    )
-    completed_response = build_cached_response(
-        response_id=response_id,
-        created_at=resolved_created_at,
-        model_name=resolved_model_name,
-        output=[completed_message],
-        usage=usage,
-    )
-    completed_event = ResponseCompletedEvent(
-        response=completed_response,
-        sequence_number=sequence_number,
-        type="response.completed",
-    )
-    yield add_agent_name_to_event(
-        RawResponsesStreamEvent(data=completed_event),
-        agent_name,
-        sender_name,
-        agent_run_id=agent_run_id,
-        parent_run_id=parent_run_id,
-    )
-    await _sleep_between_events()
+    if emit_response_events:
+        usage = ResponseUsage(
+            input_tokens=0,
+            input_tokens_details=InputTokensDetails(cached_tokens=0),
+            output_tokens=len(tokens),
+            output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
+            total_tokens=len(tokens),
+        )
+        completed_response = build_cached_response(
+            response_id=response_id,
+            created_at=resolved_created_at,
+            model_name=resolved_model_name,
+            output=[completed_message],
+            usage=usage,
+        )
+        completed_event = ResponseCompletedEvent(
+            response=completed_response,
+            sequence_number=sequence_number,
+            type="response.completed",
+        )
+        yield add_agent_name_to_event(
+            RawResponsesStreamEvent(data=completed_event),
+            agent_name,
+            sender_name,
+            agent_run_id=agent_run_id,
+            parent_run_id=parent_run_id,
+        )
+        await _sleep_between_events()
 
 
 async def stream_cached_items_events(
@@ -281,7 +284,46 @@ async def stream_cached_items_events(
 ) -> AsyncGenerator[StreamEvent]:
     id_normalizer = StreamIdNormalizer()
     model_name = get_model_name(agent.model) or "cached-response"
+    first_caller_agent: str | None = None
+    first_agent_run_id: str | None = None
+    first_parent_run_id: str | None = None
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        caller_agent = item.get("callerAgent")
+        agent_run_id = item.get("agent_run_id")
+        parent_run_id = item.get("parent_run_id")
+        if isinstance(caller_agent, str):
+            first_caller_agent = caller_agent
+        if isinstance(agent_run_id, str):
+            first_agent_run_id = agent_run_id
+        if isinstance(parent_run_id, str):
+            first_parent_run_id = parent_run_id
+        break
+    response_id = f"resp_{uuid.uuid4().hex}"
+    created_at = time.time()
     output_index = 0
+    created_response = build_cached_response(
+        response_id=response_id,
+        created_at=created_at,
+        model_name=model_name,
+        output=[],
+        usage=None,
+    )
+    created_event = ResponseCreatedEvent(
+        response=created_response,
+        sequence_number=0,
+        type="response.created",
+    )
+    created_wrapped = add_agent_name_to_event(
+        RawResponsesStreamEvent(data=created_event),
+        agent.name,
+        first_caller_agent,
+        agent_run_id=first_agent_run_id,
+        parent_run_id=first_parent_run_id,
+    )
+    yield _normalize_event(id_normalizer, created_wrapped)
+    await _sleep_between_events()
     for item in items:
         if not isinstance(item, dict):
             continue
@@ -580,6 +622,7 @@ async def stream_cached_items_events(
                 agent_run_id=agent_run_id if isinstance(agent_run_id, str) else None,
                 parent_run_id=parent_run_id if isinstance(parent_run_id, str) else None,
                 output_index=output_index,
+                emit_response_events=False,
             ):
                 yield _normalize_event(id_normalizer, raw_event)
 
@@ -606,6 +649,28 @@ async def stream_cached_items_events(
             yield _normalize_event(id_normalizer, run_item_event)
             await _sleep_between_events()
             output_index += 1
+
+    completed_response = build_cached_response(
+        response_id=response_id,
+        created_at=created_at,
+        model_name=model_name,
+        output=[],
+        usage=None,
+    )
+    completed_event = ResponseCompletedEvent(
+        response=completed_response,
+        sequence_number=0,
+        type="response.completed",
+    )
+    completed_wrapped = add_agent_name_to_event(
+        RawResponsesStreamEvent(data=completed_event),
+        agent.name,
+        first_caller_agent,
+        agent_run_id=first_agent_run_id,
+        parent_run_id=first_parent_run_id,
+    )
+    yield _normalize_event(id_normalizer, completed_wrapped)
+    await _sleep_between_events()
 
 
 async def _sleep_between_events() -> None:

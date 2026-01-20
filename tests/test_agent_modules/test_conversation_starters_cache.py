@@ -5,6 +5,7 @@ from agency_swarm.agent.context_types import AgentRuntimeState
 from agency_swarm.agent.conversation_starters_cache import (
     build_run_items_from_cached,
     compute_starter_cache_fingerprint,
+    is_simple_text_message,
 )
 from agency_swarm.tools.send_message import Handoff
 
@@ -19,6 +20,24 @@ def require_support_prefix(
 @output_guardrail(name="BlockEmails")
 def block_emails(context: RunContextWrapper, agent: Agent, response_text: str) -> GuardrailFunctionOutput:
     return GuardrailFunctionOutput(output_info="", tripwire_triggered=False)
+
+
+def test_is_simple_text_message_requires_single_user_item() -> None:
+    items = [
+        {"role": "system", "content": "You are helpful."},
+        {"role": "user", "content": "Hello there."},
+    ]
+
+    assert is_simple_text_message(items) is False
+
+
+def test_is_simple_text_message_rejects_multiple_user_items() -> None:
+    items = [
+        {"role": "user", "content": "Hello."},
+        {"role": "user", "content": "Follow-up."},
+    ]
+
+    assert is_simple_text_message(items) is False
 
 
 def test_starter_cache_fingerprint_includes_guardrails() -> None:
