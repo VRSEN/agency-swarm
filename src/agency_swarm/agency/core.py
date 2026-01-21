@@ -227,34 +227,6 @@ class Agency:
         if default_mcp_manager.mark_atexit_registered():
             atexit.register(default_mcp_manager.shutdown_sync)
 
-    def _configure_oauth_support(self) -> None:
-        """Apply oauth_token_path for OAuth-enabled servers."""
-
-        if MCPServerOAuthRuntime is None:
-            return
-
-        cache_dir: Path | None = None
-        if self.oauth_token_path:
-            cache_dir = Path(self.oauth_token_path).expanduser()
-
-        for agent in self.agents.values():
-            servers = getattr(agent, "mcp_servers", None)
-            if not isinstance(servers, list):
-                continue
-            for server in servers:
-                config: Any | None = None
-                if MCPServerOAuthRuntime is not None and isinstance(server, MCPServerOAuthRuntime):
-                    config = server
-                elif MCPServerOAuthClientRuntime is not None and isinstance(server, MCPServerOAuthClientRuntime):
-                    config = server.oauth_config
-                if config is None:
-                    continue
-                if cache_dir and getattr(config, "cache_dir", None) is None:
-                    config.cache_dir = cache_dir
-
-        if cache_dir:
-            default_mcp_manager.update_oauth_cache_dir(cache_dir)
-
     @property
     def default_run_hooks(self) -> RunHooks | None:
         """Return the agency-level hooks applied to each run.
@@ -264,6 +236,7 @@ class Agency:
             returns a single hook (or None).
         """
         return self._default_run_hooks
+
     def get_agent_context(self, agent_name: str) -> AgencyContext:
         """Public accessor for the agency context associated with an agent."""
         if agent_name not in self._agent_runtime_state:
