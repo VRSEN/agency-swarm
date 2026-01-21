@@ -272,6 +272,7 @@ async def test_get_response_rejects_oauth_servers_without_streaming() -> None:
             self.chat_history = None
             self.user_context = None
             self.generate_chat_name = False
+            self.client_config = None
 
     class DummyThreadManager:
         def get_all_messages(self) -> list:
@@ -302,7 +303,7 @@ async def test_get_response_rejects_oauth_servers_without_streaming() -> None:
         DummyRequest,
         agency_factory,
         lambda *args, **kwargs: None,
-        FastAPIOAuthConfig(OAuthStateRegistry()),
+        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry()),
     )
 
     req = DummyRequest()
@@ -326,6 +327,7 @@ async def test_get_response_rejects_hosted_mcp_tool_without_streaming() -> None:
             self.chat_history = None
             self.user_context = None
             self.generate_chat_name = False
+            self.client_config = None
 
     class DummyThreadManager:
         def get_all_messages(self) -> list:
@@ -363,7 +365,7 @@ async def test_get_response_rejects_hosted_mcp_tool_without_streaming() -> None:
         DummyRequest,
         agency_factory,
         lambda *args, **kwargs: None,
-        FastAPIOAuthConfig(OAuthStateRegistry()),
+        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry()),
     )
 
     req = DummyRequest()

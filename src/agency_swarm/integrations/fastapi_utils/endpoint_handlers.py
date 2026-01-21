@@ -16,7 +16,6 @@ from ag_ui.encoder import EventEncoder
 from agents import Model, OpenAIChatCompletionsModel, OpenAIResponsesModel, TResponseInputItem, output_guardrail
 from agents.exceptions import OutputGuardrailTripwireTriggered
 from agents.models._openai_shared import get_default_openai_client
-from agents.models.fake_id import FAKE_RESPONSES_ID
 
 # LiteLLM is optional - only available if openai-agents[litellm] is installed
 try:
