@@ -272,7 +272,6 @@ class Agency:
 
         if cache_dir:
             default_mcp_manager.update_oauth_cache_dir(cache_dir)
-
     @property
     def default_run_hooks(self) -> RunHooks | None:
         """Return the agency-level hooks applied to each run.
