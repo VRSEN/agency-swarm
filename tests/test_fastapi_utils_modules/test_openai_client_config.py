@@ -35,6 +35,7 @@ class TestClientConfig:
         config = ClientConfig()
         assert config.base_url is None
         assert config.api_key is None
+        assert config.default_headers is None
         assert config.litellm_keys is None
 
     def test_config_with_litellm_keys(self) -> None:
@@ -65,8 +66,10 @@ class TestBaseRequestWithClientConfig:
             client_config=ClientConfig(
                 base_url="https://custom.api.com",
                 api_key="sk-custom-key",
+                default_headers={"x-test": "1"},
             ),
         )
         assert request.client_config is not None
         assert request.client_config.base_url == "https://custom.api.com"
         assert request.client_config.api_key == "sk-custom-key"
+        assert request.client_config.default_headers == {"x-test": "1"}
