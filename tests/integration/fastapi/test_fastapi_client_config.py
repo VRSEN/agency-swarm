@@ -35,13 +35,15 @@ class _ChatCompletionsStubHandler(BaseHTTPRequestHandler):
             return
 
         auth = self.headers.get("authorization") or self.headers.get("Authorization")
-        self.__class__.requests_seen.append({"path": self.path, "authorization": auth})
-
-        if auth != f"Bearer {self.__class__.expected_api_key}":
-            self.send_response(401)
-            self.end_headers()
-            self.wfile.write(b'{"error":"unauthorized"}')
-            return
+        self.__class__.requests_seen.append(
+            {
+                "path": self.path,
+                "authorization": auth,
+                "x-agency-id": self.headers.get("x-agency-id"),
+                "x-sandbox-id": self.headers.get("x-sandbox-id"),
+                "x-user-id": self.headers.get("x-user-id"),
+            }
+        )
 
         # Minimal Chat Completions response shape.
         response = {
@@ -129,3 +131,59 @@ def test_client_config_overrides_openai_client_base_url_and_key(openai_stub_base
     assert len(seen) == 1
     assert seen[0]["path"] == "/v1/chat/completions"
     assert seen[0]["authorization"] == "Bearer sk-test"
+
+
+def test_client_config_merges_default_headers_and_allows_overrides(openai_stub_base_url: str) -> None:
+    """Request-level default_headers merge with existing client headers (request wins)."""
+
+    def create_agency(load_threads_callback=None, save_threads_callback=None):
+        original_client = AsyncOpenAI(
+            api_key="sk-test",
+            base_url=f"{openai_stub_base_url}/v1",
+            default_headers={
+                "x-agency-id": "agency-orig",
+                "x-sandbox-id": "sandbox-orig",
+            },
+        )
+
+        agent = Agent(
+            name="TestAgent",
+            instructions="You are a test agent.",
+            model=OpenAIChatCompletionsModel(model="gpt-4o-mini", openai_client=original_client),
+        )
+        return Agency(
+            agent,
+            load_threads_callback=load_threads_callback,
+            save_threads_callback=save_threads_callback,
+        )
+
+    app = run_fastapi(
+        agencies={"test_agency": create_agency},
+        return_app=True,
+        app_token_env="",  # disable auth for test
+        enable_agui=False,
+    )
+    client = TestClient(app)
+
+    res = client.post(
+        "/test_agency/get_response",
+        json={
+            "message": "hi",
+            "client_config": {
+                # No base_url/api_key override: use the existing client's values.
+                "default_headers": {
+                    "x-sandbox-id": "sandbox-override",
+                    "x-user-id": "user-123",
+                }
+            },
+        },
+    )
+    assert res.status_code == 200
+    assert res.json()["response"] == "hello from stub"
+
+    seen = _ChatCompletionsStubHandler.requests_seen
+    assert len(seen) == 1
+    assert seen[0]["authorization"] == "Bearer sk-test"
+    assert seen[0]["x-agency-id"] == "agency-orig"
+    assert seen[0]["x-sandbox-id"] == "sandbox-override"
+    assert seen[0]["x-user-id"] == "user-123"

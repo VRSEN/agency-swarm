@@ -66,17 +66,17 @@ def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
     config : ClientConfig
         Configuration containing base_url and/or api_key overrides.
     """
-    if config.base_url is None and config.api_key is None and config.litellm_keys is None:
+    if (
+        config.base_url is None
+        and config.api_key is None
+        and config.default_headers is None
+        and config.litellm_keys is None
+    ):
         return  # Nothing to override
-
-    # Create custom client with overrides
-    client = AsyncOpenAI(
-        api_key=config.api_key,
-        base_url=config.base_url,
-    )
 
     # Apply to all agents in the agency
     for agent in agency.agents.values():
+        client = _build_openai_client_for_agent(agent, config)
         _apply_client_to_agent(agent, client, config)
 
 
@@ -721,12 +721,21 @@ def _normalize_new_messages_for_client(messages: list[TResponseInputItem]) -> li
     return normalizer.normalize_message_dicts(messages)
 
 
-def make_metadata_endpoint(agency_metadata: dict, verify_token):
+def make_metadata_endpoint(
+    agency_metadata: dict,
+    verify_token,
+    allowed_local_dirs: Sequence[str | Path] | None = None,
+):
     async def handler(token: str = Depends(verify_token)):
         metadata_with_version = dict(agency_metadata)
         agency_swarm_version = _get_agency_swarm_version()
         if agency_swarm_version is not None:
             metadata_with_version["agency_swarm_version"] = agency_swarm_version
+        # Always include so clients can tell if local file access is enabled and what paths are allowed.
+        if allowed_local_dirs is None:
+            metadata_with_version["allowed_local_file_dirs"] = None
+        else:
+            metadata_with_version["allowed_local_file_dirs"] = [str(p) for p in allowed_local_dirs]
         return metadata_with_version
 
     return handler
@@ -815,3 +824,32 @@ def _get_agency_swarm_version() -> str | None:
     except metadata.PackageNotFoundError:
         logger.debug("agency-swarm package metadata not found; returning no version")
         return None
+
+def _get_openai_client_from_agent(agent: Agent) -> AsyncOpenAI | None:
+    """Return the agent's current OpenAI client, if directly accessible."""
+    model = agent.model
+    for attr in ("openai_client", "client", "_client"):
+        maybe = getattr(model, attr, None)
+        if isinstance(maybe, AsyncOpenAI):
+            return maybe
+    return None
+
+
+def _build_openai_client_for_agent(agent: Agent, config: ClientConfig) -> AsyncOpenAI:
+    """Build an AsyncOpenAI client by layering config over existing defaults.
+
+    Priority:
+    - explicit values from `config` win
+    - otherwise fall back to the agent's existing OpenAI client (if any)
+    - otherwise fall back to the global default OpenAI client (if any)
+    - otherwise fall back to a fresh AsyncOpenAI() using environment variables
+    """
+    base_client = _get_openai_client_from_agent(agent) or get_default_openai_client() or AsyncOpenAI()
+
+    # Only override the values that are explicitly provided in `config`.
+    # OpenAI's `copy()` also handles merging default headers correctly.
+    return base_client.copy(
+        api_key=config.api_key,
+        base_url=config.base_url,
+        default_headers=config.default_headers,
+    )

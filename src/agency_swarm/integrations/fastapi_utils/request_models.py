@@ -30,6 +30,13 @@ class ClientConfig(BaseModel):
         default=None,
         description="OpenAI API key override.",
     )
+    default_headers: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Additional default headers to include in OpenAI API requests for this run only. "
+            "Merged with any existing client default headers; per-request values override existing keys."
+        ),
+    )
     litellm_keys: dict[LiteLLMProvider, str] | None = Field(
         default=None,
         description=(

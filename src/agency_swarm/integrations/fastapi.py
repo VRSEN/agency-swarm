@@ -187,7 +187,11 @@ def run_fastapi(
 
             app.add_api_route(
                 f"/{agency_name}/get_metadata",
-                make_metadata_endpoint(agency_metadata, verify_token),
+                make_metadata_endpoint(
+                    agency_metadata,
+                    verify_token,
+                    allowed_local_dirs=normalized_allowed_dirs,
+                ),
                 methods=["GET"],
             )
             endpoints.append(f"/{agency_name}/get_metadata")
