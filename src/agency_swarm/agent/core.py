@@ -431,14 +431,22 @@ class Agent(BaseAgent[MasterContext]):
             **kwargs,
         )
 
-    def refresh_conversation_starters_cache(self, runtime_state: AgentRuntimeState | None = None) -> None:
+    def refresh_conversation_starters_cache(
+        self,
+        runtime_state: AgentRuntimeState | None = None,
+        shared_instructions: str | None = None,
+    ) -> None:
         """Recompute conversation starter cache fingerprint and reload cached entries."""
         if not self.cache_conversation_starters:
             return
         if not self.conversation_starters:
             return
 
-        fingerprint = compute_starter_cache_fingerprint(self, runtime_state=runtime_state)
+        fingerprint = compute_starter_cache_fingerprint(
+            self,
+            runtime_state=runtime_state,
+            shared_instructions=shared_instructions,
+        )
         if fingerprint == self._conversation_starters_fingerprint and self._conversation_starters_cache:
             return
 

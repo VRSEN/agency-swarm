@@ -73,6 +73,43 @@ def get_weather(location: str) -> str:
 
 
 @pytest.mark.asyncio
+async def test_conversation_starter_cache_reuse_stream_without_llm(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENCY_SWARM_CHATS_DIR", str(tmp_path))
+
+    starter = "What is the weather in London?"
+    agent = Agent(
+        name="StarterAgent",
+        instructions="You are helpful.",
+        model="gpt-5-mini",
+        conversation_starters=[starter],
+        cache_conversation_starters=True,
+    )
+    agency = Agency(agent)
+
+    cache_dir = Path(tmp_path) / "starter_cache"
+    cache_files = await _wait_for_cache_files(cache_dir, 1)
+    assert len(cache_files) == 1
+    cached = load_cached_starter(
+        agent.name,
+        starter,
+        expected_fingerprint=agent._conversation_starters_fingerprint,
+    )
+    assert cached is not None
+
+    expected_text = extract_final_output_text(cached.items)
+    assert expected_text
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-invalid")
+    stream = agency.get_response_stream(starter)
+    async for _event in stream:
+        pass
+
+    final_result = stream.final_result
+    assert final_result is not None
+    assert final_result.final_output == expected_text
+
+
+@pytest.mark.asyncio
 async def test_conversation_starter_cache_populates_for_agency_tools(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENCY_SWARM_CHATS_DIR", str(tmp_path))
 
