@@ -247,6 +247,7 @@ Avoid growing already large files. Prefer extracting focused modules. If you mus
 - Name test files clearly (e.g. `test_thread_isolation.py`), avoid generic root names
 - Symmetry required: tests should mirror `src/`. Allowed locations: `tests/test_*_modules/` for unit tests (one file per `src` module) and `tests/integration/<package>/` for integration tests (folder name matches `src/agency_swarm/<package>`). Enforce this structure.
 - Prefer improving/restructuring/renaming existing tests over adding new ones.
+- Avoid tests that create a false sense of security; we discourage unit tests that do not reflect real behavior.
 - Retire unit tests that mask gaps in real behavior; prefer integration coverage that exercises the full agent/tool flow before trusting functionality.
 - Remove dead code when it is in scope.
 - Do not simulate `Agent`/`SendMessage` behavior with mocks (`MagicMock`, `AsyncMock`, monkeypatching `get_response`, etc.). Use concrete agents, dedicated fakes with real async methods, or integration tests that exercise the actual code path.

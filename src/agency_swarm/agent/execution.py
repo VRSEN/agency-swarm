@@ -18,6 +18,7 @@ from agents.stream_events import StreamEvent
 
 from agency_swarm.agent.conversation_starters_cache import (
     build_run_items_from_cached,
+    compute_starter_cache_fingerprint,
     extract_final_output_text,
     extract_starter_segment,
     filter_replay_items,
@@ -160,13 +161,28 @@ class Execution:
 
             matched_starter: str | None = None
             cached_starter = None
+            cache_fingerprint: str | None = None
+            has_user_context_override = bool(
+                context_override and any(key != "_streaming_context" for key in context_override)
+            )
             if (
                 sender_name is None
                 and self.agent.cache_conversation_starters
                 and is_first_message
                 and is_simple_text_message(processed_current_message_items)
                 and not additional_instructions  # Skip cache when per-run instructions provided
+                and not has_user_context_override  # Skip cache when per-run context provided
+                and hooks_override is None  # Skip cache when hooks override is provided
             ):
+                runtime_state = agency_context.runtime_state if agency_context else None
+                shared_instructions = agency_context.shared_instructions if agency_context else None
+                cache_fingerprint = compute_starter_cache_fingerprint(
+                    self.agent,
+                    runtime_state=runtime_state,
+                    shared_instructions=shared_instructions,
+                    instructions_override=original_instructions,
+                    use_instructions_override=True,
+                )
                 matched_starter = match_conversation_starter(
                     processed_current_message_items, self.agent.conversation_starters
                 )
@@ -174,11 +190,17 @@ class Execution:
                     normalized = normalize_starter_text(matched_starter)
                     cache_map = self.agent._conversation_starters_cache
                     cached_starter = cache_map.get(normalized)
+                    if (
+                        cached_starter is not None
+                        and cache_fingerprint
+                        and cached_starter.metadata.get("fingerprint") != cache_fingerprint
+                    ):
+                        cached_starter = None
                     if cached_starter is None:
                         cached_starter = load_cached_starter(
                             self.agent.name,
                             matched_starter,
-                            expected_fingerprint=self.agent._conversation_starters_fingerprint,
+                            expected_fingerprint=cache_fingerprint,
                         )
                         if cached_starter is not None:
                             cache_map[normalized] = cached_starter
@@ -334,7 +356,7 @@ class Execution:
                             matched_starter,
                             segment,
                             metadata={"source": "live_run"},
-                            fingerprint=self.agent._conversation_starters_fingerprint,
+                            fingerprint=cache_fingerprint,
                         )
                         cache_map = self.agent._conversation_starters_cache
                         cache_map[normalize_starter_text(matched_starter)] = cached
@@ -470,13 +492,28 @@ class Execution:
 
                 matched_starter: str | None = None
                 cached_starter = None
+                cache_fingerprint: str | None = None
+                has_user_context_override = bool(
+                    context_override and any(key != "_streaming_context" for key in context_override)
+                )
                 if (
                     sender_name is None
                     and self.agent.cache_conversation_starters
                     and is_first_message
                     and is_simple_text_message(processed_current_message_items)
                     and not additional_instructions  # Skip cache when per-run instructions provided
+                    and not has_user_context_override  # Skip cache when per-run context provided
+                    and hooks_override is None  # Skip cache when hooks override is provided
                 ):
+                    runtime_state = agency_context.runtime_state if agency_context else None
+                    shared_instructions = agency_context.shared_instructions if agency_context else None
+                    cache_fingerprint = compute_starter_cache_fingerprint(
+                        self.agent,
+                        runtime_state=runtime_state,
+                        shared_instructions=shared_instructions,
+                        instructions_override=original_instructions,
+                        use_instructions_override=True,
+                    )
                     matched_starter = match_conversation_starter(
                         processed_current_message_items, self.agent.conversation_starters
                     )
@@ -484,11 +521,17 @@ class Execution:
                         normalized = normalize_starter_text(matched_starter)
                         cache_map = self.agent._conversation_starters_cache
                         cached_starter = cache_map.get(normalized)
+                        if (
+                            cached_starter is not None
+                            and cache_fingerprint
+                            and cached_starter.metadata.get("fingerprint") != cache_fingerprint
+                        ):
+                            cached_starter = None
                         if cached_starter is None:
                             cached_starter = load_cached_starter(
                                 self.agent.name,
                                 matched_starter,
-                                expected_fingerprint=self.agent._conversation_starters_fingerprint,
+                                expected_fingerprint=cache_fingerprint,
                             )
                             if cached_starter is not None:
                                 cache_map[normalized] = cached_starter
@@ -602,7 +645,7 @@ class Execution:
                                 matched_starter,
                                 segment,
                                 metadata={"source": "live_stream"},
-                                fingerprint=self.agent._conversation_starters_fingerprint,
+                                fingerprint=cache_fingerprint,
                             )
                             cache_map = self.agent._conversation_starters_cache
                             cache_map[normalize_starter_text(matched_starter)] = cached

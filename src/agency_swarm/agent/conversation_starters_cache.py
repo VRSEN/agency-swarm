@@ -7,6 +7,7 @@ import json
 import re
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -53,7 +54,14 @@ def normalize_starter_text(text: str) -> str:
     return text.strip().casefold()
 
 
-def compute_starter_cache_fingerprint(agent: Agent, runtime_state: AgentRuntimeState | None = None) -> str:
+def compute_starter_cache_fingerprint(
+    agent: Agent,
+    runtime_state: AgentRuntimeState | None = None,
+    shared_instructions: str | None = None,
+    instructions_override: str | Callable | None = None,
+    use_instructions_override: bool = False,
+) -> str:
+    instructions = instructions_override if use_instructions_override else agent.instructions
     model_name = get_model_name(agent.model)
     tools = [_tool_signature(tool) for tool in agent.tools]
     runtime_tools = _runtime_tool_signatures(runtime_state)
@@ -66,8 +74,13 @@ def compute_starter_cache_fingerprint(agent: Agent, runtime_state: AgentRuntimeS
         sanitized_mcp_config = _sanitize_mapping(cast(dict[str, Any], mcp_config))
     else:
         sanitized_mcp_config = _serialize_value(mcp_config)
+    if isinstance(shared_instructions, str):
+        shared_instructions_text = shared_instructions or None
+    else:
+        shared_instructions_text = None
     payload = {
-        "instructions": _instructions_signature(agent.instructions),
+        "instructions": _instructions_signature(instructions),
+        "shared_instructions": shared_instructions_text,
         "prompt": _serialize_value(agent.prompt),
         "model": model_name,
         "model_settings": _serialize_value(agent.model_settings),
