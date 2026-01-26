@@ -42,7 +42,8 @@ class ClientConfig(BaseModel):
         description=(
             "Provider-specific API keys for LiteLLM models. "
             "Key = provider from model path (e.g., 'anthropic', 'gemini', 'azure', 'xai'). "
-            "Falls back to 'api_key' if provider not found."
+            "If not provided (or provider not found), non-OpenAI providers will fall back to their environment "
+            "variables; OpenAI-compatible providers may fall back to 'api_key'."
         ),
     )
 
