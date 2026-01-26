@@ -11,7 +11,14 @@ from pathlib import Path
 
 from ag_ui.core import EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
 from ag_ui.encoder import EventEncoder
-from agents import Model, OpenAIChatCompletionsModel, OpenAIResponsesModel, TResponseInputItem, output_guardrail
+from agents import (
+    Model,
+    ModelSettings,
+    OpenAIChatCompletionsModel,
+    OpenAIResponsesModel,
+    TResponseInputItem,
+    output_guardrail,
+)
 from agents.exceptions import OutputGuardrailTripwireTriggered
 from agents.models._openai_shared import get_default_openai_client
 
@@ -74,163 +81,28 @@ def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
     ):
         return  # Nothing to override
 
+    openai_overrides_present = (
+        config.base_url is not None or config.api_key is not None or config.default_headers is not None
+    )
+    litellm_overrides_present = (
+        config.base_url is not None or config.api_key is not None or config.litellm_keys is not None
+    )
+
     # Apply to all agents in the agency
     for agent in agency.agents.values():
+        if _agent_uses_litellm(agent):
+            if config.default_headers is not None:
+                _apply_default_headers_to_agent_model_settings(agent, config.default_headers)
+            if not litellm_overrides_present:
+                continue
+            _apply_client_to_agent(agent, None, config)
+            continue
+
+        if not openai_overrides_present:
+            continue
+
         client = _build_openai_client_for_agent(agent, config)
         _apply_client_to_agent(agent, client, config)
-
-
-def _is_litellm_model(model_name: str) -> bool:
-    """Check if a model name is a LiteLLM model (uses litellm/ prefix)."""
-    return model_name.startswith("litellm/")
-
-
-def _is_openai_model_name(model_name: str) -> bool:
-    """Return True if a model name should be treated as OpenAI-compatible.
-
-    The Agents SDK's MultiProvider treats:
-    - no prefix (e.g. "gpt-4o") as OpenAI
-    - "openai/<model>" as OpenAI
-
-    For any other prefix (e.g. "anthropic/<model>"), we should NOT wrap into
-    OpenAIResponsesModel, since that would route through the OpenAI client.
-    """
-    if "/" not in model_name:
-        return True
-    prefix, _rest = model_name.split("/", 1)
-    return prefix == "openai"
-
-
-def _apply_client_to_agent(agent: Agent, client: AsyncOpenAI, config: ClientConfig) -> None:
-    """Apply a custom OpenAI client to an agent's model.
-
-    For OpenAI models, wraps them in OpenAIResponsesModel with the custom client.
-    For LiteLLM models, creates a new LitellmModel with base_url and api_key from config.
-    """
-    model = agent.model
-
-    if isinstance(model, str):
-        if _is_litellm_model(model):
-            _apply_litellm_config(agent, model, config)
-        elif not _is_openai_model_name(model):
-            logger.warning(
-                "Skipping client_config for agent '%s': custom model '%s' is not supported for "
-                "client override (only OpenAI models or 'litellm/' models are supported)",
-                agent.name,
-                model,
-            )
-        else:
-            # String model name - wrap in OpenAIResponsesModel with custom client
-            agent.model = OpenAIResponsesModel(model=model, openai_client=client)
-    elif isinstance(model, OpenAIResponsesModel):
-        if _is_litellm_model(model.model):
-            _apply_litellm_config(agent, model.model, config)
-        elif not _is_openai_model_name(model.model):
-            logger.warning(
-                "Skipping client_config for agent '%s': custom model '%s' is not supported for "
-                "client override (only OpenAI models or 'litellm/' models are supported)",
-                agent.name,
-                model.model,
-            )
-        else:
-            # Create new model instance with custom client, preserving model name
-            agent.model = OpenAIResponsesModel(model=model.model, openai_client=client)
-    elif isinstance(model, OpenAIChatCompletionsModel):
-        if _is_litellm_model(model.model):
-            _apply_litellm_config(agent, model.model, config)
-        elif not _is_openai_model_name(model.model):
-            logger.warning(
-                "Skipping client_config for agent '%s': custom model '%s' is not supported for "
-                "client override (only OpenAI models or 'litellm/' models are supported)",
-                agent.name,
-                model.model,
-            )
-        else:
-            # Create new model instance with custom client, preserving model name
-            agent.model = OpenAIChatCompletionsModel(model=model.model, openai_client=client)
-    elif _LITELLM_AVAILABLE and LitellmModel is not None and isinstance(model, LitellmModel):
-        # Already a LitellmModel instance - create new one with config
-        agent.model = LitellmModel(
-            model=model.model,
-            base_url=config.base_url,
-            api_key=config.api_key,
-        )
-    elif isinstance(model, Model):
-        # For other Model types, try to extract and wrap with OpenAIResponsesModel
-        model_name = getattr(model, "model", None)
-        if isinstance(model_name, str):
-            if _is_litellm_model(model_name):
-                _apply_litellm_config(agent, model_name, config)
-            elif not _is_openai_model_name(model_name):
-                logger.warning(
-                    "Skipping client_config for agent '%s': custom model '%s' is not supported for "
-                    "client override (only OpenAI models or 'litellm/' models are supported)",
-                    agent.name,
-                    model_name,
-                )
-            else:
-                agent.model = OpenAIResponsesModel(model=model_name, openai_client=client)
-        else:
-            logger.warning(
-                f"Cannot apply client config to agent '{agent.name}': unsupported model type {type(model).__name__}"
-            )
-    else:
-        logger.warning(
-            f"Cannot apply client config to agent '{agent.name}': unsupported model type {type(model).__name__}"
-        )
-
-
-def _get_litellm_provider(model_name: str) -> str | None:
-    """Extract provider name from a LiteLLM model string.
-
-    Examples:
-        "litellm/anthropic/claude-sonnet-4" -> "anthropic"
-        "anthropic/claude-sonnet-4" -> "anthropic"
-        "claude-sonnet-4" -> None
-    """
-    # Strip litellm/ prefix if present
-    name = model_name[8:] if model_name.startswith("litellm/") else model_name
-
-    # Provider is the first segment before /
-    if "/" in name:
-        return name.split("/")[0]
-    return None
-
-
-def _apply_litellm_config(agent: Agent, model_name: str, config: ClientConfig) -> None:
-    """Apply config to a LiteLLM model by creating a new LitellmModel instance."""
-    if not _LITELLM_AVAILABLE or LitellmModel is None:
-        logger.warning(
-            f"Cannot apply client config to agent '{agent.name}': LiteLLM model "
-            f"('{model_name}') requires openai-agents[litellm] to be installed"
-        )
-        return
-
-    # Strip the 'litellm/' prefix to get the actual model identifier
-    actual_model = model_name[8:] if model_name.startswith("litellm/") else model_name
-
-    # Determine which API key to use:
-    # 1. Provider-specific key from litellm_keys (if available)
-    # 2. Fall back to generic api_key
-    # 3. None (LiteLLM will use environment variables)
-    api_key = config.api_key
-    if config.litellm_keys:
-        provider = _get_litellm_provider(model_name)
-        if provider:
-            # litellm_keys uses LlmProviders enum as keys (when litellm installed)
-            # Look up by iterating since keys may be enum instances
-            for key, value in config.litellm_keys.items():
-                # Compare by value (works for both enum and string keys)
-                key_str = key.value if hasattr(key, "value") else str(key)
-                if key_str == provider:
-                    api_key = value
-                    break
-
-    agent.model = LitellmModel(
-        model=actual_model,
-        base_url=config.base_url,
-        api_key=api_key,
-    )
 
 
 @dataclass
@@ -844,7 +716,16 @@ def _build_openai_client_for_agent(agent: Agent, config: ClientConfig) -> AsyncO
     - otherwise fall back to the global default OpenAI client (if any)
     - otherwise fall back to a fresh AsyncOpenAI() using environment variables
     """
-    base_client = _get_openai_client_from_agent(agent) or get_default_openai_client() or AsyncOpenAI()
+    base_client = _get_openai_client_from_agent(agent) or get_default_openai_client()
+
+    if base_client is None:
+        # Allow request-provided api_key/base_url to work even when the server has no OPENAI_API_KEY.
+        return AsyncOpenAI(
+            api_key=config.api_key,
+            base_url=config.base_url,
+            default_headers=config.default_headers,
+        )
+
 
     # Only override the values that are explicitly provided in `config`.
     # OpenAI's `copy()` also handles merging default headers correctly.
@@ -852,4 +733,212 @@ def _build_openai_client_for_agent(agent: Agent, config: ClientConfig) -> AsyncO
         api_key=config.api_key,
         base_url=config.base_url,
         default_headers=config.default_headers,
+    )
+
+def _apply_default_headers_to_agent_model_settings(agent: Agent, headers: dict[str, str]) -> None:
+    """Merge request headers into this agent's ModelSettings.extra_headers."""
+    if not headers:
+        return
+    current: ModelSettings = getattr(agent, "model_settings", None) or ModelSettings()
+    existing = dict(current.extra_headers or {})
+    merged = {**existing, **headers}
+    # ModelSettings is a dataclass (agents==0.6.4), so updating requires replacement.
+    current.extra_headers = merged
+    agent.model_settings = current
+
+
+def _is_litellm_model(model_name: str) -> bool:
+    """Check if a model name is a LiteLLM model (uses litellm/ prefix)."""
+    return model_name.startswith("litellm/")
+
+
+def _is_openai_model_name(model_name: str) -> bool:
+    """Return True if a model name should be treated as OpenAI-compatible.
+
+    The Agents SDK's MultiProvider treats:
+    - no prefix (e.g. "gpt-4o") as OpenAI
+    - "openai/<model>" as OpenAI
+
+    For any other prefix (e.g. "anthropic/<model>"), we should NOT wrap into
+    OpenAIResponsesModel, since that would route through the OpenAI client.
+    """
+    if "/" not in model_name:
+        return True
+    prefix, _rest = model_name.split("/", 1)
+    return prefix == "openai"
+
+
+def _apply_client_to_agent(agent: Agent, client: AsyncOpenAI | None, config: ClientConfig) -> None:
+    """Apply a custom OpenAI client to an agent's model.
+
+    For OpenAI models, wraps them in OpenAIResponsesModel with the custom client.
+    For LiteLLM models, creates a new LitellmModel with base_url and api_key from config.
+    """
+    model = agent.model
+    has_litellm_overrides = config.base_url is not None or config.api_key is not None or config.litellm_keys is not None
+
+    if isinstance(model, str):
+        if _is_litellm_model(model):
+            if has_litellm_overrides:
+                _apply_litellm_config(agent, model, config)
+        elif not _is_openai_model_name(model):
+            logger.warning(
+                "Skipping client_config for agent '%s': custom model '%s' is not supported for "
+                "client override (only OpenAI models or 'litellm/' models are supported)",
+                agent.name,
+                model,
+            )
+        else:
+            # String model name - wrap in OpenAIResponsesModel with custom client
+            if client is None:
+                return
+            agent.model = OpenAIResponsesModel(model=model, openai_client=client)
+    elif isinstance(model, OpenAIResponsesModel):
+        if _is_litellm_model(model.model):
+            if has_litellm_overrides:
+                _apply_litellm_config(agent, model.model, config)
+        elif not _is_openai_model_name(model.model):
+            logger.warning(
+                "Skipping client_config for agent '%s': custom model '%s' is not supported for "
+                "client override (only OpenAI models or 'litellm/' models are supported)",
+                agent.name,
+                model.model,
+            )
+        else:
+            # Create new model instance with custom client, preserving model name
+            if client is None:
+                return
+            agent.model = OpenAIResponsesModel(model=model.model, openai_client=client)
+    elif isinstance(model, OpenAIChatCompletionsModel):
+        if _is_litellm_model(model.model):
+            if has_litellm_overrides:
+                _apply_litellm_config(agent, model.model, config)
+        elif not _is_openai_model_name(model.model):
+            logger.warning(
+                "Skipping client_config for agent '%s': custom model '%s' is not supported for "
+                "client override (only OpenAI models or 'litellm/' models are supported)",
+                agent.name,
+                model.model,
+            )
+        else:
+            # Create new model instance with custom client, preserving model name
+            if client is None:
+                return
+            agent.model = OpenAIChatCompletionsModel(model=model.model, openai_client=client)
+    elif _LITELLM_AVAILABLE and LitellmModel is not None and isinstance(model, LitellmModel):
+        if has_litellm_overrides:
+            # Preserve existing settings unless explicitly overridden.
+            base_url = config.base_url if config.base_url is not None else model.base_url
+            api_key = _resolve_litellm_api_key(model.model, config, existing_api_key=model.api_key)
+            agent.model = LitellmModel(model=model.model, base_url=base_url, api_key=api_key)
+    elif isinstance(model, Model):
+        # For other Model types, try to extract and wrap with OpenAIResponsesModel
+        model_name = getattr(model, "model", None)
+        if isinstance(model_name, str):
+            if _is_litellm_model(model_name):
+                if has_litellm_overrides:
+                    _apply_litellm_config(agent, model_name, config)
+            elif not _is_openai_model_name(model_name):
+                logger.warning(
+                    "Skipping client_config for agent '%s': custom model '%s' is not supported for "
+                    "client override (only OpenAI models or 'litellm/' models are supported)",
+                    agent.name,
+                    model_name,
+                )
+            else:
+                if client is None:
+                    return
+                agent.model = OpenAIResponsesModel(model=model_name, openai_client=client)
+        else:
+            logger.warning(
+                f"Cannot apply client config to agent '{agent.name}': unsupported model type {type(model).__name__}"
+            )
+    else:
+        logger.warning(
+            f"Cannot apply client config to agent '{agent.name}': unsupported model type {type(model).__name__}"
+        )
+
+
+def _agent_uses_litellm(agent: Agent) -> bool:
+    model = agent.model
+    if isinstance(model, str):
+        return _is_litellm_model(model)
+    if isinstance(model, OpenAIResponsesModel | OpenAIChatCompletionsModel):
+        return _is_litellm_model(model.model)
+    if _LITELLM_AVAILABLE and LitellmModel is not None and isinstance(model, LitellmModel):
+        return True
+    if isinstance(model, Model):
+        model_name = getattr(model, "model", None)
+        return isinstance(model_name, str) and _is_litellm_model(model_name)
+    return False
+
+
+def _get_litellm_provider(model_name: str) -> str | None:
+    """Extract provider name from a LiteLLM model string.
+
+    Examples:
+        "litellm/anthropic/claude-sonnet-4" -> "anthropic"
+        "anthropic/claude-sonnet-4" -> "anthropic"
+        "claude-sonnet-4" -> None
+    """
+    # Strip litellm/ prefix if present
+    name = model_name[8:] if model_name.startswith("litellm/") else model_name
+
+    # Provider is the first segment before /
+    if "/" in name:
+        return name.split("/")[0]
+    return None
+
+
+def _is_openai_based_litellm_provider(provider: str | None) -> bool:
+    # LiteLLM treats openai-like providers differently; allow request api_key as a fallback there.
+    # For non-OpenAI providers (anthropic/gemini/etc), prefer env unless litellm_keys is provided.
+    return provider in {None, "openai", "azure", "azure_ai", "openai_compatible"}
+
+
+def _resolve_litellm_api_key(
+    model_name: str,
+    config: ClientConfig,
+    existing_api_key: str | None = None,
+) -> str | None:
+    provider = _get_litellm_provider(model_name)
+
+    # Prefer provider-specific keys when provided.
+    if config.litellm_keys:
+        if provider:
+            for key, value in config.litellm_keys.items():
+                key_str = key.value if hasattr(key, "value") else str(key)
+                if key_str == provider:
+                    return value
+        # Provider missing in litellm_keys:
+        # - For openai-based providers, allow falling back to config.api_key.
+        # - Otherwise keep existing (or env if None).
+        if _is_openai_based_litellm_provider(provider):
+            return config.api_key if config.api_key is not None else existing_api_key
+        return existing_api_key
+
+    # No litellm_keys provided: only use config.api_key for openai-based providers.
+    if _is_openai_based_litellm_provider(provider):
+        return config.api_key if config.api_key is not None else existing_api_key
+    return existing_api_key
+
+
+def _apply_litellm_config(agent: Agent, model_name: str, config: ClientConfig) -> None:
+    """Apply config to a LiteLLM model by creating a new LitellmModel instance."""
+    if not _LITELLM_AVAILABLE or LitellmModel is None:
+        logger.warning(
+            f"Cannot apply client config to agent '{agent.name}': LiteLLM model "
+            f"('{model_name}') requires openai-agents[litellm] to be installed"
+        )
+        return
+
+    # Strip the 'litellm/' prefix to get the actual model identifier
+    actual_model = model_name[8:] if model_name.startswith("litellm/") else model_name
+
+    api_key = _resolve_litellm_api_key(model_name, config, existing_api_key=None)
+
+    agent.model = LitellmModel(
+        model=actual_model,
+        base_url=config.base_url,
+        api_key=api_key,
     )
