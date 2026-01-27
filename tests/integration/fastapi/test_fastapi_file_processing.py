@@ -33,6 +33,32 @@ class TestFastAPIFileProcessing:
             return int(sock.getsockname()[1])
 
     @staticmethod
+    def _start_fastapi_server(app, base_url: str, port: int) -> None:
+        def run_server():
+            uvicorn.run(app, host="127.0.0.1", port=port, log_level="error")
+
+        server_thread = threading.Thread(target=run_server, daemon=True)
+        server_thread.start()
+
+        time.sleep(3)
+
+        max_retries = 15
+        for i in range(max_retries):
+            try:
+                response = httpx.get(f"{base_url}/docs", timeout=10.0)
+                if response.status_code == 200:
+                    time.sleep(1)
+                    break
+            except (httpx.ConnectTimeout, httpx.ReadTimeout):
+                time.sleep(1.5)
+                if i == max_retries - 1:
+                    pytest.skip("Could not start FastAPI server after multiple retries")
+            except Exception as e:
+                time.sleep(1)
+                if i == max_retries - 1:
+                    pytest.skip(f"Could not start FastAPI server: {e}")
+
+    @staticmethod
     def get_http_client(timeout_seconds: int = 120) -> httpx.AsyncClient:
         """Create an HTTP client with proper timeout configuration."""
         timeout_config = httpx.Timeout(
@@ -114,30 +140,7 @@ class TestFastAPIFileProcessing:
             allowed_local_file_dirs=[tempfile.gettempdir()],
         )
 
-        def run_server():
-            uvicorn.run(app, host="127.0.0.1", port=port, log_level="error")
-
-        server_thread = threading.Thread(target=run_server, daemon=True)
-        server_thread.start()
-
-        # Wait for server to start
-        time.sleep(3)
-
-        max_retries = 15
-        for i in range(max_retries):
-            try:
-                response = httpx.get(f"{base_url}/docs", timeout=10.0)
-                if response.status_code == 200:
-                    time.sleep(1)
-                    break
-            except (httpx.ConnectTimeout, httpx.ReadTimeout):
-                time.sleep(1.5)
-                if i == max_retries - 1:
-                    pytest.skip("Could not start FastAPI server after multiple retries")
-            except Exception as e:
-                time.sleep(1)
-                if i == max_retries - 1:
-                    pytest.skip(f"Could not start FastAPI server: {e}")
+        self._start_fastapi_server(app, base_url, port)
 
         yield base_url
 
@@ -266,6 +269,43 @@ class TestFastAPIFileProcessing:
         assert "response" in response_data
         response_text = response_data["response"].lower()
         assert "local secret phrase" in response_text
+
+    @pytest.mark.asyncio
+    async def test_local_allowlist_created_after_start(self, tmp_path, agency_factory):
+        """Allowlist entries should activate when created after server start."""
+        port = self._get_free_tcp_port()
+        base_url = f"http://127.0.0.1:{port}"
+        missing_dir = tmp_path / "late-uploads"
+
+        app = run_fastapi(
+            agencies={"test_agency": agency_factory},
+            port=port,
+            app_token_env="",
+            return_app=True,
+            enable_agui=False,
+            allowed_local_file_dirs=[str(missing_dir)],
+        )
+
+        self._start_fastapi_server(app, base_url, port)
+
+        missing_dir.mkdir(parents=True, exist_ok=True)
+        file_path = missing_dir / "late-file.txt"
+        file_path.write_text("late secret phrase", encoding="utf-8")
+
+        url = f"{base_url}/test_agency/get_response"
+        payload = {
+            "message": "Please read the content of the uploaded file and tell me what secret phrase you find.",
+            "file_urls": {"late-file.txt": str(file_path)},
+        }
+
+        async with self.get_http_client(timeout_seconds=120) as client:
+            response = await client.post(url, json=payload)
+
+        assert response.status_code == 200
+        response_data = response.json()
+        assert "file_ids_map" in response_data
+        assert "late-file.txt" in response_data["file_ids_map"]
+        assert "late secret phrase" in str(response_data.get("response", "")).lower()
 
     @pytest.mark.asyncio
     async def test_local_file_attachment_disallowed_without_allowlist(self, fastapi_server_no_local, tmp_path):
