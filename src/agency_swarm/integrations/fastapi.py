@@ -49,7 +49,8 @@ def run_fastapi(
         Defaults to 'activity-logs'.
     allowed_local_file_dirs : list[str] | None
         Optional allowlist of directories that local file_urls may read from.
-        When omitted, local file access is disabled.
+        When omitted, local file access is disabled. Missing directories are
+        skipped so the server can start even if some paths do not exist yet.
     """
     if (agencies is None or len(agencies) == 0) and (tools is None or len(tools) == 0):
         logger.warning("No endpoints to deploy. Please provide at least one agency or tool.")
@@ -71,7 +72,6 @@ def run_fastapi(
             make_response_endpoint,
             make_stream_endpoint,
         )
-        from .fastapi_utils.file_handler import _normalize_allowed_dirs
         from .fastapi_utils.logging_middleware import (
             RequestTracker,
             setup_enhanced_logging,
@@ -100,7 +100,7 @@ def run_fastapi(
     else:
         base_url = f"http://{host}:{port}"
 
-    normalized_allowed_dirs = _normalize_allowed_dirs(allowed_local_file_dirs)
+    normalized_allowed_dirs = allowed_local_file_dirs
 
     app = FastAPI(servers=[{"url": base_url}])
 
@@ -187,7 +187,11 @@ def run_fastapi(
 
             app.add_api_route(
                 f"/{agency_name}/get_metadata",
-                make_metadata_endpoint(agency_metadata, verify_token),
+                make_metadata_endpoint(
+                    agency_metadata,
+                    verify_token,
+                    allowed_local_dirs=normalized_allowed_dirs,
+                ),
                 methods=["GET"],
             )
             endpoints.append(f"/{agency_name}/get_metadata")
