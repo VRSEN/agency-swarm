@@ -43,7 +43,7 @@ from agency_swarm import (
     RunContextWrapper,
 )
 from agency_swarm.agent.execution_stream_response import StreamingRunResponse
-from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_urls
+from agency_swarm.integrations.fastapi_utils.file_handler import _normalize_allowed_dirs, upload_from_urls
 from agency_swarm.integrations.fastapi_utils.logging_middleware import get_logs_endpoint_impl
 from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
 from agency_swarm.messages import MessageFilter, MessageFormatter
@@ -607,7 +607,8 @@ def make_metadata_endpoint(
         if allowed_local_dirs is None:
             metadata_with_version["allowed_local_file_dirs"] = None
         else:
-            metadata_with_version["allowed_local_file_dirs"] = [str(p) for p in allowed_local_dirs]
+            normalized_dirs = _normalize_allowed_dirs(allowed_local_dirs, skip_missing=True)
+            metadata_with_version["allowed_local_file_dirs"] = [str(p) for p in normalized_dirs]
         return metadata_with_version
 
     return handler
