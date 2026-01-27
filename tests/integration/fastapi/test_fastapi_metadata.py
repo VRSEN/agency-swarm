@@ -244,6 +244,25 @@ def test_metadata_includes_tool_input_schema():
     assert "text" in input_schema.get("properties", {})
 
 
+def test_metadata_skips_missing_allowed_dirs(tmp_path, agency_factory):
+    """Missing allowed local file directories should be omitted from metadata."""
+    missing_dir = tmp_path / "missing-uploads"
+
+    app = run_fastapi(
+        agencies={"test_agency": agency_factory},
+        return_app=True,
+        app_token_env="",
+        allowed_local_file_dirs=[str(missing_dir)],
+    )
+    client = TestClient(app)
+
+    response = client.get("/test_agency/get_metadata")
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["allowed_local_file_dirs"] == []
+
+
 def test_tool_endpoint_handles_nested_schema():
     """Test that tool endpoints work with nested Pydantic models."""
 
