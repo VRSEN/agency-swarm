@@ -43,7 +43,7 @@ import OpenAI from "openai";
 const client = new OpenAI({
   baseURL: "https://ai-gateway.agencii.ai/openai",
   apiKey: "unused",
-  defaultHeaders: { "X-Agencii-Api-Key": "sk-agencii-************************" },
+  defaultHeaders: { "X-Agencii-Api-Key": "sk-agencii-REPLACE_ME" },
 });
 
 const resp = await client.responses.create({
@@ -62,6 +62,7 @@ Use the `/openai` base URL for SDK compatibility.
 
 - **Base URL**: `https://ai-gateway.agencii.ai/openai`
 - **Endpoint**: `POST /v1/responses`
+- **All paths below are relative to the base URL.**
 - **Also accepted**:
   - `POST /responses`
   - `POST /openai/v1/responses`
@@ -78,13 +79,14 @@ Preferred auth:
 
 - `X-Agencii-Api-Key: <your_agencii_api_key>`
 
-You can create and manage Agencii API keys in your Agencii dashboard.
+You can create and manage Agencii API keys in your [Agencii dashboard](https://agencii.ai/settings/?tab=apiKeys).
 
 For OpenAI SDK compatibility, the gateway also accepts:
 
 - `Authorization: Bearer <your_agencii_api_key>`
 
 <Note>
+If both headers are present, the gateway uses `X-Agencii-Api-Key` and ignores `Authorization`.
 When possible, keep platform auth on `X-Agencii-Api-Key` and reserve `Authorization` for frontend auth flows (e.g. App Check).
 </Note>
 
