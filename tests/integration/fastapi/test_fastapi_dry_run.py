@@ -18,7 +18,14 @@ def agency_factory_with_tool():
         return f"Hello, {name}"
 
     def create_agency(load_threads_callback=None, save_threads_callback=None):
-        agent = Agent(name="TestAgent", instructions="Base", tools=[greet])
+        agent = Agent(
+            name="TestAgent",
+            instructions="Base",
+            # Use a normal OpenAI model name here; this test only verifies endpoint
+            # registration under DRY_RUN and does not invoke the model.
+            model="gpt-4o-mini",
+            tools=[greet],
+        )
         return Agency(
             agent,
             load_threads_callback=load_threads_callback,
@@ -29,12 +36,18 @@ def agency_factory_with_tool():
 
 
 def test_dry_run_metadata_includes_tools(monkeypatch, agency_factory_with_tool):
-    """When DRY_RUN=1, metadata should include explicitly defined tools, and response endpoints are not registered."""
+    """When DRY_RUN=1, endpoints are registered (not 404) without side effects."""
     # Enable DRY_RUN for the app lifecycle
     monkeypatch.setenv("DRY_RUN", "1")
 
+    @function_tool
+    def add_one(x: int) -> int:
+        """Add one."""
+        return x + 1
+
     app = run_fastapi(
         agencies={"test_agency": agency_factory_with_tool},
+        tools=[add_one],
         return_app=True,
         app_token_env="",  # disable auth for test
         enable_agui=False,
@@ -57,7 +70,11 @@ def test_dry_run_metadata_includes_tools(monkeypatch, agency_factory_with_tool):
     tools_list = agent_node.get("data", {}).get("tools", [])
     assert isinstance(tools_list, list) and len(tools_list) >= 1, "Expected tools listed for agent in DRY_RUN"
 
-    # get_response endpoint should not be available in DRY_RUN
-    res_resp = client.post("/test_agency/get_response", json={"message": "hi"})
-    print(res_resp.status_code)
-    assert res_resp.status_code in (404, 405)
+    # get_response should be registered under DRY_RUN: 422 means validation ran (route exists), not 404.
+    res_resp = client.post("/test_agency/get_response", json={})
+    assert res_resp.status_code == 422
+
+    # tool endpoints should be available in DRY_RUN
+    tool_res = client.post("/tool/add_one", json={"x": 1})
+    assert tool_res.status_code == 200
+    assert tool_res.json()["response"] == 2

@@ -13,17 +13,16 @@ Agency Swarm contains multiple commonly requested classes for communication flow
 | Class Name                  | Description                                                                                                                                                                                                                               | When to Use                                                                                                    | Code Link                                                                                                            |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | `SendMessage` (default)     | This is the default class for sending messages to other agents. It uses synchronous communication with basic COT (Chain of Thought) prompting and allows agents to relay files and modify system instructions for each other.             | Suitable for most use cases. Balances speed and functionality.                                                 | [link](https://github.com/VRSEN/agency-swarm/blob/main/src/agency_swarm/tools/send_message.py)               |
-| `SendMessageHandoff`        | Enables unidirectional delegation of tasks or entire interaction flows to specialized agents. When a handoff occurs, the receiving agent takes over the interaction.                                                                        | Use for routing queries to specialized agents or sequential workflows where control should transfer completely. | [link](https://github.com/VRSEN/agency-swarm/blob/main/src/agency_swarm/tools/send_message.py)       |
+| `Handoff`                   | Enables unidirectional transfer of control to a specialized agent. When a handoff occurs, the receiving agent takes over the interaction and continues the conversation. (`SendMessageHandoff` is deprecated.)                                                                        | Use for routing queries to specialized agents or sequential workflows where control should transfer completely. | [link](https://github.com/VRSEN/agency-swarm/blob/main/src/agency_swarm/tools/send_message.py)       |
 
 
 #### Customizing Communication Flows
 
 To select your own custom send message tool, simply provide it as the last argument to the communication flow tuple.
-Agent-level `send_message_tool_class` is deprecated—attach custom tools to the specific flow instead.
 
 ```python
 from agency_swarm import Agent
-from agency_swarm.tools import SendMessageHandoff
+from agency_swarm.tools import Handoff
 
 ceo = Agent(
     name="CeoAgent",
@@ -35,10 +34,10 @@ worker = Agent(
     instructions="You are a helpful assistant.",
 )
 
-agency = Agency(ceo, communication_flows=[(ceo > worker, SendMessageHandoff)])
+agency = Agency(ceo, communication_flows=[(ceo > worker, Handoff)])
 ```
 
-Here, the `SendMessageHandoff` tool will be used specifically for `ceo -> worker` communication and nowhere else. If there were other agents in the agency connected to ceo, they would be using regular `SendMessage` for agent-to-agent conversations.
+Here, the `Handoff` tool will be used specifically for `ceo -> worker` communication and nowhere else. If there were other agents in the agency connected to ceo, they would be using regular `SendMessage` for agent-to-agent conversations.
 
 ## Creating Your Own Unique Communication Flows
 
@@ -90,9 +89,9 @@ You can customize the reminder message or disable it entirely by defining a cust
 
 ```python
 from agency_swarm import Agency, Agent
-from agency_swarm.tools.send_message import SendMessageHandoff
+from agency_swarm.tools.send_message import Handoff
 
-class NoReminderHandoff(SendMessageHandoff):
+class NoReminderHandoff(Handoff):
     add_reminder = False # Set to False to completely remove the extra message
 
 sender = Agent(name="NoReminderSender")
@@ -107,7 +106,7 @@ agency = Agency(
 
 ```python
 from agency_swarm import Agency, Agent
-from agency_swarm.tools.send_message import SendMessageHandoff
+from agency_swarm.tools.send_message import Handoff
 
 sender = Agent(name="CustomHandoffSender")
 recipient = Agent(
@@ -119,7 +118,7 @@ recipient = Agent(
 agency = Agency(
     sender,
     recipient,
-    communication_flows=[(sender > recipient, SendMessageHandoff)],
+    communication_flows=[(sender > recipient, Handoff)],
 )
 ```
 

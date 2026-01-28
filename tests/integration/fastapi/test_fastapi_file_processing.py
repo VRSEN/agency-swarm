@@ -7,9 +7,11 @@ containing the expected file content.
 """
 
 import asyncio
+import json
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -17,8 +19,6 @@ from pathlib import Path
 import httpx
 import pytest
 import uvicorn
-from agents import ModelSettings
-from openai.types.shared import Reasoning
 
 from agency_swarm import Agency, Agent, run_fastapi
 
@@ -57,10 +57,7 @@ class TestFastAPIFileProcessing:
                 alternative text. If multiple phrases appear, include them all exactly as written.
                 """,
                 description="Agent that processes and analyzes file content",
-                model="gpt-5.2",
-                model_settings=ModelSettings(
-                    reasoning=Reasoning(effort="low"),
-                ),
+                model="gpt-5-mini",
             )
 
             return Agency(
@@ -74,7 +71,6 @@ class TestFastAPIFileProcessing:
     @pytest.fixture(scope="class")
     def file_server_base_url(self) -> str:
         """Start HTTP file server for serving test files."""
-        # Get the path to tests/data/files directory
         test_files_dir = Path(__file__).parents[2] / "data" / "files"
         if not test_files_dir.exists():
             pytest.skip(f"Test files directory not found: {test_files_dir}")
@@ -82,7 +78,6 @@ class TestFastAPIFileProcessing:
         port = self._get_free_tcp_port()
         base_url = f"http://127.0.0.1:{port}"
 
-        # Start HTTP server
         server_process = subprocess.Popen(
             [sys.executable, "-m", "http.server", str(port), "--bind", "127.0.0.1"],
             cwd=test_files_dir,
@@ -90,10 +85,8 @@ class TestFastAPIFileProcessing:
             stderr=subprocess.DEVNULL,
         )
 
-        # Wait for server to start
         time.sleep(2)
 
-        # Verify server is running
         try:
             response = httpx.get(f"{base_url}/", timeout=5)
             assert response.status_code == 200
@@ -103,7 +96,6 @@ class TestFastAPIFileProcessing:
 
         yield base_url
 
-        # Cleanup
         server_process.terminate()
         server_process.wait()
 
@@ -113,13 +105,15 @@ class TestFastAPIFileProcessing:
         port = self._get_free_tcp_port()
         base_url = f"http://127.0.0.1:{port}"
 
-        # Ensure no authentication is required by using a non-existent env var
-        # This will make app_token None and disable authentication
         app = run_fastapi(
-            agencies={"test_agency": agency_factory}, port=port, app_token_env="", return_app=True, enable_agui=False
+            agencies={"test_agency": agency_factory},
+            port=port,
+            app_token_env="",
+            return_app=True,
+            enable_agui=False,
+            allowed_local_file_dirs=[tempfile.gettempdir()],
         )
 
-        # Start server in a thread
         def run_server():
             uvicorn.run(app, host="127.0.0.1", port=port, log_level="error")
 
@@ -129,13 +123,11 @@ class TestFastAPIFileProcessing:
         # Wait for server to start
         time.sleep(3)
 
-        # Verify server is running with proper timeout configuration
         max_retries = 15
         for i in range(max_retries):
             try:
                 response = httpx.get(f"{base_url}/docs", timeout=10.0)
                 if response.status_code == 200:
-                    # Ensure server is fully ready
                     time.sleep(1)
                     break
             except (httpx.ConnectTimeout, httpx.ReadTimeout):
@@ -146,6 +138,36 @@ class TestFastAPIFileProcessing:
                 time.sleep(1)
                 if i == max_retries - 1:
                     pytest.skip(f"Could not start FastAPI server: {e}")
+
+        yield base_url
+
+    @pytest.fixture(scope="class")
+    def fastapi_server_no_local(self, agency_factory) -> str:
+        """Start FastAPI server with local file access disabled."""
+        port = self._get_free_tcp_port()
+        base_url = f"http://127.0.0.1:{port}"
+
+        app = run_fastapi(
+            agencies={"test_agency": agency_factory},
+            port=port,
+            app_token_env="",
+            return_app=True,
+            enable_agui=False,
+            allowed_local_file_dirs=None,
+        )
+
+        server_thread = threading.Thread(
+            target=lambda: uvicorn.run(
+                app,
+                host="127.0.0.1",
+                port=port,
+                log_level="error",
+            ),
+            daemon=True,
+        )
+        server_thread.start()
+
+        time.sleep(3)
 
         yield base_url
 
@@ -216,6 +238,54 @@ class TestFastAPIFileProcessing:
 
         # Verify response contains expected content
         assert last_response_data is not None and "response" in last_response_data
+
+    @pytest.mark.asyncio
+    async def test_local_file_attachment(self, fastapi_base_url: str, tmp_path):
+        """Test processing a local absolute file path via file_urls."""
+        file_path = tmp_path / "local-file.txt"
+        file_path.write_text("local secret phrase", encoding="utf-8")
+
+        url = f"{fastapi_base_url}/test_agency/get_response"
+        payload = {
+            "message": "Please read the content of the uploaded file and tell me what secret phrase you find.",
+            "file_urls": {"local-file.txt": str(file_path)},
+        }
+        headers = {}
+
+        async with self.get_http_client(timeout_seconds=120) as client:
+            response = await client.post(url, json=payload, headers=headers)
+
+        assert response.status_code == 200
+        response_data = response.json()
+
+        # Verify the file was attached and processed
+        assert "file_ids_map" in response_data
+        assert "local-file.txt" in response_data["file_ids_map"]
+
+        # Should return a response without error
+        assert "response" in response_data
+        response_text = response_data["response"].lower()
+        assert "local secret phrase" in response_text
+
+    @pytest.mark.asyncio
+    async def test_local_file_attachment_disallowed_without_allowlist(self, fastapi_server_no_local, tmp_path):
+        """Local file access should be blocked when no allowlist is configured."""
+        file_path = tmp_path / "local-file.txt"
+        file_path.write_text("local secret phrase", encoding="utf-8")
+
+        url = f"{fastapi_server_no_local}/test_agency/get_response"
+        payload = {
+            "message": "Please read the content of the uploaded file and tell me what secret phrase you find.",
+            "file_urls": {"local-file.txt": str(file_path)},
+        }
+
+        async with self.get_http_client(timeout_seconds=60) as client:
+            response = await client.post(url, json=payload)
+
+        assert response.status_code == 200
+        response_data = response.json()
+        assert "error" in response_data
+        assert "file access is disabled" in response_data["error"].lower()
 
     @pytest.mark.asyncio
     async def test_code_interpreter_attachment(self, file_server_base_url: str, fastapi_base_url: str):
@@ -308,14 +378,12 @@ class TestFastAPIFileProcessing:
         # The request should still return 200, but the response should indicate file issues
         assert response.status_code == 200
         response_data = response.json()
-
-        # The agent should mention it couldn't access the file
         response_text = response_data["error"].lower()
         assert "error downloading file from provided urls" in response_text
 
     @pytest.mark.asyncio
     async def test_streaming_invalid_file_url(self, file_server_base_url: str, fastapi_base_url: str):
-        """Test that streaming endpoint properly handles invalid file URLs without hanging."""
+        """Test that streaming endpoint properly handles invalid file URLs with HTTP 404."""
         url = f"{fastapi_base_url}/test_agency/get_response_stream"
         payload = {
             "message": "Please process this file.",
@@ -335,8 +403,6 @@ class TestFastAPIFileProcessing:
                         # Check if this is an error event
                         if line.startswith("data: "):
                             try:
-                                import json
-
                                 data = json.loads(line[6:])  # Remove "data: " prefix
                                 if "error" in data:
                                     error_found = True

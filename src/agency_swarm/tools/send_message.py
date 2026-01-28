@@ -1,5 +1,5 @@
 """
-Defines the SendMessage and SendMessageHandoff tools for direct communication between agents.
+Defines the SendMessage and Handoff tools for agent communication and delegation.
 
 This module provides the `SendMessage` class, a specialized `FunctionTool` that
 allows one agent to send a message to another registered agent within the
@@ -10,7 +10,6 @@ recipient details.
 import asyncio
 import json
 import logging
-import warnings
 from typing import TYPE_CHECKING, Any, Literal
 
 from agents import (
@@ -92,18 +91,6 @@ class SendMessage(FunctionTool):
                     "enum": recipient_enum,
                     "description": "The name of the agent to send the message to.",
                 },
-                "my_primary_instructions": {
-                    "type": "string",
-                    "description": (
-                        "Please repeat your primary instructions step-by-step, including both completed "
-                        "and the following next steps that you need to perform. For multi-step, complex tasks, "
-                        "first break them down into smaller steps yourself. Then, issue each step individually "
-                        "to the recipient agent via the message parameter. Each identified step should be "
-                        "sent in a separate message. Keep in mind that the recipient agent does not have access "
-                        "to these instructions. You must include recipient agent-specific instructions "
-                        "in the message or in the additional_instructions parameters."
-                    ),
-                },
                 "message": {
                     "type": "string",
                     "description": (
@@ -121,7 +108,7 @@ class SendMessage(FunctionTool):
                 },
             },
             # OpenAI API requires all properties in 'required' array, even optional ones
-            "required": ["recipient_agent", "my_primary_instructions", "message", "additional_instructions"],
+            "required": ["recipient_agent", "message", "additional_instructions"],
             "additionalProperties": False,
         }
 
@@ -284,7 +271,6 @@ class SendMessage(FunctionTool):
 
         recipient_agent_name = kwargs.get("recipient_agent")
         message_content = kwargs.get("message")
-        my_primary_instructions = kwargs.get("my_primary_instructions")
         additional_instructions = kwargs.get("additional_instructions", "")
 
         # Validate extra params, if a Pydantic model was provided by subclass
@@ -306,10 +292,6 @@ class SendMessage(FunctionTool):
         if not message_content:
             logger.error(f"Tool '{self.name}' invoked without 'message' parameter.")
             return f"Error: Missing required parameter 'message' for tool {self.name}."
-        if not my_primary_instructions:
-            logger.error(f"Tool '{self.name}' invoked without 'my_primary_instructions' parameter.")
-            return f"Error: Missing required parameter 'my_primary_instructions' for tool {self.name}."
-
         # Case-insensitive lookup for recipient agent
         recipient_key = recipient_agent_name.lower()
         if recipient_key not in self.recipients:
@@ -527,21 +509,15 @@ class SendMessage(FunctionTool):
                         self._pending_per_thread.pop(thread_key, None)
 
 
-class SendMessageHandoff:
+class Handoff:
     """A handoff configuration class for defining agent handoffs."""
 
     add_reminder: bool = True  # Adds a reminder system message to the history on handoff
-    reminder_override: str | None = None  # Deprecated in favor of Agent.handoff_reminder
 
     def create_handoff(self, recipient_agent: "Agent"):
         recipient_agent_name = recipient_agent.name
-        legacy_override = getattr(self, "reminder_override", None)
-        if legacy_override is not None:
-            warnings.warn(
-                "SendMessageHandoff.reminder_override is deprecated; set Agent(..., handoff_reminder=...) instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
+        if hasattr(self, "reminder_override"):
+            raise TypeError("Handoff.reminder_override was removed. Set Agent(..., handoff_reminder=...) instead.")
         handoff_object = handoff(
             agent=recipient_agent,
             tool_description_override=recipient_agent.description,
@@ -567,12 +543,9 @@ class SendMessageHandoff:
                     if all_messages:
                         last_message = all_messages[-1]
 
-                        # Agent-level reminder takes precedence over the deprecated reminder_override fallback
                         agent_override = getattr(recipient_agent, "handoff_reminder", None)
                         if agent_override is not None:
                             reminder_content = agent_override
-                        elif legacy_override is not None:
-                            reminder_content = legacy_override
                         else:
                             reminder_content = (
                                 f"Transfer completed. You are {recipient_agent_name}. Please continue the task."
@@ -608,3 +581,7 @@ class SendMessageHandoff:
 
             handoff_object.input_filter = message_filter
         return handoff_object
+
+
+class SendMessageHandoff(Handoff):
+    """Deprecated alias for `Handoff`. Prefer `Handoff`."""

@@ -151,7 +151,6 @@ async def test_send_message_success(specific_send_message_tool, mock_wrapper, mo
     message_content = "Test message"
     args_dict = {
         "recipient_agent": mock_recipient_agent.name,  # Add the recipient_agent field
-        "my_primary_instructions": "Primary instructions for test.",
         "message": message_content,
         "additional_instructions": "Additional instructions for test.",
     }
@@ -186,7 +185,6 @@ async def test_send_message_missing_required_param(specific_send_message_tool, m
     # Test missing 'message'
     args_dict_missing_message = {
         "recipient_agent": "RecipientAgent",
-        "my_primary_instructions": "Primary instructions.",
         # "message" is missing
     }
     args_json_missing_message = json.dumps(args_dict_missing_message)
@@ -205,26 +203,6 @@ async def test_send_message_missing_required_param(specific_send_message_tool, m
 
     mock_module_logger.reset_mock()
 
-    # Test missing 'my_primary_instructions'
-    args_dict_missing_instr = {
-        "recipient_agent": "RecipientAgent",
-        "message": "A message",
-        # my_primary_instructions is missing
-    }
-    args_json_missing_instr = json.dumps(args_dict_missing_instr)
-    expected_error_missing_instr = (
-        f"Error: Missing required parameter 'my_primary_instructions' for tool {specific_send_message_tool.name}."
-    )
-
-    with patch("agency_swarm.tools.send_message.logger") as mock_module_logger_instr:
-        result = await specific_send_message_tool.on_invoke_tool(
-            wrapper=mock_wrapper, arguments_json_string=args_json_missing_instr
-        )
-    assert result == expected_error_missing_instr
-    mock_module_logger_instr.error.assert_called_once_with(
-        f"Tool '{specific_send_message_tool.name}' invoked without 'my_primary_instructions' parameter."
-    )
-
 
 @pytest.mark.asyncio
 async def test_send_message_target_agent_error(mock_wrapper):
@@ -237,7 +215,6 @@ async def test_send_message_target_agent_error(mock_wrapper):
     message_content = "Test message"
     args_dict = {
         "recipient_agent": "RecipientAgent",
-        "my_primary_instructions": "Primary instructions.",
         "message": message_content,
         "additional_instructions": "",
     }
@@ -269,7 +246,6 @@ async def test_send_message_input_guardrail_returns_error(mock_sender_agent, moc
 
     args = {
         "recipient_agent": recipient.name,
-        "my_primary_instructions": "inst",
         "message": "Hello",
         "additional_instructions": "",
     }
@@ -341,6 +317,33 @@ def valid_tool() -> str:
     assert len(tool_names) == 1
 
 
+@pytest.mark.asyncio
+async def test_tools_folder_supports_relative_imports(tmp_path):
+    """Tools that use relative imports should load correctly from tools_folder."""
+    tools_dir = tmp_path / "tools"
+    tools_dir.mkdir()
+
+    # Helper module imported relatively by the tool
+    (tools_dir / "helpers.py").write_text("def greet(name: str) -> str:\n    return f'hello {name}'\n")
+
+    # Tool that relies on relative import
+    (tools_dir / "RelativeTool.py").write_text(
+        "from pydantic import Field\n"
+        "from agency_swarm.tools import BaseTool\n"
+        "from .helpers import greet\n\n"
+        "class RelativeTool(BaseTool):\n"
+        "    name: str = Field(description='Name to greet')\n\n"
+        "    def run(self):\n"
+        "        return greet(self.name)\n"
+    )
+
+    agent = Agent(name="test", instructions="test", tools_folder=str(tools_dir))
+    tool = next(t for t in agent.tools if t.name == "RelativeTool")
+
+    result = await tool.on_invoke_tool(None, json.dumps({"name": "Ada"}))
+    assert result == "hello Ada"
+
+
 @pytest.mark.parametrize("folder", [None, "/nonexistent/path"])
 def test_tools_folder_missing(folder: str | None):
     """Agent should handle missing or invalid tools_folder gracefully."""
@@ -356,8 +359,9 @@ async def test_shared_state_property(mock_run_context_wrapper):
 
     tool = TestTool()
     tool._context = mock_run_context_wrapper
-    with pytest.deprecated_call():
-        assert tool._shared_state is mock_run_context_wrapper.context
+    with pytest.raises(AttributeError, match=r"_shared_state"):
+        _ = tool._shared_state
+    assert tool.context is mock_run_context_wrapper.context
 
 
 # --- one_call_at_a_time Tests ---

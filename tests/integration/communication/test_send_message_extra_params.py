@@ -27,10 +27,9 @@ async def test_schema_includes_extra_params():
         name="A",
         instructions="",
         model_settings=ModelSettings(temperature=0.0),
-        send_message_tool_class=SendMessageWithContext,
     )
     b = Agent(name="B", instructions="", model_settings=ModelSettings(temperature=0.0))
-    agency = Agency(a, communication_flows=[a > b])
+    agency = Agency(a, communication_flows=[(a > b, SendMessageWithContext)])
 
     # find the send_message tool on A via runtime state
     runtime_state = agency.get_agent_runtime_state("A")
@@ -48,17 +47,15 @@ async def test_validation_of_extra_params_errors():
         name="A",
         instructions="Use send_message to talk to B and include fields.",
         model_settings=ModelSettings(temperature=0.0),
-        send_message_tool_class=SendMessageWithContext,
     )
     b = Agent(name="B", instructions="Reply with OK", model_settings=ModelSettings(temperature=0.0))
-    agency = Agency(a, communication_flows=[a > b])
+    agency = Agency(a, communication_flows=[(a > b, SendMessageWithContext)])
 
     runtime_state = agency.get_agent_runtime_state("A")
     send_tool = next(iter(runtime_state.send_message_tools.values()))
 
     args = {
         "recipient_agent": "B",
-        "my_primary_instructions": "",
         "message": "hi",
         "additional_instructions": "",
     }
@@ -77,10 +74,9 @@ async def test_nested_class_schema_included():
         name="A",
         instructions="",
         model_settings=ModelSettings(temperature=0.0),
-        send_message_tool_class=NestedSendMessage,
     )
     b = Agent(name="B", instructions="", model_settings=ModelSettings(temperature=0.0))
-    agency = Agency(a, communication_flows=[a > b])
+    agency = Agency(a, communication_flows=[(a > b, NestedSendMessage)])
 
     runtime_state = agency.get_agent_runtime_state("A")
     send_tool = next(iter(runtime_state.send_message_tools.values()))

@@ -39,8 +39,15 @@ For validating **tool inputs** (e.g., checking field values, data types, ranges)
 Use input guardrails to keep agents focused on their domain. This example delegates relevance decisions to a judge agent:
 
 ```python
-from agency_swarm import Agency, Agent, GuardrailFunctionOutput, RunContextWrapper, input_guardrail
-from agents.model_settings import ModelSettings
+from agency_swarm import (
+    Agency,
+    Agent,
+    GuardrailFunctionOutput,
+    ModelSettings,
+    Reasoning,
+    RunContextWrapper,
+    input_guardrail,
+)
 from pydantic import BaseModel
 
 class RelevanceDecision(BaseModel):
@@ -55,7 +62,7 @@ guardrail_agent = Agent(
         "Flag any other unrelated requests as irrelevant."
     ),
     model="gpt-5-nano",
-    model_settings=ModelSettings(reasoning_effort="minimal"),
+    model_settings=ModelSettings(reasoning=Reasoning(effort="minimal")),
     output_type=RelevanceDecision,
 )
 
@@ -588,7 +595,7 @@ Agent-to-agent messages are always single strings, so input guardrails for inter
 It is recommended to use **friendly mode** (`throw_input_guardrail_error=False`) for the agency's internal agents. While **strict mode** (`True`) is also supported, friendly mode ensures that guardrail guidance flows naturally through the agent chain without raising exceptions that interrupt the communication flow.
 
 <Warning>
-Due to the nature of Handoffs, using `SendMessageHandoff` for agent-to-agent communication will bypass input guardrails set between agents.
+Due to the nature of Handoffs, using `Handoff` for agent-to-agent communication will bypass input guardrails set between agents.
 </Warning>
 
 ## Best Practices

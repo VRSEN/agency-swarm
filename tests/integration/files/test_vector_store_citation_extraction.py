@@ -9,6 +9,7 @@ not direct file attachment citations which are tested separately.
 """
 
 import asyncio
+import os
 import tempfile
 from pathlib import Path
 
@@ -20,6 +21,10 @@ from agency_swarm.utils.citation_extractor import extract_vector_store_citations
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    os.getenv("CI") == "true",
+    reason="Requires live OpenAI API; skipped on CI to avoid upstream flake.",
+)
 async def test_vector_store_citation_extraction():
     """
     Test that FileSearch tool properly returns citations when include_search_results=True
@@ -48,7 +53,7 @@ async def test_vector_store_citation_extraction():
             ),
             files_folder=str(temp_path),
             include_search_results=True,
-            model="gpt-5.2",
+            model="gpt-5-mini",
             model_settings=ModelSettings(tool_choice="file_search"),
             tool_use_behavior="stop_on_first_tool",
         )

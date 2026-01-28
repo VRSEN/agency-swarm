@@ -7,13 +7,30 @@ from typing import TYPE_CHECKING, Any
 
 from agents import (
     RunConfig,
+    RunContextWrapper,
     RunHooks,
     RunResult,
+    RunResultStreaming,
     TResponseInputItem,
 )
 from agents.items import MessageOutputItem
 from agents.stream_events import StreamEvent
 
+from agency_swarm.agent.conversation_starters_cache import (
+    build_run_items_from_cached,
+    extract_final_output_text,
+    extract_starter_segment,
+    filter_replay_items,
+    is_simple_text_message,
+    load_cached_starter,
+    match_conversation_starter,
+    normalize_starter_text,
+    parse_cached_output,
+    prepare_cached_items_for_replay,
+    reorder_cached_items_for_tools,
+    save_cached_starter,
+)
+from agency_swarm.agent.conversation_starters_streaming import stream_cached_items_events
 from agency_swarm.agent.execution_helpers import (
     cleanup_execution,
     extract_hosted_tool_results_if_needed,
@@ -58,7 +75,6 @@ class Execution:
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
         run_config_override: RunConfig | None = None,
-        message_files: list[str] | None = None,
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
         agency_context: "AgencyContext | None" = None,
@@ -75,7 +91,6 @@ class Execution:
             context_override: Optional context data to override default MasterContext values
             hooks_override: Optional hooks to override default agent hooks
             run_config_override: Optional run configuration settings
-            message_files: DEPRECATED: Use file_ids instead. File IDs to attach to the message
             file_ids: List of OpenAI file IDs to attach to the message
             additional_instructions: Additional instructions to be appended to
                 the agent's instructions for this run only
@@ -98,12 +113,20 @@ class Execution:
             if self.agent.attachment_manager is None:
                 raise RuntimeError(f"attachment_manager not initialized for agent {self.agent.name}")
             processed_current_message_items = await self.agent.attachment_manager.process_message_and_files(
-                message, file_ids, message_files, kwargs, "get_response"
+                message, file_ids, kwargs, "get_response"
             )
             # Generate a unique run id for this agent execution (non-streaming)
             current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
 
             run_trace_id = get_run_trace_id(run_config_override, agency_context)
+
+            initial_saved_count = 0
+            if agency_context and agency_context.thread_manager:
+                try:
+                    initial_saved_count = len(agency_context.thread_manager.get_all_messages())
+                except Exception:
+                    initial_saved_count = 0
+            is_first_message = initial_saved_count == 0
 
             # Prepare history for runner, persisting initiating messages with agent_run_id and parent_run_id
             history_for_runner = MessageFormatter.prepare_history_for_runner(
@@ -126,24 +149,79 @@ class Execution:
                 pass
 
             agency_name = "Unnamed Agency"
-            if agency_context and agency_context.agency_instance:
-                agency_name = getattr(agency_context.agency_instance, "name", None) or agency_name
+            if agency_context and agency_context.agency_instance is not None:
+                from agency_swarm.agency.core import Agency
 
-            run_result, master_context_for_run = await run_with_guardrails(
-                agent=self.agent,
-                history_for_runner=history_for_runner,
-                master_context_for_run=master_context_for_run,
-                sender_name=sender_name,
-                agency_context=agency_context,
-                hooks_override=hooks_override,
-                run_config_override=run_config_override or RunConfig(workflow_name=agency_name, trace_id=run_trace_id),
-                kwargs=kwargs,
-                current_agent_run_id=current_agent_run_id,
-                parent_run_id=parent_run_id,
-                run_trace_id=run_trace_id,
-                validation_attempts=int(getattr(self.agent, "validation_attempts", 1) or 0),
-                throw_input_guardrail_error=getattr(self.agent, "throw_input_guardrail_error", False),
-            )
+                agency_instance = agency_context.agency_instance
+                if isinstance(agency_instance, Agency):
+                    agency_instance_name = agency_instance.name
+                    if isinstance(agency_instance_name, str):
+                        agency_name = agency_instance_name
+
+            matched_starter: str | None = None
+            cached_starter = None
+            if (
+                sender_name is None
+                and self.agent.cache_conversation_starters
+                and is_first_message
+                and is_simple_text_message(processed_current_message_items)
+                and not additional_instructions  # Skip cache when per-run instructions provided
+            ):
+                matched_starter = match_conversation_starter(
+                    processed_current_message_items, self.agent.conversation_starters
+                )
+                if matched_starter:
+                    normalized = normalize_starter_text(matched_starter)
+                    cache_map = self.agent._conversation_starters_cache
+                    cached_starter = cache_map.get(normalized)
+                    if cached_starter is None:
+                        cached_starter = load_cached_starter(
+                            self.agent.name,
+                            matched_starter,
+                            expected_fingerprint=self.agent._conversation_starters_fingerprint,
+                        )
+                        if cached_starter is not None:
+                            cache_map[normalized] = cached_starter
+
+            if cached_starter is None:
+                run_result, master_context_for_run = await run_with_guardrails(
+                    agent=self.agent,
+                    history_for_runner=history_for_runner,
+                    master_context_for_run=master_context_for_run,
+                    sender_name=sender_name,
+                    agency_context=agency_context,
+                    hooks_override=hooks_override,
+                    run_config_override=run_config_override
+                    or RunConfig(workflow_name=agency_name, trace_id=run_trace_id),
+                    kwargs=kwargs,
+                    current_agent_run_id=current_agent_run_id,
+                    parent_run_id=parent_run_id,
+                    run_trace_id=run_trace_id,
+                    validation_attempts=int(self.agent.validation_attempts or 0),
+                    throw_input_guardrail_error=self.agent.throw_input_guardrail_error,
+                )
+            else:
+                replay_items = prepare_cached_items_for_replay(
+                    cached_starter.items,
+                    run_trace_id=run_trace_id,
+                    parent_run_id=parent_run_id,
+                )
+                replay_items = filter_replay_items(replay_items)
+                run_items = build_run_items_from_cached(self.agent, replay_items)
+                final_output_text = extract_final_output_text(replay_items)
+                final_output = parse_cached_output(final_output_text, self.agent.output_type)
+                run_result = RunResult(
+                    input=history_for_runner,
+                    new_items=run_items,
+                    raw_responses=[],
+                    final_output=final_output,
+                    input_guardrail_results=[],
+                    output_guardrail_results=[],
+                    tool_input_guardrail_results=[],
+                    tool_output_guardrail_results=[],
+                    context_wrapper=RunContextWrapper(master_context_for_run),
+                    _last_agent=self.agent,
+                )
 
             # Store sub-agent raw_responses with model info for per-response cost calculation
             # These are tuples of (model_name, response) to enable accurate per-model pricing
@@ -223,7 +301,7 @@ class Execution:
                         )
 
                         # If this item indicates a handoff, update current agent for subsequent items
-                        if getattr(run_item_obj, "type", None) == "handoff_output_item":
+                        if run_item_obj.type == "handoff_output_item":
                             target = MessageFormatter.extract_handoff_target_name(run_item_obj)
                             if target:
                                 current_agent_name = target
@@ -237,13 +315,46 @@ class Execution:
                 agency_context.thread_manager.add_messages(normalized_items)  # type: ignore[arg-type] # Save filtered items to flat storage
                 logger.debug(f"Saved {len(filtered_items)} items to storage (filtered from {len(items_to_save)}).")
 
+            if (
+                matched_starter
+                and cached_starter is None
+                and self.agent.cache_conversation_starters
+                and is_first_message
+                and agency_context
+                and agency_context.thread_manager
+            ):
+                try:
+                    all_messages = agency_context.thread_manager.get_all_messages()
+                    new_messages = all_messages[initial_saved_count:]
+                    segment = extract_starter_segment(new_messages, matched_starter) or new_messages
+                    if segment and extract_final_output_text(segment):
+                        segment = reorder_cached_items_for_tools(segment, self.agent.name)
+                        cached = save_cached_starter(
+                            self.agent.name,
+                            matched_starter,
+                            segment,
+                            metadata={"source": "live_run"},
+                            fingerprint=self.agent._conversation_starters_fingerprint,
+                        )
+                        cache_map = self.agent._conversation_starters_cache
+                        cache_map[normalize_starter_text(matched_starter)] = cached
+                except Exception as e:
+                    logger.debug(f"Failed to cache conversation starter: {e}")
+
             # Sync back context changes if we used a merged context due to override
-            if context_override and agency_context and agency_context.agency_instance:
-                base_user_context = getattr(agency_context.agency_instance, "user_context", {})
+            if context_override and agency_context and agency_context.agency_instance is not None:
+                from agency_swarm.agency.core import Agency
+
+                agency_instance = agency_context.agency_instance
+                if isinstance(agency_instance, Agency):
+                    base_user_context = agency_instance.user_context
+                else:
+                    base_user_context = None
                 # Sync back any new keys that weren't part of the original override
-                for key, value in master_context_for_run.user_context.items():
-                    if key not in context_override:  # Don't sync back override keys
-                        base_user_context[key] = value
+                if base_user_context is not None:
+                    for key, value in master_context_for_run.user_context.items():
+                        if key not in context_override:  # Don't sync back override keys
+                            base_user_context[key] = value
 
             return run_result
 
@@ -256,6 +367,9 @@ class Execution:
             else:
                 # Ensure instructions are restored even if context was not prepared
                 self.agent.instructions = original_instructions
+            if self.agent.attachment_manager is None:
+                raise RuntimeError(f"attachment_manager not initialized for agent {self.agent.name}")
+            self.agent.attachment_manager.attachments_cleanup()
 
     def get_response_stream(
         self,
@@ -264,7 +378,6 @@ class Execution:
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
         run_config_override: RunConfig | None = None,
-        message_files: list[str] | None = None,  # Backward compatibility
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
         agency_context: "AgencyContext | None" = None,
@@ -283,7 +396,6 @@ class Execution:
             context_override: Optional context data to override default MasterContext values
             hooks_override: Optional hooks to override default agent hooks
             run_config_override: Optional run configuration settings
-            message_files: DEPRECATED: Use file_ids instead. File IDs to attach to the message
             file_ids: List of OpenAI file IDs to attach to the message
             additional_instructions: Additional instructions to be appended to
                 the agent's instructions for this run only
@@ -326,11 +438,19 @@ class Execution:
                 if self.agent.attachment_manager is None:
                     raise RuntimeError(f"attachment_manager not initialized for agent {self.agent.name}")
                 processed_current_message_items = await self.agent.attachment_manager.process_message_and_files(
-                    message, file_ids, message_files, kwargs, "get_response_stream"
+                    message, file_ids, kwargs, "get_response_stream"
                 )
                 current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
 
                 run_trace_id = get_run_trace_id(run_config_override, agency_context)
+
+                initial_saved_count = 0
+                if agency_context and agency_context.thread_manager:
+                    try:
+                        initial_saved_count = len(agency_context.thread_manager.get_all_messages())
+                    except Exception:
+                        initial_saved_count = 0
+                is_first_message = initial_saved_count == 0
 
                 history_for_runner = MessageFormatter.prepare_history_for_runner(
                     processed_current_message_items,
@@ -348,9 +468,83 @@ class Execution:
                     len(history_for_runner),
                 )
 
+                matched_starter: str | None = None
+                cached_starter = None
+                if (
+                    sender_name is None
+                    and self.agent.cache_conversation_starters
+                    and is_first_message
+                    and is_simple_text_message(processed_current_message_items)
+                    and not additional_instructions  # Skip cache when per-run instructions provided
+                ):
+                    matched_starter = match_conversation_starter(
+                        processed_current_message_items, self.agent.conversation_starters
+                    )
+                    if matched_starter:
+                        normalized = normalize_starter_text(matched_starter)
+                        cache_map = self.agent._conversation_starters_cache
+                        cached_starter = cache_map.get(normalized)
+                        if cached_starter is None:
+                            cached_starter = load_cached_starter(
+                                self.agent.name,
+                                matched_starter,
+                                expected_fingerprint=self.agent._conversation_starters_fingerprint,
+                            )
+                            if cached_starter is not None:
+                                cache_map[normalized] = cached_starter
+
+                if cached_starter is not None:
+                    master_context_for_run = prepare_master_context(self.agent, context_override, agency_context)
+                    try:
+                        master_context_for_run._current_agent_run_id = current_agent_run_id
+                        master_context_for_run._parent_run_id = parent_run_id
+                    except Exception:
+                        pass
+
+                    replay_items = prepare_cached_items_for_replay(
+                        cached_starter.items,
+                        run_trace_id=run_trace_id,
+                        parent_run_id=parent_run_id,
+                    )
+                    replay_items = filter_replay_items(replay_items)
+                    if agency_context and agency_context.thread_manager:
+                        agency_context.thread_manager.add_messages(replay_items)
+
+                    run_items = build_run_items_from_cached(self.agent, replay_items)
+                    final_output_text = extract_final_output_text(replay_items)
+                    final_output = parse_cached_output(final_output_text, self.agent.output_type)
+                    run_result = RunResult(
+                        input=history_for_runner,
+                        new_items=run_items,
+                        raw_responses=[],
+                        final_output=final_output,
+                        input_guardrail_results=[],
+                        output_guardrail_results=[],
+                        tool_input_guardrail_results=[],
+                        tool_output_guardrail_results=[],
+                        context_wrapper=RunContextWrapper(master_context_for_run),
+                        _last_agent=self.agent,
+                    )
+
+                    main_model_name = get_model_name(self.agent.model)
+                    if main_model_name:
+                        typing.cast(_UsageTrackingRunResult, run_result)._main_agent_model = main_model_name
+
+                    async for cached_event in stream_cached_items_events(items=replay_items, agent=self.agent):
+                        yield cached_event
+
+                    wrapper._resolve_final_result(typing.cast(RunResultStreaming, run_result))
+                    return
+
                 agency_name = "Unnamed Agency"
-                if agency_context and agency_context.agency_instance:
-                    agency_name = getattr(agency_context.agency_instance, "name", None) or agency_name
+                if agency_context and agency_context.agency_instance is not None:
+                    from agency_swarm.agency.core import Agency
+
+                    agency_instance = agency_context.agency_instance
+                    if isinstance(agency_instance, Agency):
+                        agency_instance_name = agency_instance.name
+                        if isinstance(agency_instance_name, str):
+                            agency_name = agency_instance_name
 
                 master_context_for_run = prepare_master_context(self.agent, context_override, agency_context)
 
@@ -367,8 +561,8 @@ class Execution:
                     current_agent_run_id=current_agent_run_id,
                     parent_run_id=parent_run_id,
                     run_trace_id=run_trace_id,
-                    validation_attempts=int(getattr(self.agent, "validation_attempts", 1) or 0),
-                    throw_input_guardrail_error=getattr(self.agent, "throw_input_guardrail_error", False),
+                    validation_attempts=int(self.agent.validation_attempts or 0),
+                    throw_input_guardrail_error=self.agent.throw_input_guardrail_error,
                 )
 
                 if isinstance(stream_handle, StreamingRunResponse):
@@ -389,6 +583,31 @@ class Execution:
                     )
                 else:
                     self.agent.instructions = original_instructions
+                if (
+                    matched_starter
+                    and cached_starter is None
+                    and self.agent.cache_conversation_starters
+                    and is_first_message
+                    and agency_context
+                    and agency_context.thread_manager
+                ):
+                    try:
+                        all_messages = agency_context.thread_manager.get_all_messages()
+                        new_messages = all_messages[initial_saved_count:]
+                        segment = extract_starter_segment(new_messages, matched_starter) or new_messages
+                        if segment and extract_final_output_text(segment):
+                            segment = reorder_cached_items_for_tools(segment, self.agent.name)
+                            cached = save_cached_starter(
+                                self.agent.name,
+                                matched_starter,
+                                segment,
+                                metadata={"source": "live_stream"},
+                                fingerprint=self.agent._conversation_starters_fingerprint,
+                            )
+                            cache_map = self.agent._conversation_starters_cache
+                            cache_map[normalize_starter_text(matched_starter)] = cached
+                    except Exception as e:
+                        logger.debug(f"Failed to cache conversation starter: {e}")
                 if self.agent.attachment_manager is None:
                     raise RuntimeError(f"attachment_manager not initialized for agent {self.agent.name}")
                 self.agent.attachment_manager.attachments_cleanup()

@@ -69,7 +69,7 @@ class TestGetExternalCallerDirectory:
             agent = Agent(
                 name="CEO",
                 instructions="./instructions.md",
-                model="gpt-4o-mini",
+                model="gpt-5-mini",
             )
             print(agent.instructions)
             """)
@@ -124,7 +124,7 @@ class TestGetExternalCallerDirectory:
                 name="Researcher",
                 instructions="Research things",
                 tools_folder="./tools",
-                model="gpt-4o-mini",
+                model="gpt-5-mini",
             )
             tool_names = [t.name for t in agent.tools]
             print(",".join(tool_names))
@@ -163,7 +163,7 @@ class TestGetExternalCallerDirectory:
 
             from agency_swarm import Agency, Agent
 
-            ceo = Agent(name="CEO", instructions="Lead", model="gpt-4o-mini")
+            ceo = Agent(name="CEO", instructions="Lead", model="gpt-5-mini")
             agency = Agency(ceo, shared_instructions="agency_manifesto.md")
             print(agency.shared_instructions)
             """)

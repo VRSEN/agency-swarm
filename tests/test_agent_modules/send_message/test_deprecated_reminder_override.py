@@ -5,7 +5,7 @@ import pytest
 from agents import ModelSettings
 
 from agency_swarm import Agent
-from agency_swarm.tools.send_message import SendMessageHandoff
+from agency_swarm.tools.send_message import Handoff
 
 
 class _DummyThreadManager:
@@ -46,7 +46,7 @@ class _DummyHandoffInputData:
         )
 
 
-class LegacyReminderHandoff(SendMessageHandoff):
+class LegacyReminderHandoff(Handoff):
     reminder_override = "Legacy reminder message"
 
 
@@ -59,24 +59,10 @@ async def test_legacy_reminder_override_warns_and_applies() -> None:
     )
 
     handoff = LegacyReminderHandoff()
-    with pytest.deprecated_call(match=r"SendMessageHandoff\.reminder_override is deprecated"):
-        handoff_obj = handoff.create_handoff(recipient)
+    with pytest.raises(TypeError, match=r"Handoff\.reminder_override was removed"):
+        _ = handoff.create_handoff(recipient)
 
-    assert handoff_obj.input_filter is not None
-
-    thread_manager = _DummyThreadManager()
-    run_context = _DummyRunContext(thread_manager)
-    input_data = _DummyHandoffInputData(run_context, ({"role": "user", "content": "Initial task"},))
-
-    filtered = await handoff_obj.input_filter(input_data)
-
-    assert thread_manager.messages[-1]["content"] == "Legacy reminder message"
-    assert thread_manager.messages[-1]["message_origin"] == "handoff_reminder"
-    assert filtered.input_history[-1]["content"] == "Legacy reminder message"
-
-
-class LegacyReminderWithAgentOverride(SendMessageHandoff):
-    reminder_override = "Legacy reminder should not win"
+    # Keep coroutine signature for pytest, but nothing async is executed once creation fails.
 
 
 @pytest.mark.asyncio
@@ -88,9 +74,7 @@ async def test_agent_handoff_reminder_takes_precedence() -> None:
         handoff_reminder="Agent-level reminder",
     )
 
-    handoff = LegacyReminderWithAgentOverride()
-    with pytest.deprecated_call(match=r"SendMessageHandoff\.reminder_override is deprecated"):
-        handoff_obj = handoff.create_handoff(recipient)
+    handoff_obj = Handoff().create_handoff(recipient)
 
     assert handoff_obj.input_filter is not None
 

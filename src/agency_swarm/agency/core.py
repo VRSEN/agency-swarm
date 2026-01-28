@@ -1,29 +1,30 @@
 # --- Core Agency class definition ---
+import asyncio
 import atexit
 import logging
 import os
+import threading
 import warnings
 from typing import TYPE_CHECKING, Any
 
-from agents import RunConfig, RunHooks, RunResult, TResponseInputItem
+from agents import RunConfig, RunHooks, RunResult, Tool, TResponseInputItem
 
 from agency_swarm.agent.agent_flow import AgentFlow
 from agency_swarm.agent.core import AgencyContext, Agent
 from agency_swarm.agent.execution_streaming import StreamingRunResponse
 from agency_swarm.hooks import PersistenceHooks
 from agency_swarm.streaming.utils import EventStreamMerger
-from agency_swarm.tools.mcp_manager import default_mcp_manager
-
-# Import split module functions
+from agency_swarm.tools import BaseTool
+from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers, default_mcp_manager
 from agency_swarm.utils.files import get_external_caller_directory
 from agency_swarm.utils.thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
 
-from .helpers import handle_deprecated_agency_args, read_instructions, run_fastapi as run_fastapi_helper
+from .helpers import read_instructions, run_fastapi as run_fastapi_helper
 from .setup import (
+    apply_shared_resources,
     configure_agents,
     initialize_agent_runtime_state,
     parse_agent_flows,
-    parse_deprecated_agency_chart,
     register_all_agents_and_set_entry_points,
 )
 
@@ -32,11 +33,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# --- Type Aliases ---
-AgencyChartEntry = Agent | list[Agent]
-AgencyChart = list[AgencyChartEntry]
-
-# Type aliases for agent communication flows
 CommunicationFlowEntry = (
     tuple[Agent, Agent]  # Basic (sender, receiver) pair
     | tuple[AgentFlow, type]  # Agent flow with tool class
@@ -55,7 +51,6 @@ class Agency:
 
     Attributes:
         agents (dict[str, Agent]): A dictionary mapping agent names to their instances.
-        chart (AgencyChart): The structure defining agents and their communication paths.
         entry_points (list[Agent]): A list of agents identified as entry points for external interaction
         thread_manager (ThreadManager): The manager responsible for handling conversation threads.
         persistence_hooks (PersistenceHooks | None): Optional hooks for loading/saving thread state.
@@ -66,11 +61,14 @@ class Agency:
     """
 
     agents: dict[str, Agent]
-    chart: AgencyChart
     entry_points: list[Agent]
     thread_manager: ThreadManager  # Legacy for backward compatibility
     persistence_hooks: PersistenceHooks | None
     shared_instructions: str | None
+    shared_tools: list[Tool | type[BaseTool]] | None  # Tools shared across all agents
+    shared_tools_folder: str | None  # Folder path containing tools for all agents
+    shared_files_folder: str | None  # Folder path containing files for all agents
+    shared_mcp_servers: list[Any] | None  # MCP servers shared across all agents
     user_context: dict[str, Any]  # Shared user context for MasterContext
     send_message_tool_class: type | None  # Fallback SendMessage tool class when flows have no override
 
@@ -83,20 +81,22 @@ class Agency:
         self,
         *entry_point_agents: Agent,
         communication_flows: list[CommunicationFlowEntry] | None = None,
-        agency_chart: AgencyChart | None = None,
         name: str | None = None,
         shared_instructions: str | None = None,
+        shared_tools: list[Tool | type[BaseTool]] | None = None,
+        shared_tools_folder: str | None = None,
+        shared_files_folder: str | None = None,
+        shared_mcp_servers: list[Any] | None = None,
         send_message_tool_class: type | None = None,
         load_threads_callback: ThreadLoadCallback | None = None,
         save_threads_callback: ThreadSaveCallback | None = None,
         user_context: dict[str, Any] | None = None,
-        **kwargs: Any,
     ):
         """
         Initializes the Agency object.
 
-        Sets up agents based on the provided structure (either new positional entry points
-        and keyword communication_flows, or the deprecated agency_chart), initializes the
+        Sets up agents based on the provided structure (positional entry points
+        and keyword communication_flows), initializes the
         `ThreadManager`, configures persistence hooks if callbacks are provided, applies
         shared instructions, and establishes communication pathways between agents.
 
@@ -110,134 +110,96 @@ class Agency:
                 - tuple[AgentFlow, type]: Agent flow with custom send_message_tool_class
                   (e.g., agent1 > agent2 > agent3, CustomSendMessageTool)
                 Defaults to None.
-            agency_chart (AgencyChart | None, optional): Deprecated structure definition; if provided, it takes
-                precedence over `entry_point_agents` and `communication_flows` (a warning is issued). Defaults to None.
             name (str | None, optional): Display name for the agency.
             shared_instructions (str | None, optional): Either direct instruction text or a file path. If a path is
                 provided, the file is read (supports caller-relative, absolute, or CWD-relative paths) and its
                 contents are used as shared instructions prepended to all agents' system prompts.
+            shared_tools (list[Tool | type[BaseTool]] | None, optional): List of Tool instances or BaseTool
+                classes to add to all agents.
+            shared_tools_folder (str | None, optional): Path to folder containing tool definitions for all agents.
+            shared_files_folder (str | None, optional): Path to folder containing files to share with all agents.
+            shared_mcp_servers (list[MCPServer] | None, optional): List of MCP server instances to add to all agents.
             send_message_tool_class (type | None, optional): Fallback SendMessage tool for routes that do not specify
-                a tool via `communication_flows`. Agent-level overrides are deprecated; prefer per-flow configuration.
+                a tool via `communication_flows`. Prefer per-flow configuration.
             load_threads_callback (ThreadLoadCallback | None, optional): Callable to load conversation threads.
             save_threads_callback (ThreadSaveCallback | None, optional): Callable to save conversation threads.
             user_context (dict[str, Any] | None, optional): Initial shared context accessible to all agents.
-            **kwargs: Catches other deprecated parameters, issuing warnings if used.
 
         Raises:
-            ValueError: If the agency structure is not defined (neither new nor deprecated methods used),
-                        or if agent names are duplicated, or chart contains invalid entries.
+            ValueError: If the agency structure is not defined, or if agent names are duplicated.
             TypeError: If entries in the structure are not `Agent` instances or valid tuples/lists.
         """
         logger.info("Initializing Agency...")
 
-        # --- Handle Deprecated Args ---
-        final_load_threads_callback, final_save_threads_callback, deprecated_args_used = handle_deprecated_agency_args(
-            load_threads_callback, save_threads_callback, **kwargs
-        )
-
-        # --- Logic for new vs. old chart/flow definition ---
         _derived_entry_points: list[Agent] = []
         _derived_communication_flows: list[tuple[Agent, Agent]] = []
         _communication_tool_classes: dict[tuple[str, str], type] = {}  # (sender_name, receiver_name) -> tool_class
 
-        if agency_chart is not None:
-            warnings.warn(
-                "'agency_chart' parameter is deprecated. Use positional arguments for entry points and the "
-                "'communication_flows' keyword argument for defining communication paths.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            deprecated_args_used["agency_chart"] = agency_chart  # Log that it was used
-            if entry_point_agents or communication_flows is not None:
-                logger.warning(
-                    "'agency_chart' was provided along with new 'entry_point_agents' or 'communication_flows'. "
-                    "'agency_chart' will be used for backward compatibility, and the new parameters will be ignored."
-                )
-            # Parse the deprecated chart regardless if it was provided
-            _derived_entry_points, _derived_communication_flows = parse_deprecated_agency_chart(self, agency_chart)
-            _communication_tool_classes = {}  # No custom tool classes in deprecated format
-
-        elif entry_point_agents or communication_flows is not None:
-            # Using new method
+        if entry_point_agents or communication_flows is not None:
             _derived_entry_points = list(entry_point_agents)
-            # Validate entry point agents
             if not all(isinstance(ep, Agent) for ep in _derived_entry_points):
                 raise TypeError("All positional arguments (entry points) must be Agent instances.")
-
-            # Parse agent communication flows
             _derived_communication_flows, _communication_tool_classes = parse_agent_flows(
                 self, communication_flows or []
             )
         else:
-            # Neither old nor new method provided chart/flows
             raise ValueError(
                 "Agency structure not defined. Provide entry point agents as positional arguments and/or "
-                "use the 'communication_flows' keyword argument, or use the deprecated 'agency_chart' parameter."
+                "use the 'communication_flows' keyword argument."
             )
 
-        # --- Assign Core Attributes ---
         self.name = name
-
-        # Handle shared instructions - can be a string or a file path
         if shared_instructions:
-            # Check if it's a file path relative to the class location
             class_relative_path = os.path.join(get_external_caller_directory(), shared_instructions)
             if os.path.isfile(class_relative_path):
                 read_instructions(self, class_relative_path)
             elif os.path.isfile(shared_instructions):
-                # It's an absolute path or relative to CWD
                 read_instructions(self, shared_instructions)
             else:
-                # It's actual instruction text, not a file path
                 self.shared_instructions = shared_instructions
         else:
             self.shared_instructions = ""
-
         self.user_context = user_context or {}
         self.send_message_tool_class = send_message_tool_class
-
-        # --- Initialize Core Components ---
+        self.shared_tools = shared_tools
+        self.shared_tools_folder = shared_tools_folder
+        self.shared_files_folder = shared_files_folder
+        self.shared_mcp_servers = shared_mcp_servers
         self.thread_manager = ThreadManager(
-            load_threads_callback=final_load_threads_callback, save_threads_callback=final_save_threads_callback
+            load_threads_callback=load_threads_callback, save_threads_callback=save_threads_callback
         )
         self.event_stream_merger = EventStreamMerger()
         self.persistence_hooks = None
-        if final_load_threads_callback and final_save_threads_callback:
-            self.persistence_hooks = PersistenceHooks(final_load_threads_callback, final_save_threads_callback)
+        if load_threads_callback and save_threads_callback:
+            self.persistence_hooks = PersistenceHooks(load_threads_callback, save_threads_callback)
             logger.info("Persistence hooks enabled.")
-
-        # --- Register Agents and Set Entry Points ---
         self.agents = {}
-        self.entry_points = []  # Will be populated by register_all_agents_and_set_entry_points
+        self.entry_points = []
         register_all_agents_and_set_entry_points(self, _derived_entry_points, _derived_communication_flows)
-
-        # Initialize per-agent runtime storage (after agents are registered)
         self._agent_runtime_state = {}
-        self._load_threads_callback = final_load_threads_callback
-        self._save_threads_callback = final_save_threads_callback
+        self._load_threads_callback = load_threads_callback
+        self._save_threads_callback = save_threads_callback
         initialize_agent_runtime_state(self)
+        self._starter_cache_warmup_started = False
 
         if not self.agents:
             raise ValueError("Agency must contain at least one agent.")
         logger.info(f"Registered agents: {list(self.agents.keys())}")
         logger.info(f"Designated entry points: {[ep.name for ep in self.entry_points]}")
-
-        # --- Store communication flows for visualization ---
         self._derived_communication_flows = _derived_communication_flows
         self._communication_tool_classes = _communication_tool_classes
-
-        # --- Configure Agents & Communication ---
-        # configure_agents uses _derived_communication_flows determined above
         configure_agents(self, _derived_communication_flows)
-
-        # Update agent contexts with communication flows
+        apply_shared_resources(self)
+        for agent_name, agent_instance in self.agents.items():
+            runtime_state = self._agent_runtime_state.get(agent_name)
+            agent_instance.refresh_conversation_starters_cache(runtime_state=runtime_state)
         logger.info("Agency initialization complete.")
+        self._schedule_starter_cache_warmup()
 
         # Register MCP shutdown at process exit so persistent servers are cleaned in scripts
         if default_mcp_manager.mark_atexit_registered():
             atexit.register(default_mcp_manager.shutdown_sync)
 
-    # Private helper methods that were missed during split
     def get_agent_context(self, agent_name: str) -> AgencyContext:
         """Public accessor for the agency context associated with an agent."""
         if agent_name not in self._agent_runtime_state:
@@ -257,7 +219,6 @@ class Agency:
             raise ValueError(f"No runtime state found for agent: {agent_name}")
         return self._agent_runtime_state[agent_name]
 
-    # Import and bind methods from split modules with proper type hints
     async def get_response(
         self,
         message: str | list[TResponseInputItem],
@@ -265,7 +226,6 @@ class Agency:
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
         run_config: RunConfig | None = None,
-        message_files: list[str] | None = None,
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
         **kwargs: Any,
@@ -276,6 +236,7 @@ class Agency:
         This method resolves the target agent, validates if it's a designated entry point
         (logs warning if not), determines the appropriate hooks (user override or agency default
         persistence hooks), and delegates the actual execution to the target agent's `get_response` method.
+        This method is latency-sensitive; conversation starter warmup is triggered during agency initialization.
 
         Args:
             message (str | list[dict[str, Any]]): The input message for the agent.
@@ -285,7 +246,6 @@ class Agency:
             hooks_override (RunHooks | None, optional): Specific hooks to use for this run, overriding
                                                        agency-level persistence hooks.
             run_config (RunConfig | None, optional): Configuration for the agent run.
-            message_files (list[str] | None, optional): Backward compatibility parameter.
             file_ids (list[str] | None, optional): Additional file IDs for the agent run.
             additional_instructions (str | None, optional): Additional instructions to be appended to the recipient
                 agent's instructions for this run only.
@@ -304,7 +264,6 @@ class Agency:
             context_override,
             hooks_override,
             run_config,
-            message_files,
             file_ids,
             additional_instructions,
             **kwargs,
@@ -317,7 +276,6 @@ class Agency:
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
         run_config: RunConfig | None = None,
-        message_files: list[str] | None = None,
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
         **kwargs: Any,
@@ -332,7 +290,6 @@ class Agency:
             context_override,
             hooks_override,
             run_config,
-            message_files,
             file_ids,
             additional_instructions,
             **kwargs,
@@ -345,7 +302,6 @@ class Agency:
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
         run_config_override: RunConfig | None = None,
-        message_files: list[str] | None = None,
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
         **kwargs: Any,
@@ -355,6 +311,7 @@ class Agency:
 
         Returns a :class:`StreamingRunResponse` wrapper that mirrors
         :func:`agency_swarm.agency.responses.get_response_stream`.
+        This method is latency-sensitive; conversation starter warmup is triggered during agency initialization.
 
         Args:
             message (str | list[dict[str, Any]]): The input message for the agent.
@@ -363,7 +320,6 @@ class Agency:
             context_override (dict[str, Any] | None, optional): Additional context for the run.
             hooks_override (RunHooks | None, optional): Specific hooks for this run.
             run_config_override (RunConfig | None, optional): Specific run configuration for this run.
-            message_files (list[str] | None, optional): Backward compatibility parameter.
             file_ids (list[str] | None, optional): Additional file IDs for the agent run.
             additional_instructions (str | None, optional): Additional instructions to be appended to the recipient
                 agent's instructions for this run only.
@@ -382,51 +338,10 @@ class Agency:
             context_override,
             hooks_override,
             run_config_override,
-            message_files,
             file_ids,
             additional_instructions,
             **kwargs,
         )
-
-    def get_completion(
-        self,
-        message: str,
-        message_files: list[str] | None = None,
-        yield_messages: bool = False,
-        recipient_agent: str | Agent | None = None,
-        additional_instructions: str | None = None,
-        attachments: list[dict] | None = None,
-        tool_choice: dict | None = None,
-        verbose: bool = False,
-        response_format: dict | None = None,
-        **kwargs: Any,
-    ) -> str:
-        """
-        [DEPRECATED] Use get_response instead. Returns final text output.
-        """
-        from .completions import get_completion
-
-        return get_completion(
-            self,
-            message,
-            message_files,
-            yield_messages,
-            recipient_agent,
-            additional_instructions,
-            attachments,
-            tool_choice,
-            verbose,
-            response_format,
-            **kwargs,
-        )
-
-    def get_completion_stream(self, *args: Any, **kwargs: Any):
-        """
-        [DEPRECATED] Use get_response_stream instead. Yields all events from the modern streaming API.
-        """
-        from .completions import get_completion_stream
-
-        return get_completion_stream(self, *args, **kwargs)
 
     def run_fastapi(
         self,
@@ -448,11 +363,26 @@ class Agency:
         """
         return run_fastapi_helper(self, host, port, app_token_env, cors_origins, enable_agui)
 
-    def get_agency_structure(self, include_tools: bool = True) -> dict[str, Any]:
-        """Return a ReactFlow-compatible JSON structure describing the agency."""
-        from .visualization import get_agency_structure
+    def get_agency_graph(self, include_tools: bool = True) -> dict[str, Any]:
+        """Return a ReactFlow-compatible JSON graph describing the agency."""
+        from .visualization import get_agency_graph
 
-        return get_agency_structure(self, include_tools)
+        return get_agency_graph(self, include_tools)
+
+    def get_metadata(self, include_tools: bool = True) -> dict[str, Any]:
+        """Return combined graph data and summary metadata."""
+        from .visualization import get_metadata
+
+        return get_metadata(self, include_tools)
+
+    def get_agency_structure(self, include_tools: bool = True) -> dict[str, Any]:
+        """Deprecated: use get_agency_graph instead."""
+        warnings.warn(
+            "get_agency_structure is deprecated; use get_agency_graph instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.get_agency_graph(include_tools)
 
     def visualize(
         self,
@@ -500,3 +430,41 @@ class Agency:
         from .visualization import copilot_demo
 
         return copilot_demo(self, host, port, frontend_port, cors_origins)
+
+    def _schedule_starter_cache_warmup(self) -> None:
+        if self._starter_cache_warmup_started:
+            return
+        warmup_agents = [
+            agent for agent in self.agents.values() if agent.cache_conversation_starters and agent.conversation_starters
+        ]
+        if not warmup_agents:
+            return
+        self._starter_cache_warmup_started = True
+
+        async def _warm_conversation_starters() -> None:
+            await attach_persistent_mcp_servers(self)
+            await asyncio.gather(
+                *(agent.warm_conversation_starters_cache(self.get_agent_context(agent.name)) for agent in warmup_agents)
+            )
+
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            try:
+                asyncio.run(_warm_conversation_starters())
+            except Exception:
+                logger.exception("Starter cache warmup failed")
+            return
+
+        def _run_warmup_thread() -> None:
+            try:
+                asyncio.run(_warm_conversation_starters())
+            except Exception:
+                logger.exception("Starter cache warmup failed")
+
+        thread = threading.Thread(
+            target=_run_warmup_thread,
+            name="agency-starter-cache-warmup",
+            daemon=True,
+        )
+        thread.start()

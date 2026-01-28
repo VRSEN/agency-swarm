@@ -4,16 +4,18 @@ An example of running an agency with a local and a public MCP server.
 This example connects to the pre-made MCP servers with custom tools
 that can be found at examples/utils/stdio_mcp_server.py and examples/utils/sse_mcp_server.py
 
-The public MCP server is running on port 8000 and can be accessed at http://localhost:8000/sse/
-You'll need to use ngrok to expose the server to the internet prior to running this example.
-Use the following command to start ngrok:
-ngrok http http://localhost:8000
-
-Then update the server_url in the tool_config to the ngrok url.
+The public MCP server is running on port 8000 and can be accessed at http://localhost:8000/sse
 Additionally, you can set up custom APP_TOKEN in .env file for auth, otherwise the token will be set to "test_token_123".
 
-Run the example with: python examples/mcp_server_example.py
+Run the example with: python examples/mcp_servers.py
 It will ask the agent to use tools from both MCP servers and present the results.
+
+To fully test the public MCP server example (copy/paste):
+1) Start ngrok in one terminal:
+ngrok http 8000
+
+2) In another terminal (replace YOUR_NGROK_ID):
+MCP_PUBLIC_SERVER_URL="https://YOUR_NGROK_ID.ngrok-free.app/sse" python examples/mcp_servers.py
 
 IF you do not want to run the public MCP server, you can comment out the public_mcp_server_example() call in the main function below.
 """
@@ -21,6 +23,7 @@ IF you do not want to run the public MCP server, you can comment out the public_
 import asyncio
 import os
 import subprocess
+import sys
 import time
 
 from agents.mcp.server import MCPServerStdio, MCPServerStdioParams
@@ -30,24 +33,30 @@ from agency_swarm import Agency, Agent, HostedMCPTool
 
 load_dotenv()
 
-stdio_server = MCPServerStdio(
-    MCPServerStdioParams(command="python", args=["./examples/utils/stdio_mcp_server.py"]), cache_tools_list=True
-)
+_EXAMPLES_DIR = os.path.dirname(os.path.abspath(__file__))
+_STDIO_SERVER_PATH = os.path.join(_EXAMPLES_DIR, "utils", "stdio_mcp_server.py")
+_SSE_SERVER_PATH = os.path.join(_EXAMPLES_DIR, "utils", "sse_mcp_server.py")
 
-app_token = os.getenv("APP_TOKEN", "test_token_123")
+app_token = os.getenv("APP_TOKEN")
 if not app_token:
-    print("APP_TOKEN not set, using default token")
     os.environ["APP_TOKEN"] = "test_token_123"
+    app_token = "test_token_123"
+
+stdio_server = MCPServerStdio(
+    MCPServerStdioParams(command=sys.executable, args=[_STDIO_SERVER_PATH], env={"APP_TOKEN": app_token}),
+    cache_tools_list=True,
+)
 
 
 # Launch the SSE MCP server
 def launch_sse_server():
     """Launch the SSE MCP server in a separate process"""
     env = os.environ.copy()
-    env["APP_TOKEN"] = os.getenv("APP_TOKEN", "test_token_123")
+    env["APP_TOKEN"] = app_token
 
     process = subprocess.Popen(
-        ["python", "./examples/utils/sse_mcp_server.py"], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        [sys.executable, _SSE_SERVER_PATH],
+        env=env,
     )
 
     # Give the server time to start
@@ -65,27 +74,6 @@ mcp_agent_local = Agent(
 
 agency_local = Agency(mcp_agent_local)
 
-mcp_agent_public = Agent(
-    name="public_MCP_Agent",
-    instructions="You are a helpful assistant",
-    description="Helpful assistant",
-    model="gpt-5.2",
-    tools=[
-        HostedMCPTool(  # <- public mcp server (requires ngrok)
-            tool_config={
-                "type": "mcp",
-                "server_label": "mcp-tools-server",
-                # server_url must be accessible from the internet (not locally)
-                "server_url": "https://8ea519b4b5ec.ngrok-free.app/sse/",  # <- update this with your ngrok url, don't forget to add /sse/ at the end
-                "require_approval": "never",
-                "headers": {"Authorization": f"Bearer {os.getenv('APP_TOKEN', 'test_token_123')}"},
-            }
-        ),
-    ],
-)
-
-agency_public = Agency(mcp_agent_public)
-
 
 async def local_mcp_server_example():
     # Agent will handle execution lifecycle of the MCP server automatically.
@@ -102,8 +90,35 @@ async def local_mcp_server_example():
 
 async def public_mcp_server_example():
     # HostedMCPTools do not require manual connection
+    public_server_url = os.getenv("MCP_PUBLIC_SERVER_URL")
+    if not public_server_url:
+        print("MCP_PUBLIC_SERVER_URL is not set; skipping public MCP server example.")
+        print("Set MCP_PUBLIC_SERVER_URL to your ngrok URL (including /sse) to enable it.")
+        return
+    public_server_url = public_server_url.rstrip("/")
+
+    public_agent = Agent(
+        name="public_MCP_Agent",
+        instructions="You are a helpful assistant",
+        description="Helpful assistant",
+        model="gpt-5.2",
+        tools=[
+            HostedMCPTool(  # <- public mcp server (requires ngrok)
+                tool_config={
+                    "type": "mcp",
+                    "server_label": "mcp-tools-server",
+                    # server_url must be accessible from the internet (not locally)
+                    "server_url": public_server_url,
+                    "require_approval": "never",
+                    "headers": {"Authorization": f"Bearer {app_token}"},
+                }
+            ),
+        ],
+    )
+    agency_public = Agency(public_agent)
     print("Running public MCP server example")
     print("-" * 25)
+    sse_server = None
     try:
         sse_server = launch_sse_server()
         await asyncio.sleep(5)  # wait for the server to start
@@ -116,7 +131,8 @@ async def public_mcp_server_example():
         )
         return
     finally:
-        sse_server.terminate()
+        if sse_server is not None:
+            sse_server.terminate()
     print(
         "\nIf secret word is 'strawberry' and agent presented a list of files from the utils folder,"
         " that means the public MCP server worked successfully"

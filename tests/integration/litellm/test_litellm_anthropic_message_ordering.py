@@ -19,7 +19,7 @@ from agents import ModelSettings
 from agents.extensions.models.litellm_model import LitellmModel
 
 from agency_swarm import Agency, Agent, function_tool
-from agency_swarm.tools.send_message import SendMessageHandoff
+from agency_swarm.tools.send_message import Handoff
 
 pytestmark = pytest.mark.skipif(
     not os.getenv("ANTHROPIC_API_KEY"),
@@ -40,7 +40,6 @@ def litellm_anthropic_agency():
         instructions="You are a coordinator agent.",
         model_settings=ModelSettings(temperature=0.0),
         model=LitellmModel(model="anthropic/claude-sonnet-4-20250514"),
-        send_message_tool_class=SendMessageHandoff,
         tools=[get_user_id],
     )
 
@@ -54,7 +53,7 @@ def litellm_anthropic_agency():
     return Agency(
         coordinator,
         worker,
-        communication_flows=[coordinator > worker],
+        communication_flows=[(coordinator > worker, Handoff)],
         shared_instructions="Test agency",
     )
 

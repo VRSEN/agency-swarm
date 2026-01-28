@@ -12,6 +12,7 @@ import pytest
 from agents import ModelSettings
 
 from agency_swarm import Agency, Agent
+from tests.deterministic_model import DeterministicModel
 
 
 @pytest.fixture
@@ -26,6 +27,7 @@ def coordinator_agent():
             "When delegating, only relay the exact task text and never include unrelated user information."
         ),
         model_settings=ModelSettings(temperature=0.0),
+        model=DeterministicModel(),
     )
 
 
@@ -38,6 +40,7 @@ def worker_agent():
             "respond with 'TASK_COMPLETED: [task description]' to confirm completion."
         ),
         model_settings=ModelSettings(temperature=0.0),
+        model=DeterministicModel(),
     )
 
 
@@ -50,6 +53,7 @@ def memory_agent():
             "confirm with 'REMEMBERED: [item]'. When asked to recall, respond with 'RECALLED: [item]'."
         ),
         model_settings=ModelSettings(temperature=0.0),
+        model=DeterministicModel(),
     )
 
 
@@ -183,18 +187,21 @@ class TestAgentToAgentPersistence:
             name="Coordinator",
             instructions=("You coordinate tasks. Use the send_message tool to delegate tasks to Worker or Worker2."),
             model_settings=ModelSettings(temperature=0.0),
+            model=DeterministicModel(),
         )
 
         worker1 = Agent(
             name="Worker",
             instructions="You are Worker. Respond with 'WORKER_COMPLETED: [task]' when given tasks.",
             model_settings=ModelSettings(temperature=0.0),
+            model=DeterministicModel(),
         )
 
         worker2 = Agent(
             name="Worker2",
             instructions="You are Worker2. Respond with 'WORKER2_COMPLETED: [task]' when given tasks.",
             model_settings=ModelSettings(temperature=0.0),
+            model=DeterministicModel(),
         )
 
         # Create agency with multiple communication flows

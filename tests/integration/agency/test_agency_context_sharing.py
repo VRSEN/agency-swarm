@@ -9,6 +9,7 @@ import pytest
 from agents import ModelSettings, RunContextWrapper, function_tool
 
 from agency_swarm import Agency, Agent, MasterContext
+from tests.deterministic_model import DeterministicModel
 
 
 @function_tool
@@ -36,7 +37,7 @@ async def test_context_sharing_between_agents():
         name="Agent1",
         instructions="You store data in the context.",
         tools=[store_data],
-        model="gpt-5-mini",
+        model=DeterministicModel(),
         model_settings=ModelSettings(tool_choice="required"),
         tool_use_behavior="stop_on_first_tool",
     )
@@ -45,7 +46,7 @@ async def test_context_sharing_between_agents():
         name="Agent2",
         instructions="You retrieve and store data in the context.",
         tools=[get_data, store_data],
-        model="gpt-5-mini",
+        model=DeterministicModel(),
         model_settings=ModelSettings(tool_choice="required"),
         tool_use_behavior="stop_on_first_tool",
     )

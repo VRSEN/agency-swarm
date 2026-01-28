@@ -7,7 +7,7 @@ path = "hatch_build.py"
 
 [project]
 name = "agency-swarm"
-version = "1.6.0"
+version = "1.7.0"
 description = "Agency Swarm framework"
 readme = "README.md"
 requires-python = ">=3.12"

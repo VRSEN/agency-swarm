@@ -83,7 +83,7 @@ def create_agent_template(
 
     max_tokens_line = ""
     if max_tokens:
-        max_tokens_line = f"\n        max_completion_tokens={max_tokens},"
+        max_tokens_line = f"\n        max_tokens={max_tokens},"
 
     temperature_line = ""
     if temperature is not None:

@@ -33,12 +33,7 @@ In this example, calling the Query Database tool stores database context, which 
 
 <Tab title="BaseTool">
 
-  Originally, in v0.x, shared data was stored in the special `_shared_state` variable, which was carried over into v1.x. You can access it using the following methods:
-  - **Setting** a value in the shared state: `_shared_state.set('key', value)`
-  - **Getting** a value from the shared state: `_shared_state.get('key')`
-
-  Starting with v1.x, `_shared_state` simply holds a pointer to the agency context, allowing you to share data between FunctionTools and BaseTools.     
-  You can also access the same context within the BaseTool by using `self.context` variable same way it's done in FunctionTools.
+  For BaseTools, access the agency context using `self.context`.
 
     ```python
     from agency_swarm.tools import BaseTool
@@ -55,10 +50,9 @@ In this example, calling the Query Database tool stores database context, which 
             context = query_database_api(self.question)
 
             # Store the context in the agency context
-            self._shared_state.set('database_context', context)
-            # Same as
-            # self.context.set('database_context', context)
-            self._shared_state.set('last_query', self.question)
+            assert self.context is not None
+            self.context.set('database_context', context)
+            self.context.set('last_query', self.question)
 
             return "Database context has been retrieved and stored successfully."
 
@@ -68,9 +62,8 @@ In this example, calling the Query Database tool stores database context, which 
         """
         async def run(self):
             # Access the stored context
-            context = self._shared_state.get('database_context')
-            # Same as
-            # context = self.context.get('database_context')
+            assert self.context is not None
+            context = self.context.get('database_context')
 
             if not context:
                 return "Database context is missing. Please call the query_database tool first."
@@ -259,8 +252,9 @@ If you're migrating from Agency Swarm v0.x, and want to use new FunctionTool ins
 ```python
 class MyTool(BaseTool):
     async def run(self):
-        self._shared_state.set("key", "value")
-        data = self._shared_state.get("key", "default")
+        assert self.context is not None
+        self.context.set("key", "value")
+        data = self.context.get("key", "default")
         return "Done"
 ```
 

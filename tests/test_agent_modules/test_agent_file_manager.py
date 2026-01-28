@@ -357,7 +357,7 @@ class TestAgentFileManager:
 
         sync = FileSync(mock_agent)
 
-        with patch("agency_swarm.agent.file_sync.time.sleep") as mock_sleep:
+        with patch.object(sync, "_sleep") as mock_sleep:
             sync.wait_for_vector_store_file_ready(vector_store_id="vs123", file_id="file456", timeout_seconds=5.0)
 
         assert mock_agent.client_sync.vector_stores.files.retrieve.call_count == 3

@@ -22,6 +22,7 @@ class FileSync:
 
     def __init__(self, agent: Agent) -> None:
         self.agent: Agent = agent
+        self._sleep = time.sleep
 
     def collect_local_file_ids(self) -> set[str]:
         local_ids: set[str] = set()
@@ -237,7 +238,7 @@ class FileSync:
             if pending:
                 progress_made = bool(completed)
                 sleep_interval = 0.5 if progress_made else backoff
-                time.sleep(sleep_interval)
+                self._sleep(sleep_interval)
                 if progress_made:
                     backoff = min(0.5 * 1.7, max_backoff)
                 else:
@@ -278,10 +279,10 @@ class FileSync:
                         exc,
                     )
                     warned = True
-                time.sleep(backoff)
+                self._sleep(backoff)
                 backoff = min(backoff * 1.7, max_backoff)
                 continue
-            time.sleep(backoff)
+            self._sleep(backoff)
             backoff = min(backoff * 1.7, max_backoff)
         if last_error:
             logger.warning(
@@ -325,10 +326,10 @@ class FileSync:
                         exc,
                     )
                     warned = True
-                time.sleep(backoff)
+                self._sleep(backoff)
                 backoff = min(backoff * 1.7, max_backoff)
                 continue
-            time.sleep(backoff)
+            self._sleep(backoff)
             backoff = min(backoff * 1.7, max_backoff)
         if last_error:
             logger.warning(

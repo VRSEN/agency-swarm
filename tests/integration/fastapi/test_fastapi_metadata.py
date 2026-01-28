@@ -6,10 +6,9 @@ from datetime import datetime
 import pytest
 
 pytest.importorskip("fastapi.testclient")
-from agents import CodeInterpreterTool, FileSearchTool, ModelSettings, WebSearchTool
+from agents import CodeInterpreterTool, FileSearchTool, WebSearchTool
 from fastapi.testclient import TestClient
 from openai.types.responses.tool_param import CodeInterpreter
-from openai.types.shared import Reasoning
 from pydantic import BaseModel
 
 from agency_swarm import Agency, Agent, BaseTool, function_tool, run_fastapi
@@ -93,13 +92,12 @@ def test_metadata_includes_agent_capabilities():
         agent3 = Agent(
             name="ReasoningAgent",
             instructions="Test",
-            model="gpt-5.2",
-            model_settings=ModelSettings(reasoning=Reasoning(effort="low")),
+            model="gpt-5-mini",
         )
         agent4 = Agent(
             name="FullAgent",
             instructions="Test",
-            model="gpt-5.2",
+            model="gpt-5-mini",
             tools=[CustomTool, FileSearchTool(vector_store_ids=["vs_456"])],
         )
         return Agency(

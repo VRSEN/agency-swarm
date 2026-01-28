@@ -22,6 +22,7 @@ def run_fastapi(
     enable_agui: bool = False,
     enable_logging: bool = False,
     logs_dir: str = "activity-logs",
+    allowed_local_file_dirs: list[str] | None = None,
 ):
     """Launch a FastAPI server exposing endpoints for multiple agencies and tools.
 
@@ -46,6 +47,9 @@ def run_fastapi(
     logs_dir : str
         Directory to store log files when logging is enabled.
         Defaults to 'activity-logs'.
+    allowed_local_file_dirs : list[str] | None
+        Optional allowlist of directories that local file_urls may read from.
+        When omitted, local file access is disabled.
     """
     if (agencies is None or len(agencies) == 0) and (tools is None or len(tools) == 0):
         logger.warning("No endpoints to deploy. Please provide at least one agency or tool.")
@@ -67,6 +71,7 @@ def run_fastapi(
             make_response_endpoint,
             make_stream_endpoint,
         )
+        from .fastapi_utils.file_handler import _normalize_allowed_dirs
         from .fastapi_utils.logging_middleware import (
             RequestTracker,
             setup_enhanced_logging,
@@ -83,9 +88,6 @@ def run_fastapi(
         logger.error(f"FastAPI deployment dependencies are missing: {e}. Please install agency-swarm[fastapi] package")
         return
 
-    dry_run_env = os.getenv("DRY_RUN", "")
-    DRY_RUN = str(dry_run_env).strip().lower() in {"1", "true", "yes", "on"}
-
     app_token = os.getenv(app_token_env)
     if app_token is None or app_token == "":
         logger.warning("App token is not set. Authentication will be disabled.")
@@ -97,6 +99,8 @@ def run_fastapi(
         base_url = f"http://localhost:{port}"
     else:
         base_url = f"http://{host}:{port}"
+
+    normalized_allowed_dirs = _normalize_allowed_dirs(allowed_local_file_dirs)
 
     app = FastAPI(servers=[{"url": base_url}])
 
@@ -133,46 +137,53 @@ def run_fastapi(
 
             # Store agent instances for easy lookup
             preview_instance = agency_factory(load_threads_callback=lambda: [])
-            if DRY_RUN:
-                # In DRY_RUN, avoid building validators;
-                agency_metadata = preview_instance.get_agency_structure()
-            else:
-                AGENT_INSTANCES: dict[str, Agent] = dict(preview_instance.agents.items())
-                AgencyRequest = add_agent_validator(BaseRequest, AGENT_INSTANCES)
-                agency_metadata = preview_instance.get_agency_structure()
+            AGENT_INSTANCES: dict[str, Agent] = dict(preview_instance.agents.items())
+            AgencyRequest = add_agent_validator(BaseRequest, AGENT_INSTANCES)
+            agency_metadata = preview_instance.get_metadata()
 
-                if enable_agui:
-                    app.add_api_route(
-                        f"/{agency_name}/get_response_stream",
-                        make_agui_chat_endpoint(RunAgentInputCustom, agency_factory, verify_token),
-                        methods=["POST"],
-                    )
-                    endpoints.append(f"/{agency_name}/get_response_stream")
-                else:
-                    run_registry = ActiveRunRegistry()
-                    app.add_api_route(
-                        f"/{agency_name}/get_response",
-                        make_response_endpoint(AgencyRequest, agency_factory, verify_token),
-                        methods=["POST"],
-                    )
-                    app.add_api_route(
-                        f"/{agency_name}/get_response_stream",
-                        make_stream_endpoint(
-                            AgencyRequest,
-                            agency_factory,
-                            verify_token,
-                            run_registry,
-                        ),
-                        methods=["POST"],
-                    )
-                    app.add_api_route(
-                        f"/{agency_name}/cancel_response_stream",
-                        make_cancel_endpoint(CancelRequest, verify_token, run_registry),
-                        methods=["POST"],
-                    )
-                    endpoints.append(f"/{agency_name}/get_response")
-                    endpoints.append(f"/{agency_name}/get_response_stream")
-                    endpoints.append(f"/{agency_name}/cancel_response_stream")
+            if enable_agui:
+                app.add_api_route(
+                    f"/{agency_name}/get_response_stream",
+                    make_agui_chat_endpoint(
+                        RunAgentInputCustom,
+                        agency_factory,
+                        verify_token,
+                        allowed_local_dirs=normalized_allowed_dirs,
+                    ),
+                    methods=["POST"],
+                )
+                endpoints.append(f"/{agency_name}/get_response_stream")
+            else:
+                run_registry = ActiveRunRegistry()
+                app.add_api_route(
+                    f"/{agency_name}/get_response",
+                    make_response_endpoint(
+                        AgencyRequest,
+                        agency_factory,
+                        verify_token,
+                        allowed_local_dirs=normalized_allowed_dirs,
+                    ),
+                    methods=["POST"],
+                )
+                app.add_api_route(
+                    f"/{agency_name}/get_response_stream",
+                    make_stream_endpoint(
+                        AgencyRequest,
+                        agency_factory,
+                        verify_token,
+                        run_registry,
+                        allowed_local_dirs=normalized_allowed_dirs,
+                    ),
+                    methods=["POST"],
+                )
+                app.add_api_route(
+                    f"/{agency_name}/cancel_response_stream",
+                    make_cancel_endpoint(CancelRequest, verify_token, run_registry),
+                    methods=["POST"],
+                )
+                endpoints.append(f"/{agency_name}/get_response")
+                endpoints.append(f"/{agency_name}/get_response_stream")
+                endpoints.append(f"/{agency_name}/cancel_response_stream")
 
             app.add_api_route(
                 f"/{agency_name}/get_metadata",
@@ -181,7 +192,7 @@ def run_fastapi(
             )
             endpoints.append(f"/{agency_name}/get_metadata")
 
-    if tools and not DRY_RUN:
+    if tools:
         for tool in tools:
             tool_name = tool.name if hasattr(tool, "name") else tool.__name__
             tool_handler = make_tool_endpoint(tool, verify_token)

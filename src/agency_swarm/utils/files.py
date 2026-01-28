@@ -35,6 +35,14 @@ def get_external_caller_directory(*, internal_package: str = "agency_swarm") -> 
     return os.getcwd()
 
 
+def get_chats_dir(*, override: str | None = None) -> Path:
+    """Return the base chat directory, honoring overrides and env configuration."""
+    base = override or os.environ.get("AGENCY_SWARM_CHATS_DIR") or str(Path.cwd() / ".agency_swarm")
+    path = Path(base)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 @functools.lru_cache(maxsize=8)
 def _get_package_root(package_name: str) -> Path | None:
     try:

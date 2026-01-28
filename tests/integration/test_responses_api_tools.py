@@ -87,7 +87,7 @@ async def test_tool_cycle_with_sdk_and_responses_api():
 
     # Explicitly create an AsyncOpenAI client
     client = AsyncOpenAI(api_key=OPENAI_API_KEY)
-    forced_responses_model = OpenAIResponsesModel(model="gpt-5.2", openai_client=client)
+    forced_responses_model = OpenAIResponsesModel(model="gpt-5-mini", openai_client=client)
 
     agent = Agent(
         name="SDK Responses API Test Agent",
@@ -167,7 +167,7 @@ async def test_tool_output_conversion_bug_two_turn_conversation():
     agent = AgencySwarmAgent(
         name="Calculator Agent",
         instructions="You are a calculator assistant. Use the calculator tool for arithmetic operations.",
-        model="gpt-5.2",
+        model="gpt-5-mini",
     )
 
     # Add the calculator tool to the agent
@@ -255,6 +255,10 @@ async def test_tool_output_conversion_bug_two_turn_conversation():
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    os.getenv("CI") == "true",
+    reason="Requires live OpenAI API; skipped on CI to avoid upstream flake.",
+)
 async def test_hosted_tool_output_preservation_multi_turn():
     """
     Integration test for hosted tool output preservation in multi-turn conversations.
@@ -301,7 +305,7 @@ Product Sales:
                 "You are a data search assistant. You MUST use the FileSearch tool to find information. "
                 "Always search files before answering. Be concise in your initial responses."
             ),
-            model="gpt-5.2",
+            model="gpt-5-mini",
             model_settings=ModelSettings(tool_choice="file_search"),
             files_folder=str(temp_dir),
             include_search_results=True,

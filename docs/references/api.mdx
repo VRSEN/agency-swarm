@@ -6,7 +6,7 @@ icon: "book"
 
 ## Agency Class
 
-The Agency class orchestrates a collection of Agent instances based on a defined structure (AgencyChart).
+The Agency class orchestrates a collection of Agent instances based on entry points and communication flows.
 
 ```python
 from agency_swarm import Agency, Agent
@@ -16,14 +16,16 @@ class Agency:
         self,
         *entry_point_agents: Agent,
         communication_flows: list[CommunicationFlowEntry] | None = None,
-        agency_chart: AgencyChart | None = None,
         name: str | None = None,
         shared_instructions: str | None = None,
+        shared_tools: list[Tool] | None = None,
+        shared_tools_folder: str | None = None,
+        shared_files_folder: str | None = None,
+        shared_mcp_servers: list[Any] | None = None,
         send_message_tool_class: type | None = None,
         load_threads_callback: ThreadLoadCallback | None = None,
         save_threads_callback: ThreadSaveCallback | None = None,
         user_context: dict[str, Any] | None = None,
-        **kwargs: Any,
     ):
         """
         Initialize an Agency instance.
@@ -31,14 +33,16 @@ class Agency:
         Parameters:
             *entry_point_agents: Agent instances serving as entry points for external interaction
             communication_flows: Flexible communication flow definitions supporting tuples and AgentFlow objects
-            agency_chart: [DEPRECATED] Legacy structure definition; takes precedence if provided
             name: Optional name for the agency
             shared_instructions: Instruction text or file path applied to every agent
+            shared_tools: Tool instances or BaseTool classes to add to all agents (each agent gets independent copies)
+            shared_tools_folder: Path to folder containing tool files to load and share with all agents
+            shared_files_folder: Path to folder of files to upload and share with all agents via a common vector store
+            shared_mcp_servers: MCP server instances to attach to all agents
             send_message_tool_class: Fallback SendMessage tool class when a communication flow does not define its own
             load_threads_callback: Callable used to load persisted conversation threads
             save_threads_callback: Callable used to save conversation threads
             user_context: Initial shared context accessible to all agents
-            **kwargs: Captures deprecated parameters, emitting warnings when used
         """
 ```
 
@@ -49,12 +53,15 @@ class Agency:
 ### Key Attributes
 
 - **`agents`** (dict[str, Agent]): Dictionary mapping agent names to their instances
-- **`chart`** (AgencyChart): Structure defining agents and their communication paths
 - **`entry_points`** (list[Agent]): Agents designated as entry points for external interaction
 - **`thread_manager`** (ThreadManager): Manager responsible for handling conversation threads
 - **`event_stream_merger`** (EventStreamMerger): Aggregates streaming events from concurrent agent runs
 - **`persistence_hooks`** (PersistenceHooks | None): Optional hooks for loading/saving thread state
 - **`shared_instructions`** (str | None): Instructions prepended to every agent's system prompt
+- **`shared_tools`** (list[Tool] | None): Tool instances or BaseTool classes shared with all agents
+- **`shared_tools_folder`** (str | None): Path to folder containing shared tool files
+- **`shared_files_folder`** (str | None): Path to folder of files shared via a common vector store
+- **`shared_mcp_servers`** (list[Any] | None): MCP server instances attached to all agents
 - **`user_context`** (dict[str, Any]): Shared user-defined context accessible within MasterContext
 - **`send_message_tool_class`** (type | None): Fallback SendMessage tool when no flow-specific tool is set
 
@@ -70,7 +77,6 @@ async def get_response(
     context_override: dict[str, Any] | None = None,
     hooks_override: RunHooks | None = None,
     run_config: RunConfig | None = None,
-    message_files: list[str] | None = None,
     file_ids: list[str] | None = None,
     additional_instructions: str | None = None,
     **kwargs: Any,
@@ -84,7 +90,6 @@ async def get_response(
         context_override: Additional context to pass to the agent run
         hooks_override: Specific hooks to use for this run, overriding agency defaults
         run_config: Configuration for the agent run
-        message_files: Backward compatibility parameter for file attachments
         file_ids: Additional file IDs for the agent run
         additional_instructions: Additional instructions for this run only
         **kwargs: Additional arguments passed to the target agent's get_response
@@ -102,7 +107,6 @@ def get_response_sync(
     context_override: dict[str, Any] | None = None,
     hooks_override: RunHooks | None = None,
     run_config: RunConfig | None = None,
-    message_files: list[str] | None = None,
     file_ids: list[str] | None = None,
     additional_instructions: str | None = None,
     **kwargs: Any,
@@ -116,7 +120,6 @@ def get_response_sync(
         context_override: Additional context to pass to the agent run
         hooks_override: Specific hooks to use for this run, overriding agency defaults
         run_config: Configuration for the agent run
-        message_files: Backward compatibility parameter for file attachments
         file_ids: Additional file IDs for the agent run
         additional_instructions: Additional instructions for this run only
         **kwargs: Additional arguments passed to the target agent's get_response
@@ -134,7 +137,6 @@ def get_response_stream(
     context_override: dict[str, Any] | None = None,
     hooks_override: RunHooks | None = None,
     run_config_override: RunConfig | None = None,
-    message_files: list[str] | None = None,
     file_ids: list[str] | None = None,
     additional_instructions: str | None = None,
     **kwargs: Any,
@@ -148,7 +150,6 @@ def get_response_stream(
         context_override: Additional context for the run
         hooks_override: Specific hooks for this run
         run_config_override: Specific run configuration for this run
-        message_files: Backward compatibility parameter for file attachments
         file_ids: Additional file IDs for the agent run
         additional_instructions: Additional instructions for this run only
         **kwargs: Additional arguments passed to get_response_stream
@@ -179,19 +180,35 @@ def run_fastapi(
     """
 ```
 
-```python get_agency_structure
-def get_agency_structure(
+```python get_agency_graph
+def get_agency_graph(
     self,
     include_tools: bool = True,
 ) -> dict[str, Any]:
     """
-    Returns a ReactFlow-compatible JSON structure representing the agency's organization.
+    Returns a ReactFlow-compatible JSON graph representing the agency's organization.
 
     Parameters:
         include_tools: Whether to include agent tools as separate nodes
 
     Returns:
         dict: ReactFlow-compatible structure with nodes and edges
+    """
+```
+
+```python get_metadata
+def get_metadata(
+    self,
+    include_tools: bool = True,
+) -> dict[str, Any]:
+    """
+    Returns combined graph data and summary metadata for the agency.
+
+    Parameters:
+        include_tools: Whether to include agent tools as separate nodes
+
+    Returns:
+        dict: Graph data plus metadata fields like agencyName, totalAgents, totalTools, agents, entryPoints
     """
 ```
 
@@ -237,44 +254,6 @@ def copilot_demo(
 
 </CodeGroup>
 
-### Deprecated Methods (Backward Compatibility)
-
-<CodeGroup>
-
-```python get_completion
-def get_completion(
-    self,
-    message: str,
-    message_files: list[str] | None = None,
-    yield_messages: bool = False,
-    recipient_agent: str | Agent | None = None,
-    additional_instructions: str | None = None,
-    attachments: list[dict] | None = None,
-    tool_choice: dict | None = None,
-    verbose: bool = False,
-    response_format: dict | None = None,
-    **kwargs: Any,
-) -> str:
-    """
-    [DEPRECATED] Use get_response instead. Returns final text output.
-
-    This method exists only for backward compatibility and will be removed in a
-    future release. Use get_response for new implementations.
-    """
-```
-
-```python get_completion_stream
-def get_completion_stream(self, *args: Any, **kwargs: Any):
-    """
-    [DEPRECATED] Use get_response_stream instead.
-
-    This method is deprecated.
-    Use get_response_stream() for streaming functionality.
-    """
-```
-
-</CodeGroup>
-
 ## Agent Class
 
 The Agent class extends the base `agents.Agent` with capabilities for multi-agent collaboration within an Agency.
@@ -296,8 +275,6 @@ class Agent(BaseAgent[MasterContext]):
             schemas_folder (str | Path | None): Directory containing OpenAPI schemas for tool generation
             api_headers (dict[str, dict[str, str]] | None): Per-schema HTTP headers for generated tools
             api_params (dict[str, dict[str, Any]] | None): Per-schema default parameters for generated tools
-            send_message_tool_class (type | None): [Deprecated] Agent-level override; configure SendMessage tools via
-                `communication_flows` on `Agency` instead
             include_search_results (bool): Include search results in FileSearchTool output (default False)
             validation_attempts (int): Number of retries when output guardrails trigger (default 1)
             throw_input_guardrail_error (bool): Controls input guardrail behavior—False enables friendly mode (guidance as assistant message), True enables strict mode (raises exceptions). Default: False
@@ -324,7 +301,6 @@ class Agent(BaseAgent[MasterContext]):
 - **`schemas_folder`** (str | Path | None): Folder scanned for OpenAPI schemas to auto-generate tools
 - **`api_headers` / `api_params`** (dict): Per-schema metadata applied when generating tools
 - **`description`** (str | None): Agent role description for dynamic send_message tools
-- **`send_message_tool_class`** (type | None): [Deprecated] Agent-level override; use `communication_flows` for tool selection
 - **`include_search_results`** (bool): Whether FileSearchTool responses include citation context
 - **`validation_attempts`** (int): Retry count for output guardrail enforcement
 - **`throw_input_guardrail_error`** (bool): Controls input guardrail mode—False for friendly (guidance as assistant), True for strict (raises exceptions)
@@ -343,7 +319,6 @@ async def get_response(
     context_override: dict[str, Any] | None = None,
     hooks_override: RunHooks | None = None,
     run_config_override: RunConfig | None = None,
-    message_files: list[str] | None = None,
     file_ids: list[str] | None = None,
     additional_instructions: str | None = None,
     agency_context: AgencyContext | None = None,
@@ -358,7 +333,6 @@ async def get_response(
         context_override: Optional context data to override default MasterContext values
         hooks_override: Optional hooks to override default agent hooks
         run_config_override: Optional run configuration settings
-        message_files: DEPRECATED: Use file_ids instead
         file_ids: List of OpenAI file IDs to attach to the message
         additional_instructions: Additional instructions for this run only
         agency_context: Injected AgencyContext (auto-created when running standalone)
@@ -377,7 +351,6 @@ def get_response_stream(
     context_override: dict[str, Any] | None = None,
     hooks_override: RunHooks | None = None,
     run_config_override: RunConfig | None = None,
-    message_files: list[str] | None = None,
     file_ids: list[str] | None = None,
     additional_instructions: str | None = None,
     agency_context: AgencyContext | None = None,
@@ -392,7 +365,6 @@ def get_response_stream(
         context_override: Optional context data to override default values
         hooks_override: Optional hooks to override default agent hooks
         run_config_override: Optional run configuration
-        message_files: DEPRECATED: Use file_ids instead
         file_ids: List of OpenAI file IDs to attach to the message
         additional_instructions: Additional instructions for this run only
         agency_context: Injected AgencyContext (auto-created when running standalone)
@@ -436,8 +408,7 @@ def register_subagent(
 
     Parameters:
         recipient_agent: The Agent instance to register as a recipient
-        send_message_tool_class: Optional custom SendMessage override for this pair (deprecated; prefer
-            assigning tool classes in `communication_flows`)
+        send_message_tool_class: Optional custom SendMessage override for this pair
         runtime_state: Optional runtime state container injected by the owning Agency
 
     Raises:

@@ -4,15 +4,25 @@ import logging
 import time
 import traceback
 import uuid
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Callable, Sequence
 from dataclasses import dataclass, field
 from importlib import metadata
+from pathlib import Path
 
 from ag_ui.core import EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
 from ag_ui.encoder import EventEncoder
-from agents import OpenAIResponsesModel, TResponseInputItem, output_guardrail
+from agents import Model, OpenAIChatCompletionsModel, OpenAIResponsesModel, TResponseInputItem, output_guardrail
 from agents.exceptions import OutputGuardrailTripwireTriggered
 from agents.models._openai_shared import get_default_openai_client
+
+# LiteLLM is optional - only available if openai-agents[litellm] is installed
+try:
+    from agents.extensions.models.litellm_model import LitellmModel
+
+    _LITELLM_AVAILABLE = True
+except ImportError:
+    _LITELLM_AVAILABLE = False
+    LitellmModel = None  # type: ignore[misc, assignment]
 from fastapi import Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -28,6 +38,7 @@ from agency_swarm import (
 from agency_swarm.agent.execution_stream_response import StreamingRunResponse
 from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_urls
 from agency_swarm.integrations.fastapi_utils.logging_middleware import get_logs_endpoint_impl
+from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
 from agency_swarm.messages import MessageFilter, MessageFormatter
 from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
 from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
@@ -39,6 +50,187 @@ from agency_swarm.utils.usage_tracking import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
+    """Apply custom OpenAI client configuration to all agents in the agency.
+
+    Creates a new AsyncOpenAI client with the provided base_url and/or api_key,
+    then updates each agent's model to use this client. This allows per-request
+    client configuration without rebuilding templates.
+
+    Parameters
+    ----------
+    agency : Agency
+        The agency instance to configure.
+    config : ClientConfig
+        Configuration containing base_url and/or api_key overrides.
+    """
+    if config.base_url is None and config.api_key is None and config.litellm_keys is None:
+        return  # Nothing to override
+
+    # Create custom client with overrides
+    client = AsyncOpenAI(
+        api_key=config.api_key,
+        base_url=config.base_url,
+    )
+
+    # Apply to all agents in the agency
+    for agent in agency.agents.values():
+        _apply_client_to_agent(agent, client, config)
+
+
+def _is_litellm_model(model_name: str) -> bool:
+    """Check if a model name is a LiteLLM model (uses litellm/ prefix)."""
+    return model_name.startswith("litellm/")
+
+
+def _is_openai_model_name(model_name: str) -> bool:
+    """Return True if a model name should be treated as OpenAI-compatible.
+
+    The Agents SDK's MultiProvider treats:
+    - no prefix (e.g. "gpt-4o") as OpenAI
+    - "openai/<model>" as OpenAI
+
+    For any other prefix (e.g. "anthropic/<model>"), we should NOT wrap into
+    OpenAIResponsesModel, since that would route through the OpenAI client.
+    """
+    if "/" not in model_name:
+        return True
+    prefix, _rest = model_name.split("/", 1)
+    return prefix == "openai"
+
+
+def _apply_client_to_agent(agent: Agent, client: AsyncOpenAI, config: ClientConfig) -> None:
+    """Apply a custom OpenAI client to an agent's model.
+
+    For OpenAI models, wraps them in OpenAIResponsesModel with the custom client.
+    For LiteLLM models, creates a new LitellmModel with base_url and api_key from config.
+    """
+    model = agent.model
+
+    if isinstance(model, str):
+        if _is_litellm_model(model):
+            _apply_litellm_config(agent, model, config)
+        elif not _is_openai_model_name(model):
+            logger.warning(
+                "Skipping client_config for agent '%s': custom model '%s' is not supported for "
+                "client override (only OpenAI models or 'litellm/' models are supported)",
+                agent.name,
+                model,
+            )
+        else:
+            # String model name - wrap in OpenAIResponsesModel with custom client
+            agent.model = OpenAIResponsesModel(model=model, openai_client=client)
+    elif isinstance(model, OpenAIResponsesModel):
+        if _is_litellm_model(model.model):
+            _apply_litellm_config(agent, model.model, config)
+        elif not _is_openai_model_name(model.model):
+            logger.warning(
+                "Skipping client_config for agent '%s': custom model '%s' is not supported for "
+                "client override (only OpenAI models or 'litellm/' models are supported)",
+                agent.name,
+                model.model,
+            )
+        else:
+            # Create new model instance with custom client, preserving model name
+            agent.model = OpenAIResponsesModel(model=model.model, openai_client=client)
+    elif isinstance(model, OpenAIChatCompletionsModel):
+        if _is_litellm_model(model.model):
+            _apply_litellm_config(agent, model.model, config)
+        elif not _is_openai_model_name(model.model):
+            logger.warning(
+                "Skipping client_config for agent '%s': custom model '%s' is not supported for "
+                "client override (only OpenAI models or 'litellm/' models are supported)",
+                agent.name,
+                model.model,
+            )
+        else:
+            # Create new model instance with custom client, preserving model name
+            agent.model = OpenAIChatCompletionsModel(model=model.model, openai_client=client)
+    elif _LITELLM_AVAILABLE and LitellmModel is not None and isinstance(model, LitellmModel):
+        # Already a LitellmModel instance - create new one with config
+        agent.model = LitellmModel(
+            model=model.model,
+            base_url=config.base_url,
+            api_key=config.api_key,
+        )
+    elif isinstance(model, Model):
+        # For other Model types, try to extract and wrap with OpenAIResponsesModel
+        model_name = getattr(model, "model", None)
+        if isinstance(model_name, str):
+            if _is_litellm_model(model_name):
+                _apply_litellm_config(agent, model_name, config)
+            elif not _is_openai_model_name(model_name):
+                logger.warning(
+                    "Skipping client_config for agent '%s': custom model '%s' is not supported for "
+                    "client override (only OpenAI models or 'litellm/' models are supported)",
+                    agent.name,
+                    model_name,
+                )
+            else:
+                agent.model = OpenAIResponsesModel(model=model_name, openai_client=client)
+        else:
+            logger.warning(
+                f"Cannot apply client config to agent '{agent.name}': unsupported model type {type(model).__name__}"
+            )
+    else:
+        logger.warning(
+            f"Cannot apply client config to agent '{agent.name}': unsupported model type {type(model).__name__}"
+        )
+
+
+def _get_litellm_provider(model_name: str) -> str | None:
+    """Extract provider name from a LiteLLM model string.
+
+    Examples:
+        "litellm/anthropic/claude-sonnet-4" -> "anthropic"
+        "anthropic/claude-sonnet-4" -> "anthropic"
+        "claude-sonnet-4" -> None
+    """
+    # Strip litellm/ prefix if present
+    name = model_name[8:] if model_name.startswith("litellm/") else model_name
+
+    # Provider is the first segment before /
+    if "/" in name:
+        return name.split("/")[0]
+    return None
+
+
+def _apply_litellm_config(agent: Agent, model_name: str, config: ClientConfig) -> None:
+    """Apply config to a LiteLLM model by creating a new LitellmModel instance."""
+    if not _LITELLM_AVAILABLE or LitellmModel is None:
+        logger.warning(
+            f"Cannot apply client config to agent '{agent.name}': LiteLLM model "
+            f"('{model_name}') requires openai-agents[litellm] to be installed"
+        )
+        return
+
+    # Strip the 'litellm/' prefix to get the actual model identifier
+    actual_model = model_name[8:] if model_name.startswith("litellm/") else model_name
+
+    # Determine which API key to use:
+    # 1. Provider-specific key from litellm_keys (if available)
+    # 2. Fall back to generic api_key
+    # 3. None (LiteLLM will use environment variables)
+    api_key = config.api_key
+    if config.litellm_keys:
+        provider = _get_litellm_provider(model_name)
+        if provider:
+            # litellm_keys uses LlmProviders enum as keys (when litellm installed)
+            # Look up by iterating since keys may be enum instances
+            for key, value in config.litellm_keys.items():
+                # Compare by value (works for both enum and string keys)
+                key_str = key.value if hasattr(key, "value") else str(key)
+                if key_str == provider:
+                    api_key = value
+                    break
+
+    agent.model = LitellmModel(
+        model=actual_model,
+        base_url=config.base_url,
+        api_key=api_key,
+    )
 
 
 @dataclass
@@ -99,7 +291,12 @@ def get_verify_token(app_token):
 
 
 # Non‑streaming response endpoint
-def make_response_endpoint(request_model, agency_factory: Callable[..., Agency], verify_token):
+def make_response_endpoint(
+    request_model,
+    agency_factory: Callable[..., Agency],
+    verify_token,
+    allowed_local_dirs: Sequence[str | Path] | None = None,
+):
     async def handler(request: request_model, token: str = Depends(verify_token)):
         if request.chat_history is not None:
             # Chat history is now a flat list
@@ -114,12 +311,17 @@ def make_response_endpoint(request_model, agency_factory: Callable[..., Agency],
         file_ids_map = None
         if request.file_urls is not None:
             try:
-                file_ids_map = await upload_from_urls(request.file_urls)
+                file_ids_map = await upload_from_urls(request.file_urls, allowed_local_dirs=allowed_local_dirs)
                 combined_file_ids = (combined_file_ids or []) + list(file_ids_map.values())
             except Exception as e:
                 return {"error": f"Error downloading file from provided urls: {e}"}
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
+
+        # Apply custom OpenAI client configuration if provided
+        if request.client_config is not None:
+            apply_openai_client_config(agency_instance, request.client_config)
+
         # Attach persistent MCP servers and ensure connections before handling the request
         await attach_persistent_mcp_servers(agency_instance)
 
@@ -166,6 +368,7 @@ def make_stream_endpoint(
     agency_factory: Callable[..., Agency],
     verify_token,
     run_registry: ActiveRunRegistry,
+    allowed_local_dirs: Sequence[str | Path] | None = None,
 ):
     async def handler(
         http_request: Request,
@@ -185,7 +388,7 @@ def make_stream_endpoint(
         file_ids_map = None
         if request.file_urls is not None:
             try:
-                file_ids_map = await upload_from_urls(request.file_urls)
+                file_ids_map = await upload_from_urls(request.file_urls, allowed_local_dirs=allowed_local_dirs)
                 combined_file_ids = (combined_file_ids or []) + list(file_ids_map.values())
             except Exception as e:
                 error_msg = str(e)
@@ -209,6 +412,11 @@ def make_stream_endpoint(
                 )
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
+
+        # Apply custom OpenAI client configuration if provided
+        if request.client_config is not None:
+            apply_openai_client_config(agency_instance, request.client_config)
+
         await attach_persistent_mcp_servers(agency_instance)
 
         # Generate unique run_id for this streaming session
@@ -374,11 +582,39 @@ def make_cancel_endpoint(request_model, verify_token, run_registry: ActiveRunReg
     return handler
 
 
-def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency], verify_token):
+def make_agui_chat_endpoint(
+    request_model,
+    agency_factory: Callable[..., Agency],
+    verify_token,
+    allowed_local_dirs: Sequence[str | Path] | None = None,
+):
     async def handler(request: request_model, token: str = Depends(verify_token)):
         """Accepts AG-UI `RunAgentInput`, returns an AG-UI event stream."""
 
         encoder = EventEncoder()
+
+        combined_file_ids = list(request.file_ids or []) if getattr(request, "file_ids", None) else []
+        if getattr(request, "file_urls", None):
+            try:
+                file_ids_map = await upload_from_urls(request.file_urls, allowed_local_dirs=allowed_local_dirs)
+                combined_file_ids = combined_file_ids + list(file_ids_map.values())
+            except Exception as exc:
+                error_message = f"Error downloading file from provided urls: {exc}"
+                run_started = RunStartedEvent(
+                    type=EventType.RUN_STARTED,
+                    thread_id=request.thread_id,
+                    run_id=request.run_id,
+                )
+                run_error = RunErrorEvent(type=EventType.RUN_ERROR, message=error_message)
+                run_finished = RunFinishedEvent(
+                    type=EventType.RUN_FINISHED,
+                    thread_id=request.thread_id,
+                    run_id=request.run_id,
+                )
+                return StreamingResponse(
+                    (encoder.encode(event) for event in (run_started, run_error, run_finished)),
+                    media_type=encoder.get_content_type(),
+                )
 
         if request.chat_history is not None:
             # Chat history is now a flat list
@@ -410,6 +646,11 @@ def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency]
 
         # Choose / build an agent – here we just create a demo agent each time.
         agency = agency_factory(load_threads_callback=load_callback)
+
+        # Apply custom OpenAI client configuration if provided
+        if request.client_config is not None:
+            apply_openai_client_config(agency, request.client_config)
+
         await attach_persistent_mcp_servers(agency)
 
         async def event_generator() -> AsyncGenerator[str]:
@@ -432,6 +673,7 @@ def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency]
                     message=request.messages[-1].content,
                     context_override=request.user_context,
                     additional_instructions=request.additional_instructions,
+                    file_ids=combined_file_ids or None,
                 ):
                     agui_event = agui_adapter.openai_to_agui_events(
                         event,

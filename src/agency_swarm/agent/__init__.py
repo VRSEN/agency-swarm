@@ -8,13 +8,14 @@ to maintain clean separation of concerns and reduce file sizes.
 from .execution import Execution
 from .initialization import (
     apply_framework_defaults,
-    handle_deprecated_parameters,
+    normalize_agent_tool_definitions,
     separate_kwargs,
     setup_file_manager,
+    validate_no_deprecated_agent_kwargs,
     wrap_input_guardrails,
 )
 from .subagents import register_subagent
-from .tools import add_tool, load_tools_from_folder, parse_schemas, validate_hosted_tools
+from .tools import add_tool, load_tools_from_folder, parse_schemas, validate_hosted_tools, validate_tools
 
 __all__ = [
     # Tool functions
@@ -22,13 +23,15 @@ __all__ = [
     "load_tools_from_folder",
     "parse_schemas",
     "validate_hosted_tools",
+    "validate_tools",
     # Subagent functions
     "register_subagent",
     # Initialization functions
     "apply_framework_defaults",
-    "handle_deprecated_parameters",
+    "normalize_agent_tool_definitions",
     "separate_kwargs",
     "setup_file_manager",
+    "validate_no_deprecated_agent_kwargs",
     "wrap_input_guardrails",
     # Classes for complex state management
     "Execution",

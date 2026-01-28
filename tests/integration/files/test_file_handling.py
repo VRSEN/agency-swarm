@@ -199,7 +199,7 @@ async def _setup_file_search_agent(real_openai_client: AsyncOpenAI, tmp_path: Pa
         instructions="""You are an agent that can read and analyze text files using FileSearch.
         When asked questions about files, always use your FileSearch tool to search through the uploaded documents.
         Be direct and specific in your answers based on what you find in the files.""",
-        model="gpt-5.2",
+        model="gpt-5-mini",
         model_settings=ModelSettings(tool_choice="required"),
         include_search_results=True,
         tool_use_behavior="stop_on_first_tool",
@@ -293,7 +293,7 @@ async def test_files_folder_reuse_without_missing_directory_warning(
         "instructions": "You are a document assistant who relies on FileSearch for answers.",
         "files_folder": str(files_dir),
         "include_search_results": True,
-        "model": "gpt-5.2",
+        "model": "gpt-5-mini",
         "model_settings": ModelSettings(tool_choice="file_search"),
         "tool_use_behavior": "stop_on_first_tool",
     }
@@ -578,6 +578,10 @@ async def test_agent_vision_capabilities(real_openai_client: AsyncOpenAI, tmp_pa
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    os.getenv("CI") == "true",
+    reason="Requires live OpenAI API; skipped on CI to avoid upstream flake.",
+)
 async def test_vector_store_cleanup_on_init(real_openai_client: AsyncOpenAI, tmp_path: Path):
     """Agent initialization synchronizes vector store with local files, removing orphaned files from VS and OpenAI."""
     source_file = Path("tests/data/files/favorite_books.txt")
@@ -596,7 +600,7 @@ async def test_vector_store_cleanup_on_init(real_openai_client: AsyncOpenAI, tmp
         "instructions": "Use FileSearch to answer from documents.",
         "files_folder": str(files_dir),
         "include_search_results": True,
-        "model": "gpt-5.2",
+        "model": "gpt-5-mini",
         "model_settings": ModelSettings(tool_choice="file_search"),
         "tool_use_behavior": "stop_on_first_tool",
     }
@@ -648,8 +652,8 @@ async def test_vector_store_cleanup_on_init(real_openai_client: AsyncOpenAI, tmp
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    os.getenv("GITHUB_ACTIONS") == "true",
-    reason="Observed >60s runtime with real OpenAI; skip on GitHub to avoid flaky slowdowns.",
+    os.getenv("CI") == "true",
+    reason="Requires live OpenAI API; skipped on CI to avoid upstream flake.",
 )
 async def test_file_reupload_on_mtime_update(real_openai_client: AsyncOpenAI, tmp_path: Path):
     """Modifying local file triggers re-upload with a new file_id and VS update."""
@@ -667,7 +671,7 @@ async def test_file_reupload_on_mtime_update(real_openai_client: AsyncOpenAI, tm
         "instructions": "Use FileSearch to answer from documents.",
         "files_folder": str(files_dir),
         "include_search_results": True,
-        "model": "gpt-5.2",
+        "model": "gpt-5-mini",
         "model_settings": ModelSettings(tool_choice="file_search"),
         "tool_use_behavior": "stop_on_first_tool",
     }

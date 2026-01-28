@@ -1,7 +1,7 @@
 """
 Handoffs Example
 
-This example demonstrates a realistic handoff workflow using SendMessageHandoff.
+This example demonstrates a realistic handoff workflow using Handoff.
 
 - DevLead implements features and hands off security-sensitive work to SecurityEngineer (default reminder)
 - SecurityEngineer performs audits and hands off to ComplianceOfficer (reminder disabled)
@@ -23,7 +23,7 @@ from utils import print_history
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 from agency_swarm import Agency, Agent, ModelSettings, function_tool
-from agency_swarm.tools.send_message import SendMessageHandoff
+from agency_swarm.tools.send_message import Handoff
 
 # Setup logging
 logging.basicConfig(level=logging.WARNING)
@@ -65,10 +65,10 @@ def generate_compliance_report(scope: str) -> str:
     return f"Compliance report generated for {scope}: Ready for sign-off; attach to release notes."
 
 
-# By default, to reduce hallucinations, when using SendMessageHandoff, a reminder system message is added to the history.
+# By default, to reduce hallucinations, when using Handoff, a reminder system message is added to the history.
 # You can adjust the reminder message per receiving agent via `Agent.handoff_reminder` or disable it entirely by subclassing.
-class NoReminderHandoff(SendMessageHandoff):
-    """SendMessageHandoff with no reminder."""
+class NoReminderHandoff(Handoff):
+    """Handoff with no reminder."""
 
     add_reminder = False  # True by default
 
@@ -115,9 +115,9 @@ compliance_officer = Agent(
 agency = Agency(
     dev_lead,
     communication_flows=[
-        (dev_lead > security_engineer, SendMessageHandoff),
+        (dev_lead > security_engineer, Handoff),
         (security_engineer > compliance_officer, NoReminderHandoff),
-        (compliance_officer > dev_lead, SendMessageHandoff),
+        (compliance_officer > dev_lead, Handoff),
     ],
     shared_instructions=(
         "Deliver secure, compliant features. Preserve exact tool outputs in responses and include sign-off details."

@@ -1,6 +1,7 @@
 import importlib.abc
 import importlib.util
 import sys
+import textwrap
 from pathlib import Path
 
 import agency_swarm
@@ -45,7 +46,7 @@ def test_integrations_fastapi_imports_without_optional_dependencies(caplog):
 
 
 def test_run_fastapi_creates_new_agency_instance(mocker):
-    agent = Agent(name="HelperAgent", instructions="test", model="gpt-5.2")
+    agent = Agent(name="HelperAgent", instructions="test", model="gpt-5-mini")
     agency = Agency(agent)
 
     captured = {}
@@ -77,8 +78,8 @@ class CustomSendMessage(SendMessage):
 
 
 def test_run_fastapi_preserves_custom_tool_mappings(mocker):
-    sender = Agent(name="A", instructions="test", model="gpt-5.2")
-    recipient = Agent(name="B", instructions="test", model="gpt-5.2")
+    sender = Agent(name="A", instructions="test", model="gpt-5-mini")
+    recipient = Agent(name="B", instructions="test", model="gpt-5-mini")
     agency = Agency(sender, recipient, communication_flows=[(sender, recipient, CustomSendMessage)])
 
     captured = {}
@@ -97,3 +98,69 @@ def test_run_fastapi_preserves_custom_tool_mappings(mocker):
     assert new_agency._communication_tool_classes.get(pair) is CustomSendMessage, (
         "Custom tool mapping was not preserved"
     )
+
+
+def test_run_fastapi_normalizes_relative_shared_folders_for_factory_calls(mocker, tmp_path: Path):
+    """Relative shared_*_folder must be stable across agency_factory call stacks.
+
+    The FastAPI integration calls agency_factory from within the server stack (uvicorn/fastapi),
+    which changes get_external_caller_directory(). We normalize relative shared folders to
+    absolute once when run_fastapi is called, so the rebuilt Agency can still load shared resources.
+    """
+    creator_dir = tmp_path / "creator"
+    creator_dir.mkdir()
+    shared_tools_dir = creator_dir / "shared_tools"
+    shared_tools_dir.mkdir()
+    (shared_tools_dir / "SampleTool.py").write_text(
+        textwrap.dedent(
+            """
+            from agency_swarm.tools import BaseTool
+            from pydantic import Field
+
+            class SampleTool(BaseTool):
+                \"\"\"A sample tool.\"\"\"
+                message: str = Field(..., description="Message to echo")
+
+                def run(self) -> str:
+                    return f"Echo: {self.message}"
+            """
+        ).strip()
+        + "\n"
+    )
+
+    captured: dict[str, object] = {}
+
+    def fake_run_fastapi(*, agencies=None, **_kwargs):
+        captured["factory"] = agencies["agency"]
+        return None
+
+    mocker.patch("agency_swarm.integrations.fastapi.run_fastapi", side_effect=fake_run_fastapi)
+
+    creator_code = textwrap.dedent(
+        """
+        from agency_swarm import Agency, Agent
+        from agency_swarm.agency.helpers import run_fastapi as helpers_run_fastapi
+
+        a = Agent(name="A", instructions="test", model="gpt-5-mini")
+        agency = Agency(a, shared_tools_folder="shared_tools")
+        helpers_run_fastapi(agency)
+        """
+    ).strip()
+    exec(compile(creator_code, str(creator_dir / "create_agency.py"), "exec"), {})
+
+    factory = captured["factory"]
+    assert callable(factory)
+
+    other_dir = tmp_path / "other"
+    other_dir.mkdir()
+    call_code = textwrap.dedent(
+        """
+        agency2 = factory()
+        agent = agency2.agents["A"]
+        tool_names = [getattr(t, "name", None) for t in agent.tools]
+        """
+    ).strip()
+    ns = {"factory": factory}
+    exec(compile(call_code, str(other_dir / "call_factory.py"), "exec"), ns)
+
+    assert "SampleTool" in ns["tool_names"]
