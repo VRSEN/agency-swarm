@@ -158,7 +158,6 @@ async def test_conversation_starter_cache_skips_stream_with_context_override(tmp
     expected_text = extract_final_output_text(cached.items)
     assert expected_text
 
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-invalid")
     stream = agency.get_response_stream(starter, context_override={"user_id": "abc"})
     async for _event in stream:
         pass
