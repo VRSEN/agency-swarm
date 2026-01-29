@@ -177,8 +177,7 @@
                 "pages": [
                   "platform/ai-gateway",
                   "platform/ai-gateway/quickstart",
-                  "platform/ai-gateway/credits-and-pricing",
-                  "platform/ai-gateway/latency-and-limits"
+                  "platform/ai-gateway/credits-and-pricing"
                 ]
               }
             ]
