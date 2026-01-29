@@ -607,7 +607,7 @@ def make_metadata_endpoint(
         if allowed_local_dirs is None:
             metadata_with_version["allowed_local_file_dirs"] = None
         else:
-            normalized_dirs = _normalize_allowed_dirs(allowed_local_dirs, skip_missing=True)
+            normalized_dirs = _normalize_allowed_dirs(allowed_local_dirs, skip_missing=True) or []
             metadata_with_version["allowed_local_file_dirs"] = [str(p) for p in normalized_dirs]
         return metadata_with_version
 
