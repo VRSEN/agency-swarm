@@ -1,9 +1,11 @@
 from .LoadFileAttachment import LoadFileAttachment
 from .PersistentShellTool import PersistentShellTool
+from .PresentFiles import PresentFiles
 
 __all__ = [
     "IPythonInterpreter",
     "LoadFileAttachment",
+    "PresentFiles",
     "PersistentShellTool",
 ]
 
