@@ -149,21 +149,7 @@
         "groups": [
           {
             "group": "Introduction",
-            "pages": [
-              "platform/overview",
-              {
-                "group": "AI Gateway",
-                "icon": "server",
-                "pages": [
-                  "platform/ai-gateway",
-                  "platform/ai-gateway/quickstart",
-                  "platform/ai-gateway/credits-and-pricing",
-                  "platform/ai-gateway/latency-and-limits"
-                ]
-              },
-              "platform/pricing",
-              "platform/how-credits-work"
-            ]
+            "pages": ["platform/overview", "platform/pricing", "platform/how-credits-work"]
           },
           {
             "group": "Integrations",
@@ -183,7 +169,19 @@
           },
           {
             "group": "Additional Features",
-            "pages": ["platform/additional-instructions"]
+            "pages": [
+              "platform/additional-instructions",
+              {
+                "group": "AI Gateway",
+                "icon": "server",
+                "pages": [
+                  "platform/ai-gateway",
+                  "platform/ai-gateway/quickstart",
+                  "platform/ai-gateway/credits-and-pricing",
+                  "platform/ai-gateway/latency-and-limits"
+                ]
+              }
+            ]
           }
         ],
         "openapi": {
