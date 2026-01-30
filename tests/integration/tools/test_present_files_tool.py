@@ -83,8 +83,8 @@ class TestPresentFilesBasics:
             assert isinstance(entry["mime_type"], str)
             assert entry["mime_type"]
             assert entry["size_bytes"] == expected_sizes[entry["name"]]
-        assert Path(entry["path"]).is_relative_to(mnt_dir)
-        assert Path(entry["path"]).name == entry["name"]
+            assert Path(entry["path"]).is_relative_to(mnt_dir)
+            assert Path(entry["path"]).name == entry["name"]
 
     def test_moves_file_to_mnt(self, agent_with_present_files, tmp_path, monkeypatch):
         src_file = tmp_path / "report.pdf"
