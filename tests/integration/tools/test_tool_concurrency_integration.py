@@ -50,7 +50,7 @@ class TestToolConcurrencyEndToEnd:
             def run(self):
                 return f"ParallelTool processed: {self.message}"
 
-        # Create agent with structured output to capture errors
+        # Create agent with structured output for response validation
         agent = Agent(
             name="ConcurrencyTestAgent",
             instructions="""You are a test agent with two tools: SequentialTool and ParallelTool.
@@ -60,6 +60,7 @@ class TestToolConcurrencyEndToEnd:
             2. Try to call ParallelTool with message="test_parallel"
             3. Report the results and any errors that occur
 
+            IMPORTANT: Always call both tools in a single response, not sequentially.
             If you encounter tool concurrency violations, include them in the errors_encountered list.""",
             tools=[SequentialTool, ParallelTool],
             output_type=self.ToolExecutionReport,
@@ -77,19 +78,20 @@ class TestToolConcurrencyEndToEnd:
         output = response.final_output
         assert isinstance(output, self.ToolExecutionReport)
 
-        # Check if concurrency violation was properly detected
-        # One tool should succeed, the other should report a concurrency violation
-        errors = output.errors_encountered
-
-        # Should have at least one concurrency violation error
-        concurrency_errors = [err for err in errors if "concurrency violation" in err.lower()]
-        assert len(concurrency_errors) > 0, f"Expected concurrency violation, but got errors: {errors}"
+        # Check tool outputs directly for concurrency violations; avoid relying on summary wording
+        tool_outputs = [str(item.output) for item in response.new_items if hasattr(item, "output")]
+        concurrency_errors = [out for out in tool_outputs if "concurrency violation" in out.lower()]
+        assert len(concurrency_errors) > 0, f"Expected concurrency violation, but got tool outputs: {tool_outputs}"
 
         # At least one tool should have completed successfully
+        success_markers = (
+            f"{SequentialTool.__name__} completed processing".lower(),
+            f"{ParallelTool.__name__} processed".lower(),
+        )
         successful_results = [
-            result
-            for result in [output.sequential_tool_result, output.parallel_tool_result]
-            if result and "completed" in result.lower() and "error" not in result.lower()
+            output
+            for output in tool_outputs
+            if any(marker in output.lower() for marker in success_markers) and "error" not in output.lower()
         ]
         assert len(successful_results) > 0, "At least one tool should have completed successfully"
 

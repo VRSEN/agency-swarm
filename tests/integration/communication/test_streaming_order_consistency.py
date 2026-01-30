@@ -51,11 +51,12 @@ def _assert_sanitized_history(messages: list[dict[str, Any]]) -> None:
         )
 
 
-def _strip_optional_initial_main_message(
+def _strip_optional_initial_message_output(
     flow: list[tuple[str, str, str | None]],
+    agent_name: str,
 ) -> list[tuple[str, str, str | None]]:
-    """Allow optional initial MainAgent message_output_item after first tool_call."""
-    if len(flow) >= 2 and flow[1] == ("message_output_item", "MainAgent", None):
+    """Allow optional initial agent message_output_item after first tool_call."""
+    if len(flow) >= 2 and flow[1] == ("message_output_item", agent_name, None):
         return [flow[0], *flow[2:]]
     return flow
 
@@ -209,7 +210,7 @@ async def test_full_streaming_flow_hardcoded_sequence(
         if t in {"function_call", "function_call_output"} or role == "assistant":
             comparable.append(m)
 
-    expected_without_main_message = _strip_optional_initial_main_message(expected_flow)
+    expected_without_main_message = _strip_optional_initial_message_output(expected_flow, "MainAgent")
     assert stream_items in (expected_flow, expected_without_main_message), (
         "Stream flow mismatch:\n"
         f" got={stream_items}\n"
@@ -451,9 +452,10 @@ def _assert_tool_call_recorded(
 
 
 # Expected flow for parallel sub-agent calls (to different agents)
+# NOTE: No ACK message expected - we don't instruct the agent to emit one,
+# keeping the expected flow strict and deterministic.
 EXPECTED_FLOW_PARALLEL: list[tuple[str, str, str | None]] = [
     ("tool_call_item", "Orchestrator", "get_market_data"),  # Get initial data arrives first via tool_called
-    ("message_output_item", "Orchestrator", None),  # ACK
     ("tool_call_output_item", "Orchestrator", None),
     ("tool_call_item", "Orchestrator", "send_message"),
     ("tool_call_item", "ProcessorA", "process_data"),  # ProcessorA works
@@ -478,7 +480,7 @@ async def test_parallel_subagent_calls() -> None:
         name="Orchestrator",
         description="Main orchestrator",
         instructions=(
-            "First say 'ACK'. Then call get_market_data('DATA'). "
+            "Call get_market_data('DATA'). "
             "Then use send_message to ask ProcessorA to process the data. "
             "After ProcessorA responds, use send_message to ask ProcessorB to validate. "
             "Finally, use combine_results tool and respond 'All done'."
@@ -491,7 +493,7 @@ async def test_parallel_subagent_calls() -> None:
         name="ProcessorA",
         description="Data processor",
         instructions="When asked: use process_data tool and respond 'ProcessorA complete'.",
-        model_settings=ModelSettings(temperature=0.0),
+        model_settings=ModelSettings(temperature=0.0, tool_choice="required"),
         tools=[process_data],
     )
 
@@ -499,7 +501,7 @@ async def test_parallel_subagent_calls() -> None:
         name="ProcessorB",
         description="Result validator",
         instructions="When asked: use validate_result tool and respond 'ProcessorB complete'.",
-        model_settings=ModelSettings(temperature=0.0),
+        model_settings=ModelSettings(temperature=0.0, tool_choice="required"),
         tools=[validate_result],
     )
 
@@ -527,7 +529,7 @@ async def test_parallel_subagent_calls() -> None:
             if isinstance(evt_type, str) and isinstance(agent_name, str):
                 stream_items.append((evt_type, agent_name, tool_name))
 
-    # Verify stream matches expected
+    # Verify stream matches expected (strict assertion)
     if stream_items != EXPECTED_FLOW_PARALLEL:
         logger.error(
             "Parallel sub-agent stream mismatch",
