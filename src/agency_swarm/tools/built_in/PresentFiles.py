@@ -29,6 +29,23 @@ def _resolve_path(path_value: str) -> Path:
     return (Path.cwd() / candidate).resolve()
 
 
+def _sanitize_anchor(anchor: str) -> str:
+    cleaned = anchor.strip("\\/").replace(":", "")
+    if not cleaned:
+        return "abs"
+    return cleaned.replace("\\", "_").replace("/", "_")
+
+
+def _build_mnt_destination(resolved_path: Path, mnt_dir: Path) -> Path:
+    cwd = Path.cwd().resolve()
+    try:
+        relative_path = resolved_path.relative_to(cwd)
+        return mnt_dir / relative_path
+    except ValueError:
+        anchor_label = _sanitize_anchor(resolved_path.anchor)
+        return mnt_dir / anchor_label / Path(*resolved_path.parts[1:])
+
+
 def _mime_type_for_path(path_value: Path) -> str:
     mime_type, _ = mimetypes.guess_type(path_value.name)
     return mime_type or "application/octet-stream"
@@ -81,7 +98,8 @@ class PresentFiles(BaseTool):  # type: ignore[misc]
                     final_path = resolved_path
                 else:
                     mnt_dir.mkdir(parents=True, exist_ok=True)
-                    destination = mnt_dir / resolved_path.name
+                    destination = _build_mnt_destination(resolved_path, mnt_dir)
+                    destination.parent.mkdir(parents=True, exist_ok=True)
                     if destination.exists():
                         if destination.is_dir():
                             errors.append(

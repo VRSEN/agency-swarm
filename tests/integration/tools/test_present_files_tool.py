@@ -8,6 +8,20 @@ from agency_swarm import Agent
 from agency_swarm.tools.built_in import PresentFiles
 
 
+def _expected_mnt_path(source_path: Path, mnt_dir: Path) -> Path:
+    cwd = Path.cwd().resolve()
+    resolved = source_path.resolve()
+    try:
+        relative = resolved.relative_to(cwd)
+        return mnt_dir / relative
+    except ValueError:
+        anchor = resolved.anchor.strip("\\/").replace(":", "")
+        if not anchor:
+            anchor = "abs"
+        anchor = anchor.replace("\\", "_").replace("/", "_")
+        return mnt_dir / anchor / Path(*resolved.parts[1:])
+
+
 @pytest.fixture
 def agent_with_present_files():
     """Create an agent with PresentFiles tool."""
@@ -69,7 +83,8 @@ class TestPresentFilesBasics:
             assert isinstance(entry["mime_type"], str)
             assert entry["mime_type"]
             assert entry["size_bytes"] == expected_sizes[entry["name"]]
-            assert Path(entry["path"]).parent == mnt_dir
+        assert Path(entry["path"]).is_relative_to(mnt_dir)
+        assert Path(entry["path"]).name == entry["name"]
 
     def test_moves_file_to_mnt(self, agent_with_present_files, tmp_path, monkeypatch):
         src_file = tmp_path / "report.pdf"
@@ -94,7 +109,7 @@ class TestPresentFilesBasics:
 
         dest_path = Path(file_entry["path"])
         assert dest_path.exists()
-        assert dest_path.parent == mnt_dir
+        assert dest_path.is_relative_to(mnt_dir)
         assert not src_file.exists()
 
     def test_keeps_file_already_in_mnt(self, agent_with_present_files, tmp_path, monkeypatch):
@@ -118,11 +133,12 @@ class TestPresentFilesBasics:
     def test_overwrites_existing_file_in_mnt(self, agent_with_present_files, tmp_path, monkeypatch):
         mnt_dir = tmp_path / "mnt"
         mnt_dir.mkdir()
-        existing_file = mnt_dir / "report.pdf"
-        existing_file.write_text("old")
         src_file = tmp_path / "report.pdf"
         src_file.write_text("new")
         monkeypatch.setenv("MNT_DIR", str(mnt_dir))
+        existing_file = _expected_mnt_path(src_file, mnt_dir)
+        existing_file.parent.mkdir(parents=True, exist_ok=True)
+        existing_file.write_text("old")
 
         tool = PresentFiles(files=[str(src_file)])
         tool._caller_agent = agent_with_present_files
@@ -135,6 +151,32 @@ class TestPresentFilesBasics:
         assert Path(file_entry["path"]).resolve() == existing_file.resolve()
         assert existing_file.read_text() == "new"
         assert not src_file.exists()
+
+    def test_preserves_structure_for_same_basename(self, agent_with_present_files, tmp_path, monkeypatch):
+        mnt_dir = tmp_path / "mnt"
+        monkeypatch.setenv("MNT_DIR", str(mnt_dir))
+
+        dir_a = tmp_path / "a"
+        dir_b = tmp_path / "b"
+        dir_a.mkdir()
+        dir_b.mkdir()
+        file_a = dir_a / "report.pdf"
+        file_b = dir_b / "report.pdf"
+        file_a.write_text("alpha")
+        file_b.write_text("beta")
+
+        tool = PresentFiles(files=[str(file_a), str(file_b)])
+        tool._caller_agent = agent_with_present_files
+
+        result = tool.run()
+
+        assert result.get("errors") == []
+        returned_files = result.get("files", [])
+        assert len(returned_files) == 2
+        paths = {Path(entry["path"]).resolve() for entry in returned_files}
+        assert len(paths) == 2
+        assert _expected_mnt_path(file_a, mnt_dir) in paths
+        assert _expected_mnt_path(file_b, mnt_dir) in paths
 
 
 class TestPresentFilesErrorHandling:
@@ -182,7 +224,7 @@ class TestPresentFilesErrorHandling:
         assert result.get("files") == []
         assert len(result.get("errors", [])) == 1
         assert "exceeds" in result["errors"][0].lower()
-        moved_file = mnt_dir / "large.bin"
+        moved_file = _expected_mnt_path(large_file, mnt_dir)
         assert moved_file.exists()
         assert not large_file.exists()
 
