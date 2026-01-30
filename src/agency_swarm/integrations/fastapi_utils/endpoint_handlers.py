@@ -895,7 +895,8 @@ def _build_message_with_local_attachments(
     message: str,
     local_attachment_items: Sequence[tuple[str, str | None]],
 ) -> list[TResponseInputItem]:
-    system_message: TResponseInputItem = {
+    # System message with custom metadata field
+    system_message = {
         "role": "system",
         "content": (
             "SYSTEM MESSAGE. DO NOT IGNORE THIS MESSAGE:\n"
@@ -904,4 +905,4 @@ def _build_message_with_local_attachments(
         "message_origin": "local_attachment_paths",
     }
     user_message: TResponseInputItem = {"role": "user", "content": message}
-    return [system_message, user_message]
+    return [system_message, user_message]  # type: ignore[list-item]
