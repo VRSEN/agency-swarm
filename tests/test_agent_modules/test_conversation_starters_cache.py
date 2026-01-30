@@ -1,16 +1,27 @@
+from collections.abc import AsyncIterator
+
 import pytest
-from agents.items import HandoffOutputItem
+from agents import Tool
+from agents.agent_output import AgentOutputSchemaBase
+from agents.handoffs import Handoff as AgentsHandoff
+from agents.items import HandoffOutputItem, ModelResponse, TResponseInputItem, TResponseStreamEvent
+from agents.lifecycle import RunHooksBase
+from agents.model_settings import ModelSettings
+from agents.models.interface import Model, ModelTracing
+from openai.types.responses.response_prompt_param import ResponsePromptParam
 
 from agency_swarm import Agency, Agent, GuardrailFunctionOutput, RunContextWrapper, input_guardrail, output_guardrail
-from agency_swarm.agent.context_types import AgentRuntimeState
+from agency_swarm.agent.context_types import AgencyContext, AgentRuntimeState
 from agency_swarm.agent.conversation_starters_cache import (
     build_run_items_from_cached,
     compute_starter_cache_fingerprint,
     is_simple_text_message,
     load_cached_starter,
 )
+from agency_swarm.context import MasterContext
 from agency_swarm.tools.send_message import Handoff
-from tests.deterministic_model import DeterministicModel
+from agency_swarm.utils.thread import ThreadManager
+from tests.deterministic_model import DeterministicModel, _build_message_response, _stream_text_events
 
 
 @input_guardrail(name="RequireSupportPrefix")
@@ -23,6 +34,141 @@ def require_support_prefix(
 @output_guardrail(name="BlockEmails")
 def block_emails(context: RunContextWrapper, agent: Agent, response_text: str) -> GuardrailFunctionOutput:
     return GuardrailFunctionOutput(output_info="", tripwire_triggered=False)
+
+
+class SystemInstructionsEchoModel(Model):
+    def __init__(self, model: str = "test-system-instructions") -> None:
+        self.model = model
+
+    async def get_response(
+        self,
+        system_instructions: str | None,
+        input: str | list[TResponseInputItem],
+        model_settings: ModelSettings,
+        tools: list[Tool],
+        output_schema: AgentOutputSchemaBase | None,
+        handoffs: list[AgentsHandoff],
+        tracing: ModelTracing,
+        *,
+        previous_response_id: str | None,
+        conversation_id: str | None,
+        prompt: ResponsePromptParam | None,
+    ) -> ModelResponse:
+        text = system_instructions or ""
+        return _build_message_response(text, self.model)
+
+    def stream_response(
+        self,
+        system_instructions: str | None,
+        input: str | list[TResponseInputItem],
+        model_settings: ModelSettings,
+        tools: list[Tool],
+        output_schema: AgentOutputSchemaBase | None,
+        handoffs: list[AgentsHandoff],
+        tracing: ModelTracing,
+        *,
+        previous_response_id: str | None,
+        conversation_id: str | None,
+        prompt: ResponsePromptParam | None,
+    ) -> AsyncIterator[TResponseStreamEvent]:
+        text = system_instructions or ""
+        return _stream_text_events(text, self.model)
+
+
+class RecordingHooks(RunHooksBase[MasterContext, Agent]):
+    def __init__(self) -> None:
+        self.agent_started = 0
+
+    async def on_agent_start(self, context: RunContextWrapper[MasterContext], agent: Agent) -> None:
+        self.agent_started += 1
+
+
+def _build_minimal_context(agent: Agent, shared_instructions: str | None) -> AgencyContext:
+    return AgencyContext(
+        agency_instance=None,
+        thread_manager=ThreadManager(),
+        runtime_state=AgentRuntimeState(agent.tool_concurrency_manager),
+        shared_instructions=shared_instructions,
+    )
+
+
+@pytest.mark.asyncio
+async def test_starter_cache_respects_shared_instructions(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AGENCY_SWARM_CHATS_DIR", str(tmp_path))
+    starter = "Hello starter"
+    agent = Agent(
+        name="CacheAgent",
+        instructions="Base instructions.",
+        model=SystemInstructionsEchoModel(),
+        conversation_starters=[starter],
+        cache_conversation_starters=True,
+    )
+
+    context_a = _build_minimal_context(agent, "Shared A")
+    result_a = await agent.get_response(starter, agency_context=context_a)
+    assert isinstance(result_a.final_output, str)
+    assert "Shared A" in result_a.final_output
+
+    context_b = _build_minimal_context(agent, "Shared B")
+    result_b = await agent.get_response(starter, agency_context=context_b)
+    assert isinstance(result_b.final_output, str)
+    assert "Shared B" in result_b.final_output
+
+
+@pytest.mark.asyncio
+async def test_starter_cache_reload_keeps_shared_instructions(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AGENCY_SWARM_CHATS_DIR", str(tmp_path))
+    starter = "Hello starter"
+    shared = "Shared instructions"
+    agent = Agent(
+        name="CacheAgent",
+        instructions="Base instructions.",
+        model=SystemInstructionsEchoModel(),
+        conversation_starters=[starter],
+        cache_conversation_starters=True,
+    )
+
+    context = _build_minimal_context(agent, shared)
+    await agent.get_response(starter, agency_context=context)
+
+    reloaded = Agent(
+        name="CacheAgent",
+        instructions="Base instructions.",
+        model=SystemInstructionsEchoModel(),
+        conversation_starters=[starter],
+        cache_conversation_starters=True,
+    )
+    reloaded.refresh_conversation_starters_cache(shared_instructions=shared)
+
+    cached = load_cached_starter(
+        reloaded.name,
+        starter,
+        expected_fingerprint=reloaded._conversation_starters_fingerprint,
+    )
+
+    assert cached is not None
+
+
+@pytest.mark.asyncio
+async def test_starter_cache_skips_hooks_override(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AGENCY_SWARM_CHATS_DIR", str(tmp_path))
+    starter = "Hello starter"
+    agent = Agent(
+        name="CacheAgent",
+        instructions="Base instructions.",
+        model=SystemInstructionsEchoModel(),
+        conversation_starters=[starter],
+        cache_conversation_starters=True,
+    )
+
+    first_context = _build_minimal_context(agent, None)
+    await agent.get_response(starter, agency_context=first_context)
+
+    hooks = RecordingHooks()
+    second_context = _build_minimal_context(agent, None)
+    await agent.get_response(starter, agency_context=second_context, hooks_override=hooks)
+
+    assert hooks.agent_started >= 1
 
 
 def test_is_simple_text_message_requires_single_user_item() -> None:

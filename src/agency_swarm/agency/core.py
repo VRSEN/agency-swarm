@@ -192,7 +192,10 @@ class Agency:
         apply_shared_resources(self)
         for agent_name, agent_instance in self.agents.items():
             runtime_state = self._agent_runtime_state.get(agent_name)
-            agent_instance.refresh_conversation_starters_cache(runtime_state=runtime_state)
+            agent_instance.refresh_conversation_starters_cache(
+                runtime_state=runtime_state,
+                shared_instructions=self.shared_instructions,
+            )
         logger.info("Agency initialization complete.")
         self._schedule_starter_cache_warmup()
 

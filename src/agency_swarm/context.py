@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
     from .agent.context_types import AgentRuntimeState
     from .agent.core import Agent
+    from .streaming.utils import StreamingContext
     from .utils.thread import ThreadManager
 
 logger = logging.getLogger(__name__)
@@ -37,7 +38,7 @@ class MasterContext:
     _current_agent_run_id: str | None = None  # Current agent run ID for tracking
     _parent_run_id: str | None = None  # Parent run ID for nested agent calls
     _is_streaming: bool = False  # Flag to indicate if we're in streaming mode
-    _streaming_context: Any = None  # Streaming context for passing state
+    _streaming_context: "StreamingContext | None" = None  # Streaming context for passing state
     # Internal: tuples of (model_name, response) from sub-agents for per-model cost calculation
     _sub_agent_raw_responses: list[tuple[str | None, "ModelResponse"]] = field(default_factory=list)
 

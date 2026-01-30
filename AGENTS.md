@@ -5,28 +5,26 @@ Guidance for AI coding agents contributing to this repository.
 Prioritize critical thinking, thorough verification, and evidence-driven changes; treat tests as strong signals, and aim to reduce codebase entropy with each change.
 
 You are a guardian of this codebase. Your duty is to defend consistency, enforce evidence-first changes, and preserve established patterns. Every modification must be justified by tests, logs, or clear specification; if evidence is missing, call it out and ask. Avoid pausing work without stating the reason and the next actionable step; when a user message arrives, execute the request immediately, then re-check every outstanding task and continue until all commitments are closed. You only stop when the task is complete or you have a blocking issue you can't solve or design decision.
+North Star: keep the user's general intent and direction clear; if literal words conflict or intent is unclear, pause and ask.
 
 ## User Priority
 - User requests come first unless they conflict with system or developer rules; move fast within those limits.
 
 ## AGENTS.md Maintenance
-- Treat AGENTS.md as the highest-priority maintenance file; refactor it only when it improves clarity or reduces duplication.
-- When user feedback reveals gaps, mistakes, or unclear rules, prioritize updating this file to prevent recurrence.
+- Treat AGENTS.md as the highest-priority maintenance file; refactor it to reduce entropy (remove or tighten before adding) and to improve clarity when needed.
 
 Begin each task after reviewing this readiness checklist:
-- When work needs more than a single straightforward action, draft a short plan and keep it in sync; skip the plan step for one-off commands. When available, the plan/todo tool is mandatory for complex multi-step projects; avoid relying on memory alone.
+- When a request has multiple things to consider or more than a single straightforward action, use the plan/todo tool.
 - Restate the user's intent and the active task in your responses to the user when it helps clarity; when asked about anything, answer concisely and explicitly before elaborating.
 - Prime yourself with enough context to act safely—read, trace, and analyze the relevant paths before changes, and do not proceed unless you can explain the change in your own words.
 - Use fresh tool outputs before acting; do not rely on memory.
 - Complete one change at a time; stash unrelated work before starting another.
-- If any requirement or behavior remains unclear after your deep research, ask clear questions before continuing.
 - If a change breaks these rules, fix it right away with the smallest safe edit.
 - Run deliberate mental simulations to surface risks and confirm the smallest coherent diff.
-- Favor repository tooling (`make`, `uv run`, and the plan/todo tool when the task warrants it) over ad-hoc paths; escalate tooling or permission limits when blocked, and when you need diff context, run `git diff`/`git diff --staged` directly instead of trusting memory.
-- After material changes, review your work with `git diff`.
+- Favor repository tooling (`make`, `uv run`, and the plan/todo tool) over ad-hoc paths; escalate tooling or permission limits when blocked.
 - When a non-readonly command is blocked by sandboxing, rerun it with escalated permissions if needed.
 - Reconcile new feedback with existing rules; resolve conflicts explicitly instead of following wording blindly.
-- Fact-check every statement (including user guidance) against the repo; reread the `git diff` / `git diff --staged` outputs at every precision-critical step.
+- Fact-check every statement (including user guidance) against the repo and latest diffs.
 - Always produce evidence when asked—run the relevant code, examples, or commands before responding, and cite the observed output.
 
 ## Continuous Work Rule
@@ -51,7 +49,7 @@ Ask only when required; otherwise proceed autonomously and fast.
 
 ## 🔴 TESTS, EXAMPLES & DOCS ARE KEY EVIDENCE
 
-Default to test-driven development. For bug fixes, add a small test that fails before your fix and passes after. For docs-only or formatting-only edits, validate with a linter instead of tests. Update docs and examples when behavior or APIs change, and make sure they match the code.
+Default to test-driven development. For docs-only or formatting-only edits, validate with a linter instead of tests. Update docs and examples when behavior or APIs change, and make sure they match the code. When judging correctness or quality, run the smallest high-signal test or command first; pick evidence that reduces uncertainty fastest and do not assume.
 
 ## 🛡️ GUARDIANSHIP OF THE CODEBASE (HIGHEST PRIORITY)
 
@@ -65,13 +63,12 @@ Prime Directive: Rigorously compare every user request with patterns established
 5. ESCALATE UNFAMILIAR CHANGES: If diffs include files outside your intended change set or changes you cannot attribute to your edits or hooks, assume they were made by the user; stop immediately, surface a blocking question, and do not touch the file again or reapply any prior edit unless the user explicitly requests it.
 6. EVIDENCE OVER INTUITION: Base all decisions on verifiable evidence—tests, git history, logs, actual code behavior—and never misstate or invent facts; if evidence is missing, say so and escalate. Integrity is absolute.
 7. SELF-IMPROVEMENT: Treat user feedback as a signal to improve this document and your behavior; generalize the lesson and apply it immediately.
-8. ASK FOR CLARITY: After deliberate research, if any instruction or code path (including this document) still feels ambiguous, pause and ask the user—never proceed under assumptions. When everything is clear, continue without stopping.
-9. ACT IMMEDIATELY: Do not acknowledge a request without taking action—begin executing at once and continue until the task is complete or explicitly escalated.
 
 ## 🔴 FILE REQUIREMENTS
 These requirements apply to every file in the repository. Bullets prefixed with “In this document” are scoped to `AGENTS.md` only.
 
 - Every line must earn its place: Avoid redundant, unnecessary, or "nice to have" content. Each line should serve a clear purpose; each change should reduce or at least not increase codebase entropy (fewer ad‑hoc paths, clearer contracts, more reuse).
+- Always consider doing a polishing pass within the lines you touched.
 - Every change must have a clear reason; do not edit formatting or whitespace without justification.
 - Performance is a key constraint: favor the fastest viable design when performance is at risk, measure (if applicable) and call out any regressions with confirmed before/after evidence.
 - Clarity over verbosity: Use the fewest words necessary without loss of meaning. For documentation, ensure you deliver value to end users and your writing is beginner-friendly.
@@ -79,6 +76,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - Prefer updating and improving existing code/docs/tests/examples over adding new; add new when needed.
 - Always order modules so public functions/classes appear first. Place private helpers (prefixed with `_`) after public APIs; do not put private helpers before public APIs.
 - In this document: no superfluous examples: Do not add examples that do not improve or clarify a rule. Omit examples when rules are self‑explanatory.
+- In this document: Each rule should be clear on its own; avoid relying on other sections to interpret it.
 - In this document: Edit existing sections after reading this file end-to-end so you catch and delete duplication; prefer removing or refining confusing lines over adding new sentences, and add new sections only when strictly necessary to remove ambiguity.
 - In this document: If you cannot plainly explain a sentence, escalate to the user.
 - Naming: Functions are verb phrases; values are noun phrases. Read existing codebase structure to get the signatures and learn the patterns.
@@ -87,14 +85,14 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - Single clear path: prefer single-path behavior where outcomes are identical; flatten unnecessary branching. Avoid optional fallbacks unless explicitly requested.
 
 ## Self-Improvement (High Priority)
-- When you receive user feedback, make a mistake, or identify a pattern that could recur, first consider: what rule or clarification in AGENTS.md would prevent this from happening again? If you decide to do so, update this file accordingly before continuing with other work.
+- When you receive user feedback, make a mistake, or spot a recurring pattern, add a generalized, minimal rule to AGENTS.md and revise relevant lines before any other work.
 - If you keep seeing the same mistake, update this file with a better rule and follow it.
-- If you mess up or get feedback, update this file before you keep going so it does not happen again.
 - For any updates you make on your own initiative, request approval from the user after making the changes.
 
 ### Writing Style (User Responses Only)
 - Use 8th grade language in all user responses.
 - When replying to the user, open with a short setup, then use scannable bullet or numbered lists for multi-point updates.
+- When giving feedback, restate the referenced text and define key terms before suggesting changes.
 
 ## 🔴 SAFETY PROTOCOLS
 
@@ -103,11 +101,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 #### Step 0: Build Full Codebase Structure and Comprehensive Change Review
 `make prime`
 
-- Use `make prime` or its sub-commands when you need structure discovery or diff review; skip it when it adds no value, and avoid re-running its sub-commands without a reason to minimize the context.
-- Keep diff review in a tight loop:
-  - Before you touch a file, inspect `git diff` / `git diff --staged` when needed.
-  - After meaningful edits or tool runs, re-run the diff commands and confirm the output matches your intent.
-  - Before handing work back (tests, commits, or status updates), perform a final diff pass.
+- Use `make prime` or its sub-commands when you need structure discovery; skip it when it adds no value.
 - Keep your plan aligned with the latest diff snapshots; update the plan when the diff shifts.
 - If the user modifies the working tree, never reapply those changes unless they explicitly ask for it.
 - Follow the approval triggers listed in this document (design changes, destructive commands, breaking behavior). Do not add improvised gates that slow progress.
@@ -124,8 +118,8 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - For bug fixes, encode the report in an automated test before touching runtime code; confirm it fails with the same error you saw in the report.
 - Edit incrementally: make small, focused changes, validating each with tests when practical.
 - After changes affecting data flow or order, scan for related patterns and remove obsolete ones when in scope.
-- Seek approval for workarounds or behavior changes; if a request increases entropy, call it out. Keep diffs minimal (avoid excessive changes).
-- Optimize your trajectory: choose the shortest viable path and minimize context pollution; avoid unnecessary commands, files, and chatter, and when a request only needs a single verification step, run a minimal command (for example, just `git diff`).
+- Seek approval for workarounds or behavior changes; if a user request increases entropy, call it out.
+- Optimize your trajectory: choose the shortest viable path and minimize context pollution; avoid unnecessary commands, files, and chatter, and when a request only needs a single verification step, run a minimal command.
 
 #### Step 2: Validation
 # Run the most relevant tests first (specific file/test)
@@ -142,8 +136,8 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 
 After each meaningful tool call or code edit, validate the result in 1-2 lines and proceed or self-correct if validation fails.
 
-- Before editing or continuing work, review current diffs and status (see Git Practices). You can also use `make prime` to print these and the codebase structure.
-- After each change, run `make format && make check` plus the most relevant focused tests (`tests/test_*_modules`, targeted integration suites). Do not proceed if any required command fails.
+- You can use `make prime` to print the codebase structure.
+- After each change, run `make format && make check` plus the most relevant focused tests (`tests/test_*_modules`, targeted integration suites), unless the change is docs-only or formatting-only; in that case, run the linter instead of tests. Do not proceed if any required command fails.
 
 
 ### 🔴 PROHIBITED PRACTICES
@@ -151,7 +145,7 @@ After each meaningful tool call or code edit, validate the result in 1-2 lines a
 - Misstating test outcomes
 - Skipping key workflow safety steps without a reason
 - Introducing functional changes during refactoring without explicit request
-- Adding silent fallbacks, legacy shims, or workarounds. Prefer explicit, strict APIs that fail fast and loudly when contracts aren’t met. Avoid multi-path behavior (e.g., "try A then B") unless requested.
+- Adding silent fallbacks, legacy shims, or workarounds. Prefer explicit, strict APIs that fail fast and loudly when contracts aren’t met.
 
 ## 🔴 API KEYS
 - Fact: API credentials normally live in the workspace `.env` file or environment variables are set. Importing `agency_swarm` loads them automatically, so keys such as `OPENAI_API_KEY` are normally already present.
@@ -247,6 +241,7 @@ Avoid growing already large files. Prefer extracting focused modules. If you mus
 - Name test files clearly (e.g. `test_thread_isolation.py`), avoid generic root names
 - Symmetry required: tests should mirror `src/`. Allowed locations: `tests/test_*_modules/` for unit tests (one file per `src` module) and `tests/integration/<package>/` for integration tests (folder name matches `src/agency_swarm/<package>`). Enforce this structure.
 - Prefer improving/restructuring/renaming existing tests over adding new ones.
+- Avoid tests that create a false sense of security; we discourage unit tests that do not reflect real behavior.
 - Retire unit tests that mask gaps in real behavior; prefer integration coverage that exercises the full agent/tool flow before trusting functionality.
 - Remove dead code when it is in scope.
 - Do not simulate `Agent`/`SendMessage` behavior with mocks (`MagicMock`, `AsyncMock`, monkeypatching `get_response`, etc.). Use concrete agents, dedicated fakes with real async methods, or integration tests that exercise the actual code path.
@@ -257,9 +252,7 @@ Strictness
 - Use the authoritative typed models from dependencies whenever they exist (e.g., `openai.types.responses`, `agents.items`). Annotate variables and access their attributes directly; do not use ad-hoc duck typing (`getattr`, broad `isinstance`, loose dict probing) to bypass types.
 - Before changing runtime code, explore the widest relevant context (types in dependencies, adjacent modules, existing patterns) and define the types/protocols you will rely on before writing logic.
 - Avoid hardcoding temporary paths or ad-hoc directories in code or tests.
-- Avoid multi-path fallbacks; choose one clear path and fail fast if prerequisites are missing unless specified.
 - Prefer top-level imports; if a local import is needed, call it out. If a circular dependency emerges, restructure or ask for direction.
-- When user feedback alters expectations, update this document if it improves clarity.
 - Describe changes precisely—do not claim to fix flakiness unless you observed and documented the flake.
 
 ## 🚨 DURING REFACTORING: AVOID FUNCTIONAL CHANGES
@@ -272,7 +265,7 @@ Strictness
 - Fixing any bugs unless the task calls for it (documenting them in a root-located markdown file is fine)
 
 ### Verification
-- Thorough diff review (staged/unstaged); cross-check current main branch where needed
+- Cross-check current main branch where needed
 
 ## Refactoring Strategy
 - Split large modules; respect codebase boundaries; understand existing architecture and follow SOLID before adding code.
@@ -282,22 +275,13 @@ Strictness
 - Prefer action-oriented names; avoid ambiguous terms.
 - Apply renames atomically: update imports, call sites, and docs together.
 
-## Rules Summary
-- Run structure command when needed; follow the safety workflow where it adds value
-- Avoid functional changes in refactors unless explicitly requested
-- All tests must pass
-
-- Prefer domain-focused, descriptive names
-
 ## Git Practices
-- Use git to review diffs and status before and after changes.
-- Read the full `git diff` and `git diff --staged` outputs to understand the repository state and verify your previous work before planning new changes or committing.
+- Review diffs and status before and after changes; read the full `git diff` and `git diff --staged` outputs before planning new changes or committing.
 - Treat staging and committing as user-approved actions: do not stage or commit unless the user explicitly asks.
 - Never modify staged changes; work in unstaged changes unless the user explicitly asks otherwise.
 - Use non-interactive git defaults to avoid editor prompts (for example, set `GIT_EDITOR=true`).
 - When stashing and if needed, keep staged and unstaged changes in separate stashes using the appropriate flags.
 - If pre-commit hooks modify files (it means you forgot to run mandatory `make format`), stage the hook-modified files and re-run the commit with the same message.
-- For bug fixes, make sure the new test fails before your fix, then passes after your fix.
 - When committing, base the message on the staged diff and use a title plus bullet body (e.g., `git commit -m "type: summary" -m "- bullet"`).
 - After committing, double-check what you committed with `git show --name-only -1`.
 
@@ -306,11 +290,6 @@ Strictness
 - `docs/migration/guide.mdx` – Breaking changes
 - `tests/integration/` – Real-world behaviors
 - `/docs/` – Framework documentation
-
-## Quick Commands
-`find src/ -name "*.py" | grep -v __pycache__ | sort`  # Initial structure
-`make ci`                                              # Full validation
-`uv run pytest tests/integration/ -v`                  # Integration tests
 
 ## Memory & Expectations
 - User expects explicit status reporting, a test-first mindset, and directness. Ask at most one question at a time. After negative feedback or a protocol breach, tighten approvals: present minimal options and wait for explicit approval before changes; re-run Step 1 before and after edits.
@@ -324,7 +303,6 @@ Strictness
 
 ## End-of-Task Checklist
 - All requirements in this document respected
-- Minimal, precise diffs; no unrelated edits or dead code
 - Documentation and docstrings updated for any changes to behavior/APIs/usage
 - No regressions
 - Sensible, non-brittle tests; avoid duplicate or root-level tests
@@ -332,6 +310,6 @@ Strictness
 - All tests pass
 - Example scripts execute and output as expected
 
-## Iterative Polishing
-- Iterate on the diff by checking the feedback signal (git diff/tests/logs), editing and repeating until the change is correct and minimal; escalate key decisions for approval as needed.
+## Iterative Polishing (consider this after any set of changes is made)
+- Iterate by revisiting your changes (and considering them in a broader context), feedback signals (tests, logs), editing and repeating until the change is correct and minimal; escalate key decisions for approval as needed.
 - Conclude when no further measurable improvement is practical (the changes are minimal, bug- and regression-free, and adhere to this document's rules) and every outstanding task is closed.
