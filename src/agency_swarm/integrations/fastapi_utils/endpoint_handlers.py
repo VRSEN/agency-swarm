@@ -36,7 +36,10 @@ from agency_swarm import (
     RunContextWrapper,
 )
 from agency_swarm.agent.execution_stream_response import StreamingRunResponse
-from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_urls
+from agency_swarm.integrations.fastapi_utils.file_handler import (
+    extract_local_files,
+    upload_from_urls,
+)
 from agency_swarm.integrations.fastapi_utils.logging_middleware import get_logs_endpoint_impl
 from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
 from agency_swarm.messages import MessageFilter, MessageFormatter
@@ -51,6 +54,11 @@ from agency_swarm.utils.usage_tracking import (
 
 logger = logging.getLogger(__name__)
 
+LOCAL_ATTACHMENT_MESSAGE_HEADER = (
+    "The following files are attached and available at these local paths. "
+    "Refer to these files when speaking to the user. "
+    "You will also see them as file-[file_id], avoid mentioning duplicating files:"
+)
 
 def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
     """Apply custom OpenAI client configuration to all agents in the agency.
@@ -309,12 +317,24 @@ def make_response_endpoint(
 
         combined_file_ids = request.file_ids
         file_ids_map = None
+        local_attachment_items: list[tuple[str, str | None]] = []
         if request.file_urls is not None:
             try:
                 file_ids_map = await upload_from_urls(request.file_urls, allowed_local_dirs=allowed_local_dirs)
                 combined_file_ids = (combined_file_ids or []) + list(file_ids_map.values())
+                local_files = _filter_local_attachment_files(
+                    extract_local_files(request.file_urls, allowed_local_dirs)
+                )
+                local_attachment_items = [
+                    (str(path), file_ids_map.get(name) if file_ids_map else None)
+                    for name, path in local_files.items()
+                ]
             except Exception as e:
                 return {"error": f"Error downloading file from provided urls: {e}"}
+
+        message_input = request.message
+        if local_attachment_items:
+            message_input = _build_message_with_local_attachments(request.message, local_attachment_items)
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
 
@@ -329,7 +349,7 @@ def make_response_endpoint(
         initial_message_count = len(agency_instance.thread_manager.get_all_messages())
 
         response = await agency_instance.get_response(
-            message=request.message,
+            message=message_input,
             recipient_agent=request.recipient_agent,
             context_override=request.user_context,
             additional_instructions=request.additional_instructions,
@@ -386,10 +406,18 @@ def make_stream_endpoint(
 
         combined_file_ids = request.file_ids
         file_ids_map = None
+        local_attachment_items: list[tuple[str, str | None]] = []
         if request.file_urls is not None:
             try:
                 file_ids_map = await upload_from_urls(request.file_urls, allowed_local_dirs=allowed_local_dirs)
                 combined_file_ids = (combined_file_ids or []) + list(file_ids_map.values())
+                local_files = _filter_local_attachment_files(
+                    extract_local_files(request.file_urls, allowed_local_dirs)
+                )
+                local_attachment_items = [
+                    (str(path), file_ids_map.get(name) if file_ids_map else None)
+                    for name, path in local_files.items()
+                ]
             except Exception as e:
                 error_msg = str(e)
 
@@ -422,6 +450,10 @@ def make_stream_endpoint(
         # Generate unique run_id for this streaming session
         run_id = str(uuid.uuid4())
 
+        message_input = request.message
+        if local_attachment_items:
+            message_input = _build_message_with_local_attachments(request.message, local_attachment_items)
+
         async def event_generator():
             # Capture initial message count to identify new messages
             initial_message_count = len(agency_instance.thread_manager.get_all_messages())
@@ -430,7 +462,7 @@ def make_stream_endpoint(
             active_run: ActiveRun | None = None
             try:
                 stream = agency_instance.get_response_stream(
-                    message=request.message,
+                    message=message_input,
                     recipient_agent=request.recipient_agent,
                     context_override=request.user_context,
                     additional_instructions=request.additional_instructions,
@@ -594,10 +626,18 @@ def make_agui_chat_endpoint(
         encoder = EventEncoder()
 
         combined_file_ids = list(request.file_ids or []) if getattr(request, "file_ids", None) else []
+        local_attachment_items: list[tuple[str, str | None]] = []
         if getattr(request, "file_urls", None):
             try:
                 file_ids_map = await upload_from_urls(request.file_urls, allowed_local_dirs=allowed_local_dirs)
                 combined_file_ids = combined_file_ids + list(file_ids_map.values())
+                local_files = _filter_local_attachment_files(
+                    extract_local_files(request.file_urls, allowed_local_dirs)
+                )
+                local_attachment_items = [
+                    (str(path), file_ids_map.get(name) if file_ids_map else None)
+                    for name, path in local_files.items()
+                ]
             except Exception as exc:
                 error_message = f"Error downloading file from provided urls: {exc}"
                 run_started = RunStartedEvent(
@@ -669,8 +709,15 @@ def make_agui_chat_endpoint(
 
                 # Store in dict format to avoid converting to classes
                 snapshot_messages = [message.model_dump() for message in request.messages]
+                message_input = request.messages[-1].content
+                if local_attachment_items:
+                    message_input = _build_message_with_local_attachments(
+                        request.messages[-1].content,
+                        local_attachment_items,
+                    )
+
                 async for event in agency.get_response_stream(
-                    message=request.messages[-1].content,
+                    message=message_input,
                     context_override=request.user_context,
                     additional_instructions=request.additional_instructions,
                     file_ids=combined_file_ids or None,
@@ -815,3 +862,46 @@ def _get_agency_swarm_version() -> str | None:
     except metadata.PackageNotFoundError:
         logger.debug("agency-swarm package metadata not found; returning no version")
         return None
+
+
+def _is_agent_sandbox_path(path: str) -> bool:
+    """Check if path refers to agent's sandbox (already accessible, no need to inject)."""
+    return Path(path).as_posix().startswith("/mnt/")
+
+
+def _filter_local_attachment_files(files: dict[str, Path]) -> dict[str, Path]:
+    """Filter out files already in agent's sandbox."""
+    return {name: path for name, path in files.items() if not _is_agent_sandbox_path(str(path))}
+
+
+def _build_local_attachment_system_message(items: Sequence[tuple[str, str | None]]) -> str:
+    lines = []
+    for path, file_id in items:
+        if file_id:
+            lines.append(f"- {path} (file_id: {file_id})")
+        else:
+            lines.append(f"- {path}")
+
+    note = (
+        "\n\nNote: Images are uploaded and appear in /mnt/data with different hashed filenames "
+        "(e.g., b920a825660ce75811d02bf3cbe0e763-image.jpeg). "
+        "The image files in /mnt/data correspond to the image paths listed above in the same respective order."
+    )
+
+    return f"{LOCAL_ATTACHMENT_MESSAGE_HEADER}\n" + "\n".join(lines) + note
+
+
+def _build_message_with_local_attachments(
+    message: str,
+    local_attachment_items: Sequence[tuple[str, str | None]],
+) -> list[TResponseInputItem]:
+    system_message: TResponseInputItem = {
+        "role": "system",
+        "content": (
+            "SYSTEM MESSAGE. DO NOT IGNORE THIS MESSAGE:\n"
+            + _build_local_attachment_system_message(local_attachment_items)
+        ),
+        "message_origin": "local_attachment_paths",
+    }
+    user_message: TResponseInputItem = {"role": "user", "content": message}
+    return [system_message, user_message]
