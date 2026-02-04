@@ -1,0 +1,84 @@
+---
+title: "Output Guardrails"
+description: "Validate agent responses before they reach users"
+icon: "arrow-right-from-bracket"
+---
+
+Output guardrails validate agent responses **before** they reach users or other agents. When a guardrail trips, the agent receives feedback and retries.
+
+## Function Signature
+
+```python
+from agency_swarm import output_guardrail, GuardrailFunctionOutput, RunContextWrapper, Agent
+from pydantic import BaseModel
+
+@output_guardrail
+async def my_output_guardrail(
+    context: RunContextWrapper,
+    agent: Agent,
+    response_text: str | BaseModel
+) -> GuardrailFunctionOutput:
+    return GuardrailFunctionOutput(output_info="", tripwire_triggered=False)
+```
+
+`response_text` is a string, or a Pydantic model if `output_type` is set on the agent.
+
+## Basic Example
+
+```python
+from agency_swarm import Agent, GuardrailFunctionOutput, RunContextWrapper, output_guardrail
+
+@output_guardrail(name="ForbidSensitiveEmail")
+async def forbid_sensitive_email(
+    context: RunContextWrapper, agent: Agent, response_text: str
+) -> GuardrailFunctionOutput:
+    if "@" in response_text:
+        return GuardrailFunctionOutput(
+            output_info="Do not share email addresses.",
+            tripwire_triggered=True,
+        )
+    return GuardrailFunctionOutput(output_info="", tripwire_triggered=False)
+
+support_agent = Agent(
+    name="SupportPilot",
+    instructions="You handle customer support.",
+    output_guardrails=[forbid_sensitive_email],
+    validation_attempts=1,
+)
+```
+
+See [`examples/guardrails_output.py`](https://github.com/VRSEN/agency-swarm/blob/main/examples/guardrails_output.py) for a complete example.
+
+## Retry Flow
+
+<Steps>
+  <Step title="Agent generates response" />
+  <Step title="Guardrail validates" />
+  <Step title="If validation fails, agent retries" />
+  <Step title="Fail after validation_attempts" />
+</Steps>
+
+### Configuring Retries
+
+| Setting | Behavior |
+|---------|----------|
+| `validation_attempts=0` | Fail immediately (no retry) |
+| `validation_attempts=1` | Default (one retry) |
+| `validation_attempts=2+` | Multiple retries |
+
+### Handling Failures
+
+```python
+from agency_swarm import OutputGuardrailTripwireTriggered
+
+try:
+    response = await agency.get_response("Hello!")
+except OutputGuardrailTripwireTriggered as e:
+    print(f"Validation failed: {e.guardrail_result.output_info}")
+```
+
+## Agent-to-Agent Validation
+
+If agents communicate with each other, the recipient agent's guardrails enforce message format and content. See [Communication Flows](/core-framework/agencies/communication-flows) and the output guardrail example above.
+
+See [Output Guardrails Advanced](/additional-features/guardrails/output-guardrails-advanced) for agent-to-agent validation and message history details.

@@ -1,0 +1,51 @@
+---
+title: "Starter Template"
+description: "Get started quickly with the production-ready template."
+icon: "layer-group"
+---
+
+The [Agency Starter Template](https://github.com/agency-ai-solutions/agency-starter-template) gives you a working agency with real tools and examples.
+
+## Recommended Flow (Use This Template)
+
+1. Open the template repo and click **Use this template**.
+2. Create your new repo.
+3. Clone your repo and run it:
+
+```bash
+git clone https://github.com/<you>/<your-repo>.git my-agency
+cd my-agency
+
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+echo "OPENAI_API_KEY=sk-..." > .env
+
+python agency.py
+```
+
+**You should see:** A terminal prompt where you can chat with the agency.
+
+<Accordion title="Alternative: clone the template directly" defaultOpen={false}>
+```bash
+git clone https://github.com/agency-ai-solutions/agency-starter-template.git my-agency
+```
+</Accordion>
+
+## What's Included
+
+- Pre-built agents with working tools
+- Multi-agent communication examples
+- Production-ready structure
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Customize Agents" icon="user-gear" href="/core-framework/agents/overview">
+    Modify or add new agents.
+  </Card>
+  <Card title="Add Tools" icon="wrench" href="/core-framework/tools/overview">
+    Create custom tools for your needs.
+  </Card>
+</CardGroup>

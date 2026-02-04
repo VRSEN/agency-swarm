@@ -5,233 +5,144 @@ icon: "code"
 ---
 
 <Note>
-Use this guide when you need to build everything manually. Otherwise, start from the [Agency Starter Template](https://github.com/agency-ai-solutions/agency-starter-template).
+Use this guide when you need to build everything manually. Otherwise, start from the [Starter Template](/welcome/getting-started/starter-template).
 </Note>
 
 <Steps>
   <Step title="Set Your OpenAI Key">
-    Begin by setting your OpenAI API key in the `.env` file. It will be loaded automatically on agency initialization
-
+    Set `OPENAI_API_KEY` in `.env` (loaded automatically on init).
     ```
     OPENAI_API_KEY=sk-...
     ```
-
   </Step>
-
   <Step title="Create Project Structure">
-    **Agent Folder Structure:**
-
-    When you run the create-agent-template command, it creates the following folder structure for your agent:
-
+    Create a basic layout like this:
     ```
-    /your-agency-path/
-    └── agent_name/                   # Directory for the specific agent
-        ├── files/                    # Directory for files that will be uploaded to openai
-        ├── schemas/                  # Directory for OpenAPI schemas to be converted into tools
-        ├── tools/                    # Directory for tools to be imported by default.
-        ├── agent_name.py             # The agent definition module
-        ├── __init__.py               # Initializes the agent folder as a Python package
-        └── instructions.md or .txt   # Instruction document for the agent
+    my_agency/
+    - agency.py
+    - agency_manifesto.md
+    - developer/
+      - __init__.py
+      - developer.py
+      - instructions.md
+      - tools/
+      - files/
+      - schemas/
     ```
+    `tools/` holds custom tools, `files/` holds local files (and optional vector store uploads), and `schemas/` holds OpenAPI schemas.
 
-    This structure ensures that each agent has its dedicated space with all necessary files to start working on its specific tasks.
-
-    **Agency Folder Structure:**
-
-    The full structure of the project will look like this:
-
-    ```
-    agency_name/
-    ├── agent_name/           # Agent folder created with the command above
-    ├── another_agent/        # Another agent folder
-    ├── agency.py             # Main file where agents are imported and the agency is defined
-    ├── agency_manifesto.md   # Shared instructions and guidelines for all agents
-    ├── requirements.txt      # File listing all dependencies
-    └── ...
-    ```
-
+    <Accordion title="Create this layout with the CLI" defaultOpen={false}>
+      ```bash
+      agency-swarm create-agent-template "Developer"
+      ```
+      This generates the same folder structure for a new agent.
+    </Accordion>
   </Step>
-
   <Step title="Create Tools">
-    In 1.x versions of the framework, you have 2 ways of defining custom tools:
-
-    By extending agency_swarm's `BaseTool` class and implementing the async `run` method.
-
-    **my_custom_tool_class.py:**
-
-    ```python
-    from agency_swarm.tools import BaseTool
-    from pydantic import Field
-
-    class MyCustomTool(BaseTool):
-        """
-        A brief description of what the custom tool does.
-        The docstring should clearly explain the tool's purpose and functionality.
-        It will be used by the agent to determine when to use this tool.
-        """
-
-        # Define the fields with descriptions using Pydantic Field
-        example_field: str = Field(
-            ..., description="Description of the example field, explaining its purpose and usage for the Agent."
-        )
-
-        # Additional Pydantic fields as required
-        # ...
-
-        async def run(self):
-            """
-            The implementation of the run method, where the tool's main functionality is executed.
-            This method should utilize the fields defined above to perform the task.
-            Doc string is not required for this method and will not be used by your agent.
-            """
-
-            # Your custom tool logic goes here
-            do_something(self.example_field)
-
-            # Return the result of the tool's operation as a string
-            return "Result of MyCustomTool operation"
-    ```
-
-    Or by using openai's `@function_tool` decorator.
-
-    **my_custom_tool.py:**
-
+    Add a tool in `developer/tools/search_database.py`.
     ```python
     from agency_swarm import function_tool
 
     @function_tool
-    def my_custom_tool(example_field: str) -> str:
-        """
-        A brief description of what the custom tool does.
-        The docstring should clearly explain the tool's purpose and functionality.
-        It will be used by the agent to determine when to use this tool.
-
-        Args:
-            example_field: Description of the example field, explaining its purpose and usage for the Agent.
-
-        Returns:
-            Result of the tool's operation as a string.
-        """
-
-        # Your custom tool logic goes here
-        do_something(example_field)
-
-        # Return the result of the tool's operation as a string
-        return "Result of MyCustomTool operation"
+    def search_database(query: str) -> str:
+        return f"Results for: {query}"
     ```
+    <Accordion title="BaseTool class version" defaultOpen={false}>
+      ```python
+      from agency_swarm import BaseTool
+      from pydantic import Field
 
+      class SearchDatabase(BaseTool):
+          query: str = Field(..., description="Search query")
+
+          async def run(self) -> str:
+              return f"Results for: {self.query}"
+      ```
+    </Accordion>
+    See [Custom Tools](/core-framework/tools/custom-tools/step-by-step-guide) for more options.
   </Step>
-
-  <Step title="Define Agent Roles">
-    Adjust the parameters and instructions for each agent.
-
-    **developer.py:**
-
+  <Step title="Define Agent">
+    In `developer/developer.py`:
     ```python
-    from agency_swarm import Agent, ModelSettings
-    from .tools.my_custom_tool import my_custom_tool
-    from .tools.my_custom_tool_class import MyCustomTool
+    from agency_swarm import Agent
 
     developer = Agent(
         name="Developer",
-        description="Responsible for executing tasks.",
         instructions="./instructions.md",
-        tools=[my_custom_tool, MyCustomTool],  # Import tools directly
-        model_settings=ModelSettings(
-            temperature=0.3,
-            max_tokens=25000,
-            model="gpt-4o"
-        ),
+        tools_folder="./tools",
+        files_folder="./files",
+        schemas_folder="./schemas",
     )
     ```
+    <Accordion title="Prefer explicit tool imports?" defaultOpen={false}>
+      ```python
+      from agency_swarm import Agent
+      from developer.tools.search_database import search_database
 
-    Tools are imported directly into the agent definition instead of from a folder.
-
-    **instructions.md:**
-
-    ```md
-    You are a Developer agent responsible for executing tasks.
-
-    # Role
-    You are responsible for writing clean, efficient, and reusable code.
-
-    # Process
-    1. How to handle incoming requests
-    2. When and how to use available tools
-    3. How to collaborate with other agents
-    ```
-
+      developer = Agent(
+          name="Developer",
+          instructions="./instructions.md",
+          tools=[search_database],
+      )
+      ```
+    </Accordion>
   </Step>
-
   <Step title="Create Agency">
-    Import your agents and initialize the Agency class.
-
-    **agency.py:**
-
+    In `agency.py`:
     ```python
     from agency_swarm import Agency
-    from .developer import developer
-    from .ceo import ceo
+    from developer.developer import developer
 
     agency = Agency(
-        ceo,  # Entry point agent as positional argument
-        communication_flows=[
-            (ceo, developer),  # CEO can initiate communication with Developer
-        ],
-        shared_instructions='./agency_manifesto.md'  # shared instructions for all agents
+        developer,
+        shared_instructions="./agency_manifesto.md",
     )
     ```
+    <Accordion title="Multi-agent example with communication flows" defaultOpen={false}>
+      ```python
+      from agency_swarm import Agency
+      from ceo.ceo import ceo
+      from developer.developer import developer
 
-    The first positional argument is the entry point agent that users interact with directly. Communication flows are defined separately.
-
-    <Note title="Note on Communication Flows">
-      In Agency Swarm, communication flows are directional tuples. For instance, in the example above: `(ceo, developer)`, the CEO can initiate a chat with the Developer, and the Developer can respond in this chat. However, the Developer cannot initiate a chat with the CEO.
-    </Note>
-
+      agency = Agency(
+          ceo,
+          communication_flows=[(ceo, developer)],
+          shared_instructions="./agency_manifesto.md",
+      )
+      ```
+      Flows are directional: `(ceo, developer)` means CEO can message Developer.
+    </Accordion>
+    See [Communication Flows](/core-framework/agencies/communication-flows) for multi-agent setups.
   </Step>
-
   <Step title="Run Demo">
-
-    There are multiple ways to run the demo. Add one of the following to your `agency.py` file:
-
-    **Web Interface:**
-
-    ```python
-    agency.copilot_demo()
-    ```
-
-    <Warning>
-    Copilot demo is currently minimal and will be updated in future patches
-    </Warning>
-
-    **Terminal Version:**
-
-    ```python
-    agency.terminal_demo()
-    ```
-
-    **Backend Version (Sync):**
-
-    ```python
-    result = agency.get_response_sync("Please create a new website for our client.")
-    ```
-
-    **Backend Version (Async):**
-
-    ```python
-    import asyncio
-
-    async def main():
-        result = await agency.get_response("Please create a new website for our client.")
+    <Tabs>
+      <Tab title="Terminal">
+        ```python
+        agency.terminal_demo()
+        ```
+      </Tab>
+      <Tab title="Backend (Sync)">
+        ```python
+        result = agency.get_response_sync("Hello!")
         print(result.final_output)
+        ```
+      </Tab>
+      <Tab title="Backend (Async)">
+        ```python
+        import asyncio
 
-    asyncio.run(main())
-    ```
+        async def main():
+            result = await agency.get_response("Hello!")
+            print(result.final_output)
 
+        asyncio.run(main())
+        ```
+      </Tab>
+    </Tabs>
+    For a web UI demo, see `agency.copilot_demo()` in [Visualization](/core-framework/agencies/visualization).
   </Step>
 </Steps>
 
 ## Next Steps
-
 - Learn the core concepts of Tools, Agents, and Agencies.
 - Watch the [Deployment Tutorial](https://www.youtube.com/watch?v=53_e3lmk6Mo).

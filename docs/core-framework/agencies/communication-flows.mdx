@@ -31,7 +31,7 @@ Control transfers completely to another agent who takes over the interaction. Th
 
 ```python
 from agency_swarm import Agent
-from agency_swarm.tools import Handoff
+from agency_swarm import Handoff
 
 # Triage agent routes to specialists
 triage_agent = Agent(
@@ -104,7 +104,7 @@ Communication flows are defined using tuples in the `communication_flows` parame
 
 ```python
 from agency_swarm import Agency
-from agency_swarm.tools import Handoff
+from agency_swarm import Handoff
 
 agency = Agency(
     ceo, dev,  # Entry points - agents that can communicate with users
@@ -127,4 +127,3 @@ At the same time, the CEO can assign tasks to both Developer and Virtual Assista
 Agency Swarm uses a `SendMessage` tool for inter-agent communication. Defining communication flows adds recipients to this tool.
 
 For advanced customization, see [Custom Communication Flows](/additional-features/custom-communication-flows/overview).
-

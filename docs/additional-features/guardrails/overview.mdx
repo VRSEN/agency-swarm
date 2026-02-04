@@ -1,0 +1,109 @@
+---
+title: "Guardrails Overview"
+description: "Screen agent inputs and review outputs with guardrails"
+icon: "shield-halved"
+sidebarTitle: "Overview"
+---
+
+Guardrails validate agent inputs and outputs, screening messages before processing and reviewing responses before delivery.
+
+```python
+from agency_swarm import Agent, output_guardrail, GuardrailFunctionOutput, RunContextWrapper
+
+@output_guardrail
+async def no_emails(ctx: RunContextWrapper, agent: Agent, text: str) -> GuardrailFunctionOutput:
+    if "@" in text:
+        return GuardrailFunctionOutput(
+            output_info="Don't share email addresses.",
+            tripwire_triggered=True,
+        )
+    return GuardrailFunctionOutput(output_info="", tripwire_triggered=False)
+
+agent = Agent(
+    name="Support",
+    instructions="Help customers.",
+    output_guardrails=[no_emails],
+)
+```
+
+<Note>
+For **tool input** validation (field values, data types), use [Pydantic validators](/core-framework/tools/custom-tools/validation). Guardrails are for **agent-level** validation.
+</Note>
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Content Filtering" icon="filter">
+    Block off-topic or inappropriate content
+  </Card>
+  <Card title="Format Enforcement" icon="align-left">
+    Require specific response structures
+  </Card>
+  <Card title="Compliance" icon="file-shield">
+    Enforce business rules and policies
+  </Card>
+  <Card title="Security" icon="lock">
+    Prevent prompt injection or data leaks
+  </Card>
+</CardGroup>
+
+## Types of Guardrails
+
+| Type | Purpose | Docs |
+|------|---------|------|
+| **Input Guardrails** | Screen messages before agent processes them | [Input Guardrails](/additional-features/guardrails/input-guardrails) |
+| **Output Guardrails** | Review responses before delivery | [Output Guardrails](/additional-features/guardrails/output-guardrails) |
+
+See [Input Guardrails Advanced](/additional-features/guardrails/input-guardrails-advanced) and [Output Guardrails Advanced](/additional-features/guardrails/output-guardrails-advanced) for deeper examples.
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Single Responsibility" icon="bullseye">
+    Each guardrail should check one thing. Create multiple guardrails for different concerns instead of combining logic.
+  </Card>
+
+  <Card title="Specific Error Messages" icon="message">
+    Provide clear, actionable feedback in `output_info`. Tell the agent or user exactly what to fix.
+  </Card>
+
+  <Card title="Use Judge Agents" icon="scale-balanced">
+    For complex decisions (like relevance or tone), delegate to a specialized judge agent instead of hard-coding rules.
+  </Card>
+
+  <Card title="Test Independently" icon="vial">
+    Test guardrails with various inputs to ensure they catch invalid cases and allow valid ones.
+  </Card>
+
+  <Card title="Balance UX vs Enforcement" icon="balance-scale">
+    Consider the user experience - friendly mode for guidance, strict mode for hard blocks.
+  </Card>
+
+  <Card title="Start Simple" icon="seedling">
+    Begin with basic checks and expand as needed. Overly complex guardrails can slow response time.
+  </Card>
+</CardGroup>
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="Tool Input Validation" icon="shield-check" href="/core-framework/tools/custom-tools/validation">
+    Validate tool inputs using Pydantic validators
+  </Card>
+
+  <Card title="Agent Configuration" icon="gear" href="/core-framework/agents/advanced-configuration">
+    Advanced agent configuration options
+  </Card>
+
+  <Card title="Agents SDK Guardrails" icon="link" href="https://openai.github.io/openai-agents-python/guardrails">
+    Underlying guardrail implementation in OpenAI Agents SDK
+  </Card>
+
+  <Card title="Streaming" icon="signal-stream" href="/additional-features/streaming">
+    Handle streaming events and responses
+  </Card>
+
+  <Card title="Examples" icon="code" href="https://github.com/VRSEN/agency-swarm/tree/main/examples">
+    View complete guardrail examples on GitHub
+  </Card>
+</CardGroup>

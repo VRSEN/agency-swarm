@@ -2,43 +2,53 @@
 title: "Deployment to Production"
 description: "Step-by-step guide for deploying your agency in a production environment."
 icon: "rocket-launch"
+sidebarTitle: "Deploy"
 ---
-To deploy your agency to production, typically the process is as follows:
-1. **Dynamically Load Conversation Threads**: Required to continue conversations from where they left off
-2. **Dynamically Load Assistant Settings**: Needed to make changes to your agent's settings persist even after redeployment
-3. **Deploy Agents and Tools on a Production Server**: Decide whether to deploy agents and tools together or separately
+
+**Recommended:** Use the [Starter Template](/welcome/getting-started/starter-template) for production. It ships with FastAPI endpoints, auth, and a clean project layout.
+
+## Required Environment Variables
+
+Before deploying, ensure these are set in your production environment:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `OPENAI_API_KEY` | Yes | Your OpenAI API key |
+| `APP_TOKEN` | Recommended | Authentication token for FastAPI endpoints |
 
 <Note>
-  This guide assumes that you have already created an agency. If you haven't, check out the [Getting Started](/welcome/installation) guide.
+Thread persistence uses callbacks you define to store threads in any database you choose.
+</Note>
+
+<Note>
+  This guide assumes you have already created an agency. If you haven't, check out the [Getting Started](/welcome/installation) guide.
 </Note>
 
 <Warning>
-  Before deploying your agency, ensure you have thoroughly tested all tools and agents in isolation and in combination. Run the test cases in each tool file and verify the agency works end-to-end using demo methods.
+  Before deploying, ensure you have thoroughly tested all tools and agents. Run the test cases in each tool file and verify the agency works end-to-end using demo methods.
 </Warning>
+
+## Deployment Process
 
 <Steps>
 
-<Step title="Step 1: Dynamically Load Conversation Threads" icon="message-dots">
+<Step title="Step 1: Persist Conversation Threads" icon="message-dots">
 
-By default, every time you create a new `Agency()`, it starts a fresh conversation thread. However, in production environments, you typically need to pick up old conversations or handle multiple users at once.
+By default, every time you create a new `Agency()`, it starts a fresh conversation thread. In production, you usually need to resume prior conversations or handle multiple users.
 
 <Info>
-In Agency Swarm, threads are stored in a dictionary that contains all conversation thread IDs, including those between your agents.
+ThreadManager stores a flat list of messages with agent metadata, including agent-to-agent messages.
 </Info>
 
-Loading threads from a database before processing a new request allows you to continue conversations from where they left off, even if you are using stateless backend.
-
-Chat persistence is handled through callback functions that are passed directly as parameters to the Agency constructor:
+Chat persistence is handled through callback functions passed to the Agency constructor:
 
 ```python
 def save_threads(thread_dict: list[dict[str, TResponseInputItem]], chat_id: str):
     # Save updated threads to your database
-    # Use the provided thread_dict when persisting threads
     save_threads_to_db(thread_dict)
 
 def load_threads(chat_id: str) -> list[dict[str, TResponseInputItem]]:
-    threads = load_threads_from_db(chat_id)
-    return threads
+    return load_threads_from_db(chat_id)
 
 agency = Agency(
     agent1,
@@ -55,70 +65,19 @@ If you switch model providers for an existing saved chat, old tool/event items m
 
 </Step>
 
-<Step title="Step 2: Deploying Agents and Tools on a Production Server" icon="rocket-launch">
+<Step title="Step 2: Deploy with the Starter Template" icon="rocket-launch">
 
-Depending on your needs, you can deploy your agents and tools together or separately:
-1. **Agents Together with Tools**: This is the simplest method: your agents execute the tools directly, in the same environment.
-2. **Tools as Separate API Endpoints**: This is the most scalable method: multiple agents can reuse the same tools, and you can scale the tools independently.
+Use the [Starter Template](/welcome/getting-started/starter-template) as your production base. It already includes FastAPI wiring and deployment defaults.
 
-<Accordion title="Comparison Table" defaultOpen={true}>
+- Create a repo from the template
+- Set `OPENAI_API_KEY` and `APP_TOKEN`
+- Follow the template README to deploy
 
-| Feature               | Agents with Tools                     | Tools as Separate API Endpoints          |
-|-----------------------|----------------------------------------|-------------------------------------------|
-| **Setup Complexity**  | "One-click" deployment       | Additional setup required          |
-| **Scalability**       | Combined agency scaling               | Independent tool/agent scaling           |
-| **Tool Reusability**  | Limited to current agency             | Cross-project utilization                 |
-| **Cost Efficiency**   | Predictable resource allocation       | Optimized resource scaling                |
-| **Security**          | Internal tool access only             | API authentication required           |
-| **Best For**          | Small to medium projects              | Large-scale or multi-project environments |
-
-</Accordion>
-
-<Tabs>
-
-<Tab title="Option 1: Agents and Tools Together" defaultOpen={true}>
-
-This is the simplest deployment method. You can use the official Railway template to get your agency up and running quickly.
-
-Watch the video below for a detailed walkthrough:
-<iframe width="560" height="315" src="https://www.youtube.com/embed/53_e3lmk6Mo?si=kASCTtxfa6ljqGNy&amp;start=806" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
-
-<Card
-  title="Railway Deployment Template"
-  href="https://github.com/VRSEN/agency-swarm-api-railway-template"
-  icon="train"
-  iconType="duotone"
->
-  Click here to open the template and follow the instructions provided.
-</Card>
-
-<Note>
-  The template includes a Gradio interface and REST API endpoints with proper authentication.
-</Note>
-
-</Tab>
-
-<Tab title="Option 2: Tools as Separate API Endpoints">
-
-Instead of deploying agents and tools together, you can host your tools separately as serverless functions or custom APIs, then connect them to your agents using [OpenAPI schemas](/core-framework/tools/openapi-schemas). This approach is useful if you want to reuse tools across different projects or scale them independently. You can also use OpenAPI schemas to connect third-party tools to your agency.
-
-You can use our Firebase template:
-<Card
-  title="Firebase Deployment Template"
-  href="https://github.com/vrsen-ai-solutions/agency-swarm-tools-template"
-  icon="fire"
-  iconType="duotone"
->
-  Click here to open the template and follow the instructions provided.
-</Card>
-
-<Note>
-  When deploying tools separately, shared state between calls will not be preserved.
-</Note>
-
-</Tab>
-
-</Tabs>
+If you are wiring your own server, see [FastAPI Integration](/additional-features/fastapi-integration).
 
 </Step>
 </Steps>
+
+<Accordion title="When you need separate tool services" defaultOpen={false}>
+If you want to scale tools independently or share them across projects, host tools as APIs and connect them with [OpenAPI schemas](/core-framework/tools/openapi-schemas). This adds setup and requires explicit auth, and shared in-memory state will not persist between tool calls.
+</Accordion>

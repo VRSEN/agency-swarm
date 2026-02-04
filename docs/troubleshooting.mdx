@@ -1,0 +1,137 @@
+---
+title: "Troubleshooting"
+description: "Common errors and how to fix them."
+icon: "bug"
+sidebarTitle: "Common Errors"
+---
+
+## Quick Fixes
+
+Find your error below and apply the fix.
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `OPENAI_API_KEY not set` | Missing or invalid API key | Set `OPENAI_API_KEY` in `.env` file or environment |
+| `ModuleNotFoundError: agency_swarm` | Package not installed | Run `pip install agency-swarm` in your virtual environment |
+| `TypeError: Agent.__init__() missing required argument: 'name'` | Agent created without a name | Add `name="MyAgent"` to your Agent constructor |
+| `Tool validation error` | Tool input doesn't match schema | Check your tool's Pydantic field types and descriptions |
+| `Connection refused` on FastAPI | Server not running or wrong port | Start server with `agency.run_fastapi()` and verify the port |
+| `Empty response from agent` | Agent has no tools or unclear instructions | Add tools and improve the agent's instructions |
+| `Rate limit exceeded` | Too many API requests | Add delays between requests or use exponential backoff |
+
+## Installation Issues
+
+<Accordion title="pip install fails with 'externally-managed-environment'" defaultOpen={false}>
+
+**Symptom:** Error message about externally-managed-environment when running pip install.
+
+**Fix:** Create and activate a virtual environment first:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install agency-swarm
+```
+
+</Accordion>
+
+<Accordion title="Import error after installation" defaultOpen={false}>
+
+**Symptom:** `ModuleNotFoundError` even after installing agency-swarm.
+
+**Fix:** Make sure you're using the correct Python environment:
+
+```bash
+# Check which Python is active
+which python  # On Windows: where python
+
+# Verify agency-swarm is installed
+pip list | grep agency-swarm
+```
+
+If agency-swarm isn't listed, reinstall it in the active environment.
+
+</Accordion>
+
+## API Key Issues
+
+<Accordion title="OpenAI API key not found" defaultOpen={false}>
+
+**Symptom:** Error about missing or invalid API key.
+
+**Fix:** Create a `.env` file in your project root:
+
+```env
+OPENAI_API_KEY=sk-your-key-here
+```
+
+Agency Swarm loads this automatically when imported.
+
+</Accordion>
+
+<Accordion title="Invalid API key format" defaultOpen={false}>
+
+**Symptom:** Authentication error even with a key set.
+
+**Fix:** Check that:
+1. The key starts with `sk-`
+2. No extra spaces or quotes around the key in `.env`
+3. The key is active in your [OpenAI dashboard](https://platform.openai.com/api-keys)
+
+</Accordion>
+
+## Agent & Tool Errors
+
+<Accordion title="Tool not being called" defaultOpen={false}>
+
+**Fix:** Verify tool is in the agent's `tools` list and has a clear docstring explaining when to use it.
+
+</Accordion>
+
+<Accordion title="Pydantic validation error" defaultOpen={false}>
+
+**Fix:** Add clear field descriptions so the model knows what format to send:
+
+```python
+count: int = Field(..., description="Number of items (integer)")
+```
+
+</Accordion>
+
+<Accordion title="Agent stuck in loop" defaultOpen={false}>
+
+**Fix:** Ensure tool returns a clear final response, or set `max_turns=10` to limit execution.
+
+</Accordion>
+
+## Communication Errors
+
+<Accordion title="Agent can't communicate with another agent" defaultOpen={false}>
+
+**Symptom:** `SendMessage` tool not available or communication fails.
+
+**Fix:** Add the communication flow when creating the agency:
+
+```python
+agency = Agency(
+    ceo,
+    communication_flows=[
+        (ceo, developer),  # CEO can message Developer
+    ],
+)
+```
+
+The first agent in the tuple can initiate messages to the second.
+
+</Accordion>
+
+## Need More Help?
+
+<CardGroup cols={2}>
+  <Card title="Debugging Guide" icon="magnifying-glass" href="/debugging">
+    Step-by-step debugging process.
+  </Card>
+  <Card title="Discord Community" icon="discord" href="https://discord.gg/cw2xBaWfFM">
+    Get help from the community.
+  </Card>
+</CardGroup>

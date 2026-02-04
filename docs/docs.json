@@ -38,6 +38,7 @@
                 "pages": [
                   "welcome/installation",
                   "welcome/getting-started/from-scratch",
+                  "welcome/getting-started/starter-template",
                   "welcome/getting-started/cursor-ide"
                 ]
               }
@@ -51,7 +52,16 @@
                 "icon": "wrench",
                 "pages": [
                   "core-framework/tools/overview",
-                  "core-framework/tools/built-in-tools",
+                  {
+                    "group": "Built-in Tools",
+                    "icon": "toolbox",
+                    "pages": [
+                      "core-framework/tools/built-in-tools",
+                      "core-framework/tools/built-in-tools/ipython-interpreter",
+                      "core-framework/tools/built-in-tools/persistent-shell-tool",
+                      "core-framework/tools/built-in-tools/load-file-attachment"
+                    ]
+                  },
                   {
                     "group": "Custom Tools",
                     "icon": "hammer",
@@ -94,7 +104,17 @@
             "pages": [
               "additional-features/agency-context",
               "additional-features/few-shot-examples",
-              "additional-features/guardrails",
+              {
+                "group": "Guardrails",
+                "icon": "shield-halved",
+                "pages": [
+                  "additional-features/guardrails/overview",
+                  "additional-features/guardrails/input-guardrails",
+                  "additional-features/guardrails/input-guardrails-advanced",
+                  "additional-features/guardrails/output-guardrails",
+                  "additional-features/guardrails/output-guardrails-advanced"
+                ]
+              },
               "additional-features/streaming",
               "additional-features/fastapi-integration",
               "additional-features/mcp-tools-server",
@@ -114,7 +134,7 @@
           },
           {
             "group": "References",
-            "pages": ["references/api"]
+            "pages": ["references/api-index", "references/api"]
           },
           {
             "group": "Contributing",
@@ -125,8 +145,8 @@
             "pages": ["migration/guide"]
           },
           {
-            "group": "FAQ",
-            "pages": ["faq"]
+            "group": "Troubleshooting",
+            "pages": ["troubleshooting", "debugging", "faq"]
           }
         ]
       },
@@ -165,7 +185,12 @@
           {
             "group": "Marketplace",
             "icon": "store",
-            "pages": ["platform/marketplace/onboarding"]
+            "pages": [
+              "platform/marketplace/onboarding",
+              "platform/marketplace/onboarding-tool-guide",
+              "platform/marketplace/onboarding-example",
+              "platform/marketplace/onboarding-advanced-fields"
+            ]
           },
           {
             "group": "Additional Features",
