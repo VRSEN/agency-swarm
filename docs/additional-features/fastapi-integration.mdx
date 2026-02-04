@@ -134,7 +134,14 @@ data: [DONE]
         "conversationStarters": ["Support: I need help with billing"],
         "isEntryPoint": true,
         "toolCount": 2,
-        "tools": [{"name": "example_tool", "type": "function", "description": "..."}]
+        "tools": [
+          {
+            "name": "example_tool",
+            "type": "function",
+            "description": "...",
+            "inputSchema": {"type": "object", "properties": {"text": {"type": "string"}}}
+          }
+        ]
       }
     }
   ],

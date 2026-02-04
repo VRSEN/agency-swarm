@@ -410,6 +410,8 @@ class TestMetadataDetails:
         data = agent_node["data"]
         assert data["toolCount"] == 1
         assert data["tools"][0]["name"] == "sample_tool"
+        assert "inputSchema" in data["tools"][0]
+        assert "text" in data["tools"][0]["inputSchema"].get("properties", {})
         assert data["instructions"].startswith("shared.md")
 
         meta = payload["metadata"]
