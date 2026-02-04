@@ -3,6 +3,8 @@ import logging
 import warnings
 from typing import TYPE_CHECKING, Any
 
+from agents import FunctionTool
+
 from agency_swarm.ui.demos.copilot import CopilotDemoLauncher
 from agency_swarm.ui.demos.terminal import start_terminal
 from agency_swarm.ui.generators.html_generator import HTMLVisualizationGenerator
@@ -68,6 +70,7 @@ def get_agency_graph(agency: "Agency", include_tools: bool = True) -> dict[str, 
 
                 tool_type = getattr(tool, "type", tool.__class__.__name__)
                 tool_desc = getattr(tool, "description", getattr(tool, "__doc__", "")) or ""
+                tool_schema = _extract_tool_schema(tool)
 
                 # Handle Hosted MCP tools with server labels for uniqueness/clarity
                 if tool_name == "hosted_mcp":
@@ -77,7 +80,9 @@ def get_agency_graph(agency: "Agency", include_tools: bool = True) -> dict[str, 
                 else:
                     display_name = tool_name
 
-                agent_data["tools"].append({"name": display_name, "type": tool_type, "description": tool_desc})
+                tool_payload = {"name": display_name, "type": tool_type, "description": tool_desc}
+                tool_payload.update(tool_schema)
+                agent_data["tools"].append(tool_payload)
                 agent_data["toolCount"] += 1
 
                 tool_node = {
@@ -86,6 +91,7 @@ def get_agency_graph(agency: "Agency", include_tools: bool = True) -> dict[str, 
                         "label": display_name,
                         "description": tool_desc,
                         "type": tool_type,
+                        **tool_schema,
                         "parentAgent": agent_name,
                     },
                     "type": "tool",
@@ -201,6 +207,12 @@ def _describe_model(model: Any) -> str:
         return model_name
 
     return model.__class__.__name__
+
+
+def _extract_tool_schema(tool: Any) -> dict[str, Any]:
+    if isinstance(tool, FunctionTool):
+        return {"inputSchema": tool.params_json_schema}
+    return {}
 
 
 def _build_agency_metadata(agency: "Agency") -> dict[str, Any]:

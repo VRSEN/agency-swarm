@@ -199,6 +199,33 @@ def test_metadata_includes_quick_replies() -> None:
     assert data["quickReplies"] == ["hi", "hello"]
 
 
+def test_metadata_includes_tool_input_schema():
+    """Metadata should include input schema for function tools when available."""
+
+    @function_tool
+    def sample_tool(text: str) -> str:
+        return text
+
+    def create_agency(load_threads_callback=None, save_threads_callback=None):
+        agent = Agent(name="SchemaAgent", instructions="Test", tools=[sample_tool])
+        return Agency(agent, load_threads_callback=load_threads_callback, save_threads_callback=save_threads_callback)
+
+    app = run_fastapi(agencies={"test_agency": create_agency}, return_app=True, app_token_env="")
+    client = TestClient(app)
+
+    response = client.get("/test_agency/get_metadata")
+
+    assert response.status_code == 200
+    payload = response.json()
+    schema_agent = next((n for n in payload.get("nodes", []) if n["id"] == "SchemaAgent"), None)
+    assert schema_agent is not None
+    tools = schema_agent["data"].get("tools", [])
+    assert tools
+    input_schema = tools[0].get("inputSchema")
+    assert isinstance(input_schema, dict)
+    assert "text" in input_schema.get("properties", {})
+
+
 def test_tool_endpoint_handles_nested_schema():
     """Test that tool endpoints work with nested Pydantic models."""
 
