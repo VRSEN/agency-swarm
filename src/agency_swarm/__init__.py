@@ -65,10 +65,12 @@ from .tools import (  # noqa: E402
     ImageGeneration,
     ImageGenerationInputImageMask,
     ImageGenerationTool,
+    LoadFileAttachment,
     LocalShellTool,
     Mcp,
     McpAllowedTools,
     McpRequireApproval,
+    PersistentShellTool,
     SendMessage,
     ToolOutputFileContent,
     ToolOutputFileContentDict,
@@ -115,7 +117,9 @@ __all__ = [
     "ComputerTool",
     "FileSearchTool",
     "ImageGenerationTool",
+    "LoadFileAttachment",
     "LocalShellTool",
+    "PersistentShellTool",
     "WebSearchTool",
     "Model",
     "AgentHooks",
@@ -157,6 +161,7 @@ __all__ = [
     "tool_output_file_from_path",
     "tool_output_file_from_url",
     "tool_output_file_from_file_id",
+    "IPythonInterpreter",
 ]
 
 # Conditionally add LitellmModel if available
@@ -172,4 +177,9 @@ def __getattr__(name: str):
             "You can install it via the optional dependency group: "
             "`pip install 'openai-agents[litellm]'`."
         )
+    if name == "IPythonInterpreter":
+        from .tools import IPythonInterpreter
+
+        globals()[name] = IPythonInterpreter
+        return IPythonInterpreter
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")

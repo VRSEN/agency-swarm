@@ -1,0 +1,45 @@
+---
+title: "PersistentShellTool"
+description: "Run shell commands in a persistent terminal session."
+icon: "terminal"
+---
+
+Use this tool when your agent needs to run CLI commands and keep shell state between calls.
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card icon="terminal">
+    **CLI Commands**
+    Execute command-line operations
+  </Card>
+  <Card icon="folder-tree">
+    **File Operations**
+    Navigate and manage file systems
+  </Card>
+  <Card icon="github">
+    **Git Operations**
+    Version control and repo tasks
+  </Card>
+  <Card icon="hammer">
+    **Build Operations**
+    Run build scripts and compile code
+  </Card>
+</CardGroup>
+
+## Usage Example
+
+```python
+from agency_swarm import Agent, PersistentShellTool
+
+devops_agent = Agent(
+    name="DevOps Agent",
+    description="Manages deployment and infrastructure",
+    instructions="./instructions.md",
+    tools=[PersistentShellTool],
+)
+```
+
+<Note>
+This tool is similar to the Agents SDK `LocalShellTool`, but works with any model.
+</Note>

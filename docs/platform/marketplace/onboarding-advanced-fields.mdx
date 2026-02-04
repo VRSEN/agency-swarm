@@ -1,0 +1,50 @@
+---
+title: "Advanced Fields"
+description: "UI options, file uploads, and update behavior."
+icon: "sliders"
+---
+
+We render the onboarding form with [react-jsonschema-form](https://react-jsonschema-form.readthedocs.io/en/stable/).
+
+## UI Options
+
+Use these `json_schema_extra` fields to control the UI:
+
+- `ui:widget` for widget type
+- `ui:options` for widget settings
+- `ui:title` to override the label
+- `ui:description` to override help text
+- `ui:readonly` to make a field read-only
+- `ui:disabled` to disable the field
+- `required` belongs in the JSON schema, not uiSchema
+
+## File Uploads
+
+Use `x-file-upload-path` with `list[str]` fields:
+
+```python
+accountant_agent_knowledge: list[str] = Field(
+    ..., description="Files for the agent",
+    json_schema_extra={
+        "x-file-upload-path": "./accountant_agent/files",
+    },
+)
+```
+
+Uploaded files are saved to the specified folder.
+
+## Multiline Text
+
+```python
+additional_notes: str | None = Field(
+    None,
+    description="Extra notes",
+    json_schema_extra={"ui:widget": "textarea"},
+)
+```
+
+## A Note on Form Updates
+
+- If you change the form, buyers must re-enter updated fields.
+- The commit summary is shown as the reason for the update.
+- Updates are not deployed until the form is completed.

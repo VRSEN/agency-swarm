@@ -1,0 +1,91 @@
+---
+title: "Debugging"
+description: "How to debug agent runs and diagnose issues."
+icon: "magnifying-glass"
+sidebarTitle: "Debug Agents"
+---
+
+When your agency isn't behaving as expected, follow this process.
+
+## Step 1: Enable Verbose Output
+
+```python
+agency.terminal_demo(show_reasoning=True)
+```
+
+This shows the agent's thinking process and tool calls in real-time.
+
+## Step 2: Inspect the Response Object
+
+```python
+import asyncio
+
+async def debug_run():
+    result = await agency.get_response("Your message")
+    
+    # What the user sees
+    print("Final output:", result.final_output)
+    
+    # Items generated during this run (tool calls, messages, etc.)
+    print("New items:", result.new_items)
+
+asyncio.run(debug_run())
+```
+
+## Step 3: Check Tool Execution
+
+If tools aren't being called:
+
+```python
+# List all tools registered to the agent
+print("Tools:", [t.name for t in agent.tools])
+
+# Run a simple test message
+result = await agency.get_response("Use the search tool to find 'test'")
+```
+
+## Worked Example: Slow Agent
+
+**Problem:** Agent takes 30+ seconds to respond.
+
+```python
+import asyncio, time
+
+async def debug_slow():
+    start = time.time()
+    result = await agency.get_response("Simple question")
+    print(f"Time: {time.time() - start:.1f}s")
+    
+    for item in result.new_items:
+        print(f"- {type(item).__name__}")
+
+asyncio.run(debug_slow())
+```
+
+**Common causes:** Too many tools, complex instructions, or slow API calls in tools.
+
+## Add Observability
+
+For production debugging, enable tracing:
+
+```python
+from agency_swarm import trace
+
+async def run_agent():
+    with trace("debug_run"):
+        result = await agency.get_response("Your message")
+        return result
+```
+
+See [Observability](/additional-features/observability) for full setup with Langfuse or AgentOps.
+
+## Still Stuck?
+
+<CardGroup cols={2}>
+  <Card title="Common Errors" icon="bug" href="/troubleshooting">
+    Check the troubleshooting guide for common fixes.
+  </Card>
+  <Card title="Discord Community" icon="discord" href="https://discord.gg/cw2xBaWfFM">
+    Get help from the community.
+  </Card>
+</CardGroup>

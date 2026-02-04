@@ -1,0 +1,90 @@
+---
+title: "Input Guardrails"
+description: "Validate incoming messages before they reach the agent"
+icon: "arrow-right-to-bracket"
+---
+
+Input guardrails validate incoming messages **before** they reach the agent. They screen both user input and inter-agent communication. Agency Swarm extracts text content for you, so guardrails receive clean text.
+
+## Function Signature
+
+```python
+from agency_swarm import input_guardrail, GuardrailFunctionOutput, RunContextWrapper, Agent
+
+@input_guardrail
+async def my_guardrail(
+    context: RunContextWrapper,
+    agent: Agent,
+    user_input: str | list[str]
+) -> GuardrailFunctionOutput:
+    return GuardrailFunctionOutput(
+        tripwire_triggered=False,
+        output_info="",
+    )
+```
+
+**Parameters:**
+- `context`: Run context with shared state
+- `agent`: The agent receiving the input
+- `user_input`: Text content (string or list of strings for multiple messages)
+
+<Note>
+File and image inputs inside messages are not passed to the guardrail.
+</Note>
+
+## Multiple Messages
+
+If a user sends multiple messages, your guardrail receives a list:
+
+```python
+["Hi", "How are you?"]
+```
+
+## Basic Example
+
+```python
+@input_guardrail
+async def require_prefix(
+    ctx: RunContextWrapper, agent: Agent, user_input: str | list[str]
+) -> GuardrailFunctionOutput:
+    text = user_input if isinstance(user_input, str) else " ".join(user_input)
+    if not text.startswith("Request:"):
+        return GuardrailFunctionOutput(
+            output_info="Start your message with 'Request:'",
+            tripwire_triggered=True,
+        )
+    return GuardrailFunctionOutput(output_info="", tripwire_triggered=False)
+
+agent = Agent(
+    name="Support",
+    instructions="Help customers.",
+    input_guardrails=[require_prefix],
+)
+```
+
+## Friendly vs Strict Mode
+
+The `throw_input_guardrail_error` parameter controls how guidance is delivered.
+
+| Mode | `throw_input_guardrail_error` | Caller Sees | Persisted As | Use Case |
+|------|-------------------------------|-------------|--------------|----------|
+| **Friendly** | `False` (default) | Guidance as `final_output` | Assistant message | Conversational flows, agent-to-agent |
+| **Strict** | `True` | `InputGuardrailTripwireTriggered` exception | System message | Hard requirements, security |
+
+<Note>
+The `validation_attempts` parameter does not apply to input guardrails.
+</Note>
+
+## Message History
+
+Each guardrail trigger is recorded with a `message_origin` field:
+
+| Origin | Meaning |
+|--------|---------|
+| `input_guardrail_message` | Input guardrail in friendly mode |
+| `input_guardrail_error` | Input guardrail in strict mode |
+| `output_guardrail_error` | Output guardrail (system message) |
+
+## Advanced Examples
+
+See [Input Guardrails Advanced](/additional-features/guardrails/input-guardrails-advanced) for judge agents, streaming behavior, and message history examples.

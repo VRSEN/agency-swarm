@@ -1,0 +1,65 @@
+---
+title: "Onboarding Tool Guide"
+description: "Step-by-step setup for marketplace onboarding tools."
+icon: "wand-magic"
+---
+
+## Step 1: Create `onboarding_tool.py`
+
+Place this file in your repo root:
+
+```python
+from agency_swarm import BaseTool
+from pydantic import Field
+
+class OnboardingTool(BaseTool):
+    agent_name: str = Field(..., description="Name shown to the buyer")
+    business_overview: str = Field(..., description="Short business overview")
+    additional_notes: str = Field(..., description="Any extra requirements")
+
+    def run(self):
+        import json
+        with open("onboarding_config.py", "w", encoding="utf-8") as f:
+            f.write(f"config = {json.dumps(self.model_dump(), indent=2)}")
+        return "Configuration saved"
+```
+
+## Step 2: Add your own fields
+
+```python
+from typing import Literal
+from pydantic import Field
+
+model: Literal["gpt-4o", "gpt-5-mini", "gpt-5"] = Field(
+    ..., description="Select the model"
+)
+```
+
+## Step 3: Run the tool
+
+```bash
+python onboarding_tool.py
+```
+
+This generates `onboarding_config.py` in the repo root.
+
+## Step 4: Use the config
+
+```python
+from agency_swarm import Agent
+from onboarding_config import config
+
+agent = Agent(
+    name=config["agent_name"],
+    instructions=f"You help {config['business_overview']}",
+)
+```
+
+## Step 5: Deploy and list
+
+- Deploy your agent as usual
+- Test it on your own account first
+- List it on the marketplace
+
+See [Advanced Fields](/platform/marketplace/onboarding-advanced-fields) for UI options and file uploads.
+See [Onboarding Tool Example](/platform/marketplace/onboarding-example) for a full reference.
