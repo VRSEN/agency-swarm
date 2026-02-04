@@ -208,7 +208,8 @@ def get_metadata(
         include_tools: Whether to include agent tools as separate nodes
 
     Returns:
-        dict: Graph data plus metadata fields like agencyName, totalAgents, totalTools, agents, entryPoints
+        dict: Graph data plus metadata fields like agencyName, totalAgents, totalTools, agents, entryPoints.
+            Tool entries include inputSchema when available.
     """
 ```
 
