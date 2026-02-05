@@ -12,7 +12,7 @@ Additional instructions allow you to pass additional context to the agent at the
 
 ### Widgets
 
-To use **additional instructions** in widgets, simply add them in the **third parameter** in the ChatComponent ****`init()` function like below.
+To use **additional instructions** in widgets, pass them as the **third parameter** to `widget.init(...)`.
 
 ```html
 <!DOCTYPE html>
@@ -23,32 +23,24 @@ To use **additional instructions** in widgets, simply add them in the **third pa
     <title>My Travel Planner</title>
   </head>
   <body>
-    <script
-      defer
-      src="https://openai-widget.web.app/ChatComponent.bundle.js"
-    ></script>
-    <script>
-      document.addEventListener("DOMContentLoaded", function () {
-        // Check if the chat container exists
-        var chatContainer = document.getElementById("chat-container");
-        // If the chat container doesn't exist, create it
-        if (!chatContainer) {
-          chatContainer = document.createElement("div");
-          chatContainer.id = "chat-container";
-          document.body.appendChild(chatContainer);
-        }
+    <script type="module">
+      const ADDITIONAL_INSTRUCTIONS = "User's favorite city is Paris.";
 
-        let additionalInstructions = "User's favorite city is Paris."
+      let chatContainer = document.getElementById("chat-container");
+      if (!chatContainer) {
+        chatContainer = document.createElement("div");
+        chatContainer.id = "chat-container";
+        document.body.appendChild(chatContainer);
+      }
 
-        // userId should be defined somewhere in your application
-        //additionalInstructions = "The current user id is" + userId
-
-        // Initialize the Chat component
-        if (window.ChatComponent) {
-          ChatComponent.init("<your-widget-id>", "#chat-container", additionalInstructions);
+      import("https://agencii-widget.web.app/widget.js").then(async () => {
+        if (window?.widget?.init) {
+          await window.widget.init("<your-widget-id>", "#chat-container", ADDITIONAL_INSTRUCTIONS);
         } else {
-          console.error("ChatComponent is not available");
+          console.error("widget.init is not available after module load.");
         }
+      }).catch((err) => {
+        console.error("Failed to load widget:", err);
       });
     </script>
   </body>
