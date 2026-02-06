@@ -144,18 +144,29 @@ class MessageFormatter:
         return False
 
     @staticmethod
+    def _is_plain_message(message: dict[str, Any]) -> bool:
+        role = message.get("role")
+        if role not in {"user", "assistant", "system", "developer"}:
+            return False
+        if MessageFormatter._looks_like_chat_completions(message):
+            return False
+        if MessageFormatter._looks_like_responses(message):
+            return False
+        return True
+
+    @staticmethod
     def _detect_history_protocol(history: list[dict[str, Any]]) -> str | None:
         protocols: set[str] = set()
         for msg in history:
-            normalized = MessageFormatter._normalize_history_protocol(msg.get("history_protocol"))
-            if normalized:
-                protocols.add(normalized)
-                continue
             if MessageFormatter._looks_like_chat_completions(msg):
                 protocols.add(MessageFormatter.HISTORY_PROTOCOL_CHAT_COMPLETIONS)
                 continue
             if MessageFormatter._looks_like_responses(msg):
                 protocols.add(MessageFormatter.HISTORY_PROTOCOL_RESPONSES)
+                continue
+            normalized = MessageFormatter._normalize_history_protocol(msg.get("history_protocol"))
+            if normalized and not MessageFormatter._is_plain_message(msg):
+                protocols.add(normalized)
         if len(protocols) > 1:
             return MessageFormatter.HISTORY_PROTOCOL_MIXED
         if len(protocols) == 1:

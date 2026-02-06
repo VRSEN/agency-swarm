@@ -30,7 +30,7 @@ def _make_context(thread_manager: ThreadManager) -> AgencyContext:
     return AgencyContext(agency_instance=None, thread_manager=thread_manager)
 
 
-def test_prepare_history_for_runner_rejects_explicit_protocol_mismatch() -> None:
+def test_prepare_history_for_runner_allows_explicit_protocol_label_on_plain_messages() -> None:
     thread_manager = ThreadManager()
     thread_manager._store.messages = [
         {
@@ -45,8 +45,22 @@ def test_prepare_history_for_runner_rejects_explicit_protocol_mismatch() -> None
     agent = _make_responses_agent("AgentA")
     context = _make_context(thread_manager)
 
-    with pytest.raises(IncompatibleChatHistoryError):
-        MessageFormatter.prepare_history_for_runner([], agent, None, agency_context=context)
+    MessageFormatter.prepare_history_for_runner([], agent, None, agency_context=context)
+
+
+def test_prepare_history_for_runner_allows_shared_plain_history_across_protocols() -> None:
+    thread_manager = ThreadManager()
+    context = _make_context(thread_manager)
+    chat_agent = _make_chat_agent("AgentA")
+    responses_agent = _make_responses_agent("AgentB")
+
+    MessageFormatter.prepare_history_for_runner([{"role": "user", "content": "hello"}], chat_agent, None, context)
+    MessageFormatter.prepare_history_for_runner([{"role": "user", "content": "second"}], responses_agent, None, context)
+
+    all_messages = thread_manager.get_all_messages()
+    assert len(all_messages) == 2
+    assert all_messages[0]["history_protocol"] == MessageFormatter.HISTORY_PROTOCOL_CHAT_COMPLETIONS
+    assert all_messages[1]["history_protocol"] == MessageFormatter.HISTORY_PROTOCOL_RESPONSES
 
 
 def test_prepare_history_for_runner_rejects_inferred_protocol_mismatch() -> None:
