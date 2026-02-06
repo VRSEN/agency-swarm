@@ -292,6 +292,11 @@ class Execution:
                             agent_run_id=current_agent_run_id,
                             parent_run_id=parent_run_id,
                             run_trace_id=run_trace_id,
+                            history_protocol=MessageFormatter.resolve_history_protocol_for_agent_name(
+                                current_agent_name,
+                                default_agent=self.agent,
+                                agency_context=agency_context,
+                            ),
                         )
                         items_to_save.append(formatted_item)
                         content_preview = str(item_dict.get("content", ""))[:50]
