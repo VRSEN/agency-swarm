@@ -77,6 +77,14 @@ except OutputGuardrailTripwireTriggered as e:
     print(f"Validation failed: {e.guardrail_result.output_info}")
 ```
 
+## Message History
+
+Output guardrail failures are stored as system messages with `message_origin="output_guardrail_error"`.
+
+| Origin | Meaning |
+|--------|---------|
+| `output_guardrail_error` | Output guardrail failure (system message) |
+
 ## Agent-to-Agent Validation
 
 If agents communicate with each other, the recipient agent's guardrails enforce message format and content. See [Communication Flows](/core-framework/agencies/communication-flows) and the output guardrail example above.

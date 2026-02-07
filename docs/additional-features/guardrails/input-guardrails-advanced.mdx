@@ -25,7 +25,8 @@ guardrail_agent = Agent(
     name="GuardrailAgent",
     instructions=(
         "You screen incoming messages for a support agent. "
-        "Allow account access, billing, and troubleshooting."
+        "Allow account access, billing, and troubleshooting. "
+        "Deem all other topics irrelevant."
     ),
     model="gpt-5-mini",
     output_type=RelevanceDecision,
@@ -48,7 +49,7 @@ async def require_support_topic(
 
 ## Streaming Behavior
 
-In friendly mode, guidance appears as a streaming event:
+In non-strict mode, guidance appears as a streaming event:
 
 ```
 RunItemStreamEvent(

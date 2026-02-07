@@ -22,6 +22,7 @@ from agency_swarm.agent import (
     apply_framework_defaults,
     load_tools_from_folder,
     normalize_agent_tool_definitions,
+    normalize_input_guardrail_error_kwargs,
     parse_schemas,
     separate_kwargs,
     setup_file_manager,
@@ -121,6 +122,8 @@ class Agent(BaseAgent[MasterContext]):
             include_search_results (bool): Include search results in FileSearchTool output for citation extraction.
                 Defaults to False.
             validation_attempts (int): Number of retries when an output guardrail trips. Defaults to 1.
+            raise_input_guardrail_error (bool): Whether to raise input guardrail errors as exceptions.
+                Alias for `throw_input_guardrail_error`.
             throw_input_guardrail_error (bool): Whether to raise input guardrail errors as exceptions.
                 Defaults to False.
             handoff_reminder (str | None): Custom reminder for handoffs.
@@ -153,6 +156,7 @@ class Agent(BaseAgent[MasterContext]):
                     calls result in a final output.
             reset_tool_choice (bool | None): Whether to reset tool choice after tool calls.
         """
+        normalize_input_guardrail_error_kwargs(kwargs)
         validate_no_deprecated_agent_kwargs(kwargs)
         normalize_agent_tool_definitions(kwargs)
 

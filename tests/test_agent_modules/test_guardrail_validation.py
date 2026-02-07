@@ -278,12 +278,12 @@ async def test_input_guardrail_streaming_strict_prunes_and_raises(monkeypatch, m
 
 
 @pytest.mark.asyncio
-async def test_input_guardrail_streaming_friendly_prunes_and_streams(monkeypatch, minimal_agent):
+async def test_input_guardrail_streaming_non_strict_prunes_and_streams(monkeypatch, minimal_agent):
     agent = minimal_agent
     agent.throw_input_guardrail_error = False
     ctx = AgencyContext(agency_instance=None, thread_manager=ThreadManager(), subagents={})
 
-    pruned_history = [{"role": "assistant", "content": "friendly"}]
+    pruned_history = [{"role": "assistant", "content": "non-strict"}]
     prune_invocations = 0
 
     def fake_prune(messages, *, initial_saved_count, run_trace_id, collapse_to_root):

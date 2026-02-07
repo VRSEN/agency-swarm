@@ -62,13 +62,13 @@ agent = Agent(
 )
 ```
 
-## Friendly vs Strict Mode
+## Non-strict vs Strict Mode
 
-The `throw_input_guardrail_error` parameter controls how guidance is delivered.
+The `raise_input_guardrail_error` parameter (alias: `throw_input_guardrail_error`) controls how guidance is delivered.
 
-| Mode | `throw_input_guardrail_error` | Caller Sees | Persisted As | Use Case |
+| Mode | `raise_input_guardrail_error` | Caller Sees | Persisted As | Use Case |
 |------|-------------------------------|-------------|--------------|----------|
-| **Friendly** | `False` (default) | Guidance as `final_output` | Assistant message | Conversational flows, agent-to-agent |
+| **Non-strict** | `False` (default) | Guidance as `final_output` | Assistant message | Conversational flows, agent-to-agent |
 | **Strict** | `True` | `InputGuardrailTripwireTriggered` exception | System message | Hard requirements, security |
 
 <Note>
@@ -81,9 +81,10 @@ Each guardrail trigger is recorded with a `message_origin` field:
 
 | Origin | Meaning |
 |--------|---------|
-| `input_guardrail_message` | Input guardrail in friendly mode |
+| `input_guardrail_message` | Input guardrail in non-strict mode |
 | `input_guardrail_error` | Input guardrail in strict mode |
-| `output_guardrail_error` | Output guardrail (system message) |
+
+For output guardrail history entries, see [Output Guardrails](/additional-features/guardrails/output-guardrails).
 
 ## Advanced Examples
 

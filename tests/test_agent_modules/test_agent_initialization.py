@@ -98,6 +98,38 @@ def test_agent_initialization_with_different_output_types():
     assert agent3.output_type is None
 
 
+def test_agent_initialization_with_raise_input_guardrail_error_alias():
+    """Alias should map to throw_input_guardrail_error behavior."""
+    agent = Agent(
+        name="AliasAgent",
+        instructions="Test",
+        raise_input_guardrail_error=True,
+    )
+    assert agent.throw_input_guardrail_error is True
+
+
+def test_agent_initialization_with_matching_raise_and_throw_input_guardrail_error():
+    """Matching alias+canonical values should be accepted."""
+    agent = Agent(
+        name="AliasMatchAgent",
+        instructions="Test",
+        raise_input_guardrail_error=False,
+        throw_input_guardrail_error=False,
+    )
+    assert agent.throw_input_guardrail_error is False
+
+
+def test_agent_initialization_with_conflicting_raise_and_throw_input_guardrail_error():
+    """Conflicting alias+canonical values should fail fast."""
+    with pytest.raises(TypeError, match=r"Conflicting values for `raise_input_guardrail_error`"):
+        Agent(
+            name="AliasConflictAgent",
+            instructions="Test",
+            raise_input_guardrail_error=True,
+            throw_input_guardrail_error=False,
+        )
+
+
 def test_agent_initialization_with_all_parameters():
     """Test Agent initialization with all parameters including output_type."""
     tool1 = MagicMock(spec=FunctionTool)
