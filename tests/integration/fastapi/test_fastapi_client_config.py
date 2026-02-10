@@ -187,3 +187,52 @@ def test_client_config_merges_default_headers_and_allows_overrides(openai_stub_b
     assert seen[0]["x-agency-id"] == "agency-orig"
     assert seen[0]["x-sandbox-id"] == "sandbox-override"
     assert seen[0]["x-user-id"] == "user-123"
+
+
+def test_client_config_is_scoped_to_single_request(openai_stub_base_url: str) -> None:
+    """Request-level overrides should not persist across requests."""
+
+    cached_agency = None
+
+    def create_agency(load_threads_callback=None, save_threads_callback=None):
+        nonlocal cached_agency
+        if cached_agency is None:
+            original_client = AsyncOpenAI(
+                api_key="sk-original",
+                base_url=f"{openai_stub_base_url}/v1",
+            )
+            agent = Agent(
+                name="TestAgent",
+                instructions="You are a test agent.",
+                model=OpenAIChatCompletionsModel(model="gpt-4o-mini", openai_client=original_client),
+            )
+            cached_agency = Agency(
+                agent,
+                load_threads_callback=load_threads_callback,
+                save_threads_callback=save_threads_callback,
+            )
+        return cached_agency
+
+    app = run_fastapi(
+        agencies={"test_agency": create_agency},
+        return_app=True,
+        app_token_env="",  # disable auth for test
+        enable_agui=False,
+    )
+    client = TestClient(app)
+
+    res = client.post(
+        "/test_agency/get_response",
+        json={"message": "hi", "client_config": {"api_key": "sk-test"}},
+    )
+    assert res.status_code == 200
+    assert res.json()["response"] == "hello from stub"
+
+    res = client.post("/test_agency/get_response", json={"message": "hi again"})
+    assert res.status_code == 200
+    assert res.json()["response"] == "hello from stub"
+
+    seen = _ChatCompletionsStubHandler.requests_seen
+    assert len(seen) == 2
+    assert seen[0]["authorization"] == "Bearer sk-test"
+    assert seen[1]["authorization"] == "Bearer sk-original"
