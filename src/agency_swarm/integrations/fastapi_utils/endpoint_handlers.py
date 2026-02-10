@@ -189,47 +189,53 @@ def make_response_endpoint(
                 return {"error": f"Error downloading file from provided urls: {e}"}
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
+        restore_snapshot = None
 
         # Apply custom OpenAI client configuration if provided
         if request.client_config is not None:
+            restore_snapshot = _snapshot_agency_state(agency_instance)
             apply_openai_client_config(agency_instance, request.client_config)
 
-        # Attach persistent MCP servers and ensure connections before handling the request
-        await attach_persistent_mcp_servers(agency_instance)
+        try:
+            # Attach persistent MCP servers and ensure connections before handling the request
+            await attach_persistent_mcp_servers(agency_instance)
 
-        # Capture initial message count to identify new messages
-        initial_message_count = len(agency_instance.thread_manager.get_all_messages())
+            # Capture initial message count to identify new messages
+            initial_message_count = len(agency_instance.thread_manager.get_all_messages())
 
-        response = await agency_instance.get_response(
-            message=request.message,
-            recipient_agent=request.recipient_agent,
-            context_override=request.user_context,
-            additional_instructions=request.additional_instructions,
-            file_ids=combined_file_ids,
-        )
-        # Get only new messages added during this request
-        all_messages = agency_instance.thread_manager.get_all_messages()
-        new_messages = all_messages[initial_message_count:]  # Only messages added during this request
-        filtered_messages = MessageFilter.filter_messages(new_messages)
-        filtered_messages = _normalize_new_messages_for_client(filtered_messages)
-        result = {"response": response.final_output, "new_messages": filtered_messages}
+            response = await agency_instance.get_response(
+                message=request.message,
+                recipient_agent=request.recipient_agent,
+                context_override=request.user_context,
+                additional_instructions=request.additional_instructions,
+                file_ids=combined_file_ids,
+            )
+            # Get only new messages added during this request
+            all_messages = agency_instance.thread_manager.get_all_messages()
+            new_messages = all_messages[initial_message_count:]  # Only messages added during this request
+            filtered_messages = MessageFilter.filter_messages(new_messages)
+            filtered_messages = _normalize_new_messages_for_client(filtered_messages)
+            result = {"response": response.final_output, "new_messages": filtered_messages}
 
-        # Extract and add usage information
-        usage_stats = extract_usage_from_run_result(response)
-        if usage_stats:
-            # Calculate cost - model_name is auto-extracted from run_result._main_agent_model
-            usage_stats = calculate_usage_with_cost(usage_stats, run_result=response)
-            result["usage"] = usage_stats.to_dict()
+            # Extract and add usage information
+            usage_stats = extract_usage_from_run_result(response)
+            if usage_stats:
+                # Calculate cost - model_name is auto-extracted from run_result._main_agent_model
+                usage_stats = calculate_usage_with_cost(usage_stats, run_result=response)
+                result["usage"] = usage_stats.to_dict()
 
-        if request.file_urls is not None and file_ids_map is not None:
-            result["file_ids_map"] = file_ids_map
-        if request.generate_chat_name:
-            try:
-                result["chat_name"] = await generate_chat_name(filtered_messages)
-            except Exception as e:
-                # Do not add errors to the result as they might be mistaken for chat name
-                logger.error(f"Error generating chat name: {e}")
-        return result
+            if request.file_urls is not None and file_ids_map is not None:
+                result["file_ids_map"] = file_ids_map
+            if request.generate_chat_name:
+                try:
+                    result["chat_name"] = await generate_chat_name(filtered_messages)
+                except Exception as e:
+                    # Do not add errors to the result as they might be mistaken for chat name
+                    logger.error(f"Error generating chat name: {e}")
+            return result
+        finally:
+            if restore_snapshot is not None:
+                _restore_agency_state(agency_instance, restore_snapshot)
 
     return handler
 
@@ -284,9 +290,11 @@ def make_stream_endpoint(
                 )
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
+        restore_snapshot = None
 
         # Apply custom OpenAI client configuration if provided
         if request.client_config is not None:
+            restore_snapshot = _snapshot_agency_state(agency_instance)
             apply_openai_client_config(agency_instance, request.client_config)
 
         await attach_persistent_mcp_servers(agency_instance)
@@ -390,6 +398,8 @@ def make_stream_endpoint(
                     yield "event: end\ndata: [DONE]\n\n"
                 finally:
                     await run_registry.finish(run_id)
+                    if restore_snapshot is not None:
+                        _restore_agency_state(agency_instance, restore_snapshot)
 
         return StreamingResponse(
             event_generator(),
@@ -518,9 +528,11 @@ def make_agui_chat_endpoint(
 
         # Choose / build an agent – here we just create a demo agent each time.
         agency = agency_factory(load_threads_callback=load_callback)
+        restore_snapshot = None
 
         # Apply custom OpenAI client configuration if provided
         if request.client_config is not None:
+            restore_snapshot = _snapshot_agency_state(agency)
             apply_openai_client_config(agency, request.client_config)
 
         await attach_persistent_mcp_servers(agency)
@@ -575,6 +587,9 @@ def make_agui_chat_endpoint(
                 tb_str = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
                 error_message = f"{str(exc)}\n\nTraceback:\n{tb_str}"
                 yield encoder.encode(RunErrorEvent(type=EventType.RUN_ERROR, message=error_message))
+            finally:
+                if restore_snapshot is not None:
+                    _restore_agency_state(agency, restore_snapshot)
 
         return StreamingResponse(event_generator(), media_type=encoder.get_content_type())
 
@@ -943,3 +958,20 @@ def _apply_litellm_config(agent: Agent, model_name: str, config: ClientConfig) -
         base_url=config.base_url,
         api_key=api_key,
     )
+
+def _snapshot_agency_state(agency: Agency) -> dict[str, tuple[object, ModelSettings | None]]:
+    """Capture agent model/model_settings so overrides can be restored."""
+    snapshot: dict[str, tuple[object, ModelSettings | None]] = {}
+    for name, agent in agency.agents.items():
+        snapshot[name] = (agent.model, getattr(agent, "model_settings", None))
+    return snapshot
+
+
+def _restore_agency_state(agency: Agency, snapshot: dict[str, tuple[object, ModelSettings | None]]) -> None:
+    """Restore agent model/model_settings after a request override."""
+    for name, (model, model_settings) in snapshot.items():
+        agent = agency.agents.get(name)
+        if agent is None:
+            continue
+        agent.model = model
+        agent.model_settings = model_settings
