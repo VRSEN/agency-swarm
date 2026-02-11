@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import json
 import logging
 import time
@@ -8,6 +9,7 @@ from collections.abc import AsyncGenerator, Callable, Sequence
 from dataclasses import dataclass, field
 from importlib import metadata
 from pathlib import Path
+from typing import cast
 
 from ag_ui.core import EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
 from ag_ui.encoder import EventEncoder
@@ -297,7 +299,12 @@ def make_stream_endpoint(
             restore_snapshot = _snapshot_agency_state(agency_instance)
             apply_openai_client_config(agency_instance, request.client_config)
 
-        await attach_persistent_mcp_servers(agency_instance)
+        try:
+            await attach_persistent_mcp_servers(agency_instance)
+        except Exception:
+            if restore_snapshot is not None:
+                _restore_agency_state(agency_instance, restore_snapshot)
+            raise
 
         # Generate unique run_id for this streaming session
         run_id = str(uuid.uuid4())
@@ -535,7 +542,12 @@ def make_agui_chat_endpoint(
             restore_snapshot = _snapshot_agency_state(agency)
             apply_openai_client_config(agency, request.client_config)
 
-        await attach_persistent_mcp_servers(agency)
+        try:
+            await attach_persistent_mcp_servers(agency)
+        except Exception:
+            if restore_snapshot is not None:
+                _restore_agency_state(agency, restore_snapshot)
+            raise
 
         async def event_generator() -> AsyncGenerator[str]:
             # Emit RUN_STARTED first.
@@ -959,19 +971,26 @@ def _apply_litellm_config(agent: Agent, model_name: str, config: ClientConfig) -
         api_key=api_key,
     )
 
-def _snapshot_agency_state(agency: Agency) -> dict[str, tuple[object, ModelSettings | None]]:
+def _snapshot_agency_state(agency: Agency) -> dict[str, tuple[str | Model | None, ModelSettings | None]]:
     """Capture agent model/model_settings so overrides can be restored."""
-    snapshot: dict[str, tuple[object, ModelSettings | None]] = {}
+    snapshot: dict[str, tuple[str | Model | None, ModelSettings | None]] = {}
     for name, agent in agency.agents.items():
-        snapshot[name] = (agent.model, getattr(agent, "model_settings", None))
+        model_settings = getattr(agent, "model_settings", None)
+        snapshot[name] = (
+            agent.model,
+            copy.deepcopy(model_settings) if model_settings is not None else None,
+        )
     return snapshot
 
 
-def _restore_agency_state(agency: Agency, snapshot: dict[str, tuple[object, ModelSettings | None]]) -> None:
+def _restore_agency_state(agency: Agency, snapshot: dict[str, tuple[str | Model | None, ModelSettings | None]]) -> None:
     """Restore agent model/model_settings after a request override."""
     for name, (model, model_settings) in snapshot.items():
         agent = agency.agents.get(name)
         if agent is None:
             continue
         agent.model = model
-        agent.model_settings = model_settings
+        if model_settings is None:
+            agent.model_settings = cast(ModelSettings, None)
+        else:
+            agent.model_settings = model_settings
