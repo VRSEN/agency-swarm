@@ -179,3 +179,32 @@ def test_litellm_openai_provider_can_use_generic_api_key_fallback() -> None:
 
     assert isinstance(agent.model, LitellmModel)
     assert agent.model.api_key == "sk-openai"
+
+
+def test_snapshot_restore_preserves_model_settings_headers() -> None:
+    """Snapshot/restore should not leak mutated model_settings."""
+    pytest.importorskip("agents")
+
+    from agents import ModelSettings
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import (
+        _apply_default_headers_to_agent_model_settings,
+        _restore_agency_state,
+        _snapshot_agency_state,
+    )
+
+    class _Agency:
+        def __init__(self, agent: Agent):
+            self.agents = {"A": agent}
+
+    agent = Agent(name="A", instructions="x", model="gpt-4o-mini")
+    agent.model_settings = ModelSettings(extra_headers={"x-orig": "1"})
+    agency = _Agency(agent)
+
+    snapshot = _snapshot_agency_state(agency)
+    _apply_default_headers_to_agent_model_settings(agent, {"x-orig": "2", "x-new": "3"})
+
+    _restore_agency_state(agency, snapshot)
+
+    assert agent.model_settings.extra_headers == {"x-orig": "1"}
