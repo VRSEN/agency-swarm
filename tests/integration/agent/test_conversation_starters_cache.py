@@ -7,6 +7,7 @@ from agents.exceptions import AgentsException
 
 from agency_swarm import Agency, Agent, function_tool
 from agency_swarm.agent.conversation_starters_cache import extract_final_output_text, load_cached_starter
+from tests.deterministic_model import DeterministicModel
 
 
 async def _wait_for_cache_files(cache_dir: Path, expected: int) -> list[Path]:
@@ -65,6 +66,45 @@ async def test_conversation_starter_cache_reuse_without_llm(tmp_path, monkeypatc
         cache_conversation_starters=True,
     )
     Agency(agent_cached)
+
+
+@pytest.mark.asyncio
+async def test_quick_reply_cache_reuse_without_model_call(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENCY_SWARM_CHATS_DIR", str(tmp_path))
+
+    quick_reply = "hi"
+    model = DeterministicModel(default_response="Hello there.")
+    agent = Agent(
+        name="QuickReplyAgent",
+        instructions="You are helpful.",
+        model=model,
+        quick_replies=[quick_reply],
+        cache_conversation_starters=True,
+    )
+    agency = Agency(agent)
+
+    cache_dir = Path(tmp_path) / "starter_cache"
+    cache_files = await _wait_for_cache_files(cache_dir, 1)
+    assert len(cache_files) == 1
+    cached = load_cached_starter(
+        agent.name,
+        quick_reply,
+        expected_fingerprint=agent._conversation_starters_fingerprint,
+    )
+    assert cached is not None
+    expected_text = extract_final_output_text(cached.items)
+    assert expected_text
+
+    async def _fail_get_response(*_args, **_kwargs):
+        raise RuntimeError("model should not be called for cached quick reply")
+
+    monkeypatch.setattr(model, "get_response", _fail_get_response)
+
+    result = await agency.get_response(quick_reply)
+    assert result.final_output == expected_text
+
+    with pytest.raises(AgentsException, match="Runner execution failed for agent QuickReplyAgent"):
+        await agency.get_response(quick_reply)
 
 
 @function_tool
