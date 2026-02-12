@@ -83,6 +83,19 @@ def test_agent_initialization_with_deprecated_model_settings():
         )
 
 
+def test_agent_initialization_with_return_input_guardrail_errors_fails_fast():
+    """Removed guardrail kwarg should fail fast with migration guidance."""
+    with pytest.raises(TypeError) as exc_info:
+        Agent(
+            name="LegacyGuardrailAgent",
+            instructions="Test",
+            return_input_guardrail_errors=False,
+        )
+    error_message = str(exc_info.value)
+    assert "return_input_guardrail_errors" in error_message
+    assert "raise_input_guardrail_error" in error_message
+
+
 def test_agent_initialization_with_different_output_types():
     """Test Agent initialization with different output_type parameters."""
     # Test with Pydantic model

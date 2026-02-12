@@ -54,6 +54,10 @@ _DEPRECATED_AGENT_KWARGS: dict[str, str] = {
     "id": "Assistant-ID loading is not supported. Use persistence hooks.",
     "refresh_from_id": "Assistant-ID loading is not supported. Use persistence hooks.",
     "response_validator": "Use `output_guardrails` and `input_guardrails`.",
+    "return_input_guardrail_errors": (
+        "Removed; use `raise_input_guardrail_error` (alias: `throw_input_guardrail_error`) "
+        "with inverse value semantics."
+    ),
     "response_format": "Use `output_type` on the Agent (a Python type).",
     "tool_resources": "Use `files_folder` and Agent file APIs.",
     "file_search": "Use `files_folder` to manage vector store + file search.",
