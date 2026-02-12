@@ -35,6 +35,7 @@ from agency_swarm.agent.conversation_starters_cache import (
     compute_starter_cache_fingerprint,
     load_cached_starter,
     load_cached_starters,
+    merge_cacheable_starters,
     normalize_starter_text,
 )
 from agency_swarm.agent.execution_streaming import StreamingRunResponse
@@ -76,6 +77,7 @@ class Agent(BaseAgent[MasterContext]):
     tools_folder: str | Path | None  # Directory path for automatic tool discovery and loading
     description: str | None
     conversation_starters: list[str] | None
+    quick_replies: list[str] | None
     cache_conversation_starters: bool = False
     output_type: type[Any] | None
     include_search_results: bool = False
@@ -115,7 +117,9 @@ class Agent(BaseAgent[MasterContext]):
             api_params (dict[str, dict[str, Any]] | None): Per-schema parameters for OpenAPI tools. Format:
                 {"schema_filename.json": {"param_name": "param_value"}}.
             conversation_starters (list[str] | None): Conversation starters for this agent.
-            cache_conversation_starters (bool): Enable cached conversation starters from .agency_swarm.
+            quick_replies (list[str] | None): Additional first-message prompts eligible for cache replay.
+            cache_conversation_starters (bool): Enable cached conversation starters and quick replies
+                from .agency_swarm.
             send_message_tool_class (type | None): DEPRECATED. Configure SendMessage tool classes via
                 `communication_flows` on `Agency` instead of setting this per agent.
             include_search_results (bool): Include search results in FileSearchTool output for citation extraction.
@@ -190,6 +194,8 @@ class Agent(BaseAgent[MasterContext]):
         self.description = current_agent_params.get("description")
         conversation_starters = current_agent_params.get("conversation_starters")
         self.conversation_starters = _validate_conversation_starters(conversation_starters)
+        quick_replies = current_agent_params.get("quick_replies")
+        self.quick_replies = _validate_quick_replies(quick_replies)
         cache_enabled = current_agent_params.get("cache_conversation_starters", False)
         self.cache_conversation_starters = _validate_cache_conversation_starters(cache_enabled)
         self.send_message_tool_class = current_agent_params.get("send_message_tool_class")
@@ -439,7 +445,8 @@ class Agent(BaseAgent[MasterContext]):
         """Recompute conversation starter cache fingerprint and reload cached entries."""
         if not self.cache_conversation_starters:
             return
-        if not self.conversation_starters:
+        cacheable_starters = merge_cacheable_starters(self.conversation_starters, self.quick_replies)
+        if not cacheable_starters:
             return
 
         fingerprint = compute_starter_cache_fingerprint(
@@ -453,7 +460,7 @@ class Agent(BaseAgent[MasterContext]):
         self._conversation_starters_fingerprint = fingerprint
         self._conversation_starters_cache = load_cached_starters(
             self.name,
-            self.conversation_starters,
+            cacheable_starters,
             expected_fingerprint=fingerprint,
         )
 
@@ -461,7 +468,8 @@ class Agent(BaseAgent[MasterContext]):
         """Populate missing conversation starters cache entries using the model."""
         if not self.cache_conversation_starters:
             return
-        if not self.conversation_starters:
+        cacheable_starters = merge_cacheable_starters(self.conversation_starters, self.quick_replies)
+        if not cacheable_starters:
             return
         if self._conversation_starters_warmup_started:
             return
@@ -470,7 +478,7 @@ class Agent(BaseAgent[MasterContext]):
         cache_map = self._conversation_starters_cache
         fingerprint = self._conversation_starters_fingerprint
         missing: list[str] = []
-        for starter in self.conversation_starters:
+        for starter in cacheable_starters:
             normalized = normalize_starter_text(starter)
             if normalized and normalized not in cache_map:
                 cached = load_cached_starter(self.name, starter, expected_fingerprint=fingerprint)
@@ -583,6 +591,15 @@ def _validate_conversation_starters(value: Any) -> list[str] | None:
         return _CONVERSATION_STARTERS_ADAPTER.validate_python(value)
     except ValidationError as exc:
         raise ValueError("conversation_starters must be a list of non-empty strings") from exc
+
+
+def _validate_quick_replies(value: Any) -> list[str] | None:
+    if value is None:
+        return None
+    try:
+        return _CONVERSATION_STARTERS_ADAPTER.validate_python(value)
+    except ValidationError as exc:
+        raise ValueError("quick_replies must be a list of non-empty strings") from exc
 
 
 def _validate_cache_conversation_starters(value: Any) -> bool:

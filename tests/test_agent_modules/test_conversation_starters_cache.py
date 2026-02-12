@@ -116,6 +116,29 @@ async def test_starter_cache_respects_shared_instructions(tmp_path, monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_quick_replies_are_cached_without_conversation_starters(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AGENCY_SWARM_CHATS_DIR", str(tmp_path))
+    quick_reply = "hi"
+    agent = Agent(
+        name="CacheAgent",
+        instructions="Base instructions.",
+        model=SystemInstructionsEchoModel(),
+        quick_replies=[quick_reply],
+        cache_conversation_starters=True,
+    )
+
+    context = _build_minimal_context(agent, None)
+    await agent.get_response(quick_reply, agency_context=context)
+
+    cached = load_cached_starter(
+        agent.name,
+        quick_reply,
+        expected_fingerprint=agent._conversation_starters_fingerprint,
+    )
+    assert cached is not None
+
+
+@pytest.mark.asyncio
 async def test_starter_cache_reload_keeps_shared_instructions(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("AGENCY_SWARM_CHATS_DIR", str(tmp_path))
     starter = "Hello starter"

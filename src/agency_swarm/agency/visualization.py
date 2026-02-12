@@ -47,6 +47,8 @@ def get_agency_graph(agency: "Agency", include_tools: bool = True) -> dict[str, 
 
         if agent.conversation_starters:
             agent_data["conversationStarters"] = agent.conversation_starters
+        if agent.quick_replies:
+            agent_data["quickReplies"] = agent.quick_replies
 
         node = {
             "id": agent_name,

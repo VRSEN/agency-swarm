@@ -54,6 +54,23 @@ def normalize_starter_text(text: str) -> str:
     return text.strip().casefold()
 
 
+def merge_cacheable_starters(
+    conversation_starters: list[str] | None,
+    quick_replies: list[str] | None,
+) -> list[str]:
+    merged: list[str] = []
+    seen_normalized: set[str] = set()
+
+    for starter in (conversation_starters or []) + (quick_replies or []):
+        normalized = normalize_starter_text(starter)
+        if not normalized or normalized in seen_normalized:
+            continue
+        seen_normalized.add(normalized)
+        merged.append(starter)
+
+    return merged
+
+
 def compute_starter_cache_fingerprint(
     agent: Agent,
     runtime_state: AgentRuntimeState | None = None,

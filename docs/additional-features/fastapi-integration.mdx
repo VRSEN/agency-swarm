@@ -132,6 +132,7 @@ data: [DONE]
         "label": "Assistant",
         "description": "Main assistant agent",
         "conversationStarters": ["Support: I need help with billing"],
+        "quickReplies": ["hi", "hello"],
         "isEntryPoint": true,
         "toolCount": 2,
         "tools": [{"name": "example_tool", "type": "function", "description": "..."}]
@@ -152,7 +153,7 @@ data: [DONE]
 }
 ```
 
-Conversation starters appear under `data.conversationStarters` on each agent node when configured. See [Conversation starters cache](/core-framework/agents/advanced-configuration#conversation-starters-cache).
+Conversation starters appear under `data.conversationStarters` and additional cache-only prompts appear under `data.quickReplies` when configured. See [Conversation starters cache](/core-framework/agents/advanced-configuration#conversation-starters-cache).
 
 **Tool (`/tool/<name>`):**
 

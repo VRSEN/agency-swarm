@@ -40,14 +40,15 @@ agent = Agent(
     instructions="You are helpful.",
     model="gpt-5-mini",
     conversation_starters=["Support: I need help with billing"],
+    quick_replies=["hi", "hello"],
     cache_conversation_starters=True,
 )
 ```
 
 In this example:
 - The UI shows the starter prompt “Support: I need help with billing”.
-- The FastAPI `/get_metadata` response exposes it as `conversationStarters` for UI rendering.
-- With `cache_conversation_starters=True`, picking that prompt can return a saved reply without calling the LLM.
+- The FastAPI `/get_metadata` response exposes starters as `conversationStarters` and extra cache-only prompts as `quickReplies`.
+- With `cache_conversation_starters=True`, either a starter or a quick reply can return a saved reply without calling the LLM.
 <Info>
 Streaming the cached reply includes events for text, tool calls, reasoning, and handoffs.
 </Info>
