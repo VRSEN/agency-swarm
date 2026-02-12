@@ -26,14 +26,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-try:
-    from agents.extensions.models.litellm_model import LitellmModel
-
-    _LITELLM_AVAILABLE = True
-except ImportError:
-    LitellmModel = None  # type: ignore[misc, assignment]
-    _LITELLM_AVAILABLE = False
-
 
 class IncompatibleChatHistoryError(RuntimeError):
     """Raised when stored chat history cannot be used with the current model protocol."""
@@ -83,8 +75,6 @@ class MessageFormatter:
     @staticmethod
     def _resolve_history_protocol_from_model(model: Any) -> str:
         if isinstance(model, OpenAIChatCompletionsModel):
-            return MessageFormatter.HISTORY_PROTOCOL_CHAT_COMPLETIONS
-        if _LITELLM_AVAILABLE and LitellmModel is not None and isinstance(model, LitellmModel):
             return MessageFormatter.HISTORY_PROTOCOL_CHAT_COMPLETIONS
         if isinstance(model, OpenAIResponsesModel):
             return MessageFormatter.HISTORY_PROTOCOL_RESPONSES

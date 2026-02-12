@@ -98,3 +98,29 @@ def test_prepare_history_for_runner_stamps_history_protocol() -> None:
     assert stored, "Expected history to be stored"
     assert stored[-1].get("history_protocol") == MessageFormatter.HISTORY_PROTOCOL_CHAT_COMPLETIONS
     assert all("history_protocol" not in item for item in history_for_runner)
+
+
+def test_prepare_history_for_runner_allows_litellm_openai_function_call_history() -> None:
+    litellm_model_module = pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
+    litellm_model_class = litellm_model_module.LitellmModel
+
+    thread_manager = ThreadManager()
+    thread_manager._store.messages = [
+        {
+            "type": "function_call",
+            "call_id": "call-1",
+            "name": "send_message",
+            "arguments": "{}",
+            "agent": "Coordinator",
+            "callerAgent": None,
+        }
+    ]
+
+    agent = Agent(
+        name="Coordinator",
+        instructions="Test",
+        model=litellm_model_class(model="openai/gpt-5-mini", api_key="test"),
+    )
+    context = _make_context(thread_manager)
+
+    MessageFormatter.prepare_history_for_runner([], agent, None, agency_context=context)
