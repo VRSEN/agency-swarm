@@ -51,9 +51,7 @@ def _compute_content_hash(run_item: RunItem) -> str | None:
     object identity is not preserved (e.g., reasoning_item, handoff_output_item).
     """
     try:
-        raw_item = getattr(run_item, "raw_item", None)
-        if raw_item is None:
-            return None
+        raw_item = cast(Any, run_item.raw_item)
 
         item_type = getattr(run_item, "type", None)
         content_parts: list[str] = [str(item_type)]
@@ -291,7 +289,7 @@ def _persist_streamed_items(
         # 1. Try Python object id() first (works for items that maintain identity)
         # 2. Try message ID + type (works for OpenAI where items may be recreated)
         obj_id = id(run_item)
-        raw_item = getattr(run_item, "raw_item", None)
+        raw_item = run_item.raw_item
         item_id = getattr(run_item, "id", None)
         if not item_id:
             item_id = raw_item.get("id") if isinstance(raw_item, dict) else getattr(raw_item, "id", None)
