@@ -51,7 +51,7 @@ def _mime_type_for_path(path_value: Path) -> str:
     return mime_type or "application/octet-stream"
 
 
-class PresentFiles(BaseTool):
+class PresentFiles(BaseTool):  # type: ignore[misc]
     """
     Returns metadata for local files and ensures they persist by moving them into the MNT directory.
     Use this tool when you want to show a local file to the user in the chat UI.
