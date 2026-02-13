@@ -3,6 +3,7 @@ from __future__ import annotations
 import mimetypes
 import os
 import shutil
+import uuid
 from pathlib import Path
 
 from pydantic import Field
@@ -24,9 +25,10 @@ def _get_max_bytes() -> int:
 
 def _resolve_path(path_value: str) -> Path:
     candidate = Path(path_value).expanduser()
-    if candidate.is_absolute():
-        return candidate.resolve()
-    return (Path.cwd() / candidate).resolve()
+    if not candidate.is_absolute():
+        candidate = Path.cwd() / candidate
+    # Keep symlink paths intact; abspath normalizes to absolute without dereferencing links.
+    return Path(os.path.abspath(candidate))
 
 
 def _sanitize_anchor(anchor: str) -> str:
@@ -49,6 +51,27 @@ def _build_mnt_destination(resolved_path: Path, mnt_dir: Path) -> Path:
 def _mime_type_for_path(path_value: Path) -> str:
     mime_type, _ = mimetypes.guess_type(path_value.name)
     return mime_type or "application/octet-stream"
+
+
+def _move_with_overwrite_safety(source_path: Path, destination: Path) -> Path:
+    if not destination.exists():
+        return Path(shutil.move(str(source_path), str(destination)))
+
+    staging_name = f".{destination.name}.incoming-{uuid.uuid4().hex}"
+    staging_path = destination.with_name(staging_name)
+    moved_to_staging = Path(shutil.move(str(source_path), str(staging_path)))
+    try:
+        moved_to_staging.replace(destination)
+    except Exception:
+        # Best-effort rollback keeps destination data safe and restores source when possible.
+        if moved_to_staging.exists() and not source_path.exists():
+            try:
+                shutil.move(str(moved_to_staging), str(source_path))
+            except Exception:
+                pass
+        raise
+
+    return destination
 
 
 class PresentFiles(BaseTool):  # type: ignore[misc]
@@ -104,18 +127,17 @@ class PresentFiles(BaseTool):  # type: ignore[misc]
                     mnt_dir.mkdir(parents=True, exist_ok=True)
                     destination = _build_mnt_destination(resolved_path, mnt_dir)
                     destination.parent.mkdir(parents=True, exist_ok=True)
+                    should_overwrite = True if self.overwrite is None else self.overwrite
                     if destination.exists():
                         if destination.is_dir():
                             errors.append(
                                 f"Unable to overwrite directory in MNT: {destination}. Remove it and retry."
                             )
                             continue
-                        should_overwrite = True if self.overwrite is None else self.overwrite
                         if not should_overwrite:
                             errors.append(f"Destination already exists and overwrite is disabled: {destination}.")
                             continue
-                        destination.unlink()
-                    final_path = Path(shutil.move(str(resolved_path), str(destination)))
+                    final_path = _move_with_overwrite_safety(resolved_path, destination)
             except Exception as exc:
                 errors.append(f"Unable to move file to MNT directory for {resolved_path}: {exc}")
                 continue
@@ -128,7 +150,7 @@ class PresentFiles(BaseTool):  # type: ignore[misc]
                 {
                     "name": final_path.name,
                     "mime_type": _mime_type_for_path(final_path),
-                    "path": final_path.resolve().as_posix(),
+                    "path": final_path.as_posix(),
                     "size_bytes": file_size,
                 }
             )

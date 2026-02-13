@@ -1,5 +1,7 @@
 """Integration tests for PresentFiles tool."""
 
+import importlib
+import os
 from pathlib import Path
 
 import pytest
@@ -10,7 +12,7 @@ from agency_swarm.tools.built_in import PresentFiles
 
 def _expected_mnt_path(source_path: Path, mnt_dir: Path) -> Path:
     cwd = Path.cwd().resolve()
-    resolved = source_path.resolve()
+    resolved = Path(os.path.abspath(source_path.expanduser()))
     try:
         relative = resolved.relative_to(cwd)
         return mnt_dir / relative
@@ -178,6 +180,38 @@ class TestPresentFilesBasics:
         assert _expected_mnt_path(file_a, mnt_dir) in paths
         assert _expected_mnt_path(file_b, mnt_dir) in paths
 
+    def test_moves_symlink_without_moving_target(self, agent_with_present_files, tmp_path, monkeypatch):
+        mnt_dir = tmp_path / "mnt"
+        monkeypatch.setenv("MNT_DIR", str(mnt_dir))
+
+        target_dir = tmp_path / "targets"
+        target_dir.mkdir()
+        target_file = target_dir / "report.pdf"
+        target_file.write_text("linked content")
+
+        links_dir = tmp_path / "links"
+        links_dir.mkdir()
+        symlink_file = links_dir / "report-link.pdf"
+        try:
+            symlink_file.symlink_to(target_file)
+        except OSError as exc:
+            pytest.skip(f"Symlink creation is not supported in this environment: {exc}")
+
+        tool = PresentFiles(files=[str(symlink_file)])
+        tool._caller_agent = agent_with_present_files
+
+        result = tool.run()
+
+        assert result.get("errors") == []
+        assert len(result.get("files", [])) == 1
+        returned_path = Path(result["files"][0]["path"])
+        expected_path = _expected_mnt_path(symlink_file, mnt_dir)
+        assert returned_path == expected_path
+        assert returned_path.is_symlink()
+        assert returned_path.resolve() == target_file.resolve()
+        assert target_file.exists()
+        assert not symlink_file.exists()
+
 
 class TestPresentFilesErrorHandling:
     """Test error handling and validations."""
@@ -245,3 +279,32 @@ class TestPresentFilesErrorHandling:
         assert len(result.get("errors", [])) == 1
         assert "exceeds" in result["errors"][0].lower()
         assert large_file.exists()
+
+    def test_move_failure_does_not_delete_existing_destination(self, agent_with_present_files, tmp_path, monkeypatch):
+        mnt_dir = tmp_path / "mnt"
+        mnt_dir.mkdir()
+        monkeypatch.setenv("MNT_DIR", str(mnt_dir))
+
+        src_file = tmp_path / "report.pdf"
+        src_file.write_text("new")
+        destination = _expected_mnt_path(src_file, mnt_dir)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text("old")
+
+        def _always_fail_move(source: str, destination_path: str):
+            raise OSError("simulated move failure")
+
+        present_files_module = importlib.import_module("agency_swarm.tools.built_in.PresentFiles")
+        monkeypatch.setattr(present_files_module.shutil, "move", _always_fail_move)
+
+        tool = PresentFiles(files=[str(src_file)])
+        tool._caller_agent = agent_with_present_files
+
+        result = tool.run()
+
+        assert result.get("files") == []
+        assert len(result.get("errors", [])) == 1
+        assert "unable to move file to mnt directory" in result["errors"][0].lower()
+        assert destination.exists()
+        assert destination.read_text() == "old"
+        assert src_file.exists()
