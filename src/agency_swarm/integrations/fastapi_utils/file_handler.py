@@ -45,7 +45,7 @@ async def upload_from_urls(
             if allowed_local_dirs is None:
                 allowed_dirs = None
             else:
-                allowed_dirs = _normalize_allowed_dirs(allowed_local_dirs, skip_missing=False)
+                allowed_dirs = _normalize_allowed_dirs(allowed_local_dirs, skip_missing=True)
             allowed_dirs_initialized = True
         return allowed_dirs
 

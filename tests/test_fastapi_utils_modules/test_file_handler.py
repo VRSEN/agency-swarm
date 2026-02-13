@@ -245,15 +245,47 @@ async def test_upload_from_urls_remote_only_skips_allowlist_validation(monkeypat
 @pytest.mark.asyncio
 async def test_upload_from_urls_rejects_missing_allowlist_path(tmp_path):
     """
-    Passing a Path to a non-existent allowlist directory should raise FileNotFoundError.
+    Non-existent allowlist entries should be skipped for local validation.
     """
     file_path = tmp_path / "doc.txt"
     file_path.write_text("hello", encoding="utf-8")
 
     missing_dir = tmp_path / "missing"
 
-    with pytest.raises(FileNotFoundError, match="Allowed directory not found"):
+    with pytest.raises(PermissionError, match="Local file access is disabled"):
         await upload_from_urls({"doc.txt": str(file_path)}, allowed_local_dirs=[missing_dir])
+
+
+@pytest.mark.asyncio
+async def test_upload_from_urls_skips_missing_allowlist_when_valid_dir_exists(monkeypatch, tmp_path):
+    """Missing allowlist entries should not block uploads from existing allowed dirs."""
+    allowed_dir = tmp_path / "allowed"
+    allowed_dir.mkdir()
+    file_path = allowed_dir / "doc.txt"
+    file_path.write_text("hello", encoding="utf-8")
+    missing_dir = tmp_path / "missing"
+
+    async def fake_upload(path):
+        return f"uploaded:{Path(path).name}"
+
+    async def fake_wait(_file_id):
+        return None
+
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.file_handler.upload_to_openai",
+        fake_upload,
+    )
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.file_handler._wait_for_file_processed",
+        fake_wait,
+    )
+
+    result = await upload_from_urls(
+        {"doc.txt": str(file_path)},
+        allowed_local_dirs=[str(allowed_dir), str(missing_dir)],
+    )
+
+    assert result == {"doc.txt": "uploaded:doc.txt"}
 
 
 @pytest.mark.asyncio
