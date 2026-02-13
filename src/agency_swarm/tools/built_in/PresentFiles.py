@@ -51,13 +51,17 @@ def _mime_type_for_path(path_value: Path) -> str:
     return mime_type or "application/octet-stream"
 
 
-class PresentFiles(BaseTool):  # type: ignore[misc]
+class PresentFiles(BaseTool):
     """
     Returns metadata for local files and ensures they persist by moving them into the MNT directory.
     Use this tool when you want to show a local file to the user in the chat UI.
     """
 
     files: list[str] = Field(..., description="List of file paths to present as previews.")
+    overwrite: bool | None = Field(
+        True,
+        description="Whether to overwrite an existing file in the MNT destination.",
+    )
 
     def run(self):
         """
@@ -105,6 +109,10 @@ class PresentFiles(BaseTool):  # type: ignore[misc]
                             errors.append(
                                 f"Unable to overwrite directory in MNT: {destination}. Remove it and retry."
                             )
+                            continue
+                        should_overwrite = True if self.overwrite is None else self.overwrite
+                        if not should_overwrite:
+                            errors.append(f"Destination already exists and overwrite is disabled: {destination}.")
                             continue
                         destination.unlink()
                     final_path = Path(shutil.move(str(resolved_path), str(destination)))
