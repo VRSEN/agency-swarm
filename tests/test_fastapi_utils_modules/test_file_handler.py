@@ -149,6 +149,93 @@ async def test_upload_from_urls_remote_only_skips_allowlist_validation(
 
 
 @pytest.mark.asyncio
+async def test_upload_from_urls_rejects_missing_allowlist_path(tmp_path):
+    """
+    Non-existent allowlist entries should be skipped for local validation.
+    """
+    file_path = tmp_path / "doc.txt"
+    file_path.write_text("hello", encoding="utf-8")
+
+    missing_dir = tmp_path / "missing"
+
+    with pytest.raises(PermissionError, match="Local file access is disabled"):
+        await upload_from_urls({"doc.txt": str(file_path)}, allowed_local_dirs=[missing_dir])
+
+
+@pytest.mark.asyncio
+async def test_upload_from_urls_skips_missing_allowlist_when_valid_dir_exists(monkeypatch, tmp_path):
+    """Missing allowlist entries should not block uploads from existing allowed dirs."""
+    allowed_dir = tmp_path / "allowed"
+    allowed_dir.mkdir()
+    file_path = allowed_dir / "doc.txt"
+    file_path.write_text("hello", encoding="utf-8")
+    missing_dir = tmp_path / "missing"
+
+    async def fake_upload(path):
+        return f"uploaded:{Path(path).name}"
+
+    async def fake_wait(_file_id):
+        return None
+
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.file_handler.upload_to_openai",
+        fake_upload,
+    )
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.file_handler._wait_for_file_processed",
+        fake_wait,
+    )
+
+    result = await upload_from_urls(
+        {"doc.txt": str(file_path)},
+        allowed_local_dirs=[str(allowed_dir), str(missing_dir)],
+    )
+
+    assert result == {"doc.txt": "uploaded:doc.txt"}
+
+
+@pytest.mark.asyncio
+async def test_upload_from_urls_rejects_relative_path():
+    """Relative paths should be rejected as unsupported scheme."""
+    with pytest.raises(ValueError, match="Unsupported URL scheme"):
+        await upload_from_urls({"file.pdf": "uploads/file.pdf"})
+
+
+@pytest.mark.asyncio
+async def test_upload_from_urls_rejects_relative_path_with_dot():
+    """Relative paths starting with ./ should be rejected."""
+    with pytest.raises(ValueError, match="Unsupported URL scheme"):
+        await upload_from_urls({"file.pdf": "./uploads/file.pdf"})
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(sys.platform == "win32", reason="file://localhost format differs on Windows")
+async def test_upload_from_urls_uploads_file_uri_localhost(monkeypatch, tmp_path):
+    """file://localhost/ URIs should work as local paths (RFC 8089)."""
+    file_path = tmp_path / "doc.txt"
+    file_path.write_text("hello", encoding="utf-8")
+
+    async def fake_upload(path):
+        return f"uploaded:{Path(path).name}"
+
+    async def fake_wait(_file_id):
+        return None
+
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.file_handler.upload_to_openai",
+        fake_upload,
+    )
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.file_handler._wait_for_file_processed",
+        fake_wait,
+    )
+
+    # file://localhost/path is equivalent to file:///path per RFC 8089 (POSIX only)
+    file_uri = f"file://localhost{file_path}"
+    result = await upload_from_urls({"doc.txt": file_uri}, allowed_local_dirs=[str(tmp_path)])
+    assert result == {"doc.txt": "uploaded:doc.txt"}
+
+
 @pytest.mark.skipif(sys.platform != "win32", reason="UNC paths are Windows-specific")
 async def test_upload_from_urls_uploads_unc_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """UNC-like Windows paths should be treated as local paths."""
