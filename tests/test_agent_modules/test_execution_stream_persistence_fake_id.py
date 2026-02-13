@@ -7,7 +7,7 @@ with LiteLLM's placeholder IDs (FAKE_RESPONSES_ID).
 from collections import deque
 from unittest.mock import patch
 
-from agents.items import ToolCallItem
+from agents.items import ToolCallItem, ToolCallOutputItem
 from agents.models.fake_id import FAKE_RESPONSES_ID
 from openai.types.responses import ResponseFunctionToolCall
 
@@ -143,16 +143,16 @@ def test_persist_streamed_items_does_not_drop_unrelated_placeholder_id_items() -
         status="in_progress",
     )
     tool_item_b = ToolCallItem(agent=agent, raw_item=tool_call_b)
-    # Note: ToolCallOutputItem requires specific raw_item structure, use a simple mock
-
-    class MockToolOutputItem:
-        def __init__(self):
-            self.type = "tool_call_output_item"
-
-        def to_input_item(self):
-            return {"id": FAKE_RESPONSES_ID, "type": "function_call_output", "call_id": "call_b", "output": "new"}
-
-    tool_output_b = MockToolOutputItem()
+    tool_output_b = ToolCallOutputItem(
+        agent=agent,
+        raw_item={
+            "id": FAKE_RESPONSES_ID,
+            "type": "function_call_output",
+            "call_id": "call_b",
+            "output": "new",
+        },
+        output="new",
+    )
 
     _persist_streamed_items(
         streaming_result=_DummyStreamResult([tool_item_b, tool_output_b]),
