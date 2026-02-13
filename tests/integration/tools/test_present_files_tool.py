@@ -212,6 +212,36 @@ class TestPresentFilesBasics:
         assert target_file.exists()
         assert not symlink_file.exists()
 
+    def test_rewrites_relative_symlink_target_after_move(self, agent_with_present_files, tmp_path, monkeypatch):
+        mnt_dir = tmp_path / "mnt"
+        monkeypatch.setenv("MNT_DIR", str(mnt_dir))
+
+        target_dir = tmp_path / "targets"
+        target_dir.mkdir()
+        target_file = target_dir / "report.pdf"
+        target_file.write_text("linked content")
+
+        links_dir = tmp_path / "links"
+        links_dir.mkdir()
+        symlink_file = links_dir / "report-link.pdf"
+        relative_target = os.path.relpath(target_file, start=links_dir)
+        try:
+            symlink_file.symlink_to(relative_target)
+        except OSError as exc:
+            pytest.skip(f"Symlink creation is not supported in this environment: {exc}")
+
+        tool = PresentFiles(files=[str(symlink_file)])
+        tool._caller_agent = agent_with_present_files
+
+        result = tool.run()
+
+        assert result.get("errors") == []
+        assert len(result.get("files", [])) == 1
+        returned_path = Path(result["files"][0]["path"])
+        assert returned_path.is_symlink()
+        assert returned_path.resolve() == target_file.resolve()
+        assert returned_path.read_text() == "linked content"
+
     def test_unknown_extension_uses_octet_stream(self, agent_with_present_files, tmp_path, monkeypatch):
         mnt_dir = tmp_path / "mnt"
         monkeypatch.setenv("MNT_DIR", str(mnt_dir))
@@ -324,4 +354,31 @@ class TestPresentFilesErrorHandling:
         assert "unable to move file to mnt directory" in result["errors"][0].lower()
         assert destination.exists()
         assert destination.read_text() == "old"
+        assert src_file.exists()
+
+    def test_dangling_symlink_destination_respects_overwrite_false(
+        self, agent_with_present_files, tmp_path, monkeypatch
+    ):
+        mnt_dir = tmp_path / "mnt"
+        mnt_dir.mkdir()
+        monkeypatch.setenv("MNT_DIR", str(mnt_dir))
+
+        src_file = tmp_path / "report.pdf"
+        src_file.write_text("new")
+        destination = _expected_mnt_path(src_file, mnt_dir)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            destination.symlink_to(destination.parent / "missing-target.pdf")
+        except OSError as exc:
+            pytest.skip(f"Symlink creation is not supported in this environment: {exc}")
+
+        tool = PresentFiles(files=[str(src_file)], overwrite=False)
+        tool._caller_agent = agent_with_present_files
+
+        result = tool.run()
+
+        assert result.get("files") == []
+        assert len(result.get("errors", [])) == 1
+        assert "destination already exists and overwrite is disabled" in result["errors"][0].lower()
+        assert destination.is_symlink()
         assert src_file.exists()

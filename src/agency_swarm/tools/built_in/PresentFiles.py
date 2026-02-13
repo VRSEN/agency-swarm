@@ -11,6 +11,10 @@ from agency_swarm.tools.base_tool import BaseTool
 from agency_swarm.tools.utils import _resolve_mime_type
 
 
+def _path_entry_exists(path_value: Path) -> bool:
+    return os.path.lexists(path_value)
+
+
 def _get_mnt_dir() -> Path:
     return Path(os.getenv("MNT_DIR", "/app/mnt")).expanduser().resolve()
 
@@ -56,7 +60,10 @@ def _mime_type_for_path(path_value: Path) -> str:
 
 
 def _move_with_overwrite_safety(source_path: Path, destination: Path) -> Path:
-    if not destination.exists():
+    if source_path.is_symlink():
+        return _move_symlink_with_overwrite_safety(source_path, destination)
+
+    if not _path_entry_exists(destination):
         return Path(shutil.move(str(source_path), str(destination)))
 
     staging_name = f".{destination.name}.incoming-{uuid.uuid4().hex}"
@@ -73,6 +80,37 @@ def _move_with_overwrite_safety(source_path: Path, destination: Path) -> Path:
                 pass
         raise
 
+    return destination
+
+
+def _resolve_relocated_symlink_target(source_path: Path, destination: Path) -> str:
+    link_target = os.readlink(source_path)
+    if os.path.isabs(link_target):
+        return link_target
+
+    absolute_target = (source_path.parent / link_target).resolve()
+    return os.path.relpath(str(absolute_target), start=str(destination.parent))
+
+
+def _move_symlink_with_overwrite_safety(source_path: Path, destination: Path) -> Path:
+    link_target = _resolve_relocated_symlink_target(source_path, destination)
+
+    if not _path_entry_exists(destination):
+        destination.symlink_to(link_target)
+        source_path.unlink()
+        return destination
+
+    staging_name = f".{destination.name}.incoming-{uuid.uuid4().hex}"
+    staging_path = destination.with_name(staging_name)
+    try:
+        staging_path.symlink_to(link_target)
+        staging_path.replace(destination)
+    except Exception:
+        if staging_path.exists():
+            staging_path.unlink()
+        raise
+
+    source_path.unlink()
     return destination
 
 
@@ -130,7 +168,7 @@ class PresentFiles(BaseTool):  # type: ignore[misc]
                     destination = _build_mnt_destination(resolved_path, mnt_dir)
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     should_overwrite = True if self.overwrite is None else self.overwrite
-                    if destination.exists():
+                    if _path_entry_exists(destination):
                         if destination.is_dir():
                             errors.append(
                                 f"Unable to overwrite directory in MNT: {destination}. Remove it and retry."
