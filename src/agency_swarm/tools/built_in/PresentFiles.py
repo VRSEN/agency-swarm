@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import mimetypes
 import os
 import shutil
 import uuid
@@ -9,6 +8,7 @@ from pathlib import Path
 from pydantic import Field
 
 from agency_swarm.tools.base_tool import BaseTool
+from agency_swarm.tools.utils import _resolve_mime_type
 
 
 def _get_mnt_dir() -> Path:
@@ -49,8 +49,10 @@ def _build_mnt_destination(resolved_path: Path, mnt_dir: Path) -> Path:
 
 
 def _mime_type_for_path(path_value: Path) -> str:
-    mime_type, _ = mimetypes.guess_type(path_value.name)
-    return mime_type or "application/octet-stream"
+    try:
+        return _resolve_mime_type(path_value)
+    except ValueError:
+        return "application/octet-stream"
 
 
 def _move_with_overwrite_safety(source_path: Path, destination: Path) -> Path:

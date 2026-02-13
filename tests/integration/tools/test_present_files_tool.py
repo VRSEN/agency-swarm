@@ -212,6 +212,23 @@ class TestPresentFilesBasics:
         assert target_file.exists()
         assert not symlink_file.exists()
 
+    def test_unknown_extension_uses_octet_stream(self, agent_with_present_files, tmp_path, monkeypatch):
+        mnt_dir = tmp_path / "mnt"
+        monkeypatch.setenv("MNT_DIR", str(mnt_dir))
+
+        src_file = tmp_path / "artifact.unknownext"
+        src_file.write_text("payload")
+
+        tool = PresentFiles(files=[str(src_file)])
+        tool._caller_agent = agent_with_present_files
+
+        result = tool.run()
+
+        assert result.get("errors") == []
+        assert len(result.get("files", [])) == 1
+        file_entry = result["files"][0]
+        assert file_entry["mime_type"] == "application/octet-stream"
+
 
 class TestPresentFilesErrorHandling:
     """Test error handling and validations."""
