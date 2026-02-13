@@ -11,7 +11,7 @@ from agency_swarm.tools.base_tool import BaseTool
 
 
 def _get_mnt_dir() -> Path:
-    return Path(os.getenv("MNT_DIR", "/mnt")).expanduser().resolve()
+    return Path(os.getenv("MNT_DIR", "/app/mnt")).expanduser().resolve()
 
 
 def _get_max_bytes() -> int:
