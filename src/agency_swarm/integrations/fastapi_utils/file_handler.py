@@ -37,13 +37,16 @@ async def upload_from_urls(
     allowed_remote_schemes = {"http", "https"}
     names_order = list(file_map.keys())
     allowed_dirs: list[Path] | None = None
+    allowed_dirs_initialized = False
 
     def _get_allowed_dirs() -> list[Path] | None:
-        nonlocal allowed_dirs
-        if allowed_local_dirs is None:
-            return None
-        if allowed_dirs is None:
-            allowed_dirs = _normalize_allowed_dirs(allowed_local_dirs)
+        nonlocal allowed_dirs, allowed_dirs_initialized
+        if not allowed_dirs_initialized:
+            if allowed_local_dirs is None:
+                allowed_dirs = None
+            else:
+                allowed_dirs = _normalize_allowed_dirs(allowed_local_dirs, skip_missing=True)
+            allowed_dirs_initialized = True
         return allowed_dirs
 
     local_files: dict[str, Path] = {}
@@ -214,6 +217,8 @@ async def download_file(url: str, name: str, save_dir: str) -> str:
 
 def _normalize_allowed_dirs(
     allowed_local_dirs: Sequence[str | Path] | None,
+    *,
+    skip_missing: bool = True,
 ) -> list[Path] | None:
     if allowed_local_dirs is None:
         return None
@@ -222,6 +227,9 @@ def _normalize_allowed_dirs(
     for entry in allowed_local_dirs:
         path = Path(entry).expanduser().resolve()
         if not path.exists():
+            if skip_missing:
+                logger.warning("Allowed directory not found (skipping): %s", entry)
+                continue
             raise FileNotFoundError(f"Allowed directory not found: {entry}")
         if not path.is_dir():
             raise NotADirectoryError(f"Allowed path must be a directory: {entry}")
