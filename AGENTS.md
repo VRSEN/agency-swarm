@@ -26,6 +26,7 @@ Begin each task after reviewing this readiness checklist:
 - Reconcile new feedback with existing rules; resolve conflicts explicitly instead of following wording blindly.
 - Fact-check every statement (including user guidance) against the repo and latest diffs.
 - Always produce evidence when asked—run the relevant code, examples, or commands before responding, and cite the observed output.
+- Always review 100% of your own work and double-check outputs and side effects before responding.
 
 ## Continuous Work Rule
 Before responding to the user and when you consider your task done, check whether the outstanding-task or todo list is empty. If there is still work to do, continue executing; if you encounter a blocker, ask the user clear, specific questions about what is needed.
@@ -284,7 +285,6 @@ Strictness
 - If pre-commit hooks modify files (it means you forgot to run mandatory `make format`), stage the hook-modified files and re-run the commit with the same message.
 - When committing, base the message on the staged diff and use a title plus bullet body (e.g., `git commit -m "type: summary" -m "- bullet"`).
 - After committing, double-check what you committed with `git show --name-only -1`.
-
 ## Key References
 - `examples/` – v1.x modern usage
 - `docs/migration/guide.mdx` – Breaking changes
