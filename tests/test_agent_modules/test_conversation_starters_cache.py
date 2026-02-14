@@ -15,6 +15,7 @@ from agency_swarm.agent.context_types import AgencyContext, AgentRuntimeState
 from agency_swarm.agent.conversation_starters_cache import (
     build_run_items_from_cached,
     compute_starter_cache_fingerprint,
+    extract_final_output_text,
     is_simple_text_message,
     load_cached_starter,
 )
@@ -113,6 +114,121 @@ async def test_starter_cache_respects_shared_instructions(tmp_path, monkeypatch)
     result_b = await agent.get_response(starter, agency_context=context_b)
     assert isinstance(result_b.final_output, str)
     assert "Shared B" in result_b.final_output
+
+
+@pytest.mark.asyncio
+async def test_quick_replies_are_cached_without_conversation_starters(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AGENCY_SWARM_CHATS_DIR", str(tmp_path))
+    quick_reply = "hi"
+    agent = Agent(
+        name="CacheAgent",
+        instructions="Base instructions.",
+        model=SystemInstructionsEchoModel(),
+        quick_replies=[quick_reply],
+        cache_conversation_starters=True,
+    )
+
+    context = _build_minimal_context(agent, None)
+    await agent.get_response(quick_reply, agency_context=context)
+
+    cached = load_cached_starter(
+        agent.name,
+        quick_reply,
+        expected_fingerprint=agent._conversation_starters_fingerprint,
+    )
+    assert cached is not None
+
+
+@pytest.mark.asyncio
+async def test_quick_replies_cache_and_replay_when_starter_cache_flag_is_disabled(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("AGENCY_SWARM_CHATS_DIR", str(tmp_path))
+    quick_reply = "hi"
+    model = SystemInstructionsEchoModel()
+    agent = Agent(
+        name="CacheAgent",
+        instructions="Base instructions.",
+        model=model,
+        quick_replies=[quick_reply],
+        cache_conversation_starters=False,
+    )
+
+    first_context = _build_minimal_context(agent, None)
+    first_result = await agent.get_response(quick_reply, agency_context=first_context)
+    assert isinstance(first_result.final_output, str)
+
+    cached = load_cached_starter(agent.name, quick_reply)
+    assert cached is not None
+    expected_output = extract_final_output_text(cached.items)
+    assert expected_output
+
+    async def _fail_get_response(*_args, **_kwargs):
+        raise RuntimeError("model should not be called for cached quick reply")
+
+    monkeypatch.setattr(model, "get_response", _fail_get_response)
+
+    second_context = _build_minimal_context(agent, None)
+    replay_result = await agent.get_response(quick_reply, agency_context=second_context)
+    assert replay_result.final_output == expected_output
+
+
+@pytest.mark.asyncio
+async def test_quick_replies_stream_replay_when_starter_cache_flag_is_disabled(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("AGENCY_SWARM_CHATS_DIR", str(tmp_path))
+    quick_reply = "hi"
+    model = SystemInstructionsEchoModel()
+    agent = Agent(
+        name="CacheAgent",
+        instructions="Base instructions.",
+        model=model,
+        quick_replies=[quick_reply],
+        cache_conversation_starters=False,
+    )
+
+    first_context = _build_minimal_context(agent, None)
+    await agent.get_response(quick_reply, agency_context=first_context)
+    cached = load_cached_starter(agent.name, quick_reply)
+    assert cached is not None
+    expected_output = extract_final_output_text(cached.items)
+    assert expected_output
+
+    def _fail_stream_response(*_args, **_kwargs):
+        raise RuntimeError("model stream should not be called for cached quick reply")
+
+    monkeypatch.setattr(model, "stream_response", _fail_stream_response)
+
+    stream_context = _build_minimal_context(agent, None)
+    stream = agent.get_response_stream(quick_reply, agency_context=stream_context)
+    async for _event in stream:
+        pass
+    assert stream.final_output == expected_output
+
+
+@pytest.mark.asyncio
+async def test_conversation_starter_not_cached_when_starter_cache_flag_is_disabled(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("AGENCY_SWARM_CHATS_DIR", str(tmp_path))
+    starter = "Hello starter"
+    agent = Agent(
+        name="CacheAgent",
+        instructions="Base instructions.",
+        model=SystemInstructionsEchoModel(),
+        conversation_starters=[starter],
+        cache_conversation_starters=False,
+    )
+
+    context = _build_minimal_context(agent, None)
+    await agent.get_response(starter, agency_context=context)
+
+    cached = load_cached_starter(agent.name, starter)
+    assert cached is None
 
 
 @pytest.mark.asyncio

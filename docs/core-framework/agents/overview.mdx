@@ -79,7 +79,8 @@ In agency swarm, to create an agent, you need to instantiate the `Agent` class.
 | Handoff Reminder *(optional)* | `handoff_reminder` | Replaces the default handoff reminder system message with a given string. Default: "Transfer completed. You are [recipient_agent_name]. Please continue the task." |
 | Include Search Results *(optional)* | `include_search_results` | Include search results in FileSearchTool output for citation extraction. Default: `False` |
 | Conversation Starters *(optional)* | `conversation_starters` | List of short user prompts for UIs. Each starter must be a non-empty string. Default: `None` |
-| Starter Cache *(optional)* | `cache_conversation_starters` | If `True`, speed up first responses by replaying cached starter replies. See [Advanced Configuration](/core-framework/agents/advanced-configuration#conversation-starters-cache). Default: `False` |
+| Quick Replies *(optional)* | `quick_replies` | First-turn user phrases used for cached responses. These phrases are not shown as `conversation_starters` in the UI. Each value must be a non-empty string. Default: `None`. |
+| Starter Cache *(optional)* | `cache_conversation_starters` | Enables caching for `conversation_starters`. When `True`, a first-turn message that matches a `conversation_starter` can return a cached response instead of calling the model. This setting does not affect `quick_replies`. See [Advanced Configuration](/core-framework/agents/advanced-configuration#conversation-starters-cache). Default: `False`. |
 
   </Tab>
 </Tabs>

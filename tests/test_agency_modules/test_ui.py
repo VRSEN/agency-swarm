@@ -418,6 +418,22 @@ class TestMetadataDetails:
         # Full agents list must include the single ToolAgent
         assert meta["agents"] == ["ToolAgent"]
 
+    def test_get_metadata_includes_quick_replies(self):
+        agent = Agent(
+            name="QuickRepliesAgent",
+            instructions="Use quick replies",
+            conversation_starters=["I need help with billing"],
+            quick_replies=["hi", "hello"],
+        )
+        agency = Agency(agent)
+
+        payload = agency.get_metadata()
+        agent_node = next(n for n in payload["nodes"] if n["id"] == "QuickRepliesAgent")
+
+        data = agent_node["data"]
+        assert data["conversationStarters"] == ["I need help with billing"]
+        assert data["quickReplies"] == ["hi", "hello"]
+
     def test_hosted_mcp_tools_unique_ids(self):
         """HostedMCPTool instances should produce unique tool nodes and labeled with server labels."""
         from agents import HostedMCPTool

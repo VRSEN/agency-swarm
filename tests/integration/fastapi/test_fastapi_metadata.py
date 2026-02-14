@@ -168,6 +168,37 @@ def test_metadata_capabilities_empty_for_basic_agent():
     assert basic_agent["data"]["capabilities"] == []
 
 
+def test_metadata_includes_quick_replies() -> None:
+    """Metadata should expose both starters and quick replies for UI clients."""
+
+    def create_agency(load_threads_callback=None, save_threads_callback=None):
+        agent = Agent(
+            name="QuickRepliesAgent",
+            instructions="Use quick replies",
+            conversation_starters=["Support: I need help with billing"],
+            quick_replies=["hi", "hello"],
+        )
+        return Agency(
+            agent,
+            load_threads_callback=load_threads_callback,
+            save_threads_callback=save_threads_callback,
+        )
+
+    app = run_fastapi(agencies={"test_agency": create_agency}, return_app=True, app_token_env="")
+    client = TestClient(app)
+
+    response = client.get("/test_agency/get_metadata")
+
+    assert response.status_code == 200
+    payload = response.json()
+    nodes = payload.get("nodes", [])
+    quick_agent = next((n for n in nodes if n["id"] == "QuickRepliesAgent"), None)
+    assert quick_agent is not None
+    data = quick_agent["data"]
+    assert data["conversationStarters"] == ["Support: I need help with billing"]
+    assert data["quickReplies"] == ["hi", "hello"]
+
+
 def test_tool_endpoint_handles_nested_schema():
     """Test that tool endpoints work with nested Pydantic models."""
 

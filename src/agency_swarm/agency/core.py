@@ -438,7 +438,9 @@ class Agency:
         if self._starter_cache_warmup_started:
             return
         warmup_agents = [
-            agent for agent in self.agents.values() if agent.cache_conversation_starters and agent.conversation_starters
+            agent
+            for agent in self.agents.values()
+            if (agent.cache_conversation_starters and agent.conversation_starters) or agent.quick_replies
         ]
         if not warmup_agents:
             return

@@ -25,6 +25,7 @@ from agency_swarm.agent.conversation_starters_cache import (
     is_simple_text_message,
     load_cached_starter,
     match_conversation_starter,
+    merge_cacheable_starters,
     normalize_starter_text,
     parse_cached_output,
     prepare_cached_items_for_replay,
@@ -162,12 +163,16 @@ class Execution:
             matched_starter: str | None = None
             cached_starter = None
             cache_fingerprint: str | None = None
+            cacheable_starters = merge_cacheable_starters(
+                self.agent.conversation_starters if self.agent.cache_conversation_starters else None,
+                self.agent.quick_replies,
+            )
             has_user_context_override = bool(
                 context_override and any(key != "_streaming_context" for key in context_override)
             )
             if (
                 sender_name is None
-                and self.agent.cache_conversation_starters
+                and cacheable_starters
                 and is_first_message
                 and is_simple_text_message(processed_current_message_items)
                 and not additional_instructions  # Skip cache when per-run instructions provided
@@ -183,9 +188,7 @@ class Execution:
                     instructions_override=original_instructions,
                     use_instructions_override=True,
                 )
-                matched_starter = match_conversation_starter(
-                    processed_current_message_items, self.agent.conversation_starters
-                )
+                matched_starter = match_conversation_starter(processed_current_message_items, cacheable_starters)
                 if matched_starter:
                     normalized = normalize_starter_text(matched_starter)
                     cache_map = self.agent._conversation_starters_cache
@@ -340,7 +343,6 @@ class Execution:
             if (
                 matched_starter
                 and cached_starter is None
-                and self.agent.cache_conversation_starters
                 and is_first_message
                 and agency_context
                 and agency_context.thread_manager
@@ -493,12 +495,16 @@ class Execution:
                 matched_starter: str | None = None
                 cached_starter = None
                 cache_fingerprint: str | None = None
+                cacheable_starters = merge_cacheable_starters(
+                    self.agent.conversation_starters if self.agent.cache_conversation_starters else None,
+                    self.agent.quick_replies,
+                )
                 has_user_context_override = bool(
                     context_override and any(key != "_streaming_context" for key in context_override)
                 )
                 if (
                     sender_name is None
-                    and self.agent.cache_conversation_starters
+                    and cacheable_starters
                     and is_first_message
                     and is_simple_text_message(processed_current_message_items)
                     and not additional_instructions  # Skip cache when per-run instructions provided
@@ -514,9 +520,7 @@ class Execution:
                         instructions_override=original_instructions,
                         use_instructions_override=True,
                     )
-                    matched_starter = match_conversation_starter(
-                        processed_current_message_items, self.agent.conversation_starters
-                    )
+                    matched_starter = match_conversation_starter(processed_current_message_items, cacheable_starters)
                     if matched_starter:
                         normalized = normalize_starter_text(matched_starter)
                         cache_map = self.agent._conversation_starters_cache
@@ -629,7 +633,6 @@ class Execution:
                 if (
                     matched_starter
                     and cached_starter is None
-                    and self.agent.cache_conversation_starters
                     and is_first_message
                     and agency_context
                     and agency_context.thread_manager

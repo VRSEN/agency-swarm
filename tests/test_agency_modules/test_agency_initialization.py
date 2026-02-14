@@ -9,6 +9,7 @@ from agents.models.interface import Model, ModelTracing
 from openai.types.responses.response_prompt_param import ResponsePromptParam
 
 from agency_swarm import Agency, Agent
+from agency_swarm.agent.conversation_starters_cache import load_cached_starter
 from agency_swarm.tools.send_message import SendMessage
 from tests.deterministic_model import DeterministicModel
 
@@ -214,3 +215,24 @@ def test_agency_warmup_failure_does_not_abort_initialization(tmp_path, monkeypat
     )
 
     Agency(agent)
+
+
+def test_agency_warmup_supports_quick_replies_without_starter_cache_flag(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AGENCY_SWARM_CHATS_DIR", str(tmp_path))
+    quick_reply = "hi"
+    agent = Agent(
+        name="QuickReplyWarmupAgent",
+        instructions="You are a test agent.",
+        model=DeterministicModel(default_response="hello"),
+        quick_replies=[quick_reply],
+        cache_conversation_starters=False,
+    )
+
+    Agency(agent)
+
+    cached = load_cached_starter(
+        agent.name,
+        quick_reply,
+        expected_fingerprint=agent._conversation_starters_fingerprint,
+    )
+    assert cached is not None
