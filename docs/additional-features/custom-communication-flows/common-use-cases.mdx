@@ -12,7 +12,7 @@ Customize parameters by subclassing `SendMessage` and declaring extra fields via
 
 ```python
 from pydantic import BaseModel, Field
-from agency_swarm.tools.send_message import SendMessage
+from agency_swarm import SendMessage
 
 class SendMessageTask(SendMessage):
     """Use this tool to send tasks to other agents within your agency."""
@@ -40,7 +40,7 @@ You can add extra fields to capture more context, like key moments and decisions
 
 ```python
 from pydantic import BaseModel, Field
-from agency_swarm.tools.send_message import SendMessage
+from agency_swarm import SendMessage
 
 class SendMessageWithContext(SendMessage):
     """SendMessage with key moments and decisions tracking."""

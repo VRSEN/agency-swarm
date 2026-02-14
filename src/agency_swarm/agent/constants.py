@@ -12,6 +12,7 @@ AGENT_PARAMS = {
     "cache_conversation_starters",
     "include_search_results",
     "validation_attempts",
+    "raise_input_guardrail_error",
     "throw_input_guardrail_error",
 }
 

@@ -54,7 +54,10 @@ _DEPRECATED_AGENT_KWARGS: dict[str, str] = {
     "id": "Assistant-ID loading is not supported. Use persistence hooks.",
     "refresh_from_id": "Assistant-ID loading is not supported. Use persistence hooks.",
     "response_validator": "Use `output_guardrails` and `input_guardrails`.",
-    "return_input_guardrail_errors": "Use `throw_input_guardrail_error`.",
+    "return_input_guardrail_errors": (
+        "Removed; use `raise_input_guardrail_error` (alias: `throw_input_guardrail_error`) "
+        "with inverse value semantics."
+    ),
     "response_format": "Use `output_type` on the Agent (a Python type).",
     "tool_resources": "Use `files_folder` and Agent file APIs.",
     "file_search": "Use `files_folder` to manage vector store + file search.",
@@ -62,6 +65,29 @@ _DEPRECATED_AGENT_KWARGS: dict[str, str] = {
     "send_message_tool_class": "Configure per-flow tools via `Agency(communication_flows=...)`.",
     "examples": "Include examples directly in `instructions`, or manage them in your own prompt building.",
 }
+
+
+def normalize_input_guardrail_error_kwargs(kwargs: dict[str, Any]) -> None:
+    """Normalize input guardrail exception-control kwargs in-place."""
+    alias = "raise_input_guardrail_error"
+    canonical = "throw_input_guardrail_error"
+
+    if alias not in kwargs:
+        return
+
+    alias_value = bool(kwargs[alias])
+    if canonical in kwargs:
+        canonical_value = bool(kwargs[canonical])
+        if canonical_value != alias_value:
+            raise TypeError(
+                "Conflicting values for `raise_input_guardrail_error` and "
+                "`throw_input_guardrail_error`. Provide only one or use matching values."
+            )
+    else:
+        kwargs[canonical] = alias_value
+
+    # Keep one source of truth for downstream parsing.
+    kwargs.pop(alias, None)
 
 
 def validate_no_deprecated_agent_kwargs(kwargs: dict[str, Any]) -> None:

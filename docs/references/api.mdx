@@ -277,7 +277,7 @@ class Agent(BaseAgent[MasterContext]):
             api_params (dict[str, dict[str, Any]] | None): Per-schema default parameters for generated tools
             include_search_results (bool): Include search results in FileSearchTool output (default False)
             validation_attempts (int): Number of retries when output guardrails trigger (default 1)
-            throw_input_guardrail_error (bool): Controls input guardrail behavior—False enables friendly mode (guidance as assistant message), True enables strict mode (raises exceptions). Default: False
+            raise_input_guardrail_error (bool): Controls input guardrail behavior—False enables non-strict mode (guidance as assistant message), True enables strict mode (raises exceptions). Alias: `throw_input_guardrail_error`. Default: False
             handoff_reminder (str | None): Custom reminder text when handing off to another agent
             model (str | Model | None): Model identifier; defaults to agents SDK configuration
             model_settings (ModelSettings | None): Model configuration overrides
@@ -303,7 +303,7 @@ class Agent(BaseAgent[MasterContext]):
 - **`description`** (str | None): Agent role description for dynamic send_message tools
 - **`include_search_results`** (bool): Whether FileSearchTool responses include citation context
 - **`validation_attempts`** (int): Retry count for output guardrail enforcement
-- **`throw_input_guardrail_error`** (bool): Controls input guardrail mode—False for friendly (guidance as assistant), True for strict (raises exceptions)
+- **`raise_input_guardrail_error`** (bool): Controls input guardrail mode—False for non-strict (guidance as assistant), True for strict (raises exceptions). Alias: `throw_input_guardrail_error`
 - **`handoff_reminder`** (str | None): Custom reminder appended to handoff prompts
 - **`tool_concurrency_manager`** (ToolConcurrencyManager): Coordinates concurrent tool execution
 

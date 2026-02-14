@@ -1,3 +1,5 @@
+import importlib.util
+
 from dotenv import load_dotenv
 
 # Automatically load environment variables from .env when the package is imported
@@ -39,6 +41,10 @@ try:
 except ImportError:
     _LITELLM_AVAILABLE = False
 
+_JUPYTER_DEPENDENCIES_AVAILABLE = all(
+    importlib.util.find_spec(module_name) is not None for module_name in ("ipykernel", "jupyter_client", "nest_asyncio")
+)
+
 from agents.model_settings import Headers, MCPToolChoice, ToolChoice  # noqa: E402
 from openai._types import Body, Query  # noqa: E402
 from openai.types.responses import ResponseIncludable  # noqa: E402
@@ -65,10 +71,12 @@ from .tools import (  # noqa: E402
     ImageGeneration,
     ImageGenerationInputImageMask,
     ImageGenerationTool,
+    LoadFileAttachment,
     LocalShellTool,
     Mcp,
     McpAllowedTools,
     McpRequireApproval,
+    PersistentShellTool,
     SendMessage,
     ToolOutputFileContent,
     ToolOutputFileContentDict,
@@ -115,7 +123,9 @@ __all__ = [
     "ComputerTool",
     "FileSearchTool",
     "ImageGenerationTool",
+    "LoadFileAttachment",
     "LocalShellTool",
+    "PersistentShellTool",
     "WebSearchTool",
     "Model",
     "AgentHooks",
@@ -163,6 +173,10 @@ __all__ = [
 if _LITELLM_AVAILABLE:
     __all__.append("LitellmModel")
 
+# Conditionally add IPythonInterpreter if optional jupyter dependencies are available
+if _JUPYTER_DEPENDENCIES_AVAILABLE:
+    __all__.append("IPythonInterpreter")
+
 
 def __getattr__(name: str):
     """Provide helpful error messages for optional dependencies."""
@@ -172,4 +186,14 @@ def __getattr__(name: str):
             "You can install it via the optional dependency group: "
             "`pip install 'openai-agents[litellm]'`."
         )
+    if name == "IPythonInterpreter":
+        if not _JUPYTER_DEPENDENCIES_AVAILABLE:
+            raise ImportError(
+                "`IPythonInterpreter` requires the optional jupyter dependencies. "
+                "Install them with `pip install 'agency-swarm[jupyter]'`."
+            )
+        from .tools import IPythonInterpreter
+
+        globals()[name] = IPythonInterpreter
+        return IPythonInterpreter
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")

@@ -445,10 +445,13 @@ class TestSharedFilesFolderLive:
         assert vs_ids == {first_vs_id}
 
         # Confirm the new file is in the vector store by filename
-        deadline = time.monotonic() + 30
+        deadline = time.monotonic() + 90
         filenames: list[str] = []
         while time.monotonic() < deadline:
-            vs_files = agency2.agents["AgentA"].client_sync.vector_stores.files.list(vector_store_id=first_vs_id)
+            vs_files = agency2.agents["AgentA"].client_sync.vector_stores.files.list(
+                vector_store_id=first_vs_id,
+                limit=100,
+            )
             file_ids = [vf.id for vf in vs_files.data]
             filenames = [agency2.agents["AgentA"].client_sync.files.retrieve(fid).filename for fid in file_ids]
             if new_filename in filenames:

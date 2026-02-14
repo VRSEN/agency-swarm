@@ -4,6 +4,31 @@ description: "Welcome to **Agency Swarm**, an open-source agent orchestration fr
 icon: "globe"
 ---
 
+## Quick Start
+
+```python
+from agency_swarm import Agency, Agent
+
+agent = Agent(name="Assistant", instructions="You are a helpful assistant.")
+agency = Agency(agent)
+
+# Run it
+result = agency.get_response_sync("Hello!")
+print(result.final_output)
+```
+
+<CardGroup cols={3}>
+  <Card title="Install" icon="download" href="/welcome/installation">
+    `pip install agency-swarm`
+  </Card>
+  <Card title="Starter Template" icon="layer-group" href="/welcome/getting-started/starter-template">
+    One-click repo to get started fast
+  </Card>
+  <Card title="From Scratch" icon="code" href="/welcome/getting-started/from-scratch">
+    Manual setup for advanced users
+  </Card>
+</CardGroup>
+
 ![Agency Swarm Logo](/images/logo-full.jpeg)
 
 ## What is Agency Swarm?

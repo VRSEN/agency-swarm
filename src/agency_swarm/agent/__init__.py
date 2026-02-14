@@ -9,6 +9,7 @@ from .execution import Execution
 from .initialization import (
     apply_framework_defaults,
     normalize_agent_tool_definitions,
+    normalize_input_guardrail_error_kwargs,
     separate_kwargs,
     setup_file_manager,
     validate_no_deprecated_agent_kwargs,
@@ -28,6 +29,7 @@ __all__ = [
     "register_subagent",
     # Initialization functions
     "apply_framework_defaults",
+    "normalize_input_guardrail_error_kwargs",
     "normalize_agent_tool_definitions",
     "separate_kwargs",
     "setup_file_manager",

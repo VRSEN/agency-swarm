@@ -49,7 +49,7 @@ To customize SendMessage parameters, extend the `SendMessage` class and declare 
 
 ```python
 from pydantic import BaseModel, Field
-from agency_swarm.tools.send_message import SendMessage
+from agency_swarm import SendMessage
 
 class CustomSendMessage(SendMessage):
     """
@@ -89,7 +89,7 @@ You can customize the reminder message or disable it entirely by defining a cust
 
 ```python
 from agency_swarm import Agency, Agent
-from agency_swarm.tools.send_message import Handoff
+from agency_swarm.tools import Handoff
 
 class NoReminderHandoff(Handoff):
     add_reminder = False # Set to False to completely remove the extra message
@@ -106,7 +106,7 @@ agency = Agency(
 
 ```python
 from agency_swarm import Agency, Agent
-from agency_swarm.tools.send_message import Handoff
+from agency_swarm.tools import Handoff
 
 sender = Agent(name="CustomHandoffSender")
 recipient = Agent(
