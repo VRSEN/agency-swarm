@@ -90,12 +90,11 @@ class MessageFormatter:
 
     @staticmethod
     def _model_name_requires_chat_completions(model_name: str) -> bool:
-        if model_name.startswith("litellm/"):
-            return True
-        if "/" not in model_name:
-            return False
-        prefix = model_name.split("/", 1)[0]
-        return prefix not in {"openai"}
+        # Provider-prefixed model names (including LiteLLM providers such as
+        # anthropic/* and openai/*) emit Responses-style history in this
+        # codebase. Chat Completions should be inferred from explicit model
+        # classes instead of guessed from provider prefixes.
+        return False
 
     @staticmethod
     def _normalize_history_protocol(value: object) -> str | None:

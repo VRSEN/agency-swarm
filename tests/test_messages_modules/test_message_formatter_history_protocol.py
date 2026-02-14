@@ -30,6 +30,16 @@ def _make_context(thread_manager: ThreadManager) -> AgencyContext:
     return AgencyContext(agency_instance=None, thread_manager=thread_manager)
 
 
+def _make_litellm_agent(name: str, model_name: str) -> Agent:
+    litellm_model_module = pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
+    litellm_model_class = litellm_model_module.LitellmModel
+    return Agent(
+        name=name,
+        instructions="Test",
+        model=litellm_model_class(model=model_name, api_key="test"),
+    )
+
+
 def test_prepare_history_for_runner_allows_explicit_protocol_label_on_plain_messages() -> None:
     thread_manager = ThreadManager()
     thread_manager._store.messages = [
@@ -100,10 +110,8 @@ def test_prepare_history_for_runner_stamps_history_protocol() -> None:
     assert all("history_protocol" not in item for item in history_for_runner)
 
 
-def test_prepare_history_for_runner_allows_litellm_openai_function_call_history() -> None:
-    litellm_model_module = pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
-    litellm_model_class = litellm_model_module.LitellmModel
-
+@pytest.mark.parametrize("model_name", ["openai/gpt-5-mini", "anthropic/claude-sonnet-4-20250514"])
+def test_prepare_history_for_runner_allows_litellm_function_call_history(model_name: str) -> None:
     thread_manager = ThreadManager()
     thread_manager._store.messages = [
         {
@@ -116,11 +124,12 @@ def test_prepare_history_for_runner_allows_litellm_openai_function_call_history(
         }
     ]
 
-    agent = Agent(
-        name="Coordinator",
-        instructions="Test",
-        model=litellm_model_class(model="openai/gpt-5-mini", api_key="test"),
-    )
+    agent = _make_litellm_agent("Coordinator", model_name)
     context = _make_context(thread_manager)
 
     MessageFormatter.prepare_history_for_runner([], agent, None, agency_context=context)
+
+
+def test_resolve_history_protocol_defaults_provider_prefixed_strings_to_responses() -> None:
+    agent = Agent(name="Coordinator", instructions="Test", model="anthropic/claude-sonnet-4-20250514")
+    assert MessageFormatter.resolve_history_protocol(agent) == MessageFormatter.HISTORY_PROTOCOL_RESPONSES
