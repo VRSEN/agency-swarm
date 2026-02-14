@@ -1,3 +1,5 @@
+import importlib.util
+
 from dotenv import load_dotenv
 
 # Automatically load environment variables from .env when the package is imported
@@ -38,6 +40,10 @@ try:
     _LITELLM_AVAILABLE = True
 except ImportError:
     _LITELLM_AVAILABLE = False
+
+_JUPYTER_DEPENDENCIES_AVAILABLE = all(
+    importlib.util.find_spec(module_name) is not None for module_name in ("ipykernel", "jupyter_client", "nest_asyncio")
+)
 
 from agents.model_settings import Headers, MCPToolChoice, ToolChoice  # noqa: E402
 from openai._types import Body, Query  # noqa: E402
@@ -161,12 +167,15 @@ __all__ = [
     "tool_output_file_from_path",
     "tool_output_file_from_url",
     "tool_output_file_from_file_id",
-    "IPythonInterpreter",
 ]
 
 # Conditionally add LitellmModel if available
 if _LITELLM_AVAILABLE:
     __all__.append("LitellmModel")
+
+# Conditionally add IPythonInterpreter if optional jupyter dependencies are available
+if _JUPYTER_DEPENDENCIES_AVAILABLE:
+    __all__.append("IPythonInterpreter")
 
 
 def __getattr__(name: str):
@@ -178,6 +187,11 @@ def __getattr__(name: str):
             "`pip install 'openai-agents[litellm]'`."
         )
     if name == "IPythonInterpreter":
+        if not _JUPYTER_DEPENDENCIES_AVAILABLE:
+            raise ImportError(
+                "`IPythonInterpreter` requires the optional jupyter dependencies. "
+                "Install them with `pip install 'agency-swarm[jupyter]'`."
+            )
         from .tools import IPythonInterpreter
 
         globals()[name] = IPythonInterpreter
