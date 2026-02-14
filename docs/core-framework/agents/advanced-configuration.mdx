@@ -30,7 +30,7 @@ If your `files_folder` ends with `_vs_<vector_store_id>`, Agency Swarm automatic
 ### Conversation starters cache
 
 Conversation starters are the suggested prompts you see in the chat UI.
-Cache makes the first reply instant without calling the LLM.
+When enabled, cache can instantly replay the first reply without calling the LLM.
 
 ```python
 from agency_swarm import Agent
@@ -40,20 +40,20 @@ agent = Agent(
     instructions="You are helpful.",
     model="gpt-5-mini",
     conversation_starters=["Support: I need help with billing"],
-    quick_replies=["hi", "hello"],
     cache_conversation_starters=True,
 )
 ```
 
 In this example:
 - The UI shows the starter prompt “Support: I need help with billing”.
-- The FastAPI `/get_metadata` response exposes starters as `conversationStarters` and extra cache-only prompts as `quickReplies`.
-- With `cache_conversation_starters=True`, either a starter or a quick reply can return a saved reply without calling the LLM.
+- The FastAPI `/get_metadata` response exposes starters as `conversationStarters`.
+- With `cache_conversation_starters=True`, the first plain-text user message can replay a saved reply when it exactly matches a configured starter.
 <Info>
 Streaming the cached reply includes events for text, tool calls, reasoning, and handoffs.
 </Info>
 
 If you change key agent settings (like instructions, tools, or model), cached starters are rebuilt.
+Per-run overrides like `additional_instructions`, `context_override`, or `hooks_override` skip replay and call the LLM.
 
 <Note>
 Cache files live under `AGENCY_SWARM_CHATS_DIR` (defaults to `.agency_swarm`) in `starter_cache/`.

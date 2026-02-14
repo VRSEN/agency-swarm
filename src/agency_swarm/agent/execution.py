@@ -163,13 +163,15 @@ class Execution:
             matched_starter: str | None = None
             cached_starter = None
             cache_fingerprint: str | None = None
-            cacheable_starters = merge_cacheable_starters(self.agent.conversation_starters, self.agent.quick_replies)
+            cacheable_starters = merge_cacheable_starters(
+                self.agent.conversation_starters if self.agent.cache_conversation_starters else None,
+                self.agent.quick_replies,
+            )
             has_user_context_override = bool(
                 context_override and any(key != "_streaming_context" for key in context_override)
             )
             if (
                 sender_name is None
-                and self.agent.cache_conversation_starters
                 and cacheable_starters
                 and is_first_message
                 and is_simple_text_message(processed_current_message_items)
@@ -341,7 +343,6 @@ class Execution:
             if (
                 matched_starter
                 and cached_starter is None
-                and self.agent.cache_conversation_starters
                 and is_first_message
                 and agency_context
                 and agency_context.thread_manager
@@ -495,14 +496,14 @@ class Execution:
                 cached_starter = None
                 cache_fingerprint: str | None = None
                 cacheable_starters = merge_cacheable_starters(
-                    self.agent.conversation_starters, self.agent.quick_replies
+                    self.agent.conversation_starters if self.agent.cache_conversation_starters else None,
+                    self.agent.quick_replies,
                 )
                 has_user_context_override = bool(
                     context_override and any(key != "_streaming_context" for key in context_override)
                 )
                 if (
                     sender_name is None
-                    and self.agent.cache_conversation_starters
                     and cacheable_starters
                     and is_first_message
                     and is_simple_text_message(processed_current_message_items)
@@ -632,7 +633,6 @@ class Execution:
                 if (
                     matched_starter
                     and cached_starter is None
-                    and self.agent.cache_conversation_starters
                     and is_first_message
                     and agency_context
                     and agency_context.thread_manager

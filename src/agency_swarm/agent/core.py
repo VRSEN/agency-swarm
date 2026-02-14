@@ -118,8 +118,7 @@ class Agent(BaseAgent[MasterContext]):
                 {"schema_filename.json": {"param_name": "param_value"}}.
             conversation_starters (list[str] | None): Conversation starters for this agent.
             quick_replies (list[str] | None): Additional first-message prompts eligible for cache replay.
-            cache_conversation_starters (bool): Enable cached conversation starters and quick replies
-                from .agency_swarm.
+            cache_conversation_starters (bool): Enable cached conversation starters from .agency_swarm.
             send_message_tool_class (type | None): DEPRECATED. Configure SendMessage tool classes via
                 `communication_flows` on `Agency` instead of setting this per agent.
             include_search_results (bool): Include search results in FileSearchTool output for citation extraction.
@@ -443,9 +442,10 @@ class Agent(BaseAgent[MasterContext]):
         shared_instructions: str | None = None,
     ) -> None:
         """Recompute conversation starter cache fingerprint and reload cached entries."""
-        if not self.cache_conversation_starters:
-            return
-        cacheable_starters = merge_cacheable_starters(self.conversation_starters, self.quick_replies)
+        cacheable_starters = merge_cacheable_starters(
+            self.conversation_starters if self.cache_conversation_starters else None,
+            self.quick_replies,
+        )
         if not cacheable_starters:
             return
 
@@ -466,9 +466,10 @@ class Agent(BaseAgent[MasterContext]):
 
     async def warm_conversation_starters_cache(self, agency_context: AgencyContext | None = None) -> None:
         """Populate missing conversation starters cache entries using the model."""
-        if not self.cache_conversation_starters:
-            return
-        cacheable_starters = merge_cacheable_starters(self.conversation_starters, self.quick_replies)
+        cacheable_starters = merge_cacheable_starters(
+            self.conversation_starters if self.cache_conversation_starters else None,
+            self.quick_replies,
+        )
         if not cacheable_starters:
             return
         if self._conversation_starters_warmup_started:
