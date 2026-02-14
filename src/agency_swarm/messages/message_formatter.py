@@ -74,9 +74,7 @@ class MessageFormatter:
 
     @staticmethod
     def _resolve_history_protocol_from_model(model: Any) -> str:
-        if isinstance(model, OpenAIChatCompletionsModel):
-            return MessageFormatter.HISTORY_PROTOCOL_CHAT_COMPLETIONS
-        if isinstance(model, OpenAIResponsesModel):
+        if isinstance(model, OpenAIChatCompletionsModel | OpenAIResponsesModel):
             return MessageFormatter.HISTORY_PROTOCOL_RESPONSES
         if isinstance(model, str):
             if MessageFormatter._model_name_requires_chat_completions(model):
@@ -90,10 +88,9 @@ class MessageFormatter:
 
     @staticmethod
     def _model_name_requires_chat_completions(model_name: str) -> bool:
-        # Provider-prefixed model names (including LiteLLM providers such as
-        # anthropic/* and openai/*) emit Responses-style history in this
-        # codebase. Chat Completions should be inferred from explicit model
-        # classes instead of guessed from provider prefixes.
+        # OpenAI Agents SDK inputs use Responses-style history items for
+        # supported model backends, including Chat Completions wrappers.
+        # Keep protocol inference strict and default to Responses.
         return False
 
     @staticmethod

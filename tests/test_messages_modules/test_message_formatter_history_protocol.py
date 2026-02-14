@@ -69,7 +69,7 @@ def test_prepare_history_for_runner_allows_shared_plain_history_across_protocols
 
     all_messages = thread_manager.get_all_messages()
     assert len(all_messages) == 2
-    assert all_messages[0]["history_protocol"] == MessageFormatter.HISTORY_PROTOCOL_CHAT_COMPLETIONS
+    assert all_messages[0]["history_protocol"] == MessageFormatter.HISTORY_PROTOCOL_RESPONSES
     assert all_messages[1]["history_protocol"] == MessageFormatter.HISTORY_PROTOCOL_RESPONSES
 
 
@@ -106,8 +106,27 @@ def test_prepare_history_for_runner_stamps_history_protocol() -> None:
 
     stored = thread_manager.get_all_messages()
     assert stored, "Expected history to be stored"
-    assert stored[-1].get("history_protocol") == MessageFormatter.HISTORY_PROTOCOL_CHAT_COMPLETIONS
+    assert stored[-1].get("history_protocol") == MessageFormatter.HISTORY_PROTOCOL_RESPONSES
     assert all("history_protocol" not in item for item in history_for_runner)
+
+
+def test_prepare_history_for_runner_allows_openai_chat_model_function_call_history() -> None:
+    thread_manager = ThreadManager()
+    thread_manager._store.messages = [
+        {
+            "type": "function_call",
+            "call_id": "call-1",
+            "name": "send_message",
+            "arguments": "{}",
+            "agent": "Coordinator",
+            "callerAgent": None,
+        }
+    ]
+
+    agent = _make_chat_agent("Coordinator")
+    context = _make_context(thread_manager)
+
+    MessageFormatter.prepare_history_for_runner([], agent, None, agency_context=context)
 
 
 @pytest.mark.parametrize("model_name", ["openai/gpt-5-mini", "anthropic/claude-sonnet-4-20250514"])
@@ -132,4 +151,9 @@ def test_prepare_history_for_runner_allows_litellm_function_call_history(model_n
 
 def test_resolve_history_protocol_defaults_provider_prefixed_strings_to_responses() -> None:
     agent = Agent(name="Coordinator", instructions="Test", model="anthropic/claude-sonnet-4-20250514")
+    assert MessageFormatter.resolve_history_protocol(agent) == MessageFormatter.HISTORY_PROTOCOL_RESPONSES
+
+
+def test_resolve_history_protocol_defaults_openai_chat_model_to_responses() -> None:
+    agent = _make_chat_agent("Coordinator")
     assert MessageFormatter.resolve_history_protocol(agent) == MessageFormatter.HISTORY_PROTOCOL_RESPONSES
