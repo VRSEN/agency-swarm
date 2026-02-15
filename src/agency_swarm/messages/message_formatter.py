@@ -368,16 +368,23 @@ class MessageFormatter:
 
     @staticmethod
     def sanitize_replayed_tool_item_ids(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Drop replay-time tool item IDs while preserving call_id correlation."""
+        """Drop non-Responses function-call IDs while preserving valid Responses IDs.
+
+        Responses-generated function calls use item IDs like ``fc_*``. Replay from
+        LiteLLM/Chat Completions may carry incompatible IDs (e.g. ``call_*``),
+        which Responses rejects. Preserve valid ``fc_*`` IDs so native Responses
+        reasoning/tool chains stay intact.
+        """
         sanitized: list[dict[str, Any]] = []
         for msg in history:
             message_type = msg.get("type")
             message_id = msg.get("id")
             call_id = msg.get("call_id")
             if (
-                message_type in {"function_call", "function_call_output"}
+                message_type == "function_call"
                 and isinstance(message_id, str)
                 and message_id
+                and not message_id.startswith("fc")
                 and isinstance(call_id, str)
                 and call_id
             ):

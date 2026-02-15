@@ -129,7 +129,7 @@ def test_prepare_history_for_runner_allows_openai_chat_model_function_call_histo
     MessageFormatter.prepare_history_for_runner([], agent, None, agency_context=context)
 
 
-def test_prepare_history_for_runner_strips_replayed_tool_item_ids() -> None:
+def test_prepare_history_for_runner_strips_non_responses_function_call_ids() -> None:
     thread_manager = ThreadManager()
     thread_manager._store.messages = [
         {
@@ -142,10 +142,11 @@ def test_prepare_history_for_runner_strips_replayed_tool_item_ids() -> None:
             "callerAgent": None,
         },
         {
-            "type": "function_call_output",
-            "id": "output_not_accepted_by_responses",
-            "call_id": "call-1",
-            "output": "ok",
+            "type": "function_call",
+            "id": "fc_accepted_by_responses",
+            "call_id": "call-2",
+            "name": "send_message",
+            "arguments": "{}",
             "agent": "Coordinator",
             "callerAgent": None,
         },
@@ -155,11 +156,11 @@ def test_prepare_history_for_runner_strips_replayed_tool_item_ids() -> None:
     context = _make_context(thread_manager)
 
     history_for_runner = MessageFormatter.prepare_history_for_runner([], agent, None, agency_context=context)
-    function_call = next(msg for msg in history_for_runner if msg.get("type") == "function_call")
-    function_output = next(msg for msg in history_for_runner if msg.get("type") == "function_call_output")
+    function_calls = [msg for msg in history_for_runner if msg.get("type") == "function_call"]
+    assert len(function_calls) == 2
 
-    assert "id" not in function_call
-    assert "id" not in function_output
+    assert "id" not in function_calls[0]
+    assert function_calls[1].get("id") == "fc_accepted_by_responses"
 
 
 @pytest.mark.parametrize("model_name", ["openai/gpt-5-mini", "anthropic/claude-sonnet-4-20250514"])
