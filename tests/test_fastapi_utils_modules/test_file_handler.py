@@ -5,7 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_urls
+from agency_swarm.integrations.fastapi_utils.file_handler import (
+    extract_local_files,
+    extract_local_paths,
+    upload_from_urls,
+)
 
 
 @pytest.mark.asyncio
@@ -121,6 +125,47 @@ async def test_upload_from_urls_uploads_file_uri_with_space(monkeypatch, tmp_pat
 
     result = await upload_from_urls({"uri file.txt": file_path.as_uri()}, allowed_local_dirs=[str(tmp_path)])
     assert result == {"uri file.txt": "uploaded:uri file.txt"}
+
+
+def test_extract_local_paths_returns_absolute(tmp_path):
+    """Local path extraction should return absolute paths in input order."""
+    first = tmp_path / "first.txt"
+    second = tmp_path / "second.txt"
+    first.write_text("one", encoding="utf-8")
+    second.write_text("two", encoding="utf-8")
+
+    file_map = {
+        "first.txt": str(first),
+        "remote.txt": "https://example.com/remote.txt",
+        "second.txt": str(second),
+    }
+
+    result = extract_local_paths(file_map, allowed_local_dirs=[str(tmp_path)])
+
+    assert result == [str(first.resolve()), str(second.resolve())]
+
+
+def test_extract_local_files_returns_name_mapping(tmp_path):
+    """Local file extraction should preserve file names and order."""
+    first = tmp_path / "first.txt"
+    second = tmp_path / "second.txt"
+    first.write_text("one", encoding="utf-8")
+    second.write_text("two", encoding="utf-8")
+
+    file_map = {
+        "first.txt": str(first),
+        "remote.txt": "https://example.com/remote.txt",
+        "second.txt": str(second),
+    }
+
+    result = extract_local_files(
+        file_map,
+        allowed_local_dirs=[str(tmp_path)],
+    )
+
+    assert list(result.keys()) == ["first.txt", "second.txt"]
+    assert result["first.txt"] == first.resolve()
+    assert result["second.txt"] == second.resolve()
 
 
 @pytest.mark.asyncio

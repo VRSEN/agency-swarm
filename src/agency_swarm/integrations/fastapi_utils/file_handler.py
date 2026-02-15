@@ -20,6 +20,48 @@ logger = logging.getLogger(__name__)
 # ============================================================
 
 
+def extract_local_paths(
+    file_map: dict[str, str],
+    allowed_local_dirs: Sequence[str | Path] | None = None,
+) -> list[str]:
+    """
+    Extract absolute local paths from a file map while enforcing allowlist rules.
+
+    Args:
+        file_map: {"filename": "url_or_absolute_path"}
+        allowed_local_dirs: Optional allowlist of directories for local files.
+
+    Returns:
+        List of absolute local paths, ordered by input map.
+    """
+    local_files = extract_local_files(file_map, allowed_local_dirs)
+    names_order = list(file_map.keys())
+    ordered_paths: list[str] = []
+    for name in names_order:
+        path = local_files.get(name)
+        if path is not None:
+            ordered_paths.append(str(path.resolve()))
+    return ordered_paths
+
+
+def extract_local_files(
+    file_map: dict[str, str],
+    allowed_local_dirs: Sequence[str | Path] | None = None,
+) -> dict[str, Path]:
+    """
+    Extract local files from a file map while enforcing allowlist rules.
+
+    Args:
+        file_map: {"filename": "url_or_absolute_path"}
+        allowed_local_dirs: Optional allowlist of directories for local files.
+
+    Returns:
+        Mapping of filename → absolute local Path for local entries.
+    """
+    local_files, _, _ = _split_file_map(file_map, allowed_local_dirs)
+    return {name: path.resolve() for name, path in local_files.items()}
+
+
 async def upload_from_urls(
     file_map: dict[str, str],
     allowed_local_dirs: Sequence[str | Path] | None = None,
@@ -35,62 +77,7 @@ async def upload_from_urls(
         Mapping of filename → OpenAI file_id
     """
     allowed_remote_schemes = {"http", "https"}
-    names_order = list(file_map.keys())
-    allowed_dirs: list[Path] | None = None
-
-    def _get_allowed_dirs() -> list[Path] | None:
-        nonlocal allowed_dirs
-        if allowed_local_dirs is None:
-            return None
-        if allowed_dirs is None:
-            allowed_dirs = _normalize_allowed_dirs(allowed_local_dirs)
-        return allowed_dirs
-
-    local_files: dict[str, Path] = {}
-    remote_files: dict[str, str] = {}
-
-    for name, path_or_url in file_map.items():
-        parsed = urlparse(path_or_url)
-
-        # Windows UNC paths (//server/share or \\server\share) before protocol-relative check
-        if sys.platform == "win32" and path_or_url.startswith(("//", "\\\\")):
-            path = Path(path_or_url)
-            _ensure_path_allowed(path, _get_allowed_dirs())
-            _validate_local_file(path, path_or_url)
-            local_files[name] = path
-            continue
-
-        # Protocol-relative URLs
-        if parsed.netloc and not parsed.scheme:
-            remote_files[name] = path_or_url
-            continue
-
-        # file:// URI
-        if parsed.scheme == "file":
-            path = _file_uri_to_path(path_or_url)
-            _ensure_path_allowed(path, _get_allowed_dirs())
-            _validate_local_file(path, path_or_url)
-            local_files[name] = path
-            continue
-
-        # Windows drive-letter paths (c:/...)
-        if parsed.scheme and len(parsed.scheme) == 1 and parsed.scheme.isalpha():
-            path = Path(path_or_url)
-            _ensure_path_allowed(path, _get_allowed_dirs())
-            _validate_local_file(path, path_or_url)
-            local_files[name] = path
-            continue
-
-        # Absolute filesystem paths
-        path = Path(path_or_url)
-        if path.is_absolute():
-            _ensure_path_allowed(path, _get_allowed_dirs())
-            _validate_local_file(path, path_or_url)
-            local_files[name] = path
-            continue
-
-        # Everything else → remote
-        remote_files[name] = path_or_url
+    local_files, remote_files, names_order = _split_file_map(file_map, allowed_local_dirs)
 
     # Validate remote URLs
     for remote_url in remote_files.values():
@@ -210,6 +197,70 @@ async def download_file(url: str, name: str, save_dir: str) -> str:
 # ============================================================
 # Path / allowlist helpers
 # ============================================================
+
+
+def _split_file_map(
+    file_map: dict[str, str],
+    allowed_local_dirs: Sequence[str | Path] | None,
+) -> tuple[dict[str, Path], dict[str, str], list[str]]:
+    names_order = list(file_map.keys())
+    allowed_dirs: list[Path] | None = None
+
+    def _get_allowed_dirs() -> list[Path] | None:
+        nonlocal allowed_dirs
+        if allowed_local_dirs is None:
+            return None
+        if allowed_dirs is None:
+            allowed_dirs = _normalize_allowed_dirs(allowed_local_dirs)
+        return allowed_dirs
+
+    local_files: dict[str, Path] = {}
+    remote_files: dict[str, str] = {}
+
+    for name, path_or_url in file_map.items():
+        parsed = urlparse(path_or_url)
+
+        # Windows UNC paths (//server/share or \\server\share) before protocol-relative check
+        if sys.platform == "win32" and path_or_url.startswith(("//", "\\\\")):
+            path = Path(path_or_url)
+            _ensure_path_allowed(path, _get_allowed_dirs())
+            _validate_local_file(path, path_or_url)
+            local_files[name] = path
+            continue
+
+        # Protocol-relative URLs
+        if parsed.netloc and not parsed.scheme:
+            remote_files[name] = path_or_url
+            continue
+
+        # file:// URI
+        if parsed.scheme == "file":
+            path = _file_uri_to_path(path_or_url)
+            _ensure_path_allowed(path, _get_allowed_dirs())
+            _validate_local_file(path, path_or_url)
+            local_files[name] = path
+            continue
+
+        # Windows drive-letter paths (c:/...)
+        if parsed.scheme and len(parsed.scheme) == 1 and parsed.scheme.isalpha():
+            path = Path(path_or_url)
+            _ensure_path_allowed(path, _get_allowed_dirs())
+            _validate_local_file(path, path_or_url)
+            local_files[name] = path
+            continue
+
+        # Absolute filesystem paths
+        path = Path(path_or_url)
+        if path.is_absolute():
+            _ensure_path_allowed(path, _get_allowed_dirs())
+            _validate_local_file(path, path_or_url)
+            local_files[name] = path
+            continue
+
+        # Everything else → remote
+        remote_files[name] = path_or_url
+
+    return local_files, remote_files, names_order
 
 
 def _normalize_allowed_dirs(

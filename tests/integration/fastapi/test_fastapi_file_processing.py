@@ -268,6 +268,65 @@ class TestFastAPIFileProcessing:
         assert "local secret phrase" in response_text
 
     @pytest.mark.asyncio
+    async def test_local_file_attachment_injects_system_message(self, fastapi_base_url: str, tmp_path):
+        """System message should list local file paths after user input."""
+        file_path = tmp_path / "local-system.txt"
+        file_path.write_text("system message test", encoding="utf-8")
+        absolute_path = str(file_path.resolve())
+
+        url = f"{fastapi_base_url}/test_agency/get_response"
+        payload = {
+            "message": "Analyze this local file.",
+            "file_urls": {"local-system.txt": str(file_path)},
+        }
+
+        async with self.get_http_client(timeout_seconds=120) as client:
+            response = await client.post(url, json=payload)
+
+        assert response.status_code == 200
+        response_data = response.json()
+        new_messages = response_data.get("new_messages", [])
+        assert isinstance(new_messages, list) and new_messages
+
+        def _message_text(message):
+            content = message.get("content")
+            if isinstance(content, str):
+                return content
+            if isinstance(content, list):
+                parts = [item.get("text", "") for item in content if isinstance(item, dict)]
+                return " ".join(parts)
+            return ""
+
+        user_index = next(
+            (
+                idx
+                for idx, msg in enumerate(new_messages)
+                if msg.get("role") == "user" and "Analyze this local file." in _message_text(msg)
+            ),
+            None,
+        )
+        assert user_index is not None
+
+        system_index = next(
+            (idx for idx, msg in enumerate(new_messages) if msg.get("role") == "system"),
+            None,
+        )
+        assert system_index is not None
+        assert system_index < user_index
+        system_message = new_messages[system_index]
+        assert system_message.get("role") == "system"
+        assert system_message.get("message_origin") == "local_attachment_paths"
+        system_content = str(system_message.get("content", ""))
+        assert "The following files are attached and available at these local paths" in system_content
+        assert absolute_path in system_content
+        assert "file_id:" in system_content
+        assert "correspond to the image paths listed above in the same" in system_content
+
+        file_ids_map = response_data.get("file_ids_map", {})
+        assert "local-system.txt" in file_ids_map
+        assert str(file_ids_map["local-system.txt"]) in system_content
+
+    @pytest.mark.asyncio
     async def test_local_file_attachment_disallowed_without_allowlist(self, fastapi_server_no_local, tmp_path):
         """Local file access should be blocked when no allowlist is configured."""
         file_path = tmp_path / "local-file.txt"
