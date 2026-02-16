@@ -5,6 +5,7 @@ from agency_swarm import (
     Agent,
     GuardrailFunctionOutput,
     InputGuardrailTripwireTriggered,
+    OutputGuardrailTripwireTriggered,
     RunContextWrapper,
     input_guardrail,
     output_guardrail,
@@ -150,7 +151,12 @@ def test_input_guardrail_function_named_guardrail_wrapper_is_wrapped(
 
 def test_output_guardrail_logs_guidance(output_guardrail_agency: Agency):
     agency = output_guardrail_agency
-    agency.get_response_sync(message="Hi")
+    try:
+        agency.get_response_sync(message="Hi")
+    except OutputGuardrailTripwireTriggered:
+        # Retry can still trip the guardrail with live models; this test only
+        # validates that guidance is persisted in history.
+        pass
 
     # History should contain a system guidance message from the guardrail
     all_msgs = agency.thread_manager.get_all_messages()

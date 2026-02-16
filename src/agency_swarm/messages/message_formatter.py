@@ -3,7 +3,7 @@
 import json
 import logging
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from agents import (
     MessageOutputItem,
@@ -11,6 +11,8 @@ from agents import (
     ToolCallItem,
     TResponseInputItem,
 )
+from agents.models.openai_chatcompletions import OpenAIChatCompletionsModel
+from agents.models.openai_responses import OpenAIResponsesModel
 from openai.types.responses import (
     ResponseFileSearchToolCall,
     ResponseFunctionWebSearch,
@@ -25,8 +27,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+class IncompatibleChatHistoryError(RuntimeError):
+    """Raised when stored chat history cannot be used with the current model protocol."""
+
+
 class MessageFormatter:
     """Handles message formatting and structure preparation."""
+
+    HISTORY_PROTOCOL_RESPONSES = "responses"
+    HISTORY_PROTOCOL_CHAT_COMPLETIONS = "chat_completions"
+    HISTORY_PROTOCOL_MIXED = "mixed"
 
     metadata_fields: list[str] = [
         "agent",
@@ -37,7 +47,144 @@ class MessageFormatter:
         "parent_run_id",
         "message_origin",
         "run_trace_id",
+        "history_protocol",
     ]
+
+    @staticmethod
+    def resolve_history_protocol(agent: "Agent") -> str:
+        """Resolve the expected history protocol for the agent's model."""
+        return MessageFormatter._resolve_history_protocol_from_model(agent.model)
+
+    @staticmethod
+    def resolve_history_protocol_for_agent_name(
+        agent_name: str,
+        *,
+        default_agent: "Agent",
+        agency_context: "AgencyContext | None" = None,
+    ) -> str:
+        """Resolve history protocol for a named agent, falling back to a default."""
+        if agency_context and agency_context.agency_instance is not None:
+            agency_instance = agency_context.agency_instance
+            agents = getattr(agency_instance, "agents", None)
+            if isinstance(agents, dict):
+                candidate = agents.get(agent_name)
+                if candidate is not None:
+                    return MessageFormatter.resolve_history_protocol(candidate)
+        return MessageFormatter.resolve_history_protocol(default_agent)
+
+    @staticmethod
+    def _resolve_history_protocol_from_model(model: Any) -> str:
+        if isinstance(model, OpenAIChatCompletionsModel | OpenAIResponsesModel):
+            return MessageFormatter.HISTORY_PROTOCOL_RESPONSES
+        if isinstance(model, str):
+            if MessageFormatter._model_name_requires_chat_completions(model):
+                return MessageFormatter.HISTORY_PROTOCOL_CHAT_COMPLETIONS
+            return MessageFormatter.HISTORY_PROTOCOL_RESPONSES
+
+        model_name = getattr(model, "model", None)
+        if isinstance(model_name, str) and MessageFormatter._model_name_requires_chat_completions(model_name):
+            return MessageFormatter.HISTORY_PROTOCOL_CHAT_COMPLETIONS
+        return MessageFormatter.HISTORY_PROTOCOL_RESPONSES
+
+    @staticmethod
+    def _model_name_requires_chat_completions(model_name: str) -> bool:
+        # OpenAI Agents SDK inputs use Responses-style history items for
+        # supported model backends, including Chat Completions wrappers.
+        # Keep protocol inference strict and default to Responses.
+        return False
+
+    @staticmethod
+    def _normalize_history_protocol(value: object) -> str | None:
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {
+                MessageFormatter.HISTORY_PROTOCOL_RESPONSES,
+                MessageFormatter.HISTORY_PROTOCOL_CHAT_COMPLETIONS,
+            }:
+                return normalized
+        return None
+
+    @staticmethod
+    def _looks_like_chat_completions(message: dict[str, Any]) -> bool:
+        if message.get("role") == "tool":
+            return True
+        if "tool_call_id" in message:
+            return True
+        tool_calls = message.get("tool_calls")
+        if isinstance(tool_calls, list) and tool_calls:
+            return True
+        return False
+
+    @staticmethod
+    def _looks_like_responses(message: dict[str, Any]) -> bool:
+        if "call_id" in message:
+            return True
+        message_type = message.get("type")
+        if isinstance(message_type, str) and message_type in {
+            "function_call",
+            "function_call_output",
+            "file_search_call",
+            "code_interpreter_call",
+            "web_search_call",
+        }:
+            return True
+        return False
+
+    @staticmethod
+    def _is_plain_message(message: dict[str, Any]) -> bool:
+        role = message.get("role")
+        if role not in {"user", "assistant", "system", "developer"}:
+            return False
+        if MessageFormatter._looks_like_chat_completions(message):
+            return False
+        if MessageFormatter._looks_like_responses(message):
+            return False
+        return True
+
+    @staticmethod
+    def _detect_history_protocol(history: list[dict[str, Any]]) -> str | None:
+        protocols: set[str] = set()
+        for msg in history:
+            if MessageFormatter._looks_like_responses(msg):
+                protocols.add(MessageFormatter.HISTORY_PROTOCOL_RESPONSES)
+                continue
+            if MessageFormatter._looks_like_chat_completions(msg):
+                protocols.add(MessageFormatter.HISTORY_PROTOCOL_CHAT_COMPLETIONS)
+                continue
+            normalized = MessageFormatter._normalize_history_protocol(msg.get("history_protocol"))
+            if normalized and not MessageFormatter._is_plain_message(msg):
+                protocols.add(normalized)
+        if len(protocols) > 1:
+            return MessageFormatter.HISTORY_PROTOCOL_MIXED
+        if len(protocols) == 1:
+            return next(iter(protocols))
+        return None
+
+    @staticmethod
+    def _ensure_history_protocol_compatibility(
+        history: list[TResponseInputItem],
+        *,
+        expected_protocol: str,
+        agent_name: str,
+    ) -> None:
+        dict_history = [msg for msg in history if isinstance(msg, dict)]
+        detected_protocol = MessageFormatter._detect_history_protocol(cast(list[dict[str, Any]], dict_history))
+        if detected_protocol is None:
+            return
+        if detected_protocol == MessageFormatter.HISTORY_PROTOCOL_MIXED:
+            raise IncompatibleChatHistoryError(
+                "Incompatible chat history for agent "
+                f"'{agent_name}': stored history mixes response and chat_completions protocols. "
+                "Start a new chat (clear the thread history) before continuing, or keep only "
+                "{role, content} messages and drop tool/event items."
+            )
+        if detected_protocol != expected_protocol:
+            raise IncompatibleChatHistoryError(
+                "Incompatible chat history for agent "
+                f"'{agent_name}': stored history uses '{detected_protocol}' but the current model expects "
+                f"'{expected_protocol}'. Start a new chat (clear the thread history) before continuing, "
+                "or keep only {role, content} messages and drop tool/event items."
+            )
 
     @staticmethod
     def add_agency_metadata(
@@ -47,6 +194,7 @@ class MessageFormatter:
         agent_run_id: str | None = None,
         parent_run_id: str | None = None,
         run_trace_id: str | None = None,
+        history_protocol: str | None = None,
         timestamp: int | None = None,
     ) -> TResponseInputItem:
         """Add agency-specific metadata to a message.
@@ -57,6 +205,7 @@ class MessageFormatter:
             caller_agent: The sender agent name (None for user)
             agent_run_id: The current agent's execution ID
             parent_run_id: The calling agent's execution ID
+            history_protocol: Expected history protocol label for the stored message.
             timestamp: Optional timestamp in microseconds.
                 If None, either preserves existing timestamp or generates a new one.
 
@@ -72,6 +221,10 @@ class MessageFormatter:
             modified_message["parent_run_id"] = parent_run_id  # type: ignore[typeddict-unknown-key]
         if run_trace_id is not None:
             modified_message["run_trace_id"] = run_trace_id  # type: ignore[typeddict-unknown-key]
+        if history_protocol is None:
+            existing_protocol = MessageFormatter._normalize_history_protocol(modified_message.get("history_protocol"))
+            history_protocol = existing_protocol or MessageFormatter.HISTORY_PROTOCOL_RESPONSES
+        modified_message["history_protocol"] = history_protocol  # type: ignore[typeddict-unknown-key]
         # Use microsecond precision to reduce timestamp collisions
         # time.time() returns seconds since epoch; multiply to get microseconds
         # Priority: explicit timestamp param > valid existing timestamp > generate new
@@ -105,6 +258,17 @@ class MessageFormatter:
             raise RuntimeError(f"Agent '{agent.name}' missing ThreadManager in agency context.")
 
         thread_manager = agency_context.thread_manager
+        history_protocol = MessageFormatter.resolve_history_protocol(agent)
+
+        existing_history = thread_manager.get_conversation_history(agent.name, sender_name)
+        compatibility_history = existing_history + [
+            msg for msg in processed_current_message_items if isinstance(msg, dict)
+        ]
+        MessageFormatter._ensure_history_protocol_compatibility(
+            compatibility_history,
+            expected_protocol=history_protocol,
+            agent_name=agent.name,
+        )
 
         # Add agency metadata to incoming messages
         messages_to_save: list[TResponseInputItem] = []
@@ -116,6 +280,7 @@ class MessageFormatter:
                 agent_run_id=agent_run_id,
                 parent_run_id=parent_run_id,
                 run_trace_id=run_trace_id,
+                history_protocol=history_protocol,
             )
             messages_to_save.append(formatted_msg)  # type: ignore[arg-type]
 
@@ -131,6 +296,7 @@ class MessageFormatter:
         history_for_runner = MessageFormatter.ensure_tool_calls_content_safety(history_for_runner)
         # Strip agency metadata before sending to OpenAI
         history_for_runner = MessageFormatter.strip_agency_metadata(history_for_runner)
+        history_for_runner = MessageFormatter.sanitize_replayed_tool_item_ids(history_for_runner)
         return history_for_runner  # type: ignore[return-value]
 
     @staticmethod
@@ -202,6 +368,36 @@ class MessageFormatter:
         return sanitized
 
     @staticmethod
+    def sanitize_replayed_tool_item_ids(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Drop replay artifact function_call IDs while preserving native Responses IDs.
+
+        In the Agents SDK Chat Completions/LiteLLM conversion path, `function_call`
+        items are emitted with `id=FAKE_RESPONSES_ID` and later normalized to
+        `id=call_id`, so persisted replay can carry `id == call_id` (e.g. `call_*`).
+        Responses-native items keep distinct IDs (`id != call_id`), which must be
+        preserved for reasoning/tool continuity across turns.
+        """
+        sanitized: list[dict[str, Any]] = []
+        for msg in history:
+            message_type = msg.get("type")
+            message_id = msg.get("id")
+            call_id = msg.get("call_id")
+            if (
+                message_type == "function_call"
+                and isinstance(message_id, str)
+                and message_id
+                and isinstance(call_id, str)
+                and call_id
+                and message_id == call_id
+            ):
+                msg_copy = dict(msg)
+                msg_copy.pop("id", None)
+                sanitized.append(msg_copy)
+                continue
+            sanitized.append(msg)
+        return sanitized
+
+    @staticmethod
     def add_citations_to_message(
         run_item_obj: RunItem,
         item_dict: TResponseInputItem,
@@ -234,6 +430,7 @@ class MessageFormatter:
                 If provided, synthetic outputs inherit the tool call's arrival time.
         """
         synthetic_outputs = []
+        history_protocol = MessageFormatter.resolve_history_protocol(agent)
 
         # Find hosted tool calls and assistant messages
         hosted_tool_calls: list[ToolCallItem] = []
@@ -310,6 +507,7 @@ class MessageFormatter:
                             },
                             agent=tool_agent_name,
                             caller_agent=caller_agent,
+                            history_protocol=history_protocol,
                             timestamp=tool_timestamp,
                         )
                     )
@@ -364,6 +562,7 @@ class MessageFormatter:
                             },
                             agent=tool_agent_name,
                             caller_agent=caller_agent,
+                            history_protocol=history_protocol,
                             timestamp=tool_timestamp,
                         )
                     )

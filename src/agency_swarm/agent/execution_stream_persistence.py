@@ -187,6 +187,11 @@ def _persist_run_item_if_needed(
         agent_run_id=current_agent_run_id,
         parent_run_id=parent_run_id,
         run_trace_id=run_trace_id,
+        history_protocol=MessageFormatter.resolve_history_protocol_for_agent_name(
+            current_stream_agent_name,
+            default_agent=agent,
+            agency_context=agency_context,
+        ),
     )
 
     # Skip per-event persistence for forwarded items (they're persisted by their originating agent)
@@ -360,6 +365,11 @@ def _persist_streamed_items(
             agent_run_id=current_agent_run_id,
             parent_run_id=parent_run_id,
             run_trace_id=run_trace_id,
+            history_protocol=MessageFormatter.resolve_history_protocol_for_agent_name(
+                current_agent_name,
+                default_agent=agent,
+                agency_context=agency_context,
+            ),
             timestamp=emission_timestamp,
         )
         items_to_save.append(formatted_item)

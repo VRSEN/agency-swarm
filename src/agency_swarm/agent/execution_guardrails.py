@@ -87,6 +87,7 @@ def append_guardrail_feedback(
     differentiate guidance provenance.
     """
     assistant_output, guidance_text = extract_guardrail_texts(exception)
+    history_protocol = MessageFormatter.resolve_history_protocol(agent)
 
     if agency_context and agency_context.thread_manager:
         to_persist: list[TResponseInputItem] = []
@@ -100,6 +101,7 @@ def append_guardrail_feedback(
                         agent_run_id=current_agent_run_id,
                         parent_run_id=parent_run_id,
                         run_trace_id=run_trace_id,
+                        history_protocol=history_protocol,
                     )
                 )
 
@@ -129,6 +131,7 @@ def append_guardrail_feedback(
                 agent_run_id=current_agent_run_id,
                 parent_run_id=parent_run_id,
                 run_trace_id=run_trace_id,
+                history_protocol=history_protocol,
             )
         )
 

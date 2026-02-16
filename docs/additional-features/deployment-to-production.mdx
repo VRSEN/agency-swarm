@@ -49,6 +49,10 @@ agency = Agency(
 )
 ```
 
+<Warning>
+If you switch model providers for an existing saved chat, old tool/event items may no longer replay correctly. Start a new chat, or keep only `{role, content}` messages.
+</Warning>
+
 </Step>
 
 <Step title="Step 2: Deploying Agents and Tools on a Production Server" icon="rocket-launch">
