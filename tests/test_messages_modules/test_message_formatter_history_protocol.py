@@ -129,6 +129,28 @@ def test_prepare_history_for_runner_allows_openai_chat_model_function_call_histo
     MessageFormatter.prepare_history_for_runner([], agent, None, agency_context=context)
 
 
+def test_prepare_history_for_runner_prefers_responses_markers_for_legacy_mixed_items() -> None:
+    thread_manager = ThreadManager()
+    thread_manager._store.messages = [
+        {
+            "type": "function_call",
+            "call_id": "call-1",
+            "name": "send_message",
+            "arguments": "{}",
+            "tool_calls": [{"id": "legacy-tool-call"}],
+            "agent": "Coordinator",
+            "callerAgent": None,
+        }
+    ]
+
+    agent = _make_responses_agent("Coordinator")
+    context = _make_context(thread_manager)
+
+    history = MessageFormatter.prepare_history_for_runner([], agent, None, agency_context=context)
+    assert history[0]["type"] == "function_call"
+    assert history[0]["call_id"] == "call-1"
+
+
 def test_prepare_history_for_runner_strips_non_responses_function_call_ids() -> None:
     thread_manager = ThreadManager()
     thread_manager._store.messages = [
