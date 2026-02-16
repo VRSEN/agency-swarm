@@ -368,12 +368,13 @@ class MessageFormatter:
 
     @staticmethod
     def sanitize_replayed_tool_item_ids(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Drop non-Responses function-call IDs while preserving valid Responses IDs.
+        """Drop replay artifact function_call IDs while preserving native Responses IDs.
 
-        Responses-generated function calls use item IDs like ``fc_*``. Replay from
-        LiteLLM/Chat Completions may carry incompatible IDs (e.g. ``call_*``),
-        which Responses rejects. Preserve valid ``fc_*`` IDs so native Responses
-        reasoning/tool chains stay intact.
+        In the Agents SDK Chat Completions/LiteLLM conversion path, `function_call`
+        items are emitted with `id=FAKE_RESPONSES_ID` and later normalized to
+        `id=call_id`, so persisted replay can carry `id == call_id` (e.g. `call_*`).
+        Responses-native items keep distinct IDs (`id != call_id`), which must be
+        preserved for reasoning/tool continuity across turns.
         """
         sanitized: list[dict[str, Any]] = []
         for msg in history:
@@ -384,9 +385,9 @@ class MessageFormatter:
                 message_type == "function_call"
                 and isinstance(message_id, str)
                 and message_id
-                and not message_id.startswith("fc")
                 and isinstance(call_id, str)
                 and call_id
+                and message_id == call_id
             ):
                 msg_copy = dict(msg)
                 msg_copy.pop("id", None)

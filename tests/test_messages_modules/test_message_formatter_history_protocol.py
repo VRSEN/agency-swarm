@@ -134,7 +134,7 @@ def test_prepare_history_for_runner_strips_non_responses_function_call_ids() -> 
     thread_manager._store.messages = [
         {
             "type": "function_call",
-            "id": "call_not_accepted_by_responses",
+            "id": "call-1",
             "call_id": "call-1",
             "name": "send_message",
             "arguments": "{}",
