@@ -1,6 +1,7 @@
 # --- Agency visualization and demo methods ---
 import logging
 import warnings
+from copy import deepcopy
 from typing import TYPE_CHECKING, Any
 
 from agents import FunctionTool
@@ -91,7 +92,6 @@ def get_agency_graph(agency: "Agency", include_tools: bool = True) -> dict[str, 
                         "label": display_name,
                         "description": tool_desc,
                         "type": tool_type,
-                        **tool_schema,
                         "parentAgent": agent_name,
                     },
                     "type": "tool",
@@ -211,7 +211,7 @@ def _describe_model(model: Any) -> str:
 
 def _extract_tool_schema(tool: Any) -> dict[str, Any]:
     if isinstance(tool, FunctionTool):
-        return {"inputSchema": tool.params_json_schema}
+        return {"inputSchema": deepcopy(tool.params_json_schema)}
     return {}
 
 

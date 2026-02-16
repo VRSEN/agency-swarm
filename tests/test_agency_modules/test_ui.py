@@ -412,6 +412,8 @@ class TestMetadataDetails:
         assert data["tools"][0]["name"] == "sample_tool"
         assert "inputSchema" in data["tools"][0]
         assert "text" in data["tools"][0]["inputSchema"].get("properties", {})
+        data["tools"][0]["inputSchema"]["properties"]["injected"] = {"type": "string"}
+        assert "injected" not in sample_tool.params_json_schema.get("properties", {})
         assert data["instructions"].startswith("shared.md")
 
         meta = payload["metadata"]
