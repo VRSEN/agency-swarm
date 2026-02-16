@@ -151,6 +151,27 @@ def test_prepare_history_for_runner_prefers_responses_markers_for_legacy_mixed_i
     assert history[0]["call_id"] == "call-1"
 
 
+def test_prepare_history_for_runner_prefers_web_search_type_over_legacy_protocol_label() -> None:
+    thread_manager = ThreadManager()
+    thread_manager._store.messages = [
+        {
+            "type": "web_search_call",
+            "id": "ws_1",
+            "status": "completed",
+            "action": {"type": "search", "query": "Agency Swarm"},
+            "history_protocol": MessageFormatter.HISTORY_PROTOCOL_CHAT_COMPLETIONS,
+            "agent": "Coordinator",
+            "callerAgent": None,
+        }
+    ]
+
+    agent = _make_responses_agent("Coordinator")
+    context = _make_context(thread_manager)
+
+    history = MessageFormatter.prepare_history_for_runner([], agent, None, agency_context=context)
+    assert history[0]["type"] == "web_search_call"
+
+
 def test_prepare_history_for_runner_strips_non_responses_function_call_ids() -> None:
     thread_manager = ThreadManager()
     thread_manager._store.messages = [

@@ -125,6 +125,7 @@ class MessageFormatter:
             "function_call_output",
             "file_search_call",
             "code_interpreter_call",
+            "web_search_call",
         }:
             return True
         return False
