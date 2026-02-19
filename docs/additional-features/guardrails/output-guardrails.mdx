@@ -81,4 +81,55 @@ except OutputGuardrailTripwireTriggered as e:
 
 If agents communicate with each other, the recipient agent's guardrails enforce message format and content. See [Communication Flows](/core-framework/agencies/communication-flows) and the output guardrail example above.
 
-See [Output Guardrails Advanced](/additional-features/guardrails/output-guardrails-advanced) for agent-to-agent validation and message history details.
+<Accordion title="Advanced: enforce message format between agents" defaultOpen={false}>
+
+```python
+from agency_swarm import Agent, GuardrailFunctionOutput, input_guardrail, output_guardrail
+
+@input_guardrail(name="RequireTaskPrefix")
+async def require_task_prefix(context, agent, agent_input: str | list[str]) -> GuardrailFunctionOutput:
+    text = agent_input if isinstance(agent_input, str) else " ".join(agent_input)
+    condition = not text.startswith("Task:")
+    return GuardrailFunctionOutput(
+        output_info="ERROR: Requests must begin with 'Task:'" if condition else "",
+        tripwire_triggered=condition,
+    )
+
+@output_guardrail(name="RequireResponsePrefix")
+async def require_response_prefix(context, agent, response_text: str) -> GuardrailFunctionOutput:
+    condition = not response_text.startswith("Response:")
+    return GuardrailFunctionOutput(
+        output_info="ERROR: Responses must start with 'Response:'" if condition else "",
+        tripwire_triggered=condition,
+    )
+
+worker = Agent(
+    name="Worker",
+    instructions="You are the worker agent.",
+    input_guardrails=[require_task_prefix],
+    output_guardrails=[require_response_prefix],
+    throw_input_guardrail_error=True,
+)
+```
+
+</Accordion>
+
+<Accordion title="Advanced: message history shape" defaultOpen={false}>
+
+```json
+{
+  "role": "system",
+  "content": "Do not include email addresses.",
+  "message_origin": "output_guardrail_error"
+}
+```
+
+</Accordion>
+
+<Note>
+For internal agent chains, friendly mode (`throw_input_guardrail_error=False`) usually keeps communication smoother.
+</Note>
+
+<Warning>
+Using `Handoff` for agent-to-agent communication bypasses input guardrails between agents.
+</Warning>

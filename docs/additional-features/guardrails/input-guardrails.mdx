@@ -87,4 +87,64 @@ Each guardrail trigger is recorded with a `message_origin` field:
 
 ## Advanced Examples
 
-See [Input Guardrails Advanced](/additional-features/guardrails/input-guardrails-advanced) for judge agents, streaming behavior, and message history examples.
+<Accordion title="Judge agent pattern" defaultOpen={false}>
+
+```python
+from agency_swarm import Agent, GuardrailFunctionOutput, RunContextWrapper, input_guardrail
+from pydantic import BaseModel
+
+class RelevanceDecision(BaseModel):
+    is_relevant: bool
+    reason: str
+
+guardrail_agent = Agent(
+    name="GuardrailAgent",
+    instructions="Allow billing, account access, and troubleshooting.",
+    model="gpt-5-mini",
+    output_type=RelevanceDecision,
+)
+
+@input_guardrail
+async def require_support_topic(
+    context: RunContextWrapper, agent: Agent, user_input: str | list[str]
+) -> GuardrailFunctionOutput:
+    text = user_input if isinstance(user_input, str) else "\n".join(user_input)
+    result = await guardrail_agent.get_response(text)
+    if not result.final_output.is_relevant:
+        return GuardrailFunctionOutput(
+            output_info="Only support questions are allowed.",
+            tripwire_triggered=True,
+        )
+    return GuardrailFunctionOutput(output_info="", tripwire_triggered=False)
+```
+
+</Accordion>
+
+<Accordion title="Streaming event shape in friendly mode" defaultOpen={false}>
+
+```text
+RunItemStreamEvent(
+  name='message_output_created',
+  item=MessageOutputItem(
+    raw_item=ResponseOutputMessage(
+      id='msg_input_guardrail_guidance',
+      role='assistant',
+      status='completed'
+    )
+  )
+)
+```
+
+</Accordion>
+
+<Accordion title="Message history payload examples" defaultOpen={false}>
+
+```json
+[
+  {"role": "assistant", "message_origin": "input_guardrail_message"},
+  {"role": "system", "message_origin": "input_guardrail_error"}
+]
+```
+
+</Accordion>
+See [`examples/guardrails_input.py`](https://github.com/VRSEN/agency-swarm/blob/main/examples/guardrails_input.py) for a full example.
