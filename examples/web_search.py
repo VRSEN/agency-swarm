@@ -11,18 +11,12 @@ Run:
 Requires OPENAI_API_KEY (or .env). Uses live API (network + usage).
 """
 
-from __future__ import annotations
-
 import asyncio
-from datetime import datetime
 
-from dotenv import load_dotenv
 from openai.types.responses.web_search_tool import Filters
 
 from agency_swarm import Agency, Agent, WebSearchTool
 from agency_swarm.utils.citation_extractor import extract_web_search_sources
-
-load_dotenv(override=True)
 
 
 async def main() -> None:
@@ -52,8 +46,7 @@ async def main() -> None:
     )
     agency = Agency(research_agent, shared_instructions="Demonstrate web search with sources.")
 
-    today = datetime.now().strftime("%Y-%m-%d")
-    query = f"What are 3 recent OpenAI platform updates for developers from the last few weeks? Today is {today}."
+    query = "What are 3 recent OpenAI platform updates for developers from the last few weeks?"
     print(f"\n❓ Query: {query}")
     response = await agency.get_response(query)
 
