@@ -29,8 +29,6 @@ If your `files_folder` ends with `_vs_<vector_store_id>`, Agency Swarm automatic
 
 ### Web Search Sources
 
-When an agent has `WebSearchTool`, Agency Swarm now includes full checked source URLs by default. It does this by adding `web_search_call.action.sources` to `model_settings.response_include`.
-
 ```python
 from agency_swarm import Agent, WebSearchTool
 
@@ -42,7 +40,8 @@ agent = Agent(
 )
 ```
 
-Set `include_web_search_sources=False` if you do not want this include field added automatically.
+With `include_web_search_sources=True` (default), `WebSearchTool` calls include source URLs.
+Set `include_web_search_sources=False` to skip this.
 
 ### Conversation starters cache
 

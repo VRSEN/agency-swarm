@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 
-from agents import Runner
+from agents.items import ToolCallItem
 from dotenv import load_dotenv
 from openai.types.responses import ResponseFunctionWebSearch
 from openai.types.responses.response_function_web_search import ActionSearch
@@ -24,10 +24,9 @@ async def main() -> None:
         model="gpt-5-mini",
         instructions="Just search and return the best option.",
         tools=[WebSearchTool()],
-        include_web_search_sources=True,  # default behavior in Agency Swarm
     )
 
-    result = await Runner.run(agent, "Find the best Toyota Corolla in Utah")
+    result = await agent.get_response("Find the best Toyota Corolla in Utah")
 
     print("### Final output ###")
     print(result.final_output)
@@ -36,7 +35,9 @@ async def main() -> None:
     print("### Sources ###")
     sources_found = 0
     for item in result.new_items or []:
-        raw_call = getattr(item, "raw_item", None)
+        if not isinstance(item, ToolCallItem):
+            continue
+        raw_call = item.raw_item
         if not isinstance(raw_call, ResponseFunctionWebSearch):
             continue
         action = raw_call.action

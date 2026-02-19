@@ -321,3 +321,27 @@ def test_agent_initialization_does_not_duplicate_web_search_sources_include():
     )
     includes = agent.model_settings.response_include or []
     assert includes.count("web_search_call.action.sources") == 1
+
+
+def test_agent_add_tool_includes_web_search_sources_by_default():
+    """Adding WebSearchTool after init should also add source include."""
+    agent = Agent(name="WebAgentAddTool", instructions="Test")
+    assert (agent.model_settings.response_include or []) == []
+
+    agent.add_tool(WebSearchTool())
+
+    includes = agent.model_settings.response_include or []
+    assert "web_search_call.action.sources" in includes
+
+
+def test_agent_add_tool_respects_web_search_sources_opt_out():
+    """Adding WebSearchTool should not inject include when opt-out is disabled."""
+    agent = Agent(
+        name="WebAgentAddToolNoSources",
+        instructions="Test",
+        include_web_search_sources=False,
+    )
+    agent.add_tool(WebSearchTool())
+
+    includes = agent.model_settings.response_include or []
+    assert "web_search_call.action.sources" not in includes

@@ -126,9 +126,8 @@ class Agent(BaseAgent[MasterContext]):
                 `communication_flows` on `Agency` instead of setting this per agent.
             include_search_results (bool): Include search results in FileSearchTool output for citation extraction.
                 Defaults to False.
-            include_web_search_sources (bool): Automatically include full web search source URLs for
-                `WebSearchTool` calls by adding `web_search_call.action.sources` to
-                `model_settings.response_include`. Defaults to True.
+            include_web_search_sources (bool): Include source URLs from `WebSearchTool` calls.
+                Defaults to True.
             validation_attempts (int): Number of retries when an output guardrail trips. Defaults to 1.
             throw_input_guardrail_error (bool): Whether to raise input guardrail errors as exceptions.
                 Defaults to False.
