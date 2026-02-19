@@ -170,9 +170,7 @@ class PresentFiles(BaseTool):  # type: ignore[misc]
                     should_overwrite = True if self.overwrite is None else self.overwrite
                     if _path_entry_exists(destination):
                         if destination.is_dir():
-                            errors.append(
-                                f"Unable to overwrite directory in MNT: {destination}. Remove it and retry."
-                            )
+                            errors.append(f"Unable to overwrite directory in MNT: {destination}. Remove it and retry.")
                             continue
                         if not should_overwrite:
                             errors.append(f"Destination already exists and overwrite is disabled: {destination}.")
@@ -196,4 +194,3 @@ class PresentFiles(BaseTool):  # type: ignore[misc]
             )
 
         return {"files": results, "errors": errors}
-
