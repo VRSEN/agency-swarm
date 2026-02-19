@@ -81,6 +81,10 @@ except OutputGuardrailTripwireTriggered as e:
 
 If agents communicate with each other, the recipient agent's guardrails enforce message format and content. See [Communication Flows](/core-framework/agencies/communication-flows) and the output guardrail example above.
 
+<Note>
+For agent-to-agent communication, guardrails receive one message string per call.
+</Note>
+
 <Accordion title="Advanced: enforce message format between agents" defaultOpen={false}>
 
 ```python
