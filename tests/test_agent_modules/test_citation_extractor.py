@@ -5,10 +5,12 @@ Unit tests for citation extraction utilities.
 from unittest.mock import MagicMock
 
 from agents.items import MessageOutputItem, ToolCallItem
+from openai.types.responses import ResponseFunctionWebSearch
 from openai.types.responses.response_file_search_tool_call import (
     ResponseFileSearchToolCall,
     Result as FileSearchResult,
 )
+from openai.types.responses.response_function_web_search import ActionOpenPage, ActionSearch, ActionSearchSource
 from openai.types.responses.response_output_message import ResponseOutputMessage, ResponseOutputText
 from openai.types.responses.response_output_text import AnnotationFileCitation, AnnotationURLCitation
 
@@ -18,6 +20,7 @@ from agency_swarm.utils.citation_extractor import (
     extract_direct_file_annotations,
     extract_direct_file_citations_from_history,
     extract_vector_store_citations,
+    extract_web_search_sources,
 )
 
 
@@ -179,6 +182,63 @@ class TestExtractVectorStoreCitations:
         run_result.new_items = [ToolCallItem(agent=MagicMock(), raw_item=tool_call)]
 
         assert extract_vector_store_citations(run_result) == []
+
+
+class TestExtractWebSearchSources:
+    """Test web search source URL extraction from run results."""
+
+    def test_extracts_and_deduplicates_urls(self):
+        """Extract unique URLs while preserving first-seen order."""
+        web_search_call = ResponseFunctionWebSearch(
+            id="web_1",
+            action=ActionSearch(
+                query="latest openai updates",
+                type="search",
+                sources=[
+                    ActionSearchSource(type="url", url="https://help.openai.com/a"),
+                    ActionSearchSource(type="url", url="https://help.openai.com/b"),
+                    ActionSearchSource(type="url", url="https://help.openai.com/a"),
+                ],
+            ),
+            status="completed",
+            type="web_search_call",
+        )
+
+        run_result = MagicMock()
+        run_result.new_items = [ToolCallItem(agent=MagicMock(), raw_item=web_search_call)]
+
+        assert extract_web_search_sources(run_result) == [
+            "https://help.openai.com/a",
+            "https://help.openai.com/b",
+        ]
+
+    def test_handles_missing_sources(self):
+        """Return empty list when a web search call has no sources."""
+        web_search_call = ResponseFunctionWebSearch(
+            id="web_2",
+            action=ActionSearch(query="openai docs", type="search", sources=None),
+            status="completed",
+            type="web_search_call",
+        )
+
+        run_result = MagicMock()
+        run_result.new_items = [ToolCallItem(agent=MagicMock(), raw_item=web_search_call)]
+
+        assert extract_web_search_sources(run_result) == []
+
+    def test_skips_non_search_web_actions(self):
+        """Ignore web search tool actions that are not search actions."""
+        web_search_call = ResponseFunctionWebSearch(
+            id="web_3",
+            action=ActionOpenPage(type="open_page", url="https://help.openai.com"),
+            status="completed",
+            type="web_search_call",
+        )
+
+        run_result = MagicMock()
+        run_result.new_items = [ToolCallItem(agent=MagicMock(), raw_item=web_search_call)]
+
+        assert extract_web_search_sources(run_result) == []
 
 
 class TestExtractDirectFileCitationsFromHistory:
