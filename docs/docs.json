@@ -185,12 +185,7 @@
           {
             "group": "Marketplace",
             "icon": "store",
-            "pages": [
-              "platform/marketplace/onboarding",
-              "platform/marketplace/onboarding-tool-guide",
-              "platform/marketplace/onboarding-example",
-              "platform/marketplace/onboarding-advanced-fields"
-            ]
+            "pages": ["platform/marketplace/onboarding"]
           },
           {
             "group": "Additional Features",
