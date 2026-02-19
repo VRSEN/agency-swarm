@@ -277,6 +277,7 @@ class Agent(BaseAgent[MasterContext]):
             api_headers (dict[str, dict[str, str]] | None): Per-schema HTTP headers for generated tools
             api_params (dict[str, dict[str, Any]] | None): Per-schema default parameters for generated tools
             include_search_results (bool): Include search results in FileSearchTool output (default False)
+            include_web_search_sources (bool): Include full source URLs for WebSearchTool output (default True)
             validation_attempts (int): Number of retries when output guardrails trigger (default 1)
             throw_input_guardrail_error (bool): Controls input guardrail behavior—False enables friendly mode (guidance as assistant message), True enables strict mode (raises exceptions). Default: False
             handoff_reminder (str | None): Custom reminder text when handing off to another agent
@@ -303,6 +304,7 @@ class Agent(BaseAgent[MasterContext]):
 - **`api_headers` / `api_params`** (dict): Per-schema metadata applied when generating tools
 - **`description`** (str | None): Agent role description for dynamic send_message tools
 - **`include_search_results`** (bool): Whether FileSearchTool responses include citation context
+- **`include_web_search_sources`** (bool): Whether WebSearchTool responses include full checked source URLs
 - **`validation_attempts`** (int): Retry count for output guardrail enforcement
 - **`throw_input_guardrail_error`** (bool): Controls input guardrail mode—False for friendly (guidance as assistant), True for strict (raises exceptions)
 - **`handoff_reminder`** (str | None): Custom reminder appended to handoff prompts
