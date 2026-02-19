@@ -12,6 +12,7 @@ To run:
 
 import os
 import sys
+from typing import Literal
 
 # Path setup for standalone examples
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "src")))
@@ -22,10 +23,23 @@ from agency_swarm import Agency, Agent, function_tool, run_fastapi
 
 
 @function_tool
-def ExampleTool(name: str, greeting_type: str = "Hello") -> str:
-    """A tool that provides a simple greeting message with customization options.
-    This tool can be used to generate personalized greetings for users."""
-    return f"{greeting_type}, {name}!"
+def CalculationTool(
+    a: float,
+    b: float,
+    operation: Literal["add", "subtract", "multiply", "divide"] = "add",
+) -> str:
+    """Perform a basic arithmetic operation on two numbers."""
+    if operation == "add":
+        result = a + b
+    elif operation == "subtract":
+        result = a - b
+    elif operation == "multiply":
+        result = a * b
+    elif operation == "divide":
+        if b == 0:
+            return "Error: Cannot divide by zero."
+        result = a / b
+    return f"Result: {result}"
 
 
 # --- Agent Setup --- #
@@ -40,7 +54,7 @@ def create_agency(load_threads_callback=None):
         description="Primary agent that handles user requests",
         instructions="""You are the primary agent. When asked to call the second agent:
         1. Use the send_message tool to communicate with ExampleAgent2
-        2. Have ExampleAgent2 use the ExampleTool
+        2. Have ExampleAgent2 use the CalculationTool
         3. Return the result to the user""",
         tools=[],
     )
@@ -52,8 +66,8 @@ def create_agency(load_threads_callback=None):
             "A helpful and knowledgeable assistant that provides "
             "comprehensive support and guidance across various domains."
         ),
-        instructions="You are a helpful assistant. Use the ExampleTool when asked to greet someone.",
-        tools=[ExampleTool],
+        instructions="You are a helpful assistant. Use the CalculationTool when asked to do arithmetic.",
+        tools=[CalculationTool],
     )
 
     # Create agency with communication flow
