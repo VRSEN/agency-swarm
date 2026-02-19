@@ -50,17 +50,17 @@ def create_agency(load_threads_callback=None):
 
     # First agent - receives user requests
     agent = Agent(
-        name="ExampleAgent",
-        description="Receives user requests.",
-        instructions="Coordinate with other agents as needed.",
+        name="UserSupportAgent",
+        description="Receives and coordinates user requests.",
+        instructions="You are UserSupportAgent. Route and handle user requests as needed.",
         tools=[],
     )
 
     # Second agent - performs tasks
     agent2 = Agent(
-        name="ExampleAgent2",
-        description="Handles math queries using CalculationTool.",
-        instructions="Use CalculationTool for arithmetic.",
+        name="MathAgent",
+        description="Handles all math queries using CalculationTool.",
+        instructions="You are MathAgent. Use CalculationTool for arithmetic questions.",
         tools=[CalculationTool],
     )
 
