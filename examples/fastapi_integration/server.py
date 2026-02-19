@@ -51,22 +51,16 @@ def create_agency(load_threads_callback=None):
     # First agent - receives user requests
     agent = Agent(
         name="ExampleAgent",
-        description="Primary agent that handles user requests",
-        instructions="""You are the primary agent. When asked to call the second agent:
-        1. Use the send_message tool to communicate with ExampleAgent2
-        2. Have ExampleAgent2 use the CalculationTool
-        3. Return the result to the user""",
+        description="Receives user requests.",
+        instructions="Coordinate with other agents as needed.",
         tools=[],
     )
 
     # Second agent - performs tasks
     agent2 = Agent(
         name="ExampleAgent2",
-        description=(
-            "A helpful and knowledgeable assistant that provides "
-            "comprehensive support and guidance across various domains."
-        ),
-        instructions="You are a helpful assistant. Use the CalculationTool when asked to do arithmetic.",
+        description="Handles math queries using CalculationTool.",
+        instructions="Use CalculationTool for arithmetic.",
         tools=[CalculationTool],
     )
 
@@ -75,7 +69,7 @@ def create_agency(load_threads_callback=None):
         agent,
         agent2,
         communication_flows=[agent > agent2],
-        shared_instructions="Be helpful and demonstrate inter-agent communication.",
+        shared_instructions="Demonstrate inter-agent communication.",
         load_threads_callback=load_threads_callback,
     )
 
