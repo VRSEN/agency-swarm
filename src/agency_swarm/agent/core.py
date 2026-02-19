@@ -12,6 +12,7 @@ from agents import (
     RunResult,
     Tool,
     TResponseInputItem,
+    WebSearchTool,
 )
 from openai import AsyncOpenAI, OpenAI
 from pydantic import StringConstraints, TypeAdapter, ValidationError
@@ -48,6 +49,7 @@ from agency_swarm.tools.mcp_manager import convert_mcp_servers_to_tools
 from .context_types import AgencyContext as AgencyContext, AgentRuntimeState
 
 logger = logging.getLogger(__name__)
+_WEB_SEARCH_SOURCES_INCLUDE = "web_search_call.action.sources"
 
 """Constants moved to agency_swarm.agent.constants (no behavior change)."""
 
@@ -81,6 +83,7 @@ class Agent(BaseAgent[MasterContext]):
     cache_conversation_starters: bool = False
     output_type: type[Any] | None
     include_search_results: bool = False
+    include_web_search_sources: bool = True
     validation_attempts: int = 1
     throw_input_guardrail_error: bool = False
 
@@ -123,6 +126,8 @@ class Agent(BaseAgent[MasterContext]):
                 `communication_flows` on `Agency` instead of setting this per agent.
             include_search_results (bool): Include search results in FileSearchTool output for citation extraction.
                 Defaults to False.
+            include_web_search_sources (bool): Include source URLs from `WebSearchTool` calls.
+                Defaults to True.
             validation_attempts (int): Number of retries when an output guardrail trips. Defaults to 1.
             throw_input_guardrail_error (bool): Whether to raise input guardrail errors as exceptions.
                 Defaults to False.
@@ -199,6 +204,7 @@ class Agent(BaseAgent[MasterContext]):
         self.cache_conversation_starters = _validate_cache_conversation_starters(cache_enabled)
         self.send_message_tool_class = current_agent_params.get("send_message_tool_class")
         self.include_search_results = current_agent_params.get("include_search_results", False)
+        self.include_web_search_sources = bool(current_agent_params.get("include_web_search_sources", True))
         self.validation_attempts = int(current_agent_params.get("validation_attempts", 1))
         self.throw_input_guardrail_error = bool(current_agent_params.get("throw_input_guardrail_error", False))
         self.handoff_reminder = current_agent_params.get("handoff_reminder")
@@ -248,6 +254,10 @@ class Agent(BaseAgent[MasterContext]):
 
         # Convert MCP servers to tools and add them to the agent
         convert_mcp_servers_to_tools(self)
+        if self.include_web_search_sources and any(isinstance(tool, WebSearchTool) for tool in self.tools):
+            existing_includes = list(self.model_settings.response_include or [])
+            if _WEB_SEARCH_SOURCES_INCLUDE not in existing_includes:
+                self.model_settings.response_include = [*existing_includes, _WEB_SEARCH_SOURCES_INCLUDE]
 
         # Refresh after MCP conversion so fingerprint includes MCP-converted tools
         self.refresh_conversation_starters_cache()
@@ -318,6 +328,10 @@ class Agent(BaseAgent[MasterContext]):
             TypeError: If the provided `tool` is not an instance of `agents.Tool`.
         """
         add_tool(self, tool)
+        if self.include_web_search_sources and isinstance(tool, WebSearchTool):
+            existing_includes = list(self.model_settings.response_include or [])
+            if _WEB_SEARCH_SOURCES_INCLUDE not in existing_includes:
+                self.model_settings.response_include = [*existing_includes, _WEB_SEARCH_SOURCES_INCLUDE]
 
     def _load_tools_from_folder(self) -> None:
         """Load tools defined in ``tools_folder`` and add them to the agent.

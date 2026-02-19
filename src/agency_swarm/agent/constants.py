@@ -11,6 +11,7 @@ AGENT_PARAMS = {
     "quick_replies",
     "cache_conversation_starters",
     "include_search_results",
+    "include_web_search_sources",
     "validation_attempts",
     "throw_input_guardrail_error",
 }

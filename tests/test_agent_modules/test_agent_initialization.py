@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock
 
 import pytest
-from agents import FunctionTool, ModelSettings, StopAtTools
+from agents import FunctionTool, ModelSettings, StopAtTools, WebSearchTool
 from pydantic import BaseModel, Field
 
 from agency_swarm import Agent
@@ -277,3 +277,71 @@ def test_agent_initialization_adapts_basetool_type():
 
     assert len(agent.tools) == 1
     assert isinstance(agent.tools[0], FunctionTool)
+
+
+def test_agent_initialization_includes_web_search_sources_by_default():
+    """WebSearchTool should opt into source URLs by default."""
+    agent = Agent(name="WebAgentDefault", instructions="Test", tools=[WebSearchTool()])
+    includes = agent.model_settings.response_include or []
+    assert "web_search_call.action.sources" in includes
+
+
+def test_agent_initialization_can_disable_web_search_sources_include():
+    """Users should be able to opt out from automatic web search sources include."""
+    agent = Agent(
+        name="WebAgentNoSources",
+        instructions="Test",
+        tools=[WebSearchTool()],
+        include_web_search_sources=False,
+    )
+    includes = agent.model_settings.response_include or []
+    assert "web_search_call.action.sources" not in includes
+
+
+def test_agent_initialization_preserves_existing_response_include_with_web_search():
+    """Automatic web-search include should merge with existing response_include values."""
+    agent = Agent(
+        name="WebAgentMergeSources",
+        instructions="Test",
+        tools=[WebSearchTool()],
+        model_settings=ModelSettings(response_include=["message.output_text.logprobs"]),
+    )
+    includes = agent.model_settings.response_include or []
+    assert "message.output_text.logprobs" in includes
+    assert "web_search_call.action.sources" in includes
+
+
+def test_agent_initialization_does_not_duplicate_web_search_sources_include():
+    """Automatic web-search include should avoid duplicate include values."""
+    agent = Agent(
+        name="WebAgentDedupSources",
+        instructions="Test",
+        tools=[WebSearchTool()],
+        model_settings=ModelSettings(response_include=["web_search_call.action.sources"]),
+    )
+    includes = agent.model_settings.response_include or []
+    assert includes.count("web_search_call.action.sources") == 1
+
+
+def test_agent_add_tool_includes_web_search_sources_by_default():
+    """Adding WebSearchTool after init should also add source include."""
+    agent = Agent(name="WebAgentAddTool", instructions="Test")
+    assert (agent.model_settings.response_include or []) == []
+
+    agent.add_tool(WebSearchTool())
+
+    includes = agent.model_settings.response_include or []
+    assert "web_search_call.action.sources" in includes
+
+
+def test_agent_add_tool_respects_web_search_sources_opt_out():
+    """Adding WebSearchTool should not inject include when opt-out is disabled."""
+    agent = Agent(
+        name="WebAgentAddToolNoSources",
+        instructions="Test",
+        include_web_search_sources=False,
+    )
+    agent.add_tool(WebSearchTool())
+
+    includes = agent.model_settings.response_include or []
+    assert "web_search_call.action.sources" not in includes

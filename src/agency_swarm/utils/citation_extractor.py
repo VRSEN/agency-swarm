@@ -1,16 +1,17 @@
 """
 Citation extraction utilities for Agency Swarm.
 
-This module contains utilities for extracting file citations from different types of
-message content and tool call results.
+This module contains utilities for extracting file citations and web search sources
+from message content and tool call results.
 """
 
 import logging
 
 from agents import RunResult
 from agents.items import MessageOutputItem, ToolCallItem
-from openai.types.responses import ResponseFileSearchToolCall
+from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionWebSearch
 from openai.types.responses.response_file_search_tool_call import Result as ResponseFileSearchResult
+from openai.types.responses.response_function_web_search import ActionSearch
 from openai.types.responses.response_output_message import ResponseOutputMessage
 from openai.types.responses.response_output_text import AnnotationFileCitation, ResponseOutputText
 
@@ -85,6 +86,32 @@ def extract_vector_store_citations(run_result: RunResult) -> list[dict]:
             )
 
     return citations
+
+
+def extract_web_search_sources(run_result: RunResult) -> list[str]:
+    """Extract unique source URLs from WebSearch tool calls in RunResult.new_items."""
+    source_urls: list[str] = []
+    seen_urls: set[str] = set()
+
+    for item in run_result.new_items:
+        if not isinstance(item, ToolCallItem):
+            continue
+
+        tool_call = item.raw_item
+        if not isinstance(tool_call, ResponseFunctionWebSearch):
+            continue
+
+        action = tool_call.action
+        if not isinstance(action, ActionSearch) or not action.sources:
+            continue
+
+        for source in action.sources:
+            url = source.url
+            if url and url not in seen_urls:
+                seen_urls.add(url)
+                source_urls.append(url)
+
+    return source_urls
 
 
 def extract_direct_file_citations_from_history(thread_items):
