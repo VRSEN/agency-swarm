@@ -13,7 +13,7 @@ AGENT_PARAMS = {
     "include_search_results",
     "include_web_search_sources",
     "validation_attempts",
-    "throw_input_guardrail_error",
+    "raise_input_guardrail_error",
 }
 
 # Constants for dynamic tool creation

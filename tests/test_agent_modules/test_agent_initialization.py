@@ -83,6 +83,19 @@ def test_agent_initialization_with_deprecated_model_settings():
         )
 
 
+def test_agent_initialization_with_return_input_guardrail_errors_fails_fast():
+    """Removed guardrail kwarg should fail fast with migration guidance."""
+    with pytest.raises(TypeError) as exc_info:
+        Agent(
+            name="LegacyGuardrailAgent",
+            instructions="Test",
+            return_input_guardrail_errors=False,
+        )
+    error_message = str(exc_info.value)
+    assert "return_input_guardrail_errors" in error_message
+    assert "raise_input_guardrail_error" in error_message
+
+
 def test_agent_initialization_with_different_output_types():
     """Test Agent initialization with different output_type parameters."""
     # Test with Pydantic model
@@ -96,6 +109,62 @@ def test_agent_initialization_with_different_output_types():
     # Test without output_type (should be None)
     agent3 = Agent(name="Agent3", instructions="Basic agent")
     assert agent3.output_type is None
+
+
+def test_agent_initialization_with_raise_input_guardrail_error_flag():
+    """Canonical kwarg should set the runtime flag."""
+    agent = Agent(
+        name="AliasAgent",
+        instructions="Test",
+        raise_input_guardrail_error=True,
+    )
+    assert agent.raise_input_guardrail_error is True
+
+
+def test_agent_initialization_with_deprecated_throw_input_guardrail_error_warns():
+    """Deprecated alias should still work and emit a deprecation warning."""
+    with pytest.warns(DeprecationWarning, match=r"throw_input_guardrail_error"):
+        agent = Agent(
+            name="AliasDeprecatedAgent",
+            instructions="Test",
+            throw_input_guardrail_error=True,
+        )
+    assert agent.raise_input_guardrail_error is True
+
+
+def test_agent_initialization_with_matching_raise_and_throw_input_guardrail_error():
+    """Matching alias+canonical values should be accepted."""
+    with pytest.warns(DeprecationWarning, match=r"throw_input_guardrail_error"):
+        agent = Agent(
+            name="AliasMatchAgent",
+            instructions="Test",
+            raise_input_guardrail_error=False,
+            throw_input_guardrail_error=False,
+        )
+    assert agent.raise_input_guardrail_error is False
+
+
+def test_agent_initialization_with_conflicting_raise_and_throw_input_guardrail_error():
+    """Conflicting alias+canonical values should fail fast."""
+    with pytest.raises(TypeError, match=r"Conflicting values for `raise_input_guardrail_error`"):
+        Agent(
+            name="AliasConflictAgent",
+            instructions="Test",
+            raise_input_guardrail_error=True,
+            throw_input_guardrail_error=False,
+        )
+
+
+def test_agent_throw_input_guardrail_error_property_alias_maps_to_canonical():
+    """Runtime property alias should map to canonical storage."""
+    agent = Agent(
+        name="AliasPropertyAgent",
+        instructions="Test",
+        raise_input_guardrail_error=True,
+    )
+    assert agent.throw_input_guardrail_error is True
+    agent.throw_input_guardrail_error = False
+    assert agent.raise_input_guardrail_error is False
 
 
 def test_agent_initialization_with_all_parameters():

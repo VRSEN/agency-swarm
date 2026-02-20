@@ -223,7 +223,7 @@ class Execution:
                     parent_run_id=parent_run_id,
                     run_trace_id=run_trace_id,
                     validation_attempts=int(self.agent.validation_attempts or 0),
-                    throw_input_guardrail_error=self.agent.throw_input_guardrail_error,
+                    raise_input_guardrail_error=self.agent.raise_input_guardrail_error,
                 )
             else:
                 replay_items = prepare_cached_items_for_replay(
@@ -614,7 +614,7 @@ class Execution:
                     parent_run_id=parent_run_id,
                     run_trace_id=run_trace_id,
                     validation_attempts=int(self.agent.validation_attempts or 0),
-                    throw_input_guardrail_error=self.agent.throw_input_guardrail_error,
+                    raise_input_guardrail_error=self.agent.raise_input_guardrail_error,
                 )
 
                 if isinstance(stream_handle, StreamingRunResponse):

@@ -1,6 +1,6 @@
 ---
 title: "Output Guardrails"
-description: "Validate agent responses before they reach users"
+description: "Validate agent responses before they reach users."
 icon: "arrow-right-from-bracket"
 ---
 
@@ -8,22 +8,53 @@ Output guardrails validate agent responses **before** they reach users or other 
 
 ## Function Signature
 
+Each output guardrail receives three parameters:
+
 ```python
-from agency_swarm import output_guardrail, GuardrailFunctionOutput, RunContextWrapper, Agent
+from agency_swarm import Agent, GuardrailFunctionOutput, RunContextWrapper, output_guardrail
 from pydantic import BaseModel
 
 @output_guardrail
 async def my_output_guardrail(
     context: RunContextWrapper,
     agent: Agent,
-    response_text: str | BaseModel
+    response_text: str | BaseModel,
 ) -> GuardrailFunctionOutput:
+    """Validate agent output."""
     return GuardrailFunctionOutput(output_info="", tripwire_triggered=False)
 ```
 
-`response_text` is a string, or a Pydantic model if `output_type` is set on the agent.
+**Parameters:**
+- `context`: Run context wrapper with access to shared state.
+- `agent`: The Agent instance generating the response.
+- `response_text`: The agent response as a string, or a structured model when `output_type` is set.
 
-## Basic Example
+**Return:**
+- `GuardrailFunctionOutput` with:
+  - `tripwire_triggered` (bool): `True` if validation failed.
+  - `output_info` (str): Feedback message sent to the agent when `tripwire_triggered=True`.
+
+## Basic Output Guardrail
+
+```python
+from agency_swarm import Agent, GuardrailFunctionOutput, RunContextWrapper, output_guardrail
+
+@output_guardrail
+async def response_content_guardrail(
+    context: RunContextWrapper, agent: Agent, response_text: str
+) -> GuardrailFunctionOutput:
+    tripwire_triggered = "bad word" in response_text.lower()
+    output_info = "Please avoid using inappropriate language." if tripwire_triggered else ""
+    return GuardrailFunctionOutput(output_info=output_info, tripwire_triggered=tripwire_triggered)
+
+agent = Agent(
+    name="CustomerSupportAgent",
+    instructions="You are a helpful customer support agent.",
+    output_guardrails=[response_content_guardrail],
+)
+```
+
+## Practical Example: Preventing Sensitive Information Leaks
 
 ```python
 from agency_swarm import Agent, GuardrailFunctionOutput, RunContextWrapper, output_guardrail
@@ -34,106 +65,176 @@ async def forbid_sensitive_email(
 ) -> GuardrailFunctionOutput:
     if "@" in response_text:
         return GuardrailFunctionOutput(
-            output_info="Do not share email addresses.",
+            output_info="Do not share email addresses. Offer to connect via the support portal instead.",
             tripwire_triggered=True,
         )
     return GuardrailFunctionOutput(output_info="", tripwire_triggered=False)
 
 support_agent = Agent(
     name="SupportPilot",
-    instructions="You handle customer support.",
+    instructions="You handle customer support. Official email: support@example.com.",
+    model="gpt-5",
     output_guardrails=[forbid_sensitive_email],
     validation_attempts=1,
 )
 ```
 
-See [`examples/guardrails_output.py`](https://github.com/VRSEN/agency-swarm/blob/main/examples/guardrails_output.py) for a complete example.
+See the full example at [`examples/guardrails_output.py`](https://github.com/VRSEN/agency-swarm/blob/main/examples/guardrails_output.py).
 
-## Retry Flow
+## Example: Simple Format Enforcement
+
+```python
+import json
+from agency_swarm import GuardrailFunctionOutput, RunContextWrapper, output_guardrail
+
+@output_guardrail(name="RequireJSONFormat")
+async def require_json_format(
+    context: RunContextWrapper, agent: Agent, response_text: str
+) -> GuardrailFunctionOutput:
+    try:
+        json.loads(response_text)
+        return GuardrailFunctionOutput(output_info="", tripwire_triggered=False)
+    except json.JSONDecodeError:
+        return GuardrailFunctionOutput(
+            output_info="Response must be valid JSON. Wrap your response in curly braces.",
+            tripwire_triggered=True,
+        )
+```
+
+## Output Guardrail Retry Flow
+
+When an output guardrail trips, the agent gets multiple chances to fix its response. The `validation_attempts` parameter controls this behavior.
+
+### How Retry Works
 
 <Steps>
-  <Step title="Agent generates response" />
-  <Step title="Guardrail validates" />
-  <Step title="If validation fails, agent retries" />
-  <Step title="Fail after validation_attempts" />
+  <Step title="Agent generates response">
+    The agent produces its initial response.
+  </Step>
+  <Step title="Output guardrail checks response">
+    Each output guardrail validates the response.
+  </Step>
+  <Step title="If validation fails">
+    The agent receives a **system message** containing the guardrail `output_info`.
+  </Step>
+  <Step title="Agent retries">
+    The agent generates a new response, informed by that message.
+  </Step>
+  <Step title="Repeat until success or limit reached">
+    This cycle continues up to `validation_attempts` times.
+  </Step>
+  <Step title="If all attempts fail">
+    `OutputGuardrailTripwireTriggered` is raised.
+  </Step>
 </Steps>
 
-### Configuring Retries
+## Configure `validation_attempts`
+
+```python
+agent = Agent(
+    name="CustomerSupportAgent",
+    instructions="You are a helpful customer support agent.",
+    output_guardrails=[response_content_guardrail],
+    validation_attempts=2,
+)
+```
 
 | Setting | Behavior |
 |---------|----------|
-| `validation_attempts=0` | Fail immediately (no retry) |
-| `validation_attempts=1` | Default (one retry) |
-| `validation_attempts=2+` | Multiple retries |
+| `validation_attempts=0` | Fail-fast (no retry, immediate exception) |
+| `validation_attempts=1` | Default (one retry after initial failure) |
+| `validation_attempts=2+` | Multiple retries for more complex validations |
 
-### Handling Failures
+<Note>
+Each retry sends the guardrail `output_info` message to the agent as a system message, giving the agent context to adjust its response.
+</Note>
+
+## Handling Validation Failures
 
 ```python
 from agency_swarm import OutputGuardrailTripwireTriggered
 
 try:
     response = await agency.get_response("Hello!")
-except OutputGuardrailTripwireTriggered as e:
-    print(f"Validation failed: {e.guardrail_result.output_info}")
+except OutputGuardrailTripwireTriggered as exc:
+    print(f"Validation failed: {exc.guardrail_result.output_info}")
 ```
+
+## Message History
+
+Output guardrail failures are stored as system messages with `message_origin="output_guardrail_error"`.
+For most use cases, `role`, `content`, and `message_origin` are enough. Extra metadata is mainly for debugging and run tracing.
+
+| Origin | Meaning |
+|--------|---------|
+| `output_guardrail_error` | Output guardrail failure (system message) |
+
+<Accordion title="Example history entry (with debug metadata)">
+
+```json
+{
+  "role": "system",
+  "content": "You are not allowed to include your email address in your response. Ask agent to redirect user to the contact page: https://www.example.com/contact",
+  "message_origin": "output_guardrail_error",
+  "agent": "DatabaseAgent",
+  "callerAgent": "CustomerSupportAgent",
+  "agent_run_id": "agent_run_id",
+  "parent_run_id": "call_id",
+  "timestamp": 1758103770629217,
+  "type": "message"
+}
+```
+</Accordion>
 
 ## Agent-to-Agent Validation
 
-If agents communicate with each other, the recipient agent's guardrails enforce message format and content. See [Communication Flows](/core-framework/agencies/communication-flows) and the output guardrail example above.
+Use guardrails to control how agents communicate with each other. When adding communication flows between agents, the recipient agent's guardrails define the message format.
 
-<Note>
-For agent-to-agent communication, guardrails receive one message string per call.
-</Note>
-
-<Accordion title="Advanced: enforce message format between agents" defaultOpen={false}>
+<Accordion title="Example: Task/Response contract between agents">
 
 ```python
-from agency_swarm import Agent, GuardrailFunctionOutput, input_guardrail, output_guardrail
+from agency_swarm import Agency, Agent, GuardrailFunctionOutput, RunContextWrapper, input_guardrail, output_guardrail
 
 @input_guardrail(name="RequireTaskPrefix")
-async def require_task_prefix(context, agent, agent_input: str | list[str]) -> GuardrailFunctionOutput:
+async def require_task_prefix(
+    context: RunContextWrapper, agent: Agent, agent_input: str | list[str]
+) -> GuardrailFunctionOutput:
     text = agent_input if isinstance(agent_input, str) else " ".join(agent_input)
-    condition = not text.startswith("Task:")
+    blocked = not text.startswith("Task:")
     return GuardrailFunctionOutput(
-        output_info="ERROR: Requests must begin with 'Task:'" if condition else "",
-        tripwire_triggered=condition,
+        output_info="ERROR: Requests to this agent must begin with 'Task:'" if blocked else "",
+        tripwire_triggered=blocked,
     )
 
 @output_guardrail(name="RequireResponsePrefix")
-async def require_response_prefix(context, agent, response_text: str) -> GuardrailFunctionOutput:
-    condition = not response_text.startswith("Response:")
+async def require_response_prefix(
+    context: RunContextWrapper, agent: Agent, response_text: str
+) -> GuardrailFunctionOutput:
+    blocked = not response_text.startswith("Response:")
     return GuardrailFunctionOutput(
-        output_info="ERROR: Responses must start with 'Response:'" if condition else "",
-        tripwire_triggered=condition,
+        output_info="ERROR: Responses must start with 'Response:'" if blocked else "",
+        tripwire_triggered=blocked,
     )
+
+ceo = Agent(name="CEO", instructions="You are the CEO agent.")
 
 worker = Agent(
     name="Worker",
     instructions="You are the worker agent.",
     input_guardrails=[require_task_prefix],
     output_guardrails=[require_response_prefix],
-    throw_input_guardrail_error=True,
+    raise_input_guardrail_error=True,
 )
-```
 
+agency = Agency(ceo, communication_flows=[(ceo, worker)])
+```
 </Accordion>
 
-<Accordion title="Advanced: message history shape" defaultOpen={false}>
-
-```json
-{
-  "role": "system",
-  "content": "Do not include email addresses.",
-  "message_origin": "output_guardrail_error"
-}
-```
-
-</Accordion>
+In this example:
+- If the CEO sends a message that does not start with `Task:`, the worker input guardrail triggers.
+- The CEO receives an error and adjusts its message.
+- The worker output guardrail enforces `Response:` in returned messages.
 
 <Note>
-For internal agent chains, friendly mode (`throw_input_guardrail_error=False`) usually keeps communication smoother.
+Agent-to-agent messages are always single strings, so input guardrails for inter-agent communication receive a string (not a list).
 </Note>
-
-<Warning>
-Using `Handoff` for agent-to-agent communication bypasses input guardrails between agents.
-</Warning>

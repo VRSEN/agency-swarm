@@ -153,7 +153,7 @@ def run_stream_with_guardrails(
     parent_run_id: str | None,
     run_trace_id: str,
     validation_attempts: int,
-    throw_input_guardrail_error: bool,
+    raise_input_guardrail_error: bool,
     result_callback: Callable[[RunResultStreaming], None] | None = None,
 ) -> StreamingRunResponse:
     """Stream events with output-guardrail retries and guidance persistence."""
@@ -328,7 +328,7 @@ def run_stream_with_guardrails(
                     except Exception:
                         guidance_text = str(e)
                         exception_guardrail_guidance = guidance_text
-                    if throw_input_guardrail_error:
+                    if raise_input_guardrail_error:
                         await event_queue.put({"type": "error", "content": guidance_text})
                     else:
                         await event_queue.put({"type": "input_guardrail_guidance", "content": guidance_text})
@@ -478,7 +478,7 @@ def run_stream_with_guardrails(
                 if guardrail_exception is None:
                     if (
                         input_guardrail_tripped
-                        and throw_input_guardrail_error
+                        and raise_input_guardrail_error
                         and input_guardrail_exception is not None
                     ):
                         wrapper._resolve_exception(input_guardrail_exception)

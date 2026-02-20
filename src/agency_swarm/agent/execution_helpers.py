@@ -96,7 +96,7 @@ async def run_with_guardrails(
     parent_run_id: str | None,
     run_trace_id: str,
     validation_attempts: int,
-    throw_input_guardrail_error: bool,
+    raise_input_guardrail_error: bool,
 ) -> tuple[RunResult, MasterContext]:
     """Run a single turn with guardrail handling and optional retries."""
     attempts_remaining = int(validation_attempts or 0)
@@ -146,7 +146,7 @@ async def run_with_guardrails(
                 exception=e,
                 include_assistant=False,
             )
-            if not throw_input_guardrail_error:
+            if not raise_input_guardrail_error:
                 from agents import RunContextWrapper  # local import to avoid cycle
 
                 _, guidance_text = extract_guardrail_texts(e)

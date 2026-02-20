@@ -110,7 +110,7 @@ def append_guardrail_feedback(
             origin = "output_guardrail_error"
             message_role = "system"
         elif isinstance(exception, InputGuardrailTripwireTriggered) and getattr(
-            agent, "throw_input_guardrail_error", False
+            agent, "raise_input_guardrail_error", False
         ):
             origin = "input_guardrail_error"
             message_role = "system"
