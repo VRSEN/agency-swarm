@@ -1,3 +1,5 @@
+import importlib.util
+
 from dotenv import load_dotenv
 
 # Automatically load environment variables from .env when the package is imported
@@ -38,6 +40,8 @@ try:
     _LITELLM_AVAILABLE = True
 except ImportError:
     _LITELLM_AVAILABLE = False
+
+_JUPYTER_AVAILABLE = importlib.util.find_spec("jupyter_client") is not None
 
 from agents.model_settings import Headers, MCPToolChoice, ToolChoice  # noqa: E402
 from openai._types import Body, Query  # noqa: E402
@@ -161,12 +165,15 @@ __all__ = [
     "tool_output_file_from_path",
     "tool_output_file_from_url",
     "tool_output_file_from_file_id",
-    "IPythonInterpreter",
 ]
 
 # Conditionally add LitellmModel if available
 if _LITELLM_AVAILABLE:
     __all__.append("LitellmModel")
+
+# Conditionally add IPythonInterpreter if available
+if _JUPYTER_AVAILABLE:
+    __all__.append("IPythonInterpreter")
 
 
 def __getattr__(name: str):

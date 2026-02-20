@@ -1,5 +1,6 @@
 import importlib.abc
 import importlib.util
+import subprocess
 import sys
 import textwrap
 from pathlib import Path
@@ -164,3 +165,35 @@ def test_run_fastapi_normalizes_relative_shared_folders_for_factory_calls(mocker
     exec(compile(call_code, str(other_dir / "call_factory.py"), "exec"), ns)
 
     assert "SampleTool" in ns["tool_names"]
+
+
+def test_package_star_import_succeeds_without_jupyter_dependencies() -> None:
+    """`from agency_swarm import *` should not fail when jupyter extras are missing."""
+    script = textwrap.dedent(
+        """
+        import builtins
+        import importlib.util
+
+        original_find_spec = importlib.util.find_spec
+        original_import = builtins.__import__
+
+        def blocked_find_spec(name, package=None):
+            if name == "jupyter_client":
+                return None
+            return original_find_spec(name, package)
+
+        def blocked_import(name, globals=None, locals=None, fromlist=(), level=0):
+            if name == "jupyter_client" or name.startswith("jupyter_client."):
+                raise ModuleNotFoundError(name)
+            return original_import(name, globals, locals, fromlist, level)
+
+        importlib.util.find_spec = blocked_find_spec
+        builtins.__import__ = blocked_import
+
+        namespace = {}
+        exec("from agency_swarm import *", namespace)
+        assert "IPythonInterpreter" not in namespace
+        """
+    )
+    result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr or result.stdout
