@@ -239,9 +239,8 @@ def test_resolve_history_protocol_defaults_openai_chat_model_to_responses() -> N
 def test_strip_agency_metadata_drops_raw_response_snapshot_messages() -> None:
     messages = [
         {
-            "role": "system",
-            "type": "message",
-            "content": "[RAW_RESPONSE_SNAPSHOT]\n{}",
+            "type": "provider_raw_response_snapshot",
+            "raw_response": {},
             "message_origin": MessageFormatter.RAW_RESPONSE_SNAPSHOT_ORIGIN,
             "agent": "Coordinator",
             "callerAgent": None,

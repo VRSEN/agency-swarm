@@ -344,10 +344,9 @@ async def test_stream_endpoint_final_payload_includes_raw_response_snapshot(monk
         for m in payload["new_messages"]
         if isinstance(m, dict) and m.get("message_origin") == "provider_raw_response_snapshot"
     )
-    content = snapshot.get("content")
-    assert isinstance(content, str)
-    assert content.startswith("[RAW_RESPONSE_SNAPSHOT]\n")
-    parsed_snapshot = json.loads(content.split("\n", 1)[1])
+    assert snapshot.get("type") == "provider_raw_response_snapshot"
+    parsed_snapshot = snapshot.get("raw_response")
+    assert isinstance(parsed_snapshot, dict)
     assert parsed_snapshot == _FinalResult.raw_responses[0]
 
 
@@ -393,10 +392,9 @@ async def test_cancel_endpoint_includes_raw_response_snapshot() -> None:
         for m in result["new_messages"]
         if isinstance(m, dict) and m.get("message_origin") == "provider_raw_response_snapshot"
     )
-    content = snapshot.get("content")
-    assert isinstance(content, str)
-    assert content.startswith("[RAW_RESPONSE_SNAPSHOT]\n")
-    parsed_snapshot = json.loads(content.split("\n", 1)[1])
+    assert snapshot.get("type") == "provider_raw_response_snapshot"
+    parsed_snapshot = snapshot.get("raw_response")
+    assert isinstance(parsed_snapshot, dict)
     assert parsed_snapshot == _FinalResult.raw_responses[0]
 
 

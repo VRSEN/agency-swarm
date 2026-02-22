@@ -73,7 +73,7 @@ def _resolve_new_messages_agent(messages: list[TResponseInputItem]) -> str | Non
 def _build_raw_response_snapshot_messages(
     *, raw_responses: list[object], agent_name: str | None, caller_agent: str | None = None
 ) -> list[TResponseInputItem]:
-    """Build system messages that preserve raw provider responses inside new_messages."""
+    """Build structured snapshot items that preserve raw provider responses in new_messages."""
     snapshots: list[TResponseInputItem] = []
     if not raw_responses:
         return snapshots
@@ -81,10 +81,9 @@ def _build_raw_response_snapshot_messages(
     timestamp = int(time.time() * 1_000_000)
     for raw_response in raw_responses:
         snapshot: dict[str, object] = {
-            "role": "system",
-            "type": "message",
-            "content": "[RAW_RESPONSE_SNAPSHOT]\n" + json.dumps(raw_response, ensure_ascii=False),
+            "type": MessageFormatter.RAW_RESPONSE_SNAPSHOT_ORIGIN,
             "message_origin": MessageFormatter.RAW_RESPONSE_SNAPSHOT_ORIGIN,
+            "raw_response": raw_response,
             "agent": agent_name,
             "callerAgent": caller_agent,
             "history_protocol": MessageFormatter.HISTORY_PROTOCOL_RESPONSES,
