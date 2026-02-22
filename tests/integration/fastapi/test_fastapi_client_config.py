@@ -128,6 +128,15 @@ def test_client_config_overrides_openai_client_base_url_and_key(openai_stub_base
     assert raw_responses
     assert isinstance(raw_responses[0], dict)
     assert "output" in raw_responses[0]
+    snapshot_messages = [
+        message
+        for message in res.json().get("new_messages", [])
+        if isinstance(message, dict)
+        and message.get("message_origin") == "provider_raw_response_snapshot"
+        and isinstance(message.get("content"), str)
+    ]
+    assert snapshot_messages
+    assert snapshot_messages[0]["content"].startswith("[RAW_RESPONSE_SNAPSHOT]\n")
 
     # Prove the request hit our stub and used the overridden API key.
     seen = _ChatCompletionsStubHandler.requests_seen

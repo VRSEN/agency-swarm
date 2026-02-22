@@ -37,6 +37,7 @@ class MessageFormatter:
     HISTORY_PROTOCOL_RESPONSES = "responses"
     HISTORY_PROTOCOL_CHAT_COMPLETIONS = "chat_completions"
     HISTORY_PROTOCOL_MIXED = "mixed"
+    RAW_RESPONSE_SNAPSHOT_ORIGIN = "provider_raw_response_snapshot"
 
     metadata_fields: list[str] = [
         "agent",
@@ -311,6 +312,10 @@ class MessageFormatter:
         """
         cleaned = []
         for msg in messages:
+            # Keep raw provider snapshots in persisted history for clients, but never send
+            # them back to the model on subsequent turns.
+            if msg.get("message_origin") == MessageFormatter.RAW_RESPONSE_SNAPSHOT_ORIGIN:
+                continue
             # Create a copy without agency fields (including citations which OpenAI doesn't accept)
             clean_msg = {k: v for k, v in msg.items() if k not in MessageFormatter.metadata_fields}
             cleaned.append(clean_msg)
