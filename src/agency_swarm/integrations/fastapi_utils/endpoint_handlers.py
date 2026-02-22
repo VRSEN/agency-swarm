@@ -52,6 +52,13 @@ from agency_swarm.utils.usage_tracking import (
 logger = logging.getLogger(__name__)
 
 
+def _serialize_raw_responses(raw_responses: object) -> list[object]:
+    """Convert run_result.raw_responses into JSON-safe payloads without dropping fields."""
+    if not isinstance(raw_responses, list):
+        return []
+    return [serialize(response, string_output=False) for response in raw_responses]
+
+
 def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
     """Apply custom OpenAI client configuration to all agents in the agency.
 
@@ -340,7 +347,11 @@ def make_response_endpoint(
         new_messages = all_messages[initial_message_count:]  # Only messages added during this request
         filtered_messages = MessageFilter.filter_messages(new_messages)
         filtered_messages = _normalize_new_messages_for_client(filtered_messages)
-        result = {"response": response.final_output, "new_messages": filtered_messages}
+        result = {
+            "response": response.final_output,
+            "new_messages": filtered_messages,
+            "raw_responses": _serialize_raw_responses(getattr(response, "raw_responses", [])),
+        }
 
         # Extract and add usage information
         usage_stats = extract_usage_from_run_result(response)
@@ -497,7 +508,13 @@ def make_stream_endpoint(
                         usage_stats = calculate_usage_with_cost(usage_stats, run_result=final_result)
 
                     # Build result with new messages
-                    result = {"new_messages": filtered_messages, "run_id": run_id}
+                    result = {
+                        "new_messages": filtered_messages,
+                        "run_id": run_id,
+                        "raw_responses": _serialize_raw_responses(
+                            getattr(final_result, "raw_responses", []) if final_result is not None else []
+                        ),
+                    }
                     if active_run is not None and active_run.cancelled:
                         result["cancelled"] = True
                     if request.file_urls is not None and file_ids_map is not None:
@@ -576,6 +593,11 @@ def make_cancel_endpoint(request_model, verify_token, run_registry: ActiveRunReg
             "cancelled": not timed_out,
             "cancel_mode": cancel_mode,
             "new_messages": filtered_messages,
+            "raw_responses": _serialize_raw_responses(
+                getattr(active_run.stream.final_result, "raw_responses", [])
+                if active_run.stream.final_result is not None
+                else []
+            ),
             "timed_out": timed_out,
         }
 

@@ -227,6 +227,7 @@ async def test_stream_endpoint_final_payload_rewrites_fake_ids(monkeypatch: pyte
 
     payload = _parse_sse_messages_payload(chunks)
     new_messages = payload["new_messages"]
+    assert payload["raw_responses"] == []
 
     assert isinstance(new_messages, list)
     assert len(new_messages) == 5
@@ -284,6 +285,7 @@ async def test_cancel_endpoint_rewrites_fake_ids(monkeypatch: pytest.MonkeyPatch
     result = await handler(request=CancelRequest(run_id=run_id, cancel_mode="immediate"), token=None)
 
     assert "new_messages" in result
+    assert result["raw_responses"] == []
     assert all(m.get("id") != FAKE_RESPONSES_ID for m in result["new_messages"] if isinstance(m, dict))
 
 
