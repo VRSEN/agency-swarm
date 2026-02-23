@@ -43,10 +43,14 @@ Persist the full conversation history for each chat, including user-facing turns
 Chat persistence is handled through callback functions passed to the Agency constructor:
 
 ```python
-def save_threads(messages: list[dict[str, object]], chat_id: str) -> None:
+from agents import TResponseInputItem
+from agency_swarm import Agency
+
+
+def save_threads(messages: list[TResponseInputItem], chat_id: str) -> None:
     save_threads_to_db(chat_id, messages)
 
-def load_threads(chat_id: str) -> list[dict[str, object]]:
+def load_threads(chat_id: str) -> list[TResponseInputItem]:
     return load_threads_from_db(chat_id)
 
 agency = Agency(
