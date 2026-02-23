@@ -8,6 +8,7 @@ including setting up file management.
 import dataclasses
 import inspect
 import logging
+import warnings
 from functools import wraps
 from typing import TYPE_CHECKING, Any
 
@@ -54,7 +55,7 @@ _DEPRECATED_AGENT_KWARGS: dict[str, str] = {
     "id": "Assistant-ID loading is not supported. Use persistence hooks.",
     "refresh_from_id": "Assistant-ID loading is not supported. Use persistence hooks.",
     "response_validator": "Use `output_guardrails` and `input_guardrails`.",
-    "return_input_guardrail_errors": "Use `throw_input_guardrail_error`.",
+    "return_input_guardrail_errors": ("Removed; use `raise_input_guardrail_error` with inverse value semantics."),
     "response_format": "Use `output_type` on the Agent (a Python type).",
     "tool_resources": "Use `files_folder` and Agent file APIs.",
     "file_search": "Use `files_folder` to manage vector store + file search.",
@@ -62,6 +63,34 @@ _DEPRECATED_AGENT_KWARGS: dict[str, str] = {
     "send_message_tool_class": "Configure per-flow tools via `Agency(communication_flows=...)`.",
     "examples": "Include examples directly in `instructions`, or manage them in your own prompt building.",
 }
+
+
+def normalize_input_guardrail_error_kwargs(kwargs: dict[str, Any]) -> None:
+    """Normalize input guardrail exception-control kwargs in-place."""
+    canonical = "raise_input_guardrail_error"
+    deprecated_alias = "throw_input_guardrail_error"
+
+    if deprecated_alias not in kwargs:
+        return
+
+    deprecated_alias_value = bool(kwargs[deprecated_alias])
+    if canonical in kwargs:
+        canonical_value = bool(kwargs[canonical])
+        if canonical_value != deprecated_alias_value:
+            raise TypeError(
+                "Conflicting values for `raise_input_guardrail_error` and "
+                "`throw_input_guardrail_error`. Provide only one or use matching values."
+            )
+    else:
+        kwargs[canonical] = deprecated_alias_value
+
+    warnings.warn(
+        "`throw_input_guardrail_error` is deprecated and will be removed in a future release. "
+        "Use `raise_input_guardrail_error` instead.",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+    kwargs.pop(deprecated_alias, None)
 
 
 def validate_no_deprecated_agent_kwargs(kwargs: dict[str, Any]) -> None:

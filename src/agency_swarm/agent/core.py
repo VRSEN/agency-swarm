@@ -23,6 +23,7 @@ from agency_swarm.agent import (
     apply_framework_defaults,
     load_tools_from_folder,
     normalize_agent_tool_definitions,
+    normalize_input_guardrail_error_kwargs,
     parse_schemas,
     separate_kwargs,
     setup_file_manager,
@@ -85,7 +86,7 @@ class Agent(BaseAgent[MasterContext]):
     include_search_results: bool = False
     include_web_search_sources: bool = True
     validation_attempts: int = 1
-    throw_input_guardrail_error: bool = False
+    raise_input_guardrail_error: bool = False
 
     # --- Internal State ---
     _associated_vector_store_id: str | None = None
@@ -129,7 +130,7 @@ class Agent(BaseAgent[MasterContext]):
             include_web_search_sources (bool): Include source URLs from `WebSearchTool` calls.
                 Defaults to True.
             validation_attempts (int): Number of retries when an output guardrail trips. Defaults to 1.
-            throw_input_guardrail_error (bool): Whether to raise input guardrail errors as exceptions.
+            raise_input_guardrail_error (bool): Whether to raise input guardrail errors as exceptions.
                 Defaults to False.
             handoff_reminder (str | None): Custom reminder for handoffs.
                 Defaults to `Transfer completed. You are {recipient_agent_name}. Please continue the task.`
@@ -161,6 +162,7 @@ class Agent(BaseAgent[MasterContext]):
                     calls result in a final output.
             reset_tool_choice (bool | None): Whether to reset tool choice after tool calls.
         """
+        normalize_input_guardrail_error_kwargs(kwargs)
         validate_no_deprecated_agent_kwargs(kwargs)
         normalize_agent_tool_definitions(kwargs)
 
@@ -206,7 +208,7 @@ class Agent(BaseAgent[MasterContext]):
         self.include_search_results = current_agent_params.get("include_search_results", False)
         self.include_web_search_sources = bool(current_agent_params.get("include_web_search_sources", True))
         self.validation_attempts = int(current_agent_params.get("validation_attempts", 1))
-        self.throw_input_guardrail_error = bool(current_agent_params.get("throw_input_guardrail_error", False))
+        self.raise_input_guardrail_error = bool(current_agent_params.get("raise_input_guardrail_error", False))
         self.handoff_reminder = current_agent_params.get("handoff_reminder")
 
         # Internal state
@@ -292,6 +294,16 @@ class Agent(BaseAgent[MasterContext]):
     def tool_concurrency_manager(self) -> ToolConcurrencyManager:
         """Provides access to the agent's tool concurrency manager."""
         return self._tool_concurrency_manager
+
+    @property
+    def throw_input_guardrail_error(self) -> bool:
+        """Backward-compatible alias for `raise_input_guardrail_error`."""
+        return self.raise_input_guardrail_error
+
+    @throw_input_guardrail_error.setter
+    def throw_input_guardrail_error(self, value: bool) -> None:
+        """Backward-compatible alias for `raise_input_guardrail_error`."""
+        self.raise_input_guardrail_error = bool(value)
 
     async def get_all_tools(self, run_context: RunContextWrapper[MasterContext]) -> list[Tool]:
         """Include agency-scoped runtime tools alongside static tools."""

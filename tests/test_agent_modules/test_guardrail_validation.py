@@ -40,7 +40,7 @@ async def test_input_guardrail_no_retry_streaming(monkeypatch, minimal_agent):
     agent = minimal_agent
     # Ensure multiple attempts available to prove no retry happens
     agent.validation_attempts = 2
-    agent.throw_input_guardrail_error = True
+    agent.raise_input_guardrail_error = True
 
     ctx = AgencyContext(agency_instance=None, thread_manager=ThreadManager(), subagents={})
 
@@ -85,7 +85,7 @@ async def test_input_guardrail_no_retry_streaming(monkeypatch, minimal_agent):
 @patch("agents.Runner.run", new_callable=AsyncMock)
 async def test_input_guardrail_returns_error_non_stream(mock_runner_run, minimal_agent, mock_thread_manager):
     agent = minimal_agent
-    agent.throw_input_guardrail_error = False
+    agent.raise_input_guardrail_error = False
 
     class _InRes:
         output = GuardrailFunctionOutput(
@@ -113,9 +113,9 @@ async def test_input_guardrail_returns_error_non_stream(mock_runner_run, minimal
 @pytest.mark.asyncio
 @patch("agents.Runner.run", new_callable=AsyncMock)
 async def test_input_guardrail_error_no_assistant_messages(mock_runner_run, minimal_agent, mock_thread_manager):
-    """When throw_input_guardrail_error=True, no assistant messages should persist."""
+    """When raise_input_guardrail_error=True, no assistant messages should persist."""
     agent = minimal_agent
-    agent.throw_input_guardrail_error = True
+    agent.raise_input_guardrail_error = True
 
     class _InRes:
         output = GuardrailFunctionOutput(
@@ -222,7 +222,7 @@ def test_prune_guardrail_messages_drops_subagent_history():
 @pytest.mark.asyncio
 async def test_input_guardrail_streaming_strict_prunes_and_raises(monkeypatch, minimal_agent):
     agent = minimal_agent
-    agent.throw_input_guardrail_error = True
+    agent.raise_input_guardrail_error = True
     ctx = AgencyContext(agency_instance=None, thread_manager=ThreadManager(), subagents={})
 
     pruned_history = [{"role": "assistant", "content": "kept"}]
@@ -280,7 +280,7 @@ async def test_input_guardrail_streaming_strict_prunes_and_raises(monkeypatch, m
 @pytest.mark.asyncio
 async def test_input_guardrail_streaming_friendly_prunes_and_streams(monkeypatch, minimal_agent):
     agent = minimal_agent
-    agent.throw_input_guardrail_error = False
+    agent.raise_input_guardrail_error = False
     ctx = AgencyContext(agency_instance=None, thread_manager=ThreadManager(), subagents={})
 
     pruned_history = [{"role": "assistant", "content": "friendly"}]

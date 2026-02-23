@@ -487,7 +487,7 @@ class SendMessage(FunctionTool):
                 f"Input guardrail triggered during sub-call via tool '{self.name}' from "
                 f"'{sender_name_for_call}' to '{recipient_name_for_call}': {message}"
             )
-            if self.recipient_agent.throw_input_guardrail_error:
+            if self.recipient_agent.raise_input_guardrail_error:
                 return f"Error getting response from the agent: {message}"
             else:
                 return message
