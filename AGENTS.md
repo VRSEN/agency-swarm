@@ -18,6 +18,7 @@ Begin each task after reviewing this readiness checklist:
 - Restate the user's intent and the active task in your responses to the user when it helps clarity; when asked about anything, answer concisely and explicitly before elaborating.
 - Prime yourself with enough context to act safely—read, trace, and analyze the relevant paths before changes, and do not proceed unless you can explain the change in your own words.
 - Use fresh tool outputs before acting; do not rely on memory.
+- Before editing, sync with upstream: run `git fetch origin` and verify `git rev-list --left-right --count HEAD...@{u}` is `0 0`; if not, sync the branch first.
 - Complete one change at a time; stash unrelated work before starting another.
 - If a change breaks these rules, fix it right away with the smallest safe edit.
 - Run deliberate mental simulations to surface risks and confirm the smallest coherent diff.
@@ -88,6 +89,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - When you receive user feedback, make a mistake, or spot a recurring pattern, add a generalized, minimal rule to AGENTS.md and revise relevant lines before any other work.
 - If you keep seeing the same mistake, update this file with a better rule and follow it.
 - For any updates you make on your own initiative, request approval from the user after making the changes.
+- Treat feedback in this transcript as authoritative process input; if the user says `hns.md`, interpret it as `AGENTS.md` unless they provide an explicit file path.
 
 ### Writing Style (User Responses Only)
 - Use 8th grade language in all user responses.
@@ -279,6 +281,7 @@ Strictness
 - Review diffs and status before and after changes; read the full `git diff` and `git diff --staged` outputs before planning new changes or committing.
 - Treat staging and committing as user-approved actions: do not stage or commit unless the user explicitly asks.
 - Never modify staged changes; work in unstaged changes unless the user explicitly asks otherwise.
+- For PR work, default to remote-tracking truth: if local and upstream differ, sync to upstream before new edits; when the user indicates remote commits are authoritative, hard-reset local branch to upstream first.
 - Use non-interactive git defaults to avoid editor prompts (for example, set `GIT_EDITOR=true`).
 - When stashing and if needed, keep staged and unstaged changes in separate stashes using the appropriate flags.
 - If pre-commit hooks modify files (it means you forgot to run mandatory `make format`), stage the hook-modified files and re-run the commit with the same message.
@@ -287,6 +290,7 @@ Strictness
 
 ### PR Comment Review Loop (Mandatory for Local Coding Work)
 - If you are doing coding work locally (outside GitHub UI) for an open PR and you can post GitHub comments, you must run this loop:
+  - Open the PR and review every active comment thread; resolve every correct finding before finalizing work.
   - Post exactly `@codex review` on the PR.
   - Wait about 10 minutes.
   - Check PR comments no more than once per minute.
