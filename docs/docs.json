@@ -37,8 +37,9 @@
                 "icon": "rocket",
                 "pages": [
                   "welcome/installation",
-                  "welcome/getting-started/from-scratch",
-                  "welcome/getting-started/cursor-ide"
+                  "welcome/getting-started/starter-template",
+                  "welcome/getting-started/cursor-ide",
+                  "welcome/getting-started/from-scratch"
                 ]
               }
             ]
