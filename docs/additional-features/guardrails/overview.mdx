@@ -1,0 +1,27 @@
+---
+title: "Guardrails Overview"
+description: "Screen agent inputs and review outputs with guardrails."
+icon: "shield-halved"
+sidebarTitle: "Overview"
+---
+
+Guardrails are checkpoint functions that keep agent behavior safe and predictable. Use them to validate incoming messages before execution and validate responses before delivery.
+
+## Choose the Right Guardrail
+
+| Type | Runs When | On Failure | Page |
+|------|-----------|------------|------|
+| **Input Guardrails** | Before the agent processes input | Return guidance (non-strict) or raise `InputGuardrailTripwireTriggered` (strict) | [Input Guardrails](/additional-features/guardrails/input-guardrails) |
+| **Output Guardrails** | After the agent drafts output, before delivery | Retry up to `validation_attempts`, then raise `OutputGuardrailTripwireTriggered` | [Output Guardrails](/additional-features/guardrails/output-guardrails) |
+
+## Runnable GitHub Examples
+
+- Input guardrails example: [`examples/guardrails_input.py`](https://github.com/VRSEN/agency-swarm/blob/main/examples/guardrails_input.py)
+- Output guardrails example: [`examples/guardrails_output.py`](https://github.com/VRSEN/agency-swarm/blob/main/examples/guardrails_output.py)
+
+## Best Practices
+
+- Keep each guardrail focused on one responsibility.
+- Write clear `output_info` messages so the model knows how to recover.
+- Use non-strict mode for guidance and strict mode for hard requirements.
+- For tool argument validation (field/model validators), use [Input Validation](/core-framework/tools/custom-tools/validation).

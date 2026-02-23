@@ -75,7 +75,7 @@ In agency swarm, to create an agent, you need to instantiate the `Agent` class.
 | API headers *(optional)*<br/>API params *(optional)*| `api_headers`<br/><br/>`api_params` | Additional parameters to include into tools converted from OpenAPI schemas. Default: `None` |
 | Schemas Folder *(optional)* | `schemas_folder` | Path to a directory containing openapi schema files in .json format. Schemas are automatically converted into FunctionTools. Default: `None` |
 | Validation Attempts *(optional)* | `validation_attempts` | Number of retries when an output guardrail trips. Default: `1` |
-| Throw Input Guardrail Error *(optional)* | `throw_input_guardrail_error` | If set to `True`, input guardrail errors raise an exception. If set to `False`, the guardrail message is returned as the agent's response. Default: `False` |
+| Raise Input Guardrail Error *(optional)* | `raise_input_guardrail_error` | If set to `True`, input guardrail errors raise an exception. If set to `False`, the guardrail message is returned as the agent's response. Default: `False` |
 | Handoff Reminder *(optional)* | `handoff_reminder` | Replaces the default handoff reminder system message with a given string. Default: "Transfer completed. You are [recipient_agent_name]. Please continue the task." |
 | Include Search Results *(optional)* | `include_search_results` | Include search results in FileSearchTool output for citation extraction. Default: `False` |
 | Include Web Search Sources *(optional)* | `include_web_search_sources` | Include source URLs from WebSearchTool calls. Default: `True` |

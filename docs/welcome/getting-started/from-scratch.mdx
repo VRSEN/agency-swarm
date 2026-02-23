@@ -5,23 +5,28 @@ icon: "code"
 ---
 
 <Note>
-Use this guide when you need to build everything manually. Otherwise, start from the [Agency Starter Template](https://github.com/agency-ai-solutions/agency-starter-template).
+Use this guide when you need to build everything manually. Otherwise, start from the [Starter Template](/welcome/getting-started/starter-template).
 </Note>
 
 <Steps>
   <Step title="Set Your OpenAI Key">
-    Begin by setting your OpenAI API key in the `.env` file. It will be loaded automatically on agency initialization
+    Begin by setting your OpenAI API key in the `.env` file. It will be loaded automatically on agency initialization.
 
     ```
     OPENAI_API_KEY=sk-...
     ```
-
   </Step>
 
   <Step title="Create Project Structure">
-    **Agent Folder Structure:**
-
     When you run the create-agent-template command, it creates the following folder structure for your agent:
+
+    <Accordion title="Create the folder with the CLI" defaultOpen={false}>
+      ```bash
+      agency-swarm create-agent-template "Developer"
+      ```
+    </Accordion>
+
+    **Agent Folder Structure:**
 
     ```
     /your-agency-path/
@@ -49,50 +54,10 @@ Use this guide when you need to build everything manually. Otherwise, start from
     ├── requirements.txt      # File listing all dependencies
     └── ...
     ```
-
   </Step>
 
   <Step title="Create Tools">
-    In 1.x versions of the framework, you have 2 ways of defining custom tools:
-
-    By extending agency_swarm's `BaseTool` class and implementing the async `run` method.
-
-    **my_custom_tool_class.py:**
-
-    ```python
-    from agency_swarm.tools import BaseTool
-    from pydantic import Field
-
-    class MyCustomTool(BaseTool):
-        """
-        A brief description of what the custom tool does.
-        The docstring should clearly explain the tool's purpose and functionality.
-        It will be used by the agent to determine when to use this tool.
-        """
-
-        # Define the fields with descriptions using Pydantic Field
-        example_field: str = Field(
-            ..., description="Description of the example field, explaining its purpose and usage for the Agent."
-        )
-
-        # Additional Pydantic fields as required
-        # ...
-
-        async def run(self):
-            """
-            The implementation of the run method, where the tool's main functionality is executed.
-            This method should utilize the fields defined above to perform the task.
-            Doc string is not required for this method and will not be used by your agent.
-            """
-
-            # Your custom tool logic goes here
-            do_something(self.example_field)
-
-            # Return the result of the tool's operation as a string
-            return "Result of MyCustomTool operation"
-    ```
-
-    Or by using openai's `@function_tool` decorator.
+    You have 2 ways of defining custom tools:
 
     **my_custom_tool.py:**
 
@@ -120,6 +85,46 @@ Use this guide when you need to build everything manually. Otherwise, start from
         return "Result of MyCustomTool operation"
     ```
 
+    <Accordion title="Preferred: BaseTool class version" defaultOpen={false}>
+      **my_custom_tool_class.py:**
+
+      ```python
+      from agency_swarm.tools import BaseTool
+      from pydantic import Field
+
+      class MyCustomTool(BaseTool):
+          """
+          A brief description of what the custom tool does.
+          The docstring should clearly explain the tool's purpose and functionality.
+          It will be used by the agent to determine when to use this tool.
+          """
+
+          # Define the fields with descriptions using Pydantic Field
+          example_field: str = Field(
+              ..., description="Description of the example field, explaining its purpose and usage for the Agent."
+          )
+
+          # Additional Pydantic fields as required
+          # ...
+
+          async def run(self):
+              """
+              The implementation of the run method, where the tool's main functionality is executed.
+              This method should utilize the fields defined above to perform the task.
+              Doc string is not required for this method and will not be used by your agent.
+              """
+
+              # Your custom tool logic goes here
+              do_something(self.example_field)
+
+              # Return the result of the tool's operation as a string
+              return "Result of MyCustomTool operation"
+      ```
+    </Accordion>
+
+    BaseTool classes support `async def run(...)`, which is preferred for I/O-bound tools.
+
+    See [Custom Tools](/core-framework/tools/custom-tools/step-by-step-guide) for full patterns.
   </Step>
 
   <Step title="Define Agent Roles">
@@ -129,6 +134,7 @@ Use this guide when you need to build everything manually. Otherwise, start from
 
     ```python
     from agency_swarm import Agent, ModelSettings
+    from agency_swarm import Reasoning
     from .tools.my_custom_tool import my_custom_tool
     from .tools.my_custom_tool_class import MyCustomTool
 
@@ -137,15 +143,37 @@ Use this guide when you need to build everything manually. Otherwise, start from
         description="Responsible for executing tasks.",
         instructions="./instructions.md",
         tools=[my_custom_tool, MyCustomTool],  # Import tools directly
+        model="gpt-5.2",
         model_settings=ModelSettings(
             temperature=0.3,
             max_tokens=25000,
-            model="gpt-4o"
+            reasoning=Reasoning(effort="medium"),
         ),
     )
     ```
 
-    Tools are imported directly into the agent definition instead of from a folder.
+    `model` and `reasoning` are both set explicitly in this configuration.
+
+    <Accordion title="Alternative: load tools/files/schemas from folders" defaultOpen={false}>
+      ```python
+      from agency_swarm import Agent, ModelSettings
+      from agency_swarm import Reasoning
+
+      developer = Agent(
+          name="Developer",
+          description="Responsible for executing tasks.",
+          model="gpt-5.2",
+          instructions="./instructions.md",
+          tools_folder="./tools",
+          files_folder="./files",
+          schemas_folder="./schemas",
+          model_settings=ModelSettings(
+              max_tokens=25000,
+              reasoning=Reasoning(effort="medium"),
+          ),
+      )
+      ```
+    </Accordion>
 
     **instructions.md:**
 
@@ -160,7 +188,6 @@ Use this guide when you need to build everything manually. Otherwise, start from
     2. When and how to use available tools
     3. How to collaborate with other agents
     ```
-
   </Step>
 
   <Step title="Create Agency">
@@ -176,7 +203,7 @@ Use this guide when you need to build everything manually. Otherwise, start from
     agency = Agency(
         ceo,  # Entry point agent as positional argument
         communication_flows=[
-            (ceo, developer),  # CEO can initiate communication with Developer
+            ceo > developer,  # CEO can initiate communication with Developer
         ],
         shared_instructions='./agency_manifesto.md'  # shared instructions for all agents
     )
@@ -185,36 +212,14 @@ Use this guide when you need to build everything manually. Otherwise, start from
     The first positional argument is the entry point agent that users interact with directly. Communication flows are defined separately.
 
     <Note title="Note on Communication Flows">
-      In Agency Swarm, communication flows are directional tuples. For instance, in the example above: `(ceo, developer)`, the CEO can initiate a chat with the Developer, and the Developer can respond in this chat. However, the Developer cannot initiate a chat with the CEO.
+      In Agency Swarm, communication flows are directional. For instance, in the example above: `ceo > developer`, the CEO can initiate a chat with the Developer, and the Developer can respond in this chat. However, the Developer cannot initiate a chat with the CEO.
     </Note>
 
+    See [Communication Flows](/core-framework/agencies/communication-flows) for multi-agent setups.
   </Step>
 
   <Step title="Run Demo">
-
     There are multiple ways to run the demo. Add one of the following to your `agency.py` file:
-
-    **Web Interface:**
-
-    ```python
-    agency.copilot_demo()
-    ```
-
-    <Warning>
-    Copilot demo is currently minimal and will be updated in future patches
-    </Warning>
-
-    **Terminal Version:**
-
-    ```python
-    agency.terminal_demo()
-    ```
-
-    **Backend Version (Sync):**
-
-    ```python
-    result = agency.get_response_sync("Please create a new website for our client.")
-    ```
 
     **Backend Version (Async):**
 
@@ -228,10 +233,30 @@ Use this guide when you need to build everything manually. Otherwise, start from
     asyncio.run(main())
     ```
 
+    **Terminal Version:**
+
+    ```python
+    agency.terminal_demo()
+    ```
+
+    <Accordion title="Other run modes" defaultOpen={false}>
+      **Web Interface:**
+
+      ```python
+      agency.copilot_demo()
+      ```
+
+      **Backend Version (Sync):**
+
+      ```python
+      result = agency.get_response_sync("Please create a new website for our client.")
+      print(result.final_output)
+      ```
+    </Accordion>
   </Step>
 </Steps>
 
 ## Next Steps
-
-- Learn the core concepts of Tools, Agents, and Agencies.
-- Watch the [Deployment Tutorial](https://www.youtube.com/watch?v=53_e3lmk6Mo).
+- Learn the core concepts: [Tools Overview](/core-framework/tools/overview), [Agents Overview](/core-framework/agents/overview), and [Agencies Overview](/core-framework/agencies/overview).
+- Run your first end-to-end flow with [Running an Agency](/core-framework/agencies/running-agency).
+- Deploy your project with [Deployment to Production](/additional-features/deployment-to-production).
