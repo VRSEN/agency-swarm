@@ -1,0 +1,288 @@
+---
+title: "Input Guardrails"
+description: "Validate incoming messages before they reach the agent."
+icon: "arrow-right-to-bracket"
+---
+
+Input guardrails validate incoming messages **before** they reach the agent. They screen both user input and inter-agent communication.
+
+## Simplified Input Processing
+
+Agency Swarm automatically extracts text content from messages, so your guardrails receive clean text instead of full message objects.
+
+## Function Signature
+
+Each input guardrail receives three parameters:
+
+```python
+from agency_swarm import Agent, GuardrailFunctionOutput, RunContextWrapper, input_guardrail
+
+@input_guardrail
+async def my_input_guardrail(
+    context: RunContextWrapper,
+    agent: Agent,
+    user_input: str | list[str],
+) -> GuardrailFunctionOutput:
+    """Validate user input."""
+    return GuardrailFunctionOutput(output_info="", tripwire_triggered=False)
+```
+
+**Parameters:**
+- `context`: Run context wrapper with access to shared state.
+- `agent`: The Agent instance receiving the input.
+- `user_input`: Extracted text content.
+  - Single message: a string containing the message content.
+  - Multiple consecutive messages: a list of strings, one per message.
+
+**Return:**
+- `GuardrailFunctionOutput` with:
+  - `tripwire_triggered` (bool): `True` if validation failed.
+  - `output_info` (str): Guidance message returned to the caller.
+
+<Note>
+File and image inputs inside messages are not passed to input guardrails.
+</Note>
+
+## Input Types
+
+When a user sends multiple messages:
+
+```json
+[
+  {"role": "user", "content": "Hi"},
+  {"role": "user", "content": "How are you?"}
+]
+```
+
+Your guardrail receives:
+
+```python
+["Hi", "How are you?"]
+```
+
+This allows you to process each new input message individually or validate them as a group.
+
+## Basic Input Guardrail
+
+```python
+from agency_swarm import Agent, GuardrailFunctionOutput, RunContextWrapper, input_guardrail
+
+@input_guardrail
+async def require_task_prefix(
+    context: RunContextWrapper, agent: Agent, user_input: str | list[str]
+) -> GuardrailFunctionOutput:
+    text = user_input if isinstance(user_input, str) else " ".join(user_input)
+    blocked = not text.startswith("Request:")
+
+    return GuardrailFunctionOutput(
+        output_info="Prefix your request with 'Request:' describing what you need." if blocked else "",
+        tripwire_triggered=blocked,
+    )
+
+agent = Agent(
+    name="CustomerSupportAgent",
+    instructions="You are a helpful customer support agent.",
+    input_guardrails=[require_task_prefix],
+)
+```
+
+## Practical Example: Filtering Off-Topic Questions
+
+Use input guardrails to keep agents focused on their domain. This example delegates relevance decisions to an evaluator agent:
+
+```python
+from agency_swarm import (
+    Agent,
+    GuardrailFunctionOutput,
+    ModelSettings,
+    Reasoning,
+    RunContextWrapper,
+    input_guardrail,
+)
+from pydantic import BaseModel
+
+class RelevanceDecision(BaseModel):
+    is_relevant: bool
+    reason: str
+
+guardrail_agent = Agent(
+    name="GuardrailAgent",
+    instructions=(
+        "You screen incoming messages for a customer-support assistant. "
+        "Treat questions about account access, billing, and troubleshooting as relevant. "
+        "Flag any unrelated requests as irrelevant."
+    ),
+    model="gpt-5-nano",
+    model_settings=ModelSettings(reasoning=Reasoning(effort="minimal")),
+    output_type=RelevanceDecision,
+)
+
+@input_guardrail
+async def require_support_topic(
+    context: RunContextWrapper, agent: Agent, user_input: str | list[str]
+) -> GuardrailFunctionOutput:
+    candidate = user_input if isinstance(user_input, str) else "\n".join(user_input)
+    guardrail_result = await guardrail_agent.get_response(candidate, context=context.context)
+    decision = RelevanceDecision.model_validate(guardrail_result.final_output)
+
+    if not decision.is_relevant:
+        return GuardrailFunctionOutput(
+            output_info="Only support questions are allowed. Ask about billing, account access, or troubleshooting.",
+            tripwire_triggered=True,
+        )
+    return GuardrailFunctionOutput(output_info="", tripwire_triggered=False)
+
+support_agent = Agent(
+    name="CustomerSupportAgent",
+    instructions="You help customers resolve account, billing, and troubleshooting issues.",
+    model="gpt-5-mini",
+    input_guardrails=[require_support_topic],
+    raise_input_guardrail_error=False,  # Non-strict mode: guidance returned as assistant message
+)
+```
+
+See the full example at [`examples/guardrails_input.py`](https://github.com/VRSEN/agency-swarm/blob/main/examples/guardrails_input.py).
+
+## Non-strict vs Strict Mode
+
+Input guardrails support two modes that control how guidance is delivered. Use `raise_input_guardrail_error` to control this behavior.
+
+### Non-strict Mode (Default)
+
+**Setting:** `raise_input_guardrail_error=False`
+
+In non-strict mode, guardrail guidance flows naturally as assistant output:
+- Guidance is returned as `final_output` (non-streaming) or `message_output_created` event (streaming).
+- No exception is raised.
+- Guidance persists as an assistant message with `message_origin="input_guardrail_message"`.
+
+### Strict Mode
+
+**Setting:** `raise_input_guardrail_error=True`
+
+In strict mode, guardrail failures abort the turn immediately:
+- `InputGuardrailTripwireTriggered` is raised.
+- Guidance persists as a system message with `message_origin="input_guardrail_error"`.
+- The turn is aborted before the agent processes input.
+- The caller must handle the exception.
+
+<Accordion title="Strict mode usage example">
+
+```python
+from agency_swarm import Agent, InputGuardrailTripwireTriggered
+
+agent = Agent(
+    name="CustomerSupportAgent",
+    instructions="You are a helpful customer support agent.",
+    input_guardrails=[require_task_prefix],
+    raise_input_guardrail_error=True,
+)
+
+try:
+    response = await agency.get_response("Hello!")
+except InputGuardrailTripwireTriggered as exc:
+    print(f"Validation failed: {exc.guardrail_result.output_info}")
+```
+</Accordion>
+
+### Comparison Table
+
+| Mode | `raise_input_guardrail_error` | Caller sees | Persisted entry | Role | Use case |
+|------|-------------------------------|-------------|-----------------|------|----------|
+| **Non-strict** | `False` (default) | Guardrail text as `final_output` or streaming event | Assistant message (`input_guardrail_message`) | `assistant` | Conversational flows, helpful guidance |
+| **Strict** | `True` | `InputGuardrailTripwireTriggered` exception | System message (`input_guardrail_error`) | `system` | Hard requirements, compliance, security |
+
+<Accordion title="Should I use non-strict or strict mode?">
+**Use non-strict mode when:**
+- You want a conversational user experience.
+- Agents are communicating with each other internally.
+- Guardrail feedback is helpful guidance, not a hard block.
+- You do not want to write exception handling code.
+
+**Use strict mode when:**
+- You are enforcing non-negotiable requirements.
+- Security or compliance rules must block processing.
+- You want explicit control over error handling.
+- The caller should know immediately that validation failed.
+</Accordion>
+
+<Accordion title="Streaming behavior example">
+
+```text
+RunItemStreamEvent(
+    name='message_output_created',
+    item=MessageOutputItem(
+        raw_item=ResponseOutputMessage(
+            id='msg_input_guardrail_guidance',
+            content=[ResponseOutputText(text="Prefix your request...")],
+            role='assistant',
+            status='completed'
+        )
+    )
+)
+```
+</Accordion>
+
+## Guardrails in Message History
+
+Each guardrail trigger is recorded in chat history with a guidance entry. Every entry carries `message_origin` to identify which guardrail fired.
+For most use cases, `role`, `content`, and `message_origin` are enough. Additional metadata is mainly for tracing multi-agent runs.
+
+### Message Origin Values
+
+- `input_guardrail_message`: Input guardrail in non-strict mode.
+- `input_guardrail_error`: Input guardrail in strict mode.
+- `output_guardrail_error`: Output guardrail failure (always a system message).
+
+### Persistence Behavior
+
+| Mode | `raise_input_guardrail_error` | Streaming Event | Persisted Entry |
+|------|-------------------------------|-----------------|-----------------|
+| **Non-strict** | `False` (default) | `message_output_created` with guidance text | Assistant message, `message_origin="input_guardrail_message"` |
+| **Strict** | `True` | `{"type": "error", "content": guidance}` | System message, `message_origin="input_guardrail_error"` |
+
+<Note>
+`validation_attempts` does not apply to input guardrails. Input guardrails trigger immediately on validation failure.
+</Note>
+
+### Message History After Guardrails Trip
+
+When an input guardrail trips, agent-to-agent request messages remain in history alongside guardrail guidance. This preserves context so calling agents can adjust their approach.
+
+Output guardrail messages also persist in history to guide retry attempts.
+
+<Accordion title="Example message history entries (illustrative)">
+
+```json
+[
+  {
+    "role": "assistant",
+    "content": "Please, prefix your request with 'Support:' describing what you need.",
+    "message_origin": "input_guardrail_message",
+    "agent": "CustomerSupportAgent"
+  },
+  {
+    "role": "assistant",
+    "content": "When chatting with this agent, provide your name first.",
+    "message_origin": "input_guardrail_message",
+    "agent": "DatabaseAgent",
+    "callerAgent": "CustomerSupportAgent"
+  },
+  {
+    "role": "system",
+    "content": "Do not include email addresses in your response.",
+    "message_origin": "output_guardrail_error",
+    "agent": "DatabaseAgent",
+    "callerAgent": "CustomerSupportAgent"
+  }
+]
+```
+</Accordion>
+
+## Internal Agent Communication
+
+For many agent-to-agent flows, non-strict mode (`raise_input_guardrail_error=False`) is easier to work with because guidance is returned inline instead of raising exceptions mid-chain.
+
+<Warning>
+Due to the nature of handoffs, using `Handoff` for agent-to-agent communication can bypass input guardrails between agents.
+</Warning>

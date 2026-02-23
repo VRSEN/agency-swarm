@@ -3,7 +3,7 @@ from collections.abc import AsyncIterator
 import pytest
 from agents import Tool
 from agents.agent_output import AgentOutputSchemaBase
-from agents.handoffs import Handoff as AgentsHandoff
+from agents.handoffs import Handoff as SDKHandoff
 from agents.items import HandoffOutputItem, ModelResponse, TResponseInputItem, TResponseStreamEvent
 from agents.lifecycle import RunHooksBase
 from agents.model_settings import ModelSettings
@@ -48,7 +48,7 @@ class SystemInstructionsEchoModel(Model):
         model_settings: ModelSettings,
         tools: list[Tool],
         output_schema: AgentOutputSchemaBase | None,
-        handoffs: list[AgentsHandoff],
+        handoffs: list[SDKHandoff],
         tracing: ModelTracing,
         *,
         previous_response_id: str | None,
@@ -65,7 +65,7 @@ class SystemInstructionsEchoModel(Model):
         model_settings: ModelSettings,
         tools: list[Tool],
         output_schema: AgentOutputSchemaBase | None,
-        handoffs: list[AgentsHandoff],
+        handoffs: list[SDKHandoff],
         tracing: ModelTracing,
         *,
         previous_response_id: str | None,

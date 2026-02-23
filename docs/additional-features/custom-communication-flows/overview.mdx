@@ -21,8 +21,7 @@ Agency Swarm contains multiple commonly requested classes for communication flow
 To select your own custom send message tool, simply provide it as the last argument to the communication flow tuple.
 
 ```python
-from agency_swarm import Agent
-from agency_swarm.tools import Handoff
+from agency_swarm import Agent, Handoff
 
 ceo = Agent(
     name="CeoAgent",
@@ -49,7 +48,7 @@ To customize SendMessage parameters, extend the `SendMessage` class and declare 
 
 ```python
 from pydantic import BaseModel, Field
-from agency_swarm.tools.send_message import SendMessage
+from agency_swarm import SendMessage
 
 class CustomSendMessage(SendMessage):
     """
@@ -88,8 +87,7 @@ By default, whenever a handoff occurs, prior to transferring the chat, a special
 You can customize the reminder message or disable it entirely by defining a custom Handoff class as follows (see [`add_reminder`](https://github.com/VRSEN/agency-swarm/blob/main/src/agency_swarm/tools/send_message.py) and [`handoff_reminder`](https://github.com/VRSEN/agency-swarm/blob/main/src/agency_swarm/agent/core.py) parameters). Set `handoff_reminder` on the agent that receives the handoff so the message appears in its context:
 
 ```python
-from agency_swarm import Agency, Agent
-from agency_swarm.tools.send_message import Handoff
+from agency_swarm import Agency, Agent, Handoff
 
 class NoReminderHandoff(Handoff):
     add_reminder = False # Set to False to completely remove the extra message
@@ -105,8 +103,7 @@ agency = Agency(
 ```
 
 ```python
-from agency_swarm import Agency, Agent
-from agency_swarm.tools.send_message import Handoff
+from agency_swarm import Agency, Agent, Handoff
 
 sender = Agent(name="CustomHandoffSender")
 recipient = Agent(

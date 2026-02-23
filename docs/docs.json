@@ -37,8 +37,9 @@
                 "icon": "rocket",
                 "pages": [
                   "welcome/installation",
-                  "welcome/getting-started/from-scratch",
-                  "welcome/getting-started/cursor-ide"
+                  "welcome/getting-started/starter-template",
+                  "welcome/getting-started/cursor-ide",
+                  "welcome/getting-started/from-scratch"
                 ]
               }
             ]
@@ -58,10 +59,10 @@
                     "pages": [
                       "core-framework/tools/custom-tools/step-by-step-guide",
                       "core-framework/tools/custom-tools/pydantic-is-all-you-need",
+                      "core-framework/tools/custom-tools/validation",
                       "core-framework/tools/custom-tools/multimodal-outputs",
                       "core-framework/tools/custom-tools/best-practices",
-                      "core-framework/tools/custom-tools/configuration",
-                      "core-framework/tools/custom-tools/validation"
+                      "core-framework/tools/custom-tools/configuration"
                     ]
                   },
                   "core-framework/tools/openapi-schemas",
@@ -94,7 +95,15 @@
             "pages": [
               "additional-features/agency-context",
               "additional-features/few-shot-examples",
-              "additional-features/guardrails",
+              {
+                "group": "Guardrails",
+                "icon": "shield-halved",
+                "pages": [
+                  "additional-features/guardrails/overview",
+                  "additional-features/guardrails/input-guardrails",
+                  "additional-features/guardrails/output-guardrails"
+                ]
+              },
               "additional-features/streaming",
               "additional-features/fastapi-integration",
               "additional-features/mcp-tools-server",
