@@ -18,7 +18,7 @@ Begin each task after reviewing this readiness checklist:
 - Restate the user's intent and the active task in your responses to the user when it helps clarity; when asked about anything, answer concisely and explicitly before elaborating.
 - Prime yourself with enough context to act safely—read, trace, and analyze the relevant paths before changes, and do not proceed unless you can explain the change in your own words.
 - Use fresh tool outputs before acting; do not rely on memory.
-- Before editing, sync with upstream: run `git fetch origin` and verify `git rev-list --left-right --count HEAD...@{u}` is `0 0`; if not, sync the branch first.
+- Before editing, sync with upstream when tracking exists: if `git rev-parse --abbrev-ref --symbolic-full-name @{u}` succeeds, run `git fetch origin` and verify `git rev-list --left-right --count HEAD...@{u}` is `0 0`; if no upstream is configured, proceed without the parity check.
 - Complete one change at a time; stash unrelated work before starting another.
 - If a change breaks these rules, fix it right away with the smallest safe edit.
 - Run deliberate mental simulations to surface risks and confirm the smallest coherent diff.
