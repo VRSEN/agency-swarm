@@ -393,7 +393,6 @@ def make_response_endpoint(
         result = {
             "response": response.final_output,
             "new_messages": filtered_messages,
-            "raw_responses": raw_responses,
         }
 
         # Extract and add usage information
@@ -563,7 +562,6 @@ def make_stream_endpoint(
                     result = {
                         "new_messages": filtered_messages,
                         "run_id": run_id,
-                        "raw_responses": raw_responses,
                     }
                     if active_run is not None and active_run.cancelled:
                         result["cancelled"] = True
@@ -654,7 +652,6 @@ def make_cancel_endpoint(request_model, verify_token, run_registry: ActiveRunReg
             "cancelled": not timed_out,
             "cancel_mode": cancel_mode,
             "new_messages": filtered_messages,
-            "raw_responses": raw_responses,
             "timed_out": timed_out,
         }
 

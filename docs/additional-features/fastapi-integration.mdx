@@ -97,13 +97,6 @@ agency.run_fastapi()
     }
   ],
   "usage": {"input_tokens": 50, "output_tokens": 12, "total_cost": 0.0001},
-  "raw_responses": [
-    {
-      "response_id": "resp_123",
-      "output": [...],
-      "usage": {...}
-    }
-  ],
   "file_ids_map": {"document.pdf": "file-abc123"}
 }
 ```
@@ -120,7 +113,7 @@ data: {"data": {"data": {"type": "response.output_text.delta", "delta": "Hello"}
 data: {"data": {"data": {"type": "response.output_text.delta", "delta": "!"}}}
 
 event: messages
-data: {"new_messages": [...], "run_id": "...", "cancelled": false, "usage": {...}, "raw_responses": [...], "file_ids_map": {...}}
+data: {"new_messages": [...], "run_id": "...", "cancelled": false, "usage": {...}, "file_ids_map": {...}}
 
 event: end
 data: [DONE]

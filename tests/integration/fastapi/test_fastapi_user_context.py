@@ -188,7 +188,6 @@ def test_non_streaming_user_context(recording_agency_factory: RecordingAgencyFac
     assert usage["output_tokens"] == 20
     assert usage["total_tokens"] == 30
     assert isinstance(usage["total_cost"], int | float)
-    assert payload["raw_responses"] == []
     assert recording_agency_factory.tracker.last_response_context == {"plan": "pro", "user_id": "123"}
 
 
@@ -217,7 +216,6 @@ def test_streaming_user_context(recording_agency_factory: RecordingAgencyFactory
     assert usage["output_tokens"] == 20
     assert usage["total_tokens"] == 30
     assert isinstance(usage["total_cost"], int | float)
-    assert messages_payload["raw_responses"] == []
 
 
 def test_agui_user_context(recording_agency_factory: RecordingAgencyFactory):
