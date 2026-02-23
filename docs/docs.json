@@ -38,7 +38,6 @@
                 "pages": [
                   "welcome/installation",
                   "welcome/getting-started/from-scratch",
-                  "welcome/getting-started/starter-template",
                   "welcome/getting-started/cursor-ide"
                 ]
               }
@@ -52,16 +51,7 @@
                 "icon": "wrench",
                 "pages": [
                   "core-framework/tools/overview",
-                  {
-                    "group": "Built-in Tools",
-                    "icon": "toolbox",
-                    "pages": [
-                      "core-framework/tools/built-in-tools",
-                      "core-framework/tools/built-in-tools/ipython-interpreter",
-                      "core-framework/tools/built-in-tools/persistent-shell-tool",
-                      "core-framework/tools/built-in-tools/load-file-attachment"
-                    ]
-                  },
+                  "core-framework/tools/built-in-tools",
                   {
                     "group": "Custom Tools",
                     "icon": "hammer",
@@ -132,7 +122,7 @@
           },
           {
             "group": "References",
-            "pages": ["references/api-index", "references/api"]
+            "pages": ["references/api"]
           },
           {
             "group": "Contributing",
@@ -143,8 +133,8 @@
             "pages": ["migration/guide"]
           },
           {
-            "group": "Troubleshooting",
-            "pages": ["troubleshooting", "debugging", "faq"]
+            "group": "FAQ",
+            "pages": ["faq"]
           }
         ]
       },

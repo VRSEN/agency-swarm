@@ -285,6 +285,15 @@ Strictness
 - When committing, base the message on the staged diff and use a title plus bullet body (e.g., `git commit -m "type: summary" -m "- bullet"`).
 - After committing, double-check what you committed with `git show --name-only -1`.
 
+### PR Comment Review Loop (Mandatory for Local Coding Work)
+- If you are doing coding work locally (outside GitHub UI) for an open PR and you can post GitHub comments, you must run this loop:
+  - Post exactly `@codex review` on the PR.
+  - Wait about 10 minutes.
+  - Check PR comments no more than once per minute.
+  - Address review feedback and repeat until there are no unresolved Codex findings.
+- Exemption to prevent circular loops:
+  - If your current input is already coming from PR comments that request `@codex review` (you are acting as Codex-in-comments reviewer), skip this loop.
+
 ## Key References
 - `examples/` – v1.x modern usage
 - `docs/migration/guide.mdx` – Breaking changes
