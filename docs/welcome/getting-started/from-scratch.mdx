@@ -39,7 +39,11 @@ Use this guide when you need to build everything manually. Otherwise, start from
         └── instructions.md or .txt   # Instruction document for the agent
     ```
 
+    This structure ensures that each agent has its dedicated space with all necessary files to start working on its specific tasks.
+
     **Agency Folder Structure:**
+
+    The full structure of the project will look like this:
 
     ```
     agency_name/
@@ -50,12 +54,10 @@ Use this guide when you need to build everything manually. Otherwise, start from
     ├── requirements.txt      # File listing all dependencies
     └── ...
     ```
-
-    This structure ensures that each agent has its dedicated space with all necessary files to start working on its specific tasks.
   </Step>
 
   <Step title="Create Tools">
-    Both patterns are supported. We show `@function_tool` first, then `BaseTool` classes.
+    You have 2 ways of defining custom tools:
 
     **my_custom_tool.py:**
 
@@ -199,7 +201,7 @@ Use this guide when you need to build everything manually. Otherwise, start from
     from .ceo import ceo
 
     agency = Agency(
-        ceo,
+        ceo,  # Entry point agent as positional argument
         communication_flows=[
             ceo > developer,  # CEO can initiate communication with Developer
         ],
