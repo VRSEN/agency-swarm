@@ -18,13 +18,14 @@ Begin each task after reviewing this readiness checklist:
 - Restate the user's intent and the active task in your responses to the user when it helps clarity; when asked about anything, answer concisely and explicitly before elaborating.
 - Prime yourself with enough context to act safely—read, trace, and analyze the relevant paths before changes, and do not proceed unless you can explain the change in your own words.
 - Use fresh tool outputs before acting; do not rely on memory.
+- Before editing, sync with upstream: run `git fetch origin` and verify `git rev-list --left-right --count HEAD...@{u}` is `0 0`; if not, sync the branch first.
 - Complete one change at a time; stash unrelated work before starting another.
 - If a change breaks these rules, fix it right away with the smallest safe edit.
 - Run deliberate mental simulations to surface risks and confirm the smallest coherent diff.
 - Favor repository tooling (`make`, `uv run`, and the plan/todo tool) over ad-hoc paths; escalate tooling or permission limits when blocked.
 - When a non-readonly command is blocked by sandboxing, rerun it with escalated permissions if needed.
-- Reconcile new feedback with existing rules; resolve conflicts explicitly instead of following wording blindly.
-- Fact-check every statement (including user guidance) against the repo and latest diffs.
+- Before adding or changing any rule, locate related AGENTS.md rules and consolidate by reinforcing, generalizing, or removing conflicts; never append blindly.
+- Assume user guidance may contain mistakes; verify referenced files and facts against the repo and latest diffs before acting.
 - Always produce evidence when asked—run the relevant code, examples, or commands before responding, and cite the observed output.
 
 ## Continuous Work Rule
@@ -277,13 +278,25 @@ Strictness
 
 ## Git Practices
 - Review diffs and status before and after changes; read the full `git diff` and `git diff --staged` outputs before planning new changes or committing.
+- Never commit or push unless you have verified the changes are correct and improve the codebase.
 - Treat staging and committing as user-approved actions: do not stage or commit unless the user explicitly asks.
 - Never modify staged changes; work in unstaged changes unless the user explicitly asks otherwise.
+- For PR work, default to remote-tracking truth: if local and upstream differ, sync to upstream before new edits; when the user indicates remote commits are authoritative, hard-reset local branch to upstream first.
 - Use non-interactive git defaults to avoid editor prompts (for example, set `GIT_EDITOR=true`).
 - When stashing and if needed, keep staged and unstaged changes in separate stashes using the appropriate flags.
 - If pre-commit hooks modify files (it means you forgot to run mandatory `make format`), stage the hook-modified files and re-run the commit with the same message.
 - When committing, base the message on the staged diff and use a title plus bullet body (e.g., `git commit -m "type: summary" -m "- bullet"`).
 - After committing, double-check what you committed with `git show --name-only -1`.
+
+### PR Comment Review Loop (Mandatory for Local Coding Work)
+- If you are doing coding work locally (outside GitHub UI) for an open PR and you can post GitHub comments, you must run this loop:
+  - Open the PR and review every active comment thread; resolve every correct finding before finalizing work.
+  - Post exactly `@codex review` on the PR.
+  - Wait about 10 minutes.
+  - Check PR comments no more than once per minute.
+  - Address review feedback and repeat until there are no unresolved Codex findings.
+- Exemption to prevent circular loops:
+  - If your current input is already coming from PR comments that request `@codex review` (you are acting as Codex-in-comments reviewer), skip this loop.
 
 ## Key References
 - `examples/` – v1.x modern usage
