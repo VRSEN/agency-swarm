@@ -15,7 +15,7 @@ license = "MIT"
 authors = [{ name = "Vrsen AI Solutions", email = "me@vrsen.ai" }]
 dependencies = [
     "openai>=2.2,<3",
-    "openai-agents==0.6.4",
+    "openai-agents==0.9.3",
     "datamodel-code-generator>=0.33.0,<0.34.0",
     "docstring-parser>=0.16,<1.0.0",
     "fastmcp>=2.13.1",

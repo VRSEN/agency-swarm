@@ -62,6 +62,28 @@ def _make_wrapper(agency: Agency) -> SimpleNamespace:
     return SimpleNamespace(context=master_context, tool_call_id="tool-call")
 
 
+async def _wait_for_pending_registration(
+    tool: SendMessage,
+    wrapper: SimpleNamespace,
+    recipient_key: str,
+    in_flight_task: asyncio.Task[str],
+) -> None:
+    """Wait until SendMessage records a pending recipient for the current thread manager."""
+    thread_key = id(wrapper.context.thread_manager)
+    for _ in range(200):
+        async with tool._pending_lock:
+            pending = tool._pending_per_thread.get(thread_key, set())
+            if recipient_key in pending:
+                return
+
+        if in_flight_task.done():
+            pytest.fail("First send completed before pending state could be observed.")
+
+        await asyncio.sleep(0.01)
+
+    pytest.fail("Timed out waiting for pending state registration.")
+
+
 @pytest.mark.asyncio
 async def test_send_message_pending_state_isolated_per_thread_manager():
     """
@@ -113,7 +135,7 @@ async def test_send_message_pending_state_isolated_per_thread_manager():
         return await tool.on_invoke_tool(wrapper, json.dumps(payload))
 
     task_one = asyncio.create_task(invoke(send_tool_a, wrapper_one, "Task 1 - isolate pending guard"))
-    await asyncio.sleep(0)  # give the first call a chance to register as pending
+    await _wait_for_pending_registration(send_tool_a, wrapper_one, recipient.name.lower(), task_one)
 
     second_result = await invoke(send_tool_b, wrapper_two, "Task 2 - parallel send within another agency")
 
@@ -123,6 +145,7 @@ async def test_send_message_pending_state_isolated_per_thread_manager():
     assert isinstance(first_result, str)
     assert "Cannot send another message" not in second_result
     assert not second_result.startswith("Error:")
+    assert not first_result.startswith("Error:")
     assert first_result != ""
 
 
