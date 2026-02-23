@@ -134,8 +134,8 @@
             "pages": ["migration/guide"]
           },
           {
-            "group": "Troubleshooting",
-            "pages": ["debugging", "faq"]
+            "group": "FAQ",
+            "pages": ["faq"]
           }
         ]
       },
