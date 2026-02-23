@@ -123,7 +123,7 @@
           },
           {
             "group": "References",
-            "pages": ["references/api"]
+            "pages": ["references/api-index", "references/api"]
           },
           {
             "group": "Contributing",
@@ -134,8 +134,8 @@
             "pages": ["migration/guide"]
           },
           {
-            "group": "FAQ",
-            "pages": ["faq"]
+            "group": "Troubleshooting",
+            "pages": ["troubleshooting", "debugging", "faq"]
           }
         ]
       },
