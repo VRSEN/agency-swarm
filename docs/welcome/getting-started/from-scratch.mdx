@@ -10,36 +10,53 @@ Use this guide when you need to build everything manually. Otherwise, start from
 
 <Steps>
   <Step title="Set Your OpenAI Key">
-    Set `OPENAI_API_KEY` in `.env` (loaded automatically on init).
+    Begin by setting your OpenAI API key in `.env`. It is loaded automatically on agency initialization.
+
     ```
     OPENAI_API_KEY=sk-...
     ```
   </Step>
-  <Step title="Create Project Structure">
-    Create a basic layout like this:
-    ```
-    my_agency/
-    - agency.py
-    - agency_manifesto.md
-    - developer/
-      - __init__.py
-      - developer.py
-      - instructions.md
-      - tools/
-      - files/
-      - schemas/
-    ```
-    `tools/` holds custom tools, `files/` holds local files (and optional vector store uploads), and `schemas/` holds OpenAPI schemas.
 
-    <Accordion title="Create this layout with the CLI" defaultOpen={false}>
+  <Step title="Create Project Structure">
+    Generate an agent folder with the CLI:
+
+    <Accordion title="Create the folder with the CLI" defaultOpen={false}>
       ```bash
-      agency-swarm create-agent-template "Developer"
+      agency-swarm create-agent-template "Worker"
       ```
-      This generates the same folder structure for a new agent.
     </Accordion>
+
+    **Agent Folder Structure:**
+
+    ```
+    /your-agency-path/
+    └── agent_name/                   # Directory for the specific agent
+        ├── files/                    # Directory for files that will be uploaded to openai
+        ├── schemas/                  # Directory for OpenAPI schemas to be converted into tools
+        ├── tools/                    # Directory for tools to be imported by default.
+        ├── agent_name.py             # The agent definition module
+        ├── __init__.py               # Initializes the agent folder as a Python package
+        └── instructions.md or .txt   # Instruction document for the agent
+    ```
+
+    **Agency Folder Structure:**
+
+    ```
+    your_agency/
+    ├── ceo/
+    ├── worker/
+    ├── agency.py
+    ├── agency_manifesto.md
+    ├── requirements.txt
+    └── ...
+    ```
   </Step>
+
   <Step title="Create Tools">
-    Add a tool in `developer/tools/search_database.py`.
+    In 1.x, both patterns are supported. We generally recommend `BaseTool` classes, and this step shows both.
+
+    **`worker/tools/search_database.py`:**
+
     ```python
     from agency_swarm import function_tool
 
@@ -47,27 +64,34 @@ Use this guide when you need to build everything manually. Otherwise, start from
     def search_database(query: str) -> str:
         return f"Results for: {query}"
     ```
-    <Accordion title="BaseTool class version" defaultOpen={false}>
+
+    <Accordion title="Preferred: BaseTool class version" defaultOpen={false}>
       ```python
       from agency_swarm import BaseTool
       from pydantic import Field
 
       class SearchDatabase(BaseTool):
-          query: str = Field(..., description="Search query")
+          query: str = Field(..., description="Search query to run")
 
           async def run(self) -> str:
               return f"Results for: {self.query}"
       ```
     </Accordion>
-    See [Custom Tools](/core-framework/tools/custom-tools/step-by-step-guide) for more options.
+
+    See [Custom Tools](/core-framework/tools/custom-tools/step-by-step-guide) for full patterns.
   </Step>
-  <Step title="Define Agent">
-    In `developer/developer.py`:
+
+  <Step title="Define Agent Roles">
+    Configure each agent in its module.
+
+    **`worker/worker.py`:**
+
     ```python
     from agency_swarm import Agent
 
-    developer = Agent(
-        name="Developer",
+    worker = Agent(
+        name="Worker",
+        description="Responsible for executing tasks.",
         model="gpt-5.2",
         instructions="./instructions.md",
         tools_folder="./tools",
@@ -75,13 +99,14 @@ Use this guide when you need to build everything manually. Otherwise, start from
         schemas_folder="./schemas",
     )
     ```
-    <Accordion title="Explicit tool imports with reasoning settings" defaultOpen={false}>
+
+    <Accordion title="Optional: explicit tool imports and model settings" defaultOpen={false}>
       ```python
       from agency_swarm import Agent, ModelSettings, Reasoning
-      from developer.tools.search_database import search_database
+      from worker.tools.search_database import search_database
 
-      developer = Agent(
-          name="Developer",
+      worker = Agent(
+          name="Worker",
           model="gpt-5.2",
           instructions="./instructions.md",
           tools=[search_database],
@@ -91,35 +116,57 @@ Use this guide when you need to build everything manually. Otherwise, start from
       )
       ```
     </Accordion>
+
+    **`worker/instructions.md`:**
+
+    ```md
+    You are a Worker agent responsible for executing tasks.
+
+    # Role
+    Execute tasks clearly and report tradeoffs.
+    ```
   </Step>
+
   <Step title="Create Agency">
-    In `agency.py`:
+    Import agents and initialize the Agency with `ceo` as the entry point.
+
+    **`agency.py`:**
+
     ```python
     from agency_swarm import Agency
-    from developer.developer import developer
+    from ceo.ceo import ceo
+    from worker.worker import worker
 
     agency = Agency(
-        developer,
+        ceo,
+        communication_flows=[ceo > worker],
         shared_instructions="./agency_manifesto.md",
     )
     ```
-    <Accordion title="Multi-agent example with communication flows" defaultOpen={false}>
+
+    The first positional argument is the entry-point agent. Communication flows are directional, so `ceo > worker` means CEO can initiate messages to Worker.
+
+    <Accordion title="More communication flow examples" defaultOpen={false}>
       ```python
-      from agency_swarm import Agency
-      from ceo.ceo import ceo
-      from developer.developer import developer
+      from qa.qa import qa
 
       agency = Agency(
           ceo,
-          communication_flows=[(ceo, developer)],
-          shared_instructions="./agency_manifesto.md",
+          communication_flows=[
+              ceo > worker,
+              ceo > qa,
+              worker > qa,
+          ],
       )
       ```
-      Flows are directional: `(ceo, developer)` means CEO can message Developer.
     </Accordion>
+
     See [Communication Flows](/core-framework/agencies/communication-flows) for multi-agent setups.
   </Step>
+
   <Step title="Run Demo">
+    Add one of these to `agency.py`:
+
     <Tabs>
       <Tab title="Terminal">
         ```python
@@ -144,6 +191,7 @@ Use this guide when you need to build everything manually. Otherwise, start from
         ```
       </Tab>
     </Tabs>
+
     For a web UI demo, see `agency.copilot_demo()` in [Visualization](/core-framework/agencies/visualization).
   </Step>
 </Steps>
