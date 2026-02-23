@@ -1,7 +1,6 @@
 ---
-title: "AI Agents"
-sidebarTitle: "AI Agents"
-description: "Use the Starter Template and Cursor to customize your agency."
+title: "Cursor AI"
+description: "Getting started with Cursor."
 icon: "cube"
 ---
 
@@ -16,33 +15,27 @@ icon: "cube"
   style={{ borderRadius: "10px" }}
 ></iframe>
 
-## Why Start With Template + Cursor
+## Why Use Cursor
 
 Cursor simplifies AI agent development by reducing the feedback loop on AI-generated code. This enables faster iteration and provides an optimal balance between manual control and AI assistance.
 
 ![Cursor IDE Overview](/images/cursor-overview.png)
 
-## Why Cursor Rules Matter
+## What are Cursor Rules
 
-**Cursor Rules** are custom instructions that tell Cursor how to work with your code. The [Starter Template](/welcome/getting-started/starter-template) includes these rules and related AI guidance files by default, so you can start with a consistent baseline.
+**Cursor Rules** are custom instructions that tell Cursor how to work with your code. Agency has a predefined `.cursorrules` file that contains everything that Cursor needs to know in order to create agents with this framework.
 
 ![Cursor Rules Example](/images/cursor-rules-example.png)
 
-## Template-First Workflow (Cursor)
+## Getting Started with Cursor
 
-Follow this flow to customize your first agency:
+Follow these steps to create your first Agency using Cursor:
 
 <Tip>
-Start here first: [Starter Template](/welcome/getting-started/starter-template). Create your own repository from the template before doing any Cursor customization.
+Prefer a ready-to-run repo? Start from the [Starter Template](/welcome/getting-started/starter-template).
 </Tip>
 
 <Steps>
-  <Step title="Create Your Repo from the Starter Template">
-    Complete this step first: [Starter Template Setup](/welcome/getting-started/starter-template).
-
-    Once your repository is created, open that repository in Cursor.
-  </Step>
-
   <Step title="Enable Cursor Rules in Settings">
     First, you need to enable Cursor Rules in the Cursor IDE:
 
@@ -53,11 +46,10 @@ Start here first: [Starter Template](/welcome/getting-started/starter-template).
     ![Enable Cursor Rules](/images/enable-cursor-rules.png)
   </Step>
 
-  <Step title="Verify AI Rule Files in Your Repository">
-    The template already includes AI guidance files. Before prompting Cursor, confirm these files are present in your repository:
-    - Cursor rules and project-level guidance files
-    - `AGENTS.md`
-    - `CLAUDE.md` (if present in your template version)
+  <Step title="Add The `.cursorrules` File to Your Project">
+    The `.cursorrules` file contains the instructions that guide Cursor's AI. To add it:
+    - Download the `.cursorrules` file from the [Agency Swarm repository](https://github.com/VRSEN/agency-swarm/blob/main/.cursorrules).
+    - Place the file in the main folder (root directory) of your project.
   </Step>
 
   <Step title="Open Cursor Composer">
@@ -118,5 +110,5 @@ Start here first: [Starter Template](/welcome/getting-started/starter-template).
 
 ## Next Steps
 
-- Review deployment guidance: [Deployment to Production](/additional-features/deployment-to-production)
-- Review platform flow: [Agencii Platform Overview](/platform/overview)
+- Learn the core concepts: [Tools Overview](/core-framework/tools/overview), [Agents Overview](/core-framework/agents/overview), and [Agencies Overview](/core-framework/agencies/overview).
+- Run your first end-to-end flow with [Running an Agency](/core-framework/agencies/running-agency).

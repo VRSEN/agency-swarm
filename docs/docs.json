@@ -123,7 +123,7 @@
           },
           {
             "group": "References",
-            "pages": ["references/api-index", "references/api"]
+            "pages": ["references/api"]
           },
           {
             "group": "Contributing",
