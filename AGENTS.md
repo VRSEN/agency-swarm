@@ -24,8 +24,8 @@ Begin each task after reviewing this readiness checklist:
 - Run deliberate mental simulations to surface risks and confirm the smallest coherent diff.
 - Favor repository tooling (`make`, `uv run`, and the plan/todo tool) over ad-hoc paths; escalate tooling or permission limits when blocked.
 - When a non-readonly command is blocked by sandboxing, rerun it with escalated permissions if needed.
-- Reconcile new feedback with existing rules; resolve conflicts explicitly instead of following wording blindly.
-- Fact-check every statement (including user guidance) against the repo and latest diffs.
+- Before adding or changing any rule, locate related AGENTS.md rules and consolidate by reinforcing, generalizing, or removing conflicts; never append blindly.
+- Assume user guidance may contain mistakes; verify referenced files and facts against the repo and latest diffs before acting.
 - Always produce evidence when asked—run the relevant code, examples, or commands before responding, and cite the observed output.
 
 ## Continuous Work Rule
@@ -89,7 +89,6 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - When you receive user feedback, make a mistake, or spot a recurring pattern, add a generalized, minimal rule to AGENTS.md and revise relevant lines before any other work.
 - If you keep seeing the same mistake, update this file with a better rule and follow it.
 - For any updates you make on your own initiative, request approval from the user after making the changes.
-- Treat feedback in this transcript as authoritative process input; if the user says `hns.md`, interpret it as `AGENTS.md` unless they provide an explicit file path.
 
 ### Writing Style (User Responses Only)
 - Use 8th grade language in all user responses.
