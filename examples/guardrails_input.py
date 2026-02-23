@@ -67,7 +67,7 @@ support_agent = Agent(
     model="gpt-5-mini",
     model_settings=ModelSettings(reasoning=Reasoning(effort="minimal")),
     input_guardrails=[require_support_topic],
-    throw_input_guardrail_error=False,  # Friendly mode: guidance returned as assistant message
+    raise_input_guardrail_error=False,  # non-strict mode: guidance returned as assistant message
 )
 
 
