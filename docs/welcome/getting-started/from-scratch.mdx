@@ -10,7 +10,7 @@ Use this guide when you need to build everything manually. Otherwise, start from
 
 <Steps>
   <Step title="Set Your OpenAI Key">
-    Begin by setting your OpenAI API key in `.env`. It is loaded automatically on agency initialization.
+    Begin by setting your OpenAI API key in the `.env` file. It will be loaded automatically on agency initialization.
 
     ```
     OPENAI_API_KEY=sk-...
@@ -18,11 +18,11 @@ Use this guide when you need to build everything manually. Otherwise, start from
   </Step>
 
   <Step title="Create Project Structure">
-    Generate an agent folder with the CLI:
+    When you run the create-agent-template command, it creates the following folder structure for your agent:
 
     <Accordion title="Create the folder with the CLI" defaultOpen={false}>
       ```bash
-      agency-swarm create-agent-template "Worker"
+      agency-swarm create-agent-template "Developer"
       ```
     </Accordion>
 
@@ -42,157 +42,215 @@ Use this guide when you need to build everything manually. Otherwise, start from
     **Agency Folder Structure:**
 
     ```
-    your_agency/
-    ├── ceo/
-    ├── worker/
-    ├── agency.py
-    ├── agency_manifesto.md
-    ├── requirements.txt
+    agency_name/
+    ├── agent_name/           # Agent folder created with the command above
+    ├── another_agent/        # Another agent folder
+    ├── agency.py             # Main file where agents are imported and the agency is defined
+    ├── agency_manifesto.md   # Shared instructions and guidelines for all agents
+    ├── requirements.txt      # File listing all dependencies
     └── ...
     ```
+
+    This structure ensures that each agent has its dedicated space with all necessary files to start working on its specific tasks.
   </Step>
 
   <Step title="Create Tools">
-    In 1.x, both patterns are supported. We generally recommend `BaseTool` classes, and this step shows both.
+    Both patterns are supported. We show `@function_tool` first, then `BaseTool` classes.
 
-    **`worker/tools/search_database.py`:**
+    **my_custom_tool.py:**
 
     ```python
     from agency_swarm import function_tool
 
     @function_tool
-    def search_database(query: str) -> str:
-        return f"Results for: {query}"
+    def my_custom_tool(example_field: str) -> str:
+        """
+        A brief description of what the custom tool does.
+        The docstring should clearly explain the tool's purpose and functionality.
+        It will be used by the agent to determine when to use this tool.
+
+        Args:
+            example_field: Description of the example field, explaining its purpose and usage for the Agent.
+
+        Returns:
+            Result of the tool's operation as a string.
+        """
+
+        # Your custom tool logic goes here
+        do_something(example_field)
+
+        # Return the result of the tool's operation as a string
+        return "Result of MyCustomTool operation"
     ```
 
     <Accordion title="Preferred: BaseTool class version" defaultOpen={false}>
+      **my_custom_tool_class.py:**
+
       ```python
-      from agency_swarm import BaseTool
+      from agency_swarm.tools import BaseTool
       from pydantic import Field
 
-      class SearchDatabase(BaseTool):
-          query: str = Field(..., description="Search query to run")
+      class MyCustomTool(BaseTool):
+          """
+          A brief description of what the custom tool does.
+          The docstring should clearly explain the tool's purpose and functionality.
+          It will be used by the agent to determine when to use this tool.
+          """
 
-          async def run(self) -> str:
-              return f"Results for: {self.query}"
+          # Define the fields with descriptions using Pydantic Field
+          example_field: str = Field(
+              ..., description="Description of the example field, explaining its purpose and usage for the Agent."
+          )
+
+          # Additional Pydantic fields as required
+          # ...
+
+          async def run(self):
+              """
+              The implementation of the run method, where the tool's main functionality is executed.
+              This method should utilize the fields defined above to perform the task.
+              Doc string is not required for this method and will not be used by your agent.
+              """
+
+              # Your custom tool logic goes here
+              do_something(self.example_field)
+
+              # Return the result of the tool's operation as a string
+              return "Result of MyCustomTool operation"
       ```
     </Accordion>
+
+    BaseTool classes support `async def run(...)`, which is preferred for I/O-bound tools.
 
     See [Custom Tools](/core-framework/tools/custom-tools/step-by-step-guide) for full patterns.
   </Step>
 
   <Step title="Define Agent Roles">
-    Configure each agent in its module.
+    Adjust the parameters and instructions for each agent.
 
-    **`worker/worker.py`:**
+    **developer.py:**
 
     ```python
-    from agency_swarm import Agent
+    from agency_swarm import Agent, ModelSettings
+    from agency_swarm import Reasoning
+    from .tools.my_custom_tool import my_custom_tool
+    from .tools.my_custom_tool_class import MyCustomTool
 
-    worker = Agent(
-        name="Worker",
+    developer = Agent(
+        name="Developer",
         description="Responsible for executing tasks.",
-        model="gpt-5.2",
         instructions="./instructions.md",
-        tools_folder="./tools",
-        files_folder="./files",
-        schemas_folder="./schemas",
+        tools=[my_custom_tool, MyCustomTool],  # Import tools directly
+        model="gpt-5.2",
+        model_settings=ModelSettings(
+            temperature=0.3,
+            max_tokens=25000,
+            reasoning=Reasoning(effort="medium"),
+        ),
     )
     ```
 
-    <Accordion title="Optional: explicit tool imports and model settings" defaultOpen={false}>
-      ```python
-      from agency_swarm import Agent, ModelSettings, Reasoning
-      from worker.tools.search_database import search_database
+    `model` and `reasoning` are both set explicitly in this configuration.
 
-      worker = Agent(
-          name="Worker",
+    <Accordion title="Alternative: load tools/files/schemas from folders" defaultOpen={false}>
+      ```python
+      from agency_swarm import Agent, ModelSettings
+      from agency_swarm import Reasoning
+
+      developer = Agent(
+          name="Developer",
+          description="Responsible for executing tasks.",
           model="gpt-5.2",
           instructions="./instructions.md",
-          tools=[search_database],
+          tools_folder="./tools",
+          files_folder="./files",
+          schemas_folder="./schemas",
           model_settings=ModelSettings(
+              max_tokens=25000,
               reasoning=Reasoning(effort="medium"),
           ),
       )
       ```
     </Accordion>
 
-    **`worker/instructions.md`:**
+    **instructions.md:**
 
     ```md
-    You are a Worker agent responsible for executing tasks.
+    You are a Developer agent responsible for executing tasks.
 
     # Role
-    Execute tasks clearly and report tradeoffs.
+    You are responsible for writing clean, efficient, and reusable code.
+
+    # Process
+    1. How to handle incoming requests
+    2. When and how to use available tools
+    3. How to collaborate with other agents
     ```
   </Step>
 
   <Step title="Create Agency">
-    Import agents and initialize the Agency with `ceo` as the entry point.
+    Import your agents and initialize the Agency class.
 
-    **`agency.py`:**
+    **agency.py:**
 
     ```python
     from agency_swarm import Agency
-    from ceo.ceo import ceo
-    from worker.worker import worker
+    from .developer import developer
+    from .ceo import ceo
 
     agency = Agency(
         ceo,
-        communication_flows=[ceo > worker],
-        shared_instructions="./agency_manifesto.md",
+        communication_flows=[
+            ceo > developer,  # CEO can initiate communication with Developer
+        ],
+        shared_instructions='./agency_manifesto.md'  # shared instructions for all agents
     )
     ```
 
-    The first positional argument is the entry-point agent. Communication flows are directional, so `ceo > worker` means CEO can initiate messages to Worker.
+    The first positional argument is the entry point agent that users interact with directly. Communication flows are defined separately.
 
-    <Accordion title="More communication flow examples" defaultOpen={false}>
-      ```python
-      from qa.qa import qa
-
-      agency = Agency(
-          ceo,
-          communication_flows=[
-              ceo > worker,
-              ceo > qa,
-              worker > qa,
-          ],
-      )
-      ```
-    </Accordion>
+    <Note title="Note on Communication Flows">
+      In Agency Swarm, communication flows are directional. For instance, in the example above: `ceo > developer`, the CEO can initiate a chat with the Developer, and the Developer can respond in this chat. However, the Developer cannot initiate a chat with the CEO.
+    </Note>
 
     See [Communication Flows](/core-framework/agencies/communication-flows) for multi-agent setups.
   </Step>
 
   <Step title="Run Demo">
-    Add one of these to `agency.py`:
+    There are multiple ways to run the demo. Add one of the following to your `agency.py` file:
 
-    <Tabs>
-      <Tab title="Terminal">
-        ```python
-        agency.terminal_demo()
-        ```
-      </Tab>
-      <Tab title="Backend (Sync)">
-        ```python
-        result = agency.get_response_sync("Hello!")
+    **Backend Version (Async):**
+
+    ```python
+    import asyncio
+
+    async def main():
+        result = await agency.get_response("Please create a new website for our client.")
         print(result.final_output)
-        ```
-      </Tab>
-      <Tab title="Backend (Async)">
-        ```python
-        import asyncio
 
-        async def main():
-            result = await agency.get_response("Hello!")
-            print(result.final_output)
+    asyncio.run(main())
+    ```
 
-        asyncio.run(main())
-        ```
-      </Tab>
-    </Tabs>
+    **Terminal Version:**
 
-    For a web UI demo, see `agency.copilot_demo()` in [Visualization](/core-framework/agencies/visualization).
+    ```python
+    agency.terminal_demo()
+    ```
+
+    <Accordion title="Other run modes" defaultOpen={false}>
+      **Web Interface:**
+
+      ```python
+      agency.copilot_demo()
+      ```
+
+      **Backend Version (Sync):**
+
+      ```python
+      result = agency.get_response_sync("Please create a new website for our client.")
+      print(result.final_output)
+      ```
+    </Accordion>
   </Step>
 </Steps>
 
