@@ -135,7 +135,7 @@
           },
           {
             "group": "Troubleshooting",
-            "pages": ["troubleshooting", "debugging", "faq"]
+            "pages": ["debugging", "faq"]
           }
         ]
       },
