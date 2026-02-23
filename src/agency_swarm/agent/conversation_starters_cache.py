@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from agents import TResponseInputItem
 from agents.agent_output import AgentOutputSchema, AgentOutputSchemaBase
-from agents.handoffs import Handoff as AgentsHandoff
+from agents.handoffs import Handoff as SDKHandoff
 from agents.items import HandoffOutputItem, MessageOutputItem, ReasoningItem, ToolCallItem, ToolCallOutputItem
 from agents.tool import (
     ApplyPatchTool,
@@ -514,7 +514,7 @@ def _runtime_tool_signatures(runtime_state: AgentRuntimeState | None) -> list[di
     return _unique_sorted_signatures(signatures)
 
 
-def _handoff_signature(handoff: AgentsHandoff) -> dict[str, Any]:
+def _handoff_signature(handoff: SDKHandoff) -> dict[str, Any]:
     schema = handoff.input_json_schema
     serialized_schema = _sanitize_mapping(schema) if isinstance(schema, dict) else _serialize_value(schema)
     return {
@@ -525,9 +525,9 @@ def _handoff_signature(handoff: AgentsHandoff) -> dict[str, Any]:
 
 
 def _handoff_signatures(agent: Agent, runtime_state: AgentRuntimeState | None) -> list[dict[str, Any]]:
-    handoffs = [handoff for handoff in agent.handoffs if isinstance(handoff, AgentsHandoff)]
+    handoffs = [handoff for handoff in agent.handoffs if isinstance(handoff, SDKHandoff)]
     if runtime_state is not None:
-        handoffs.extend([handoff for handoff in runtime_state.handoffs if isinstance(handoff, AgentsHandoff)])
+        handoffs.extend([handoff for handoff in runtime_state.handoffs if isinstance(handoff, SDKHandoff)])
     signatures = [_handoff_signature(handoff) for handoff in handoffs]
     return _unique_sorted_signatures(signatures)
 

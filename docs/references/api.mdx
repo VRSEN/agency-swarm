@@ -50,6 +50,9 @@ class Agency:
 > that accepts `(Agent, Agent)` tuples, `AgentFlow` chains, or those accompanied by a
 > custom SendMessage tool class.
 
+> **Advanced Note:** `Handoff` from `agency_swarm` is the Agency Swarm communication-flow class.
+> `SDKHandoff` exposes the raw OpenAI Agents SDK handoff type for advanced interoperability.
+
 ### Key Attributes
 
 - **`agents`** (dict[str, Agent]): Dictionary mapping agent names to their instances

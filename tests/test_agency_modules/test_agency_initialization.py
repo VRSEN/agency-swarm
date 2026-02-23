@@ -3,13 +3,15 @@ from collections.abc import AsyncIterator
 import pytest
 from agents import ModelSettings, Tool
 from agents.agent_output import AgentOutputSchemaBase
-from agents.handoffs import Handoff
+from agents.handoffs import Handoff as RawSDKHandoff
 from agents.items import ModelResponse, TResponseInputItem, TResponseStreamEvent
 from agents.models.interface import Model, ModelTracing
 from openai.types.responses.response_prompt_param import ResponsePromptParam
 
-from agency_swarm import Agency, Agent
+import agency_swarm
+from agency_swarm import Agency, Agent, Handoff, SDKHandoff
 from agency_swarm.agent.conversation_starters_cache import load_cached_starter
+from agency_swarm.tools import Handoff as ToolHandoff
 from agency_swarm.tools.send_message import SendMessage
 from tests.deterministic_model import DeterministicModel
 
@@ -36,7 +38,7 @@ class _FailingModel(Model):
         model_settings: ModelSettings,
         tools: list[Tool],
         output_schema: AgentOutputSchemaBase | None,
-        handoffs: list[Handoff],
+        handoffs: list[RawSDKHandoff],
         tracing: ModelTracing,
         *,
         previous_response_id: str | None,
@@ -52,7 +54,7 @@ class _FailingModel(Model):
         model_settings: ModelSettings,
         tools: list[Tool],
         output_schema: AgentOutputSchemaBase | None,
-        handoffs: list[Handoff],
+        handoffs: list[RawSDKHandoff],
         tracing: ModelTracing,
         *,
         previous_response_id: str | None,
@@ -236,3 +238,16 @@ def test_agency_warmup_supports_quick_replies_without_starter_cache_flag(tmp_pat
         expected_fingerprint=agent._conversation_starters_fingerprint,
     )
     assert cached is not None
+
+
+def test_package_handoff_export_uses_framework_handoff(mock_agent, mock_agent2) -> None:
+    """Top-level Handoff should configure Agency Swarm flow handoffs."""
+    assert Handoff is ToolHandoff
+    assert SDKHandoff is RawSDKHandoff
+    assert not hasattr(agency_swarm, "AgentsHandoff")
+
+    agency = Agency(mock_agent, communication_flows=[(mock_agent, mock_agent2, Handoff)])
+    runtime_state = agency._agent_runtime_state[mock_agent.name]
+
+    assert len(runtime_state.handoffs) == 1
+    assert runtime_state.send_message_tools == {}
