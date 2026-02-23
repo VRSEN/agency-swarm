@@ -279,6 +279,7 @@ Strictness
 
 ## Git Practices
 - Review diffs and status before and after changes; read the full `git diff` and `git diff --staged` outputs before planning new changes or committing.
+- Never commit or push unless you have verified the changes are correct and improve the codebase.
 - Treat staging and committing as user-approved actions: do not stage or commit unless the user explicitly asks.
 - Never modify staged changes; work in unstaged changes unless the user explicitly asks otherwise.
 - For PR work, default to remote-tracking truth: if local and upstream differ, sync to upstream before new edits; when the user indicates remote commits are authoritative, hard-reset local branch to upstream first.
