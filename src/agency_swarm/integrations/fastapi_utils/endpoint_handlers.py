@@ -193,12 +193,12 @@ def make_response_endpoint(
         agency_instance = agency_factory(load_threads_callback=load_callback)
         restore_snapshot = None
 
-        # Apply custom OpenAI client configuration if provided
-        if request.client_config is not None:
-            restore_snapshot = _snapshot_agency_state(agency_instance)
-            apply_openai_client_config(agency_instance, request.client_config)
-
         try:
+            # Apply client overrides inside try so partial mutations are always rolled back.
+            if request.client_config is not None:
+                restore_snapshot = _snapshot_agency_state(agency_instance)
+                apply_openai_client_config(agency_instance, request.client_config)
+
             # Attach persistent MCP servers and ensure connections before handling the request
             await attach_persistent_mcp_servers(agency_instance)
 
@@ -294,12 +294,11 @@ def make_stream_endpoint(
         agency_instance = agency_factory(load_threads_callback=load_callback)
         restore_snapshot = None
 
-        # Apply custom OpenAI client configuration if provided
-        if request.client_config is not None:
-            restore_snapshot = _snapshot_agency_state(agency_instance)
-            apply_openai_client_config(agency_instance, request.client_config)
-
         try:
+            # Apply client overrides inside try so partial mutations are always rolled back.
+            if request.client_config is not None:
+                restore_snapshot = _snapshot_agency_state(agency_instance)
+                apply_openai_client_config(agency_instance, request.client_config)
             await attach_persistent_mcp_servers(agency_instance)
         except Exception:
             if restore_snapshot is not None:
@@ -537,12 +536,11 @@ def make_agui_chat_endpoint(
         agency = agency_factory(load_threads_callback=load_callback)
         restore_snapshot = None
 
-        # Apply custom OpenAI client configuration if provided
-        if request.client_config is not None:
-            restore_snapshot = _snapshot_agency_state(agency)
-            apply_openai_client_config(agency, request.client_config)
-
         try:
+            # Apply client overrides inside try so partial mutations are always rolled back.
+            if request.client_config is not None:
+                restore_snapshot = _snapshot_agency_state(agency)
+                apply_openai_client_config(agency, request.client_config)
             await attach_persistent_mcp_servers(agency)
         except Exception:
             if restore_snapshot is not None:
