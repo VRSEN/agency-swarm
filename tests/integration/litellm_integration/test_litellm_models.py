@@ -5,14 +5,17 @@ These tests verify that agents are able to process
 user and agent-to-agent messages without errors.
 """
 
+import importlib
 import os
 
 import pytest
 from agents import ModelSettings
-from agents.extensions.models.litellm_model import LitellmModel
 
 from agency_swarm import Agency, Agent
 from agency_swarm.tools.send_message import Handoff, SendMessage
+
+pytest.importorskip("litellm")
+LitellmModel = importlib.import_module("agents.extensions.models.litellm_model").LitellmModel
 
 
 @pytest.fixture

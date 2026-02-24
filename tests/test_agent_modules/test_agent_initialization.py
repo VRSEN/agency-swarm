@@ -189,6 +189,13 @@ def test_agent_initialization_with_all_parameters():
 
         mock_client = MagicMock()
         mock_client.vector_stores.create.return_value = mock_vector_store
+        uploaded_file = MagicMock()
+        uploaded_file.id = "file-1234567890abcdef"
+        uploaded_file.created_at = 1_735_689_600
+        mock_client.files.create.return_value = uploaded_file
+        vs_file = MagicMock()
+        vs_file.status = "completed"
+        mock_client.vector_stores.files.retrieve.return_value = vs_file
         # Prevent infinite pagination when syncing vector store files during init
         list_resp = MagicMock()
         list_resp.data = []

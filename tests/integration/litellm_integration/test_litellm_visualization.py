@@ -2,12 +2,16 @@
 Integration test ensuring LiteLLM visualization redacts sensitive fields.
 """
 
+import importlib
 import os
 
+import pytest
 from agents import ModelSettings
-from agents.extensions.models.litellm_model import LitellmModel
 
 from agency_swarm import Agency, Agent
+
+pytest.importorskip("litellm")
+LitellmModel = importlib.import_module("agents.extensions.models.litellm_model").LitellmModel
 
 
 def test_visualize_redacts_litellm_credentials(tmp_path):

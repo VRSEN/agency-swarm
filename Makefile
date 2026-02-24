@@ -2,6 +2,11 @@
 sync:
 	uv sync --all-extras --dev
 
+.PHONY: test-env
+test-env: sync
+	uv run python -c "import litellm"
+	uv run python -c "from agents.extensions.models.litellm_model import LitellmModel"
+
 .PHONY: prime
 prime:
 	@echo "[prime] Context priming: building structure and reviewing diffs"
@@ -42,25 +47,25 @@ mypy:
 	uv run mypy src
 
 .PHONY: tests
-tests:
+tests: test-env
 	uv run pytest
 
 .PHONY: tests-fast
-tests-fast:
+tests-fast: test-env
 	uv run pytest -x --ff
 
 .PHONY: tests-verbose
-tests-verbose:
+tests-verbose: test-env
 	uv run pytest -v
 
 .PHONY: coverage
-coverage:
+coverage: test-env
 	uv run coverage run -m pytest
 	uv run coverage xml -o coverage.xml
 	uv run coverage report -m --fail-under=89
 
 .PHONY: coverage-html
-coverage-html:
+coverage-html: test-env
 	uv run coverage run -m pytest
 	uv run coverage html
 	@echo "Coverage report generated in htmlcov/index.html"
@@ -89,16 +94,17 @@ build:
 .PHONY: help
 help:
 	@echo "Available commands:"
-	@echo "  sync         - Install dependencies"
+	@echo "  sync         - Install dependencies (all extras + dev)"
+	@echo "  test-env     - Sync deps and verify LiteLLM test imports"
 	@echo "  format       - Format code and apply safe fixes"
 	@echo "  lint         - Run linting checks"
 	@echo "  lint-unsafe  - Run linting with unsafe fixes"
 	@echo "  mypy         - Run type checking"
-	@echo "  tests        - Run all tests"
-	@echo "  tests-fast   - Run tests with fail-fast and last-failed"
-	@echo "  tests-verbose- Run tests with verbose output"
-	@echo "  coverage     - Run tests with coverage reporting"
-	@echo "  coverage-html- Generate HTML coverage report"
+	@echo "  tests        - Sync/verify test env and run all tests"
+	@echo "  tests-fast   - Sync/verify test env and run tests with fail-fast and last-failed"
+	@echo "  tests-verbose- Sync/verify test env and run tests with verbose output"
+	@echo "  coverage     - Sync/verify test env and run tests with coverage reporting"
+	@echo "  coverage-html- Sync/verify test env and generate HTML coverage report"
 	@echo "  clean        - Clean cache files and artifacts"
 	@echo "  check        - Run lint and mypy"
 	@echo "  ci           - Run full CI pipeline (sync, check, coverage)"
