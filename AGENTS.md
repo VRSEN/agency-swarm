@@ -163,7 +163,7 @@ After each meaningful tool call or code edit, validate the result in 1-2 lines a
 
 ### Example Runs
 - Run non-interactive examples from /examples directory. Never run examples/interactive/* directly as they require user input. You can run equivalent non-interactive code snippets for that purpose.
-- MANDATORY: Run 100% of code you touch. If you modify an example, run it. If you modify a module, run its tests.
+- MANDATORY: Run 100% of code you touch. If you modify an example, run it. If you modify a module, run its tests. For provider-specific integrations (for example LiteLLM), run the full related integration suite and examples when required keys are available; do not treat key-enabled skips as acceptable coverage.
 
 ### Test Guidelines (Canonical)
 - Shared rules:
