@@ -31,12 +31,13 @@ def _make_context(thread_manager: ThreadManager) -> AgencyContext:
 
 
 def _make_litellm_agent(name: str, model_name: str) -> Agent:
-    litellm_model_module = pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
-    litellm_model_class = litellm_model_module.LitellmModel
+    pytest.importorskip("litellm")
+    from agents.extensions.models.litellm_model import LitellmModel
+
     return Agent(
         name=name,
         instructions="Test",
-        model=litellm_model_class(model=model_name, api_key="test"),
+        model=LitellmModel(model=model_name, api_key="test"),
     )
 
 

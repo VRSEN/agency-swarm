@@ -4,6 +4,7 @@ Integration test verifying LiteLLM placeholder IDs are normalized before persist
 Requires live Anthropic access; skipped automatically when ANTHROPIC_API_KEY is not configured.
 """
 
+import importlib
 import os
 
 import pytest
@@ -13,8 +14,7 @@ from agency_swarm import Agency, Agent, ModelSettings, function_tool
 from agency_swarm.tools.send_message import Handoff
 
 litellm = pytest.importorskip("litellm")
-litellm_model_module = pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
-LitellmModel = litellm_model_module.LitellmModel
+LitellmModel = importlib.import_module("agents.extensions.models.litellm_model").LitellmModel
 
 pytestmark = pytest.mark.skipif(
     not os.getenv("ANTHROPIC_API_KEY"),

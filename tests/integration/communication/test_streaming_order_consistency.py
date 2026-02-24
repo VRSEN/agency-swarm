@@ -143,9 +143,9 @@ async def test_full_streaming_flow_hardcoded_sequence(
 ) -> None:
     """Proves canonical streaming order for Main→Sub agent with tool calls is deterministic."""
     if use_anthropic:
-        litellm = pytest.importorskip("litellm", reason="litellm package is required for Anthropic test")
-        litellm_model_module = pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
-        LitellmModel = litellm_model_module.LitellmModel
+        pytest.importorskip("litellm", reason="litellm package is required for Anthropic test")
+        import litellm
+        from agents.extensions.models.litellm_model import LitellmModel
 
         litellm.modify_params = True
 
