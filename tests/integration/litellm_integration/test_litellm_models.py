@@ -9,10 +9,12 @@ import os
 
 import pytest
 from agents import ModelSettings
-from agents.extensions.models.litellm_model import LitellmModel
 
 from agency_swarm import Agency, Agent
 from agency_swarm.tools.send_message import Handoff, SendMessage
+
+litellm_model_module = pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
+LitellmModel = litellm_model_module.LitellmModel
 
 
 @pytest.fixture

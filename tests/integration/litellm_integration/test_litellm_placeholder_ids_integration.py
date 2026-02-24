@@ -6,13 +6,15 @@ Requires live Anthropic access; skipped automatically when ANTHROPIC_API_KEY is 
 
 import os
 
-import litellm
 import pytest
-from agents.extensions.models.litellm_model import LitellmModel
 from agents.models.fake_id import FAKE_RESPONSES_ID
 
 from agency_swarm import Agency, Agent, ModelSettings, function_tool
 from agency_swarm.tools.send_message import Handoff
+
+litellm = pytest.importorskip("litellm")
+litellm_model_module = pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
+LitellmModel = litellm_model_module.LitellmModel
 
 pytestmark = pytest.mark.skipif(
     not os.getenv("ANTHROPIC_API_KEY"),

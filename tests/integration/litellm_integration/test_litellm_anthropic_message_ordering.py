@@ -1,17 +1,28 @@
 """
-Non-streaming version of Anthropic message ordering test.
+Regression test for LiteLLM/Anthropic message ordering bug.
 
-Verifies correct message ordering in non-streaming mode.
+Bug: After upgrading to openai-agents 0.3.x, streaming mode with LiteLLM/Anthropic
+would fail on the second turn with:
+  "tool_use ids were found without tool_result blocks immediately after..."
+
+Root cause: Intermediate assistant messages during tool execution were persisted,
+breaking Anthropic's requirement for consecutive tool_use/tool_result pairs.
+
+This test verifies the fix: intermediate assistant messages are NOT persisted
+during tool execution, maintaining the correct sequence for Anthropic API.
 """
 
 import os
 
 import pytest
 from agents import ModelSettings
-from agents.extensions.models.litellm_model import LitellmModel
 
 from agency_swarm import Agency, Agent, function_tool
 from agency_swarm.tools.send_message import Handoff
+
+litellm = pytest.importorskip("litellm")
+litellm_model_module = pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
+LitellmModel = litellm_model_module.LitellmModel
 
 pytestmark = pytest.mark.skipif(
     not os.getenv("ANTHROPIC_API_KEY"),
@@ -50,18 +61,16 @@ def litellm_anthropic_agency():
     )
 
 
-class TestLitellmAnthropicNonStreamingMessageOrdering:
-    """Verify no intermediate assistant messages persist during tool execution (non-streaming mode)."""
+class TestLitellmAnthropicMessageOrdering:
+    """Verify no intermediate assistant messages persist during tool execution."""
 
     @pytest.mark.asyncio
     async def test_tool_usage_no_intermediate_messages(self, litellm_anthropic_agency: Agency):
-        """Verify tool usage preserves correct message sequence in non-streaming mode."""
-        import litellm
-
+        """Verify tool usage with streaming followed by second turn."""
         litellm.modify_params = True
 
-        # First turn with tool usage
-        await litellm_anthropic_agency.get_response(message="get my id")
+        async for _ in litellm_anthropic_agency.get_response_stream(message="get my id"):
+            pass
 
         # Verify message structure
         messages = litellm_anthropic_agency.thread_manager.get_all_messages()
@@ -90,20 +99,34 @@ class TestLitellmAnthropicNonStreamingMessageOrdering:
                 )
 
         # Second turn should succeed
-        await litellm_anthropic_agency.get_response(message="hi")
+        async for _ in litellm_anthropic_agency.get_response_stream(message="hi"):
+            pass
 
     @pytest.mark.asyncio
     async def test_handoff_no_intermediate_messages(self, litellm_anthropic_agency: Agency):
-        """Verify handoff preserves correct message sequence in non-streaming mode."""
-        import litellm
-
+        """Verify handoff preserves correct message sequence in streaming mode."""
         litellm.modify_params = True
 
         # First turn with handoff
-        await litellm_anthropic_agency.get_response(message="transfer to worker", recipient_agent="Coordinator")
+        async for _ in litellm_anthropic_agency.get_response_stream(
+            message="transfer to worker", recipient_agent="Coordinator"
+        ):
+            pass
 
         # Verify no intermediate assistant messages between tool calls and outputs
         messages = litellm_anthropic_agency.thread_manager.get_all_messages()
+
+        # Verify no duplicate function_call entries with the same call_id
+        function_calls = [m for m in messages if m.get("type") == "function_call"]
+        call_ids = [m.get("call_id") for m in function_calls]
+        unique_call_ids = set(call_ids)
+
+        assert len(call_ids) == len(unique_call_ids), (
+            f"Found duplicate function_call entries with the same call_id. "
+            f"This violates provider requirements (Anthropic: unique tool_use ids; "
+            f"OpenAI: one tool result per tool_call_id). "
+            f"call_ids={call_ids}"
+        )
 
         for i, msg in enumerate(messages):
             if msg.get("type") == "function_call":
@@ -124,4 +147,5 @@ class TestLitellmAnthropicNonStreamingMessageOrdering:
                     )
 
         # Second turn should succeed
-        await litellm_anthropic_agency.get_response(message="hi")
+        async for _ in litellm_anthropic_agency.get_response_stream(message="hi"):
+            pass

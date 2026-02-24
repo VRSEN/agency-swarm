@@ -7,9 +7,11 @@ import os
 
 import pytest
 from agents import ModelSettings
-from agents.extensions.models.litellm_model import LitellmModel
 
 from agency_swarm import Agency, Agent, function_tool
+
+litellm_model_module = pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
+LitellmModel = litellm_model_module.LitellmModel
 
 pytestmark = pytest.mark.skipif(
     not os.getenv("OPENAI_API_KEY"),
