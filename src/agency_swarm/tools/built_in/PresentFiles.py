@@ -118,12 +118,13 @@ class PresentFiles(BaseTool):  # type: ignore[misc]
     """
     Returns metadata for local files and ensures they persist by moving them into the MNT directory.
     Use this tool when you want to show a local file to the user in the chat UI.
+    If multiple inputs resolve to one MNT destination path, `overwrite=True` keeps the latest file.
     """
 
     files: list[str] = Field(..., description="List of file paths to present as previews.")
     overwrite: bool | None = Field(
         True,
-        description="Whether to overwrite an existing file in the MNT destination.",
+        description="Whether to overwrite an existing file in the MNT destination when path collisions occur.",
     )
 
     def run(self):
