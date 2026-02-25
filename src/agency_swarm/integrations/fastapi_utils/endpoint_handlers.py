@@ -2,6 +2,7 @@ import asyncio
 import copy
 import json
 import logging
+import threading
 import time
 import traceback
 import uuid
@@ -10,6 +11,7 @@ from dataclasses import dataclass, field
 from importlib import metadata
 from pathlib import Path
 from typing import cast
+from weakref import WeakKeyDictionary
 
 from ag_ui.core import EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
 from ag_ui.encoder import EventEncoder
@@ -37,6 +39,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
+from starlette.background import BackgroundTask
 
 from agency_swarm import (
     Agency,
@@ -59,6 +62,96 @@ from agency_swarm.utils.usage_tracking import (
 )
 
 logger = logging.getLogger(__name__)
+
+@dataclass
+class _AgencyRequestState:
+    """Per-agency request coordination state for one event loop."""
+
+    state_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    active_regular_requests: int = 0
+    override_active: bool = False
+    pending_overrides: int = 0
+    state_changed: asyncio.Condition = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.state_changed = asyncio.Condition(self.state_lock)
+
+
+@dataclass
+class _AgencyRequestLease:
+    state: _AgencyRequestState
+    is_override: bool
+
+
+_AGENCY_REQUEST_STATES: WeakKeyDictionary[Agency, dict[asyncio.AbstractEventLoop, _AgencyRequestState]] = (
+    WeakKeyDictionary()
+)
+_AGENCY_REQUEST_STATES_GUARD = threading.Lock()
+
+
+async def _get_agency_request_state(agency: Agency) -> _AgencyRequestState:
+    """Return per-agency request coordination state for the current event loop."""
+    loop = asyncio.get_running_loop()
+    with _AGENCY_REQUEST_STATES_GUARD:
+        per_loop = _AGENCY_REQUEST_STATES.get(agency)
+        if per_loop is None:
+            per_loop = {}
+            _AGENCY_REQUEST_STATES[agency] = per_loop
+
+        # Drop closed-loop state to avoid unbounded growth in long-lived processes.
+        closed_loops = [existing_loop for existing_loop in per_loop if existing_loop.is_closed()]
+        for closed_loop in closed_loops:
+            per_loop.pop(closed_loop, None)
+
+        active_loops = [existing_loop for existing_loop in per_loop if not existing_loop.is_closed()]
+        if active_loops and loop not in per_loop:
+            logger.warning(
+                "Agency '%s' is being reused across event loops; request coordination remains per-loop only.",
+                getattr(agency, "name", agency.__class__.__name__),
+            )
+
+        existing = per_loop.get(loop)
+        if existing is not None:
+            return existing
+
+        created = _AgencyRequestState()
+        per_loop[loop] = created
+        return created
+
+
+async def _acquire_agency_request_lease(agency: Agency, is_override: bool) -> _AgencyRequestLease:
+    """Acquire a regular or override lease for a request."""
+    state = await _get_agency_request_state(agency)
+    async with state.state_changed:
+        if is_override:
+            state.pending_overrides += 1
+            try:
+                await state.state_changed.wait_for(
+                    lambda: not state.override_active and state.active_regular_requests == 0
+                )
+                state.override_active = True
+            finally:
+                state.pending_overrides -= 1
+                state.state_changed.notify_all()
+        else:
+            # Once an override is queued, block new regular requests so the override
+            # can run as soon as in-flight regular work drains.
+            await state.state_changed.wait_for(
+                lambda: not state.override_active and state.pending_overrides == 0
+            )
+            state.active_regular_requests += 1
+    return _AgencyRequestLease(state=state, is_override=is_override)
+
+
+async def _release_agency_request_lease(lease: _AgencyRequestLease) -> None:
+    """Release a previously acquired request lease."""
+    state = lease.state
+    async with state.state_changed:
+        if lease.is_override:
+            state.override_active = False
+        else:
+            state.active_regular_requests -= 1
+        state.state_changed.notify_all()
 
 
 def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
@@ -101,6 +194,10 @@ def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
             continue
 
         if not openai_overrides_present:
+            continue
+
+        if not _agent_supports_openai_client_override(agent):
+            _log_unsupported_client_override(agent)
             continue
 
         client = _build_openai_client_for_agent(agent, config)
@@ -191,9 +288,15 @@ def make_response_endpoint(
                 return {"error": f"Error downloading file from provided urls: {e}"}
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
+        agency_lease: _AgencyRequestLease | None = None
         restore_snapshot = None
 
         try:
+            agency_lease = await _acquire_agency_request_lease(
+                agency_instance,
+                is_override=request.client_config is not None,
+            )
+
             # Apply client overrides inside try so partial mutations are always rolled back.
             if request.client_config is not None:
                 restore_snapshot = _snapshot_agency_state(agency_instance)
@@ -238,6 +341,8 @@ def make_response_endpoint(
         finally:
             if restore_snapshot is not None:
                 _restore_agency_state(agency_instance, restore_snapshot)
+            if agency_lease is not None:
+                await _release_agency_request_lease(agency_lease)
 
     return handler
 
@@ -292,9 +397,15 @@ def make_stream_endpoint(
                 )
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
+        agency_lease: _AgencyRequestLease | None = None
         restore_snapshot = None
 
         try:
+            agency_lease = await _acquire_agency_request_lease(
+                agency_instance,
+                is_override=request.client_config is not None,
+            )
+
             # Apply client overrides inside try so partial mutations are always rolled back.
             if request.client_config is not None:
                 restore_snapshot = _snapshot_agency_state(agency_instance)
@@ -303,10 +414,25 @@ def make_stream_endpoint(
         except Exception:
             if restore_snapshot is not None:
                 _restore_agency_state(agency_instance, restore_snapshot)
+            if agency_lease is not None:
+                await _release_agency_request_lease(agency_lease)
             raise
 
         # Generate unique run_id for this streaming session
         run_id = str(uuid.uuid4())
+        cleanup_lock = asyncio.Lock()
+        cleanup_completed = False
+
+        async def cleanup_stream_context() -> None:
+            nonlocal cleanup_completed
+            async with cleanup_lock:
+                if cleanup_completed:
+                    return
+                cleanup_completed = True
+                if restore_snapshot is not None:
+                    _restore_agency_state(agency_instance, restore_snapshot)
+                if agency_lease is not None:
+                    await _release_agency_request_lease(agency_lease)
 
         async def event_generator():
             # Capture initial message count to identify new messages
@@ -404,8 +530,7 @@ def make_stream_endpoint(
                     yield "event: end\ndata: [DONE]\n\n"
                 finally:
                     await run_registry.finish(run_id)
-                    if restore_snapshot is not None:
-                        _restore_agency_state(agency_instance, restore_snapshot)
+                    await cleanup_stream_context()
 
         return StreamingResponse(
             event_generator(),
@@ -415,6 +540,7 @@ def make_stream_endpoint(
                 "Connection": "keep-alive",
                 "X-Accel-Buffering": "no",
             },
+            background=BackgroundTask(cleanup_stream_context),
         )
 
     return handler
@@ -534,9 +660,15 @@ def make_agui_chat_endpoint(
 
         # Choose / build an agent – here we just create a demo agent each time.
         agency = agency_factory(load_threads_callback=load_callback)
+        agency_lease: _AgencyRequestLease | None = None
         restore_snapshot = None
 
         try:
+            agency_lease = await _acquire_agency_request_lease(
+                agency,
+                is_override=request.client_config is not None,
+            )
+
             # Apply client overrides inside try so partial mutations are always rolled back.
             if request.client_config is not None:
                 restore_snapshot = _snapshot_agency_state(agency)
@@ -545,7 +677,23 @@ def make_agui_chat_endpoint(
         except Exception:
             if restore_snapshot is not None:
                 _restore_agency_state(agency, restore_snapshot)
+            if agency_lease is not None:
+                await _release_agency_request_lease(agency_lease)
             raise
+
+        cleanup_lock = asyncio.Lock()
+        cleanup_completed = False
+
+        async def cleanup_stream_context() -> None:
+            nonlocal cleanup_completed
+            async with cleanup_lock:
+                if cleanup_completed:
+                    return
+                cleanup_completed = True
+                if restore_snapshot is not None:
+                    _restore_agency_state(agency, restore_snapshot)
+                if agency_lease is not None:
+                    await _release_agency_request_lease(agency_lease)
 
         async def event_generator() -> AsyncGenerator[str]:
             # Emit RUN_STARTED first.
@@ -598,10 +746,13 @@ def make_agui_chat_endpoint(
                 error_message = f"{str(exc)}\n\nTraceback:\n{tb_str}"
                 yield encoder.encode(RunErrorEvent(type=EventType.RUN_ERROR, message=error_message))
             finally:
-                if restore_snapshot is not None:
-                    _restore_agency_state(agency, restore_snapshot)
+                await cleanup_stream_context()
 
-        return StreamingResponse(event_generator(), media_type=encoder.get_content_type())
+        return StreamingResponse(
+            event_generator(),
+            media_type=encoder.get_content_type(),
+            background=BackgroundTask(cleanup_stream_context),
+        )
 
     return handler
 
@@ -792,6 +943,46 @@ def _is_openai_model_name(model_name: str) -> bool:
         return True
     prefix, _rest = model_name.split("/", 1)
     return prefix == "openai"
+
+
+def _get_model_name_for_override_logging(agent: Agent) -> str | None:
+    """Return a human-friendly model identifier for override logs."""
+    model = agent.model
+    if isinstance(model, str):
+        return model
+    if isinstance(model, OpenAIResponsesModel | OpenAIChatCompletionsModel):
+        return model.model
+    if isinstance(model, Model):
+        model_name = getattr(model, "model", None)
+        if isinstance(model_name, str):
+            return model_name
+    return None
+
+
+def _agent_supports_openai_client_override(agent: Agent) -> bool:
+    """Return True only when request OpenAI client overrides are applicable."""
+    model_name = _get_model_name_for_override_logging(agent)
+    if model_name is None:
+        return False
+    return _is_openai_model_name(model_name)
+
+
+def _log_unsupported_client_override(agent: Agent) -> None:
+    model_name = _get_model_name_for_override_logging(agent)
+    if model_name is not None:
+        logger.warning(
+            "Skipping client_config for agent '%s': custom model '%s' is not supported for "
+            "client override (only OpenAI models or 'litellm/' models are supported)",
+            agent.name,
+            model_name,
+        )
+        return
+
+    logger.warning(
+        "Cannot apply client config to agent '%s': unsupported model type %s",
+        agent.name,
+        type(agent.model).__name__,
+    )
 
 
 def _apply_client_to_agent(agent: Agent, client: AsyncOpenAI | None, config: ClientConfig) -> None:
