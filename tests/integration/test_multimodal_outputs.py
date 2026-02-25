@@ -67,6 +67,7 @@ async def test_multimodal_outputs_image_description() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.skip(reason="Temporarily disabled: remote PDF file_url handling is unstable in OpenAI Responses API.")
 async def test_multimodal_outputs_remote_pdf() -> None:
     agency = _build_agency(LoadReferenceReportFromUrl)
     result = await agency.get_response("Summarise the attached PDF and quote its secret phrase.")
