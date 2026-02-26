@@ -157,9 +157,7 @@ async def upload_to_openai(file_path: str, openai_client: AsyncOpenAI | None = N
         raise
 
 
-async def _wait_for_file_processed(
-    file_id: str, timeout: int = 60, openai_client: AsyncOpenAI | None = None
-) -> None:
+async def _wait_for_file_processed(file_id: str, timeout: int = 60, openai_client: AsyncOpenAI | None = None) -> None:
     client = _get_openai_client(openai_client=openai_client)
     for _ in range(timeout):
         try:
