@@ -604,8 +604,10 @@ async def create_oauth_provider(
     if client_info and hasattr(storage, "set_client_info"):
         await storage.set_client_info(client_info)
 
-    # Use provided handlers or defaults
-    redirect_handler = redirect_handler or default_redirect_handler
+    # Handler precedence: explicit args > server-level handlers > defaults
+    redirect_handler = redirect_handler or server.redirect_handler or default_redirect_handler
+    if callback_handler is None:
+        callback_handler = server.callback_handler
     if callback_handler is None:
 
         async def _wrapped_callback_handler() -> tuple[str, str | None]:
