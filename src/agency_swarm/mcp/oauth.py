@@ -549,6 +549,13 @@ async def default_callback_handler(redirect_uri: str | None = None) -> tuple[str
             for finished in done:
                 try:
                     result = finished.result()
+                except EOFError as exc:
+                    # Non-interactive environments (e.g. background workers) cannot
+                    # satisfy the fallback stdin prompt.
+                    raise RuntimeError(
+                        "OAuth callback input is unavailable in non-interactive mode. "
+                        "Use FastAPI OAuth handlers or provide a callback URL."
+                    ) from exc
                 except OSError as exc:
                     if server_task is not None and finished is server_task:
                         logger.warning("Local callback server failed (%s); falling back to manual entry.", exc)
