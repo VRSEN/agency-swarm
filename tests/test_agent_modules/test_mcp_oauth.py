@@ -488,7 +488,7 @@ class TestOAuthClientTransportCompatibility:
 
             return _legacy_context()
 
-        monkeypatch.setattr(oauth_client_module, "_streamable_http_client", fake_modern)
+        monkeypatch.setattr(oauth_client_module, "_get_modern_streamable_http_client", lambda: fake_modern)
         monkeypatch.setattr(oauth_client_module, "_legacy_streamablehttp_client", fake_legacy)
         monkeypatch.setattr(oauth_client_module.httpx, "AsyncClient", DummyAsyncClient)
 
@@ -518,7 +518,7 @@ class TestOAuthClientTransportCompatibility:
 
             return _legacy_context()
 
-        monkeypatch.setattr(oauth_client_module, "_streamable_http_client", None)
+        monkeypatch.setattr(oauth_client_module, "_get_modern_streamable_http_client", lambda: None)
         monkeypatch.setattr(oauth_client_module, "_legacy_streamablehttp_client", fake_legacy)
 
         oauth_provider = object()

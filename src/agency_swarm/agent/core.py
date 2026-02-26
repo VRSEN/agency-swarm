@@ -255,6 +255,8 @@ class Agent(BaseAgent[MasterContext]):
         for tool in self.tools:
             _attach_one_call_guard(tool, self)
 
+        self._ensure_web_search_sources_include()
+
         # MCP servers are converted lazily on first use to avoid interactive auth at init.
 
         # Refresh after MCP conversion so fingerprint includes MCP-converted tools
@@ -336,10 +338,7 @@ class Agent(BaseAgent[MasterContext]):
             TypeError: If the provided `tool` is not an instance of `agents.Tool`.
         """
         add_tool(self, tool)
-        if self.include_web_search_sources and isinstance(tool, WebSearchTool):
-            existing_includes = list(self.model_settings.response_include or [])
-            if _WEB_SEARCH_SOURCES_INCLUDE not in existing_includes:
-                self.model_settings.response_include = [*existing_includes, _WEB_SEARCH_SOURCES_INCLUDE]
+        self._ensure_web_search_sources_include()
 
     def _load_tools_from_folder(self) -> None:
         """Load tools defined in ``tools_folder`` and add them to the agent.
@@ -358,7 +357,18 @@ class Agent(BaseAgent[MasterContext]):
         if self._mcp_tools_initialized:
             return
         convert_mcp_servers_to_tools(self)
+        self._ensure_web_search_sources_include()
         self._mcp_tools_initialized = True
+
+    def _ensure_web_search_sources_include(self) -> None:
+        """Ensure web search sources are included when a WebSearchTool is present."""
+        if not self.include_web_search_sources:
+            return
+        if not any(isinstance(tool, WebSearchTool) for tool in self.tools):
+            return
+        existing_includes = list(self.model_settings.response_include or [])
+        if _WEB_SEARCH_SOURCES_INCLUDE not in existing_includes:
+            self.model_settings.response_include = [*existing_includes, _WEB_SEARCH_SOURCES_INCLUDE]
 
     # --- File Handling ---
     def upload_file(self, file_path: str, include_in_vector_store: bool = True) -> str:
