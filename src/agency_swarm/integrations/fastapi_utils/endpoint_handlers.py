@@ -89,71 +89,6 @@ _AGENCY_REQUEST_STATES: WeakKeyDictionary[Agency, dict[asyncio.AbstractEventLoop
 _AGENCY_REQUEST_STATES_GUARD = threading.Lock()
 
 
-async def _get_agency_request_state(agency: Agency) -> _AgencyRequestState:
-    """Return per-agency request coordination state for the current event loop."""
-    loop = asyncio.get_running_loop()
-    with _AGENCY_REQUEST_STATES_GUARD:
-        per_loop = _AGENCY_REQUEST_STATES.get(agency)
-        if per_loop is None:
-            per_loop = {}
-            _AGENCY_REQUEST_STATES[agency] = per_loop
-
-        # Drop closed-loop state to avoid unbounded growth in long-lived processes.
-        closed_loops = [existing_loop for existing_loop in per_loop if existing_loop.is_closed()]
-        for closed_loop in closed_loops:
-            per_loop.pop(closed_loop, None)
-
-        active_loops = [existing_loop for existing_loop in per_loop if not existing_loop.is_closed()]
-        if active_loops and loop not in per_loop:
-            logger.warning(
-                "Agency '%s' is being reused across event loops; request coordination remains per-loop only.",
-                getattr(agency, "name", agency.__class__.__name__),
-            )
-
-        existing = per_loop.get(loop)
-        if existing is not None:
-            return existing
-
-        created = _AgencyRequestState()
-        per_loop[loop] = created
-        return created
-
-
-async def _acquire_agency_request_lease(agency: Agency, is_override: bool) -> _AgencyRequestLease:
-    """Acquire a regular or override lease for a request."""
-    state = await _get_agency_request_state(agency)
-    async with state.state_changed:
-        if is_override:
-            state.pending_overrides += 1
-            try:
-                await state.state_changed.wait_for(
-                    lambda: not state.override_active and state.active_regular_requests == 0
-                )
-                state.override_active = True
-            finally:
-                state.pending_overrides -= 1
-                state.state_changed.notify_all()
-        else:
-            # Once an override is queued, block new regular requests so the override
-            # can run as soon as in-flight regular work drains.
-            await state.state_changed.wait_for(
-                lambda: not state.override_active and state.pending_overrides == 0
-            )
-            state.active_regular_requests += 1
-    return _AgencyRequestLease(state=state, is_override=is_override)
-
-
-async def _release_agency_request_lease(lease: _AgencyRequestLease) -> None:
-    """Release a previously acquired request lease."""
-    state = lease.state
-    async with state.state_changed:
-        if lease.is_override:
-            state.override_active = False
-        else:
-            state.active_regular_requests -= 1
-        state.state_changed.notify_all()
-
-
 def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
     """Apply custom OpenAI client configuration to all agents in the agency.
 
@@ -261,6 +196,21 @@ def get_verify_token(app_token):
     return verify_token
 
 
+def _build_file_upload_client(config: ClientConfig | None) -> AsyncOpenAI | None:
+    """Build a request-scoped OpenAI client for file uploads when overrides are present."""
+    if config is None:
+        return None
+
+    if config.base_url is None and config.api_key is None and config.default_headers is None:
+        return None
+
+    return AsyncOpenAI(
+        api_key=config.api_key,
+        base_url=config.base_url,
+        default_headers=config.default_headers,
+    )
+
+
 # Non‑streaming response endpoint
 def make_response_endpoint(
     request_model,
@@ -282,7 +232,11 @@ def make_response_endpoint(
         file_ids_map = None
         if request.file_urls is not None:
             try:
-                file_ids_map = await upload_from_urls(request.file_urls, allowed_local_dirs=allowed_local_dirs)
+                file_ids_map = await upload_from_urls(
+                    request.file_urls,
+                    allowed_local_dirs=allowed_local_dirs,
+                    openai_client=_build_file_upload_client(request.client_config),
+                )
                 combined_file_ids = (combined_file_ids or []) + list(file_ids_map.values())
             except Exception as e:
                 return {"error": f"Error downloading file from provided urls: {e}"}
@@ -373,7 +327,11 @@ def make_stream_endpoint(
         file_ids_map = None
         if request.file_urls is not None:
             try:
-                file_ids_map = await upload_from_urls(request.file_urls, allowed_local_dirs=allowed_local_dirs)
+                file_ids_map = await upload_from_urls(
+                    request.file_urls,
+                    allowed_local_dirs=allowed_local_dirs,
+                    openai_client=_build_file_upload_client(request.client_config),
+                )
                 combined_file_ids = (combined_file_ids or []) + list(file_ids_map.values())
             except Exception as e:
                 error_msg = str(e)
@@ -610,7 +568,11 @@ def make_agui_chat_endpoint(
         combined_file_ids = list(request.file_ids or []) if getattr(request, "file_ids", None) else []
         if getattr(request, "file_urls", None):
             try:
-                file_ids_map = await upload_from_urls(request.file_urls, allowed_local_dirs=allowed_local_dirs)
+                file_ids_map = await upload_from_urls(
+                    request.file_urls,
+                    allowed_local_dirs=allowed_local_dirs,
+                    openai_client=_build_file_upload_client(request.client_config),
+                )
                 combined_file_ids = combined_file_ids + list(file_ids_map.values())
             except Exception as exc:
                 error_message = f"Error downloading file from provided urls: {exc}"
@@ -1183,3 +1145,67 @@ def _restore_agency_state(agency: Agency, snapshot: dict[str, tuple[str | Model 
             agent.model_settings = cast(ModelSettings, None)
         else:
             agent.model_settings = model_settings
+
+async def _get_agency_request_state(agency: Agency) -> _AgencyRequestState:
+    """Return per-agency request coordination state for the current event loop."""
+    loop = asyncio.get_running_loop()
+    with _AGENCY_REQUEST_STATES_GUARD:
+        per_loop = _AGENCY_REQUEST_STATES.get(agency)
+        if per_loop is None:
+            per_loop = {}
+            _AGENCY_REQUEST_STATES[agency] = per_loop
+
+        # Drop closed-loop state to avoid unbounded growth in long-lived processes.
+        closed_loops = [existing_loop for existing_loop in per_loop if existing_loop.is_closed()]
+        for closed_loop in closed_loops:
+            per_loop.pop(closed_loop, None)
+
+        active_loops = [existing_loop for existing_loop in per_loop if not existing_loop.is_closed()]
+        if active_loops and loop not in per_loop:
+            logger.warning(
+                "Agency '%s' is being reused across event loops; request coordination remains per-loop only.",
+                getattr(agency, "name", agency.__class__.__name__),
+            )
+
+        existing = per_loop.get(loop)
+        if existing is not None:
+            return existing
+
+        created = _AgencyRequestState()
+        per_loop[loop] = created
+        return created
+
+
+async def _acquire_agency_request_lease(agency: Agency, is_override: bool) -> _AgencyRequestLease:
+    """Acquire a regular or override lease for a request."""
+    state = await _get_agency_request_state(agency)
+    async with state.state_changed:
+        if is_override:
+            state.pending_overrides += 1
+            try:
+                await state.state_changed.wait_for(
+                    lambda: not state.override_active and state.active_regular_requests == 0
+                )
+                state.override_active = True
+            finally:
+                state.pending_overrides -= 1
+                state.state_changed.notify_all()
+        else:
+            # Once an override is queued, block new regular requests so the override
+            # can run as soon as in-flight regular work drains.
+            await state.state_changed.wait_for(
+                lambda: not state.override_active and state.pending_overrides == 0
+            )
+            state.active_regular_requests += 1
+    return _AgencyRequestLease(state=state, is_override=is_override)
+
+
+async def _release_agency_request_lease(lease: _AgencyRequestLease) -> None:
+    """Release a previously acquired request lease."""
+    state = lease.state
+    async with state.state_changed:
+        if lease.is_override:
+            state.override_active = False
+        else:
+            state.active_regular_requests -= 1
+        state.state_changed.notify_all()

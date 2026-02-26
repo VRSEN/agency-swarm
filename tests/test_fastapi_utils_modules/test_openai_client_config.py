@@ -239,6 +239,75 @@ def test_non_openai_custom_model_skips_openai_client_build(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_make_response_endpoint_passes_request_client_to_file_upload(monkeypatch) -> None:
+    """file_urls upload should use request-level OpenAI client overrides."""
+    pytest.importorskip("agents")
+
+    from agency_swarm.integrations.fastapi_utils import endpoint_handlers
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import make_response_endpoint
+    from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest, ClientConfig
+
+    captured = {
+        "api_key": None,
+        "base_url": None,
+        "default_headers": None,
+    }
+
+    class _ThreadManager:
+        def get_all_messages(self):
+            return []
+
+    class _Response:
+        def __init__(self, final_output):
+            self.final_output = final_output
+
+    class _Agency:
+        def __init__(self):
+            self.agents = {}
+            self.thread_manager = _ThreadManager()
+
+        async def get_response(self, **_kwargs):
+            return _Response("ok")
+
+    agency = _Agency()
+
+    def _agency_factory(**_kwargs):
+        return agency
+
+    async def _attach_noop(_agency):
+        return None
+
+    async def _fake_upload_from_urls(_file_urls, allowed_local_dirs=None, openai_client=None):
+        del allowed_local_dirs  # not relevant for this test
+        assert openai_client is not None
+        captured["api_key"] = openai_client.api_key
+        captured["base_url"] = str(openai_client.base_url)
+        captured["default_headers"] = dict(openai_client.default_headers or {})
+        return {"doc.txt": "file-123"}
+
+    monkeypatch.setattr(endpoint_handlers, "attach_persistent_mcp_servers", _attach_noop)
+    monkeypatch.setattr(endpoint_handlers, "apply_openai_client_config", lambda _agency, _config: None)
+    monkeypatch.setattr(endpoint_handlers, "upload_from_urls", _fake_upload_from_urls)
+
+    handler = make_response_endpoint(BaseRequest, _agency_factory, verify_token=lambda: None)
+    request = BaseRequest(
+        message="hello",
+        file_urls={"doc.txt": "https://example.com/doc.txt"},
+        client_config=ClientConfig(
+            api_key="sk-request-key",
+            base_url="https://api.example.test/v1",
+            default_headers={"x-request-id": "req-1"},
+        ),
+    )
+
+    response = await handler(request, token=None)
+    assert response["file_ids_map"] == {"doc.txt": "file-123"}
+    assert captured["api_key"] == "sk-request-key"
+    assert captured["base_url"].startswith("https://api.example.test/v1")
+    assert captured["default_headers"]["x-request-id"] == "req-1"
+
+
+@pytest.mark.asyncio
 async def test_make_response_endpoint_serializes_singleton_agency_requests(monkeypatch) -> None:
     """Concurrent requests against a cached agency should be serialized by the handler."""
     pytest.importorskip("agents")
