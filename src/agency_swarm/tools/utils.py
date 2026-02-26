@@ -26,6 +26,8 @@ logger = logging.getLogger(__name__)
 PDF_MIME_TYPE = "application/pdf"
 URL_FETCH_TIMEOUT_SECONDS = 20.0
 MAX_INLINE_PDF_BYTES = 10 * 1024 * 1024
+MAX_FETCH_REDIRECTS = 5
+REDIRECT_STATUS_CODES = {301, 302, 303, 307, 308}
 
 
 def _build_data_url_from_bytes(data: bytes, mime_type: str) -> str:
@@ -60,6 +62,14 @@ def _is_global_ip_address(value: str) -> bool:
 
 def _is_remote_host_safe_for_fetch(url: str) -> bool:
     parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        return False
+
+    try:
+        parsed_port = parsed.port
+    except ValueError:
+        return False
+
     hostname = parsed.hostname
     if not hostname:
         return False
@@ -73,7 +83,7 @@ def _is_remote_host_safe_for_fetch(url: str) -> bool:
     if _is_global_ip_address(hostname.strip("[]")):
         return True
 
-    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    port = parsed_port or (443 if parsed.scheme == "https" else 80)
     try:
         addr_infos = socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM)
     except socket.gaierror:
@@ -100,17 +110,54 @@ def _is_pdf_content_type(content_type: str | None) -> bool:
     return normalized_content_type == PDF_MIME_TYPE
 
 
-def _download_with_size_limit(url: str, *, max_bytes: int) -> bytes:
-    buffer = bytearray()
-    with httpx.stream("GET", url, follow_redirects=True, timeout=URL_FETCH_TIMEOUT_SECONDS) as response:
+def _resolve_redirect_target(response: httpx.Response) -> str:
+    location = response.headers.get("location")
+    if not location:
+        raise ValueError("Redirect response missing Location header")
+    request_url = getattr(response, "request", None)
+    if request_url is None:
+        raise ValueError("Redirect response missing request URL")
+    return str(request_url.url.join(location))
+
+
+def _fetch_remote_headers(url: str) -> httpx.Headers:
+    current_url = url
+    for _ in range(MAX_FETCH_REDIRECTS + 1):
+        response = httpx.head(current_url, follow_redirects=False, timeout=URL_FETCH_TIMEOUT_SECONDS)
+        if response.status_code in REDIRECT_STATUS_CODES:
+            next_url = _resolve_redirect_target(response)
+            if not _is_remote_host_safe_for_fetch(next_url):
+                raise ValueError(f"Unsafe redirect target: {next_url}")
+            current_url = next_url
+            continue
         response.raise_for_status()
-        for chunk in response.iter_bytes():
-            if not chunk:
+        return response.headers
+
+    raise ValueError(f"Exceeded max redirects ({MAX_FETCH_REDIRECTS}) while fetching headers: {url}")
+
+
+def _download_with_size_limit(url: str, *, max_bytes: int) -> bytes:
+    current_url = url
+    for _ in range(MAX_FETCH_REDIRECTS + 1):
+        buffer = bytearray()
+        with httpx.stream("GET", current_url, follow_redirects=False, timeout=URL_FETCH_TIMEOUT_SECONDS) as response:
+            if response.status_code in REDIRECT_STATUS_CODES:
+                next_url = _resolve_redirect_target(response)
+                if not _is_remote_host_safe_for_fetch(next_url):
+                    raise ValueError(f"Unsafe redirect target: {next_url}")
+                current_url = next_url
                 continue
-            buffer.extend(chunk)
-            if len(buffer) > max_bytes:
-                raise ValueError(f"Remote file exceeds max inline size ({max_bytes} bytes)")
-    return bytes(buffer)
+
+            response.raise_for_status()
+            for chunk in response.iter_bytes():
+                if not chunk:
+                    continue
+                buffer.extend(chunk)
+                if len(buffer) > max_bytes:
+                    raise ValueError(f"Remote file exceeds max inline size ({max_bytes} bytes)")
+            return bytes(buffer)
+
+    raise ValueError(f"Exceeded max redirects ({MAX_FETCH_REDIRECTS}) while downloading: {url}")
 
 
 def _inline_pdf_url_as_file_data(url: str, *, filename: str) -> ToolOutputFileContent:
@@ -203,13 +250,12 @@ def tool_output_file_from_url(url: str) -> ToolOutputFileContent:
         return ToolOutputFileContent(file_url=url)
 
     try:
-        response = httpx.head(url, follow_redirects=True, timeout=URL_FETCH_TIMEOUT_SECONDS)
-        response.raise_for_status()
+        response_headers = _fetch_remote_headers(url)
     except Exception:
         logger.debug("Failed to inspect remote file URL %s; preserving file_url behavior.", url, exc_info=True)
         return ToolOutputFileContent(file_url=url)
 
-    if _is_pdf_content_type(response.headers.get("content-type")):
+    if _is_pdf_content_type(response_headers.get("content-type")):
         return ToolOutputFileContent(file_url=url)
 
     try:
@@ -218,7 +264,7 @@ def tool_output_file_from_url(url: str) -> ToolOutputFileContent:
         logger.warning(
             "Failed to inline PDF URL %s after non-PDF content-type (%s); preserving file_url behavior.",
             url,
-            response.headers.get("content-type"),
+            response_headers.get("content-type"),
             exc_info=True,
         )
         return ToolOutputFileContent(file_url=url)
