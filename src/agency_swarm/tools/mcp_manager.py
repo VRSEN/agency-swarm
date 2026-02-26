@@ -125,14 +125,14 @@ class PersistentMCPServerManager:
                         method = getattr(real_server, method_name)
                         res = await method(*args, **kwargs)
                         result_fut.set_result(res)
-                    except Exception as e:  # noqa: BLE001
+                    except BaseException as e:  # noqa: BLE001
                         result_fut.set_exception(e)
                 elif typ == "shutdown":
                     result_fut: Future = cmd["result_fut"]
                     try:
                         await real_server.cleanup()
                         result_fut.set_result(True)
-                    except Exception as e:  # noqa: BLE001
+                    except BaseException as e:  # noqa: BLE001
                         result_fut.set_exception(e)
                     break
                 elif typ == "force_stop":
@@ -324,6 +324,32 @@ class PersistentMCPServerManager:
         loop = self._ensure_bg_loop()
         return asyncio.run_coroutine_threadsafe(coro, loop)
 
+    def _submit_driver_call(self, server: Any, method: str, args: tuple[Any, ...], kwargs: dict[str, Any]) -> Future:
+        """Schedule a coroutine method call on the server's long-lived driver task."""
+        real_server = getattr(server, "_server", server)
+        self._ensure_driver(real_server)
+        state = self._drivers.get(real_server)
+        if state is None:
+            raise RuntimeError(f"Driver not initialized for server {getattr(real_server, 'name', '<unnamed>')}")
+
+        queue: asyncio.Queue = state["queue"]
+        fut: Future = Future()
+
+        def _post_call() -> None:
+            queue.put_nowait(
+                {
+                    "type": "call",
+                    "method": method,
+                    "args": args,
+                    "kwargs": kwargs,
+                    "result_fut": fut,
+                }
+            )
+
+        loop = self._ensure_bg_loop()
+        loop.call_soon_threadsafe(_post_call)
+        return fut
+
     async def _await_future(self, fut: Future, timeout: float | None = None) -> Any:  # noqa: ANN401
         loop = asyncio.get_running_loop()
 
@@ -380,10 +406,13 @@ class LoopAffineAsyncProxy:
         target = getattr(self._server, "__aenter__", None)
         if target is None:
             raise TypeError(f"Server {self._server!r} does not support asynchronous context management")
+        timeout = self._manager._timeouts.get("__aenter__", 30.0)
+        if inspect.iscoroutinefunction(target):
+            fut = self._manager._submit_driver_call(self._server, "__aenter__", (), {})
+            return await self._manager._await_future(fut, timeout=timeout)
         result = target()
         if inspect.isawaitable(result):
             fut = self._manager._submit_to_loop(result)
-            timeout = self._manager._timeouts.get("__aenter__", 30.0)
             return await self._manager._await_future(fut, timeout=timeout)
         return result
 
@@ -391,10 +420,13 @@ class LoopAffineAsyncProxy:
         target = getattr(self._server, "__aexit__", None)
         if target is None:
             raise TypeError(f"Server {self._server!r} does not support asynchronous context management")
+        timeout = self._manager._timeouts.get("__aexit__", 30.0)
+        if inspect.iscoroutinefunction(target):
+            fut = self._manager._submit_driver_call(self._server, "__aexit__", (exc_type, exc, tb), {})
+            return await self._manager._await_future(fut, timeout=timeout)
         result = target(exc_type, exc, tb)
         if inspect.isawaitable(result):
             fut = self._manager._submit_to_loop(result)
-            timeout = self._manager._timeouts.get("__aexit__", 30.0)
             return await self._manager._await_future(fut, timeout=timeout)
         return result
 
@@ -405,8 +437,22 @@ class LoopAffineAsyncProxy:
             timeout = self._manager._timeouts.get(name, 30.0)
 
             async def _proxy(*args, **kwargs):  # noqa: ANN001
-                fut = self._manager._submit_to_loop(target(*args, **kwargs))
-                return await self._manager._await_future(fut, timeout=timeout)
+                fut = self._manager._submit_driver_call(self._server, name, args, kwargs)
+                server_name = getattr(self._server, "name", "<unnamed>")
+                try:
+                    return await self._manager._await_future(fut, timeout=timeout)
+                except TimeoutError as exc:
+                    raise TimeoutError(
+                        f"MCP call '{name}' timed out after {timeout:.1f}s on server '{server_name}'"
+                    ) from exc
+                except asyncio.CancelledError as exc:
+                    current_task = asyncio.current_task()
+                    if current_task is not None and current_task.cancelling():
+                        raise
+                    raise RuntimeError(
+                        f"MCP call '{name}' was cancelled on server '{server_name}'. "
+                        "Check MCP server availability and OAuth configuration."
+                    ) from exc
 
             return _proxy
 
