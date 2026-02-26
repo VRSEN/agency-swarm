@@ -1,7 +1,9 @@
 import base64
+import ipaddress
 import json
 import logging
 import mimetypes
+import socket
 from collections.abc import Callable
 from datetime import date, datetime
 from decimal import Decimal
@@ -23,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 PDF_MIME_TYPE = "application/pdf"
 URL_FETCH_TIMEOUT_SECONDS = 20.0
+MAX_INLINE_PDF_BYTES = 10 * 1024 * 1024
 
 
 def _build_data_url_from_bytes(data: bytes, mime_type: str) -> str:
@@ -47,6 +50,49 @@ def _extract_filename_from_url(url: str) -> str | None:
     return filename or None
 
 
+def _is_global_ip_address(value: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return ip.is_global
+
+
+def _is_remote_host_safe_for_fetch(url: str) -> bool:
+    parsed = urlparse(url)
+    hostname = parsed.hostname
+    if not hostname:
+        return False
+    if hostname.lower() in {"localhost", "localhost.localdomain"}:
+        return False
+
+    # Direct IPs are validated without DNS lookups.
+    if _is_global_ip_address(hostname):
+        return True
+
+    if _is_global_ip_address(hostname.strip("[]")):
+        return True
+
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        addr_infos = socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        return False
+
+    resolved_ips: set[str] = set()
+    for entry in addr_infos:
+        socket_address = entry[4]
+        if not isinstance(socket_address, tuple) or not socket_address:
+            continue
+        host = socket_address[0]
+        if isinstance(host, str):
+            resolved_ips.add(host)
+    if not resolved_ips:
+        return False
+
+    return all(_is_global_ip_address(ip.strip("[]")) for ip in resolved_ips)
+
+
 def _is_pdf_content_type(content_type: str | None) -> bool:
     if not content_type:
         return False
@@ -54,11 +100,23 @@ def _is_pdf_content_type(content_type: str | None) -> bool:
     return normalized_content_type == PDF_MIME_TYPE
 
 
+def _download_with_size_limit(url: str, *, max_bytes: int) -> bytes:
+    buffer = bytearray()
+    with httpx.stream("GET", url, follow_redirects=True, timeout=URL_FETCH_TIMEOUT_SECONDS) as response:
+        response.raise_for_status()
+        for chunk in response.iter_bytes():
+            if not chunk:
+                continue
+            buffer.extend(chunk)
+            if len(buffer) > max_bytes:
+                raise ValueError(f"Remote file exceeds max inline size ({max_bytes} bytes)")
+    return bytes(buffer)
+
+
 def _inline_pdf_url_as_file_data(url: str, *, filename: str) -> ToolOutputFileContent:
-    response = httpx.get(url, follow_redirects=True, timeout=URL_FETCH_TIMEOUT_SECONDS)
-    response.raise_for_status()
+    content = _download_with_size_limit(url, max_bytes=MAX_INLINE_PDF_BYTES)
     return ToolOutputFileContent(
-        file_data=_build_data_url_from_bytes(response.content, PDF_MIME_TYPE),
+        file_data=_build_data_url_from_bytes(content, PDF_MIME_TYPE),
         filename=filename,
     )
 
@@ -138,6 +196,10 @@ def tool_output_file_from_url(url: str) -> ToolOutputFileContent:
     """
     filename = _extract_filename_from_url(url)
     if not filename or not filename.lower().endswith(".pdf"):
+        return ToolOutputFileContent(file_url=url)
+
+    if not _is_remote_host_safe_for_fetch(url):
+        logger.warning("Skipping local fetch for potentially unsafe remote PDF URL %s.", url)
         return ToolOutputFileContent(file_url=url)
 
     try:
