@@ -11,9 +11,11 @@ import pytest
 
 import agency_swarm.tools.mcp_manager as mcp_manager
 from agency_swarm.mcp import MCPServerOAuth, MCPServerOAuthClient
+from agency_swarm.mcp.oauth import FileTokenStorage, set_oauth_user_id
 from agency_swarm.tools.mcp_manager import (
     LoopAffineAsyncProxy,
     PersistentMCPServerManager,
+    _sync_oauth_client_handlers,
     attach_persistent_mcp_servers,
     default_mcp_manager,
 )
@@ -92,6 +94,15 @@ class _TaskAffinityServer(_DummyServer):
         task_id = id(task)
         self.task_ids.append(task_id)
         return task_id
+
+
+class _ContextAwareServer(_DummyServer):
+    def __init__(self, cache_dir: Path) -> None:
+        super().__init__()
+        self.storage = FileTokenStorage(cache_dir=cache_dir, server_name="ctx-server")
+
+    async def get_user_bucket(self) -> str:
+        return self.storage._get_user_cache_dir().name
 
 
 @pytest.mark.asyncio
@@ -465,6 +476,26 @@ def test_convert_mcp_servers_to_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     }
     assert added_tools == ["a", "b"]
     assert agent.mcp_servers == []
+
+
+@pytest.mark.asyncio
+async def test_proxy_propagates_oauth_user_context_to_driver(tmp_path: Path) -> None:
+    manager = PersistentMCPServerManager()
+    server = _ContextAwareServer(tmp_path)
+
+    await manager.ensure_connected(server)
+    proxy = LoopAffineAsyncProxy(server, manager)
+
+    set_oauth_user_id("user_ctx")
+    try:
+        bucket = await proxy.get_user_bucket()
+    finally:
+        set_oauth_user_id(None)
+        await manager.shutdown()
+
+    assert bucket == "user_ctx"
+
+
 def test_update_oauth_cache_dir_updates_clients(tmp_path: Path) -> None:
     manager = PersistentMCPServerManager()
     server = MCPServerOAuth(url="http://localhost:8001/mcp", name="github")
@@ -479,6 +510,43 @@ def test_update_oauth_cache_dir_updates_clients(tmp_path: Path) -> None:
     assert server.cache_dir == tmp_path
     assert client.oauth_config.cache_dir == tmp_path
     assert client._oauth_provider.storage.base_cache_dir == tmp_path
+
+
+def test_sync_oauth_client_handlers_invalidates_authenticated_session() -> None:
+    oauth_config = MCPServerOAuth(url="http://localhost:8001/mcp", name="github")
+
+    async def first_redirect(_auth_url: str) -> None:
+        return None
+
+    async def first_callback() -> tuple[str, str | None]:
+        return ("code-1", None)
+
+    async def second_redirect(_auth_url: str) -> None:
+        return None
+
+    async def second_callback() -> tuple[str, str | None]:
+        return ("code-2", None)
+
+    persistent = MCPServerOAuthClient(
+        oauth_config,
+        {"redirect": first_redirect, "callback": first_callback},
+    )
+    persistent.session = object()
+    persistent._authenticated = True
+    persistent._oauth_provider = object()
+
+    candidate = MCPServerOAuthClient(
+        oauth_config,
+        {"redirect": second_redirect, "callback": second_callback},
+    )
+
+    _sync_oauth_client_handlers(persistent, candidate)
+
+    assert persistent._redirect_handler is second_redirect
+    assert persistent._callback_handler is second_callback
+    assert persistent._oauth_provider is None
+    assert persistent.session is None
+    assert persistent._authenticated is False
 
 
 @pytest.mark.asyncio
