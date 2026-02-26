@@ -47,7 +47,10 @@ def _resolve_mime_type(file_path: Path) -> str:
 
 
 def _extract_filename_from_url(url: str) -> str | None:
-    parsed = urlparse(url)
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return None
     filename = Path(parsed.path).name
     return filename or None
 
@@ -61,7 +64,10 @@ def _is_global_ip_address(value: str) -> bool:
 
 
 def _is_remote_host_safe_for_fetch(url: str) -> bool:
-    parsed = urlparse(url)
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
     if parsed.scheme not in {"http", "https"}:
         return False
 

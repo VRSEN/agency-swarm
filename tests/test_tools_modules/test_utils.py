@@ -193,6 +193,13 @@ def test_tool_output_file_from_url_preserves_file_url_for_invalid_port():
     assert result.file_data is None
 
 
+def test_tool_output_file_from_url_preserves_file_url_for_invalid_ipv6_host():
+    result = tool_output_file_from_url("https://[::1/doc.pdf")
+
+    assert result.file_url == "https://[::1/doc.pdf"
+    assert result.file_data is None
+
+
 def test_tool_output_file_from_url_blocks_unsafe_redirect_targets(monkeypatch):
     def _fake_head(url: str, *, follow_redirects: bool, timeout: float) -> httpx.Response:
         request = httpx.Request("HEAD", url)
