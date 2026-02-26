@@ -82,6 +82,18 @@ class _SyncContextServer(_DummyServer):
         return f"pong:{payload}"
 
 
+class _TaskAffinityServer(_DummyServer):
+    def __init__(self) -> None:
+        super().__init__()
+        self.task_ids: list[int] = []
+
+    async def get_task_id(self) -> int:
+        task = asyncio.current_task()
+        task_id = id(task)
+        self.task_ids.append(task_id)
+        return task_id
+
+
 @pytest.mark.asyncio
 async def test_ensure_connected_reuses_driver_for_proxy() -> None:
     manager = PersistentMCPServerManager()
@@ -196,6 +208,24 @@ async def test_proxy_supports_sync_context_and_method_proxying() -> None:
         assert server.context_exited == 1
     finally:
         await manager.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_proxy_coroutine_calls_stay_on_driver_task() -> None:
+    manager = PersistentMCPServerManager()
+    server = _TaskAffinityServer()
+
+    await manager.ensure_connected(server)
+    proxy = LoopAffineAsyncProxy(server, manager)
+
+    try:
+        first = await proxy.get_task_id()
+        second = await proxy.get_task_id()
+    finally:
+        await manager.shutdown()
+
+    assert first == second
+    assert len(set(server.task_ids)) == 1
 
 
 def test_register_get_all_and_mark_atexit() -> None:
