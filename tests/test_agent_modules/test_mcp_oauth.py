@@ -317,6 +317,15 @@ class TestOAuthHandlers:
         with pytest.raises(ValueError, match="No authorization code found"):
             await default_callback_handler()
 
+    async def test_callback_handler_non_interactive_prompt_raises_runtime_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """default_callback_handler should return actionable error in non-interactive mode."""
+        monkeypatch.setattr("builtins.input", lambda _: (_ for _ in ()).throw(EOFError("stdin closed")))
+
+        with pytest.raises(RuntimeError, match="OAuth callback input is unavailable in non-interactive mode"):
+            await default_callback_handler("https://example.com/auth/callback")
+
     @patch("agency_swarm.mcp.oauth._listen_for_callback_once")
     async def test_callback_handler_prefers_local_server(
         self,
