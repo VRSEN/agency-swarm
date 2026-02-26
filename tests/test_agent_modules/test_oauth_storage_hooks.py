@@ -151,3 +151,25 @@ class TestFileTokenStorageWithContextVar:
 
         finally:
             set_oauth_user_id(None)
+
+    async def test_storage_sanitizes_path_traversal_user_id(self, tmp_path: Path) -> None:
+        """User IDs should never escape the configured cache directory."""
+        storage = FileTokenStorage(
+            cache_dir=tmp_path,
+            server_name="test-server",
+            server_url="http://localhost:8001/mcp",
+        )
+        token = OAuthToken(
+            access_token="traversal-test",
+            token_type="Bearer",
+            expires_in=3600,
+        )
+
+        set_oauth_user_id("../../../outside_dir")
+        try:
+            await storage.set_tokens(token)
+            token_files = list(tmp_path.rglob("tokens.json"))
+            assert len(token_files) == 1
+            token_files[0].resolve().relative_to(tmp_path.resolve())
+        finally:
+            set_oauth_user_id(None)
