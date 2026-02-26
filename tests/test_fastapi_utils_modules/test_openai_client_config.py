@@ -308,6 +308,84 @@ async def test_make_response_endpoint_passes_request_client_to_file_upload(monke
 
 
 @pytest.mark.asyncio
+async def test_make_response_endpoint_uses_existing_client_for_file_upload_headers_only(monkeypatch) -> None:
+    """default_headers-only requests should keep the agent's existing OpenAI auth for uploads."""
+    pytest.importorskip("agents")
+
+    from openai import AsyncOpenAI
+
+    from agency_swarm.integrations.fastapi_utils import endpoint_handlers
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import make_response_endpoint
+    from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest, ClientConfig
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    captured = {
+        "api_key": None,
+        "base_url": None,
+        "default_headers": None,
+    }
+
+    class _ThreadManager:
+        def get_all_messages(self):
+            return []
+
+    class _Response:
+        def __init__(self, final_output):
+            self.final_output = final_output
+
+    class _Model:
+        def __init__(self):
+            self.openai_client = AsyncOpenAI(api_key="sk-agent", base_url="https://api.agent.test/v1")
+
+    class _AgentState:
+        def __init__(self):
+            self.model = _Model()
+            self.model_settings = None
+
+    class _Agency:
+        def __init__(self):
+            self.agents = {"A": _AgentState()}
+            self.thread_manager = _ThreadManager()
+
+        async def get_response(self, **_kwargs):
+            return _Response("ok")
+
+    agency = _Agency()
+
+    def _agency_factory(**_kwargs):
+        return agency
+
+    async def _attach_noop(_agency):
+        return None
+
+    async def _fake_upload_from_urls(_file_urls, allowed_local_dirs=None, openai_client=None):
+        del allowed_local_dirs
+        assert openai_client is not None
+        captured["api_key"] = openai_client.api_key
+        captured["base_url"] = str(openai_client.base_url)
+        captured["default_headers"] = dict(openai_client.default_headers or {})
+        return {"doc.txt": "file-123"}
+
+    monkeypatch.setattr(endpoint_handlers, "attach_persistent_mcp_servers", _attach_noop)
+    monkeypatch.setattr(endpoint_handlers, "apply_openai_client_config", lambda _agency, _config: None)
+    monkeypatch.setattr(endpoint_handlers, "upload_from_urls", _fake_upload_from_urls)
+
+    handler = make_response_endpoint(BaseRequest, _agency_factory, verify_token=lambda: None)
+    request = BaseRequest(
+        message="hello",
+        file_urls={"doc.txt": "https://example.com/doc.txt"},
+        client_config=ClientConfig(default_headers={"x-request-id": "req-1"}),
+    )
+
+    response = await handler(request, token=None)
+    assert response["file_ids_map"] == {"doc.txt": "file-123"}
+    assert captured["api_key"] == "sk-agent"
+    assert captured["base_url"].startswith("https://api.agent.test/v1")
+    assert captured["default_headers"]["x-request-id"] == "req-1"
+
+
+@pytest.mark.asyncio
 async def test_make_response_endpoint_applies_client_config_to_agent_client_sync(monkeypatch) -> None:
     """Request client_config should provide a sync OpenAI client for attachment lookups."""
     pytest.importorskip("agents")
@@ -495,6 +573,82 @@ async def test_make_response_endpoint_passes_request_client_to_chat_name_generat
 
     assert response["chat_name"] == "Sample Chat Name"
     assert captured["api_key"] == "sk-request-key"
+
+
+@pytest.mark.asyncio
+async def test_make_response_endpoint_uses_existing_client_for_chat_name_headers_only(monkeypatch) -> None:
+    """default_headers-only requests should keep agent OpenAI auth for chat-name generation."""
+    pytest.importorskip("agents")
+
+    from openai import AsyncOpenAI
+
+    from agency_swarm.integrations.fastapi_utils import endpoint_handlers
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import make_response_endpoint
+    from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest, ClientConfig
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    captured = {
+        "api_key": None,
+        "default_headers": None,
+    }
+
+    class _ThreadManager:
+        def get_all_messages(self):
+            return []
+
+    class _Response:
+        def __init__(self, final_output):
+            self.final_output = final_output
+
+    class _Model:
+        def __init__(self):
+            self.openai_client = AsyncOpenAI(api_key="sk-agent", base_url="https://api.agent.test/v1")
+
+    class _AgentState:
+        def __init__(self):
+            self.model = _Model()
+            self.model_settings = None
+
+    class _Agency:
+        def __init__(self):
+            self.agents = {"A": _AgentState()}
+            self.thread_manager = _ThreadManager()
+
+        async def get_response(self, **_kwargs):
+            return _Response("ok")
+
+    agency = _Agency()
+
+    def _agency_factory(**_kwargs):
+        return agency
+
+    async def _attach_noop(_agency):
+        return None
+
+    async def _fake_generate_chat_name(_messages, openai_client=None):
+        assert openai_client is not None
+        captured["api_key"] = openai_client.api_key
+        captured["default_headers"] = dict(openai_client.default_headers or {})
+        return "Sample Chat Name"
+
+    monkeypatch.setattr(endpoint_handlers, "attach_persistent_mcp_servers", _attach_noop)
+    monkeypatch.setattr(endpoint_handlers, "apply_openai_client_config", lambda _agency, _config: None)
+    monkeypatch.setattr(endpoint_handlers, "generate_chat_name", _fake_generate_chat_name)
+
+    handler = make_response_endpoint(BaseRequest, _agency_factory, verify_token=lambda: None)
+    response = await handler(
+        BaseRequest(
+            message="hello",
+            generate_chat_name=True,
+            client_config=ClientConfig(default_headers={"x-request-id": "req-1"}),
+        ),
+        token=None,
+    )
+
+    assert response["chat_name"] == "Sample Chat Name"
+    assert captured["api_key"] == "sk-agent"
+    assert captured["default_headers"]["x-request-id"] == "req-1"
 
 
 @pytest.mark.asyncio
@@ -713,6 +867,7 @@ async def test_cancelled_override_notifies_waiting_regular_requests(monkeypatch)
     monkeypatch.setattr(endpoint_handlers, "_get_agency_request_state", _get_state)
 
     agency = _Agency()
+
     async def _wait_until(predicate):
         while not predicate():
             await asyncio.sleep(0)
