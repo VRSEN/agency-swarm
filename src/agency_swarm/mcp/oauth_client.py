@@ -9,9 +9,11 @@ from typing import TypedDict
 
 import httpx
 from agents import Agent as AgentBase, RunContextWrapper
+from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
 from mcp import ClientSession
 from mcp.client.auth import OAuthClientProvider
 from mcp.client.streamable_http import streamablehttp_client as _legacy_streamablehttp_client
+from mcp.shared.message import SessionMessage
 from mcp.types import (
     CallToolResult,
     GetPromptResult,
@@ -31,18 +33,28 @@ from .oauth import (
 
 logger = logging.getLogger(__name__)
 
-try:
-    from mcp.client.streamable_http import streamable_http_client as _streamable_http_client
-except ImportError:  # pragma: no cover - compatibility with older MCP SDKs
-    _streamable_http_client = None
-
 
 class OAuthHandlerMap(TypedDict, total=False):
     redirect: OAuthRedirectHandler
     callback: OAuthCallbackHandler
 
 
-StreamableHTTPContext = AbstractAsyncContextManager[tuple[object, object, Callable[[], str | None]]]
+StreamableHTTPContext = AbstractAsyncContextManager[
+    tuple[
+        MemoryObjectReceiveStream[SessionMessage | Exception],
+        MemoryObjectSendStream[SessionMessage],
+        Callable[[], str | None],
+    ]
+]
+
+
+def _get_modern_streamable_http_client() -> Callable[..., StreamableHTTPContext] | None:
+    """Return modern streamable HTTP transport factory when available."""
+    try:
+        from mcp.client.streamable_http import streamable_http_client
+    except ImportError:  # pragma: no cover - compatibility with older MCP SDKs
+        return None
+    return streamable_http_client
 
 
 def _build_streamable_transport(
@@ -50,9 +62,10 @@ def _build_streamable_transport(
     oauth_provider: OAuthClientProvider,
 ) -> tuple[StreamableHTTPContext, httpx.AsyncClient | None]:
     """Build streamable HTTP transport with auth across MCP SDK versions."""
-    if _streamable_http_client is not None:
+    modern_streamable_http_client = _get_modern_streamable_http_client()
+    if modern_streamable_http_client is not None:
         http_client = httpx.AsyncClient(auth=oauth_provider, timeout=httpx.Timeout(30.0, read=300.0))
-        return _streamable_http_client(url, http_client=http_client), http_client
+        return modern_streamable_http_client(url, http_client=http_client), http_client
     return _legacy_streamablehttp_client(url, auth=oauth_provider), None
 
 
