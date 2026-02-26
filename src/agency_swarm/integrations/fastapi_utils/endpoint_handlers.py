@@ -274,22 +274,11 @@ def make_response_endpoint(
                 return []
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
-        request_upload_client = _build_file_upload_client(agency_instance, request.client_config)
         has_client_overrides = _has_request_client_overrides(request.client_config)
+        request_upload_client: AsyncOpenAI | None = None
 
         combined_file_ids = request.file_ids
         file_ids_map = None
-        if request.file_urls is not None:
-            try:
-                file_ids_map = await upload_from_urls(
-                    request.file_urls,
-                    allowed_local_dirs=allowed_local_dirs,
-                    openai_client=request_upload_client,
-                )
-                combined_file_ids = (combined_file_ids or []) + list(file_ids_map.values())
-            except Exception as e:
-                return {"error": f"Error downloading file from provided urls: {e}"}
-
         agency_lease: _AgencyRequestLease | None = None
         restore_snapshot = None
 
@@ -303,6 +292,19 @@ def make_response_endpoint(
             if has_client_overrides and request.client_config is not None:
                 restore_snapshot = _snapshot_agency_state(agency_instance)
                 apply_openai_client_config(agency_instance, request.client_config)
+
+            request_upload_client = _build_file_upload_client(agency_instance, request.client_config)
+
+            if request.file_urls is not None:
+                try:
+                    file_ids_map = await upload_from_urls(
+                        request.file_urls,
+                        allowed_local_dirs=allowed_local_dirs,
+                        openai_client=request_upload_client,
+                    )
+                    combined_file_ids = (combined_file_ids or []) + list(file_ids_map.values())
+                except Exception as e:
+                    return {"error": f"Error downloading file from provided urls: {e}"}
 
             # Attach persistent MCP servers and ensure connections before handling the request
             await attach_persistent_mcp_servers(agency_instance)
@@ -375,42 +377,19 @@ def make_stream_endpoint(
                 return []
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
-        request_upload_client = _build_file_upload_client(agency_instance, request.client_config)
         has_client_overrides = _has_request_client_overrides(request.client_config)
+        request_upload_client: AsyncOpenAI | None = None
 
         combined_file_ids = request.file_ids
         file_ids_map = None
-        if request.file_urls is not None:
-            try:
-                file_ids_map = await upload_from_urls(
-                    request.file_urls,
-                    allowed_local_dirs=allowed_local_dirs,
-                    openai_client=request_upload_client,
-                )
-                combined_file_ids = (combined_file_ids or []) + list(file_ids_map.values())
-            except Exception as e:
-                error_msg = str(e)
-
-                async def error_generator():
-                    yield (
-                        "data: "
-                        + json.dumps({"error": f"Error downloading file from provided urls: {error_msg}"})
-                        + "\n\n"
-                    )
-                    yield "event: end\ndata: [DONE]\n\n"
-
-                return StreamingResponse(
-                    error_generator(),
-                    media_type="text/event-stream",
-                    headers={
-                        "Cache-Control": "no-cache",
-                        "Connection": "keep-alive",
-                        "X-Accel-Buffering": "no",
-                    },
-                )
-
         agency_lease: _AgencyRequestLease | None = None
         restore_snapshot = None
+
+        async def cleanup_setup_context() -> None:
+            if restore_snapshot is not None:
+                _restore_agency_state(agency_instance, restore_snapshot)
+            if agency_lease is not None:
+                await _release_agency_request_lease(agency_lease)
 
         try:
             agency_lease = await _acquire_agency_request_lease(
@@ -422,12 +401,40 @@ def make_stream_endpoint(
             if has_client_overrides and request.client_config is not None:
                 restore_snapshot = _snapshot_agency_state(agency_instance)
                 apply_openai_client_config(agency_instance, request.client_config)
+
+            request_upload_client = _build_file_upload_client(agency_instance, request.client_config)
+            if request.file_urls is not None:
+                try:
+                    file_ids_map = await upload_from_urls(
+                        request.file_urls,
+                        allowed_local_dirs=allowed_local_dirs,
+                        openai_client=request_upload_client,
+                    )
+                    combined_file_ids = (combined_file_ids or []) + list(file_ids_map.values())
+                except Exception as e:
+                    error_msg = str(e)
+                    await cleanup_setup_context()
+
+                    async def error_generator():
+                        yield (
+                            "data: "
+                            + json.dumps({"error": f"Error downloading file from provided urls: {error_msg}"})
+                            + "\n\n"
+                        )
+                        yield "event: end\ndata: [DONE]\n\n"
+
+                    return StreamingResponse(
+                        error_generator(),
+                        media_type="text/event-stream",
+                        headers={
+                            "Cache-Control": "no-cache",
+                            "Connection": "keep-alive",
+                            "X-Accel-Buffering": "no",
+                        },
+                    )
             await attach_persistent_mcp_servers(agency_instance)
         except Exception:
-            if restore_snapshot is not None:
-                _restore_agency_state(agency_instance, restore_snapshot)
-            if agency_lease is not None:
-                await _release_agency_request_lease(agency_lease)
+            await cleanup_setup_context()
             raise
 
         # Generate unique run_id for this streaming session
@@ -654,37 +661,17 @@ def make_agui_chat_endpoint(
 
         # Choose / build an agent – here we just create a demo agent each time.
         agency = agency_factory(load_threads_callback=load_callback)
-        request_upload_client = _build_file_upload_client(agency, request.client_config)
         has_client_overrides = _has_request_client_overrides(request.client_config)
-
-        if getattr(request, "file_urls", None):
-            try:
-                file_ids_map = await upload_from_urls(
-                    request.file_urls,
-                    allowed_local_dirs=allowed_local_dirs,
-                    openai_client=request_upload_client,
-                )
-                combined_file_ids = combined_file_ids + list(file_ids_map.values())
-            except Exception as exc:
-                error_message = f"Error downloading file from provided urls: {exc}"
-                run_started = RunStartedEvent(
-                    type=EventType.RUN_STARTED,
-                    thread_id=request.thread_id,
-                    run_id=request.run_id,
-                )
-                run_error = RunErrorEvent(type=EventType.RUN_ERROR, message=error_message)
-                run_finished = RunFinishedEvent(
-                    type=EventType.RUN_FINISHED,
-                    thread_id=request.thread_id,
-                    run_id=request.run_id,
-                )
-                return StreamingResponse(
-                    (encoder.encode(event) for event in (run_started, run_error, run_finished)),
-                    media_type=encoder.get_content_type(),
-                )
+        request_upload_client: AsyncOpenAI | None = None
 
         agency_lease: _AgencyRequestLease | None = None
         restore_snapshot = None
+
+        async def cleanup_setup_context() -> None:
+            if restore_snapshot is not None:
+                _restore_agency_state(agency, restore_snapshot)
+            if agency_lease is not None:
+                await _release_agency_request_lease(agency_lease)
 
         try:
             agency_lease = await _acquire_agency_request_lease(
@@ -696,12 +683,37 @@ def make_agui_chat_endpoint(
             if has_client_overrides and request.client_config is not None:
                 restore_snapshot = _snapshot_agency_state(agency)
                 apply_openai_client_config(agency, request.client_config)
+
+            request_upload_client = _build_file_upload_client(agency, request.client_config)
+            if getattr(request, "file_urls", None):
+                try:
+                    file_ids_map = await upload_from_urls(
+                        request.file_urls,
+                        allowed_local_dirs=allowed_local_dirs,
+                        openai_client=request_upload_client,
+                    )
+                    combined_file_ids = combined_file_ids + list(file_ids_map.values())
+                except Exception as exc:
+                    error_message = f"Error downloading file from provided urls: {exc}"
+                    await cleanup_setup_context()
+                    run_started = RunStartedEvent(
+                        type=EventType.RUN_STARTED,
+                        thread_id=request.thread_id,
+                        run_id=request.run_id,
+                    )
+                    run_error = RunErrorEvent(type=EventType.RUN_ERROR, message=error_message)
+                    run_finished = RunFinishedEvent(
+                        type=EventType.RUN_FINISHED,
+                        thread_id=request.thread_id,
+                        run_id=request.run_id,
+                    )
+                    return StreamingResponse(
+                        (encoder.encode(event) for event in (run_started, run_error, run_finished)),
+                        media_type=encoder.get_content_type(),
+                    )
             await attach_persistent_mcp_servers(agency)
         except Exception:
-            if restore_snapshot is not None:
-                _restore_agency_state(agency, restore_snapshot)
-            if agency_lease is not None:
-                await _release_agency_request_lease(agency_lease)
+            await cleanup_setup_context()
             raise
 
         cleanup_lock = asyncio.Lock()

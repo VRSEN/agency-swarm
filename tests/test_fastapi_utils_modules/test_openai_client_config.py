@@ -657,6 +657,86 @@ async def test_make_response_endpoint_uses_existing_client_for_chat_name_headers
 
 
 @pytest.mark.asyncio
+async def test_make_response_endpoint_builds_upload_client_after_lease(monkeypatch) -> None:
+    """Upload client derivation must happen only after the request lease is acquired."""
+    pytest.importorskip("agents")
+
+    from agency_swarm.integrations.fastapi_utils import endpoint_handlers
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import make_response_endpoint
+    from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest, ClientConfig
+
+    lease_acquired = False
+    upload_client = object()
+
+    class _ThreadManager:
+        def get_all_messages(self):
+            return []
+
+    class _Response:
+        def __init__(self, final_output):
+            self.final_output = final_output
+
+    class _AgentState:
+        def __init__(self):
+            self.model = "gpt-4o-mini"
+            self.model_settings = None
+
+    class _Agency:
+        def __init__(self):
+            self.agents = {"A": _AgentState()}
+            self.thread_manager = _ThreadManager()
+
+        async def get_response(self, **_kwargs):
+            return _Response("ok")
+
+    agency = _Agency()
+
+    def _agency_factory(**_kwargs):
+        return agency
+
+    async def _attach_noop(_agency):
+        return None
+
+    async def _acquire(_agency, is_override: bool):
+        nonlocal lease_acquired
+        assert is_override is True
+        lease_acquired = True
+        return object()
+
+    async def _release(_lease):
+        return None
+
+    def _build_upload_client(_agency, _config):
+        assert lease_acquired is True
+        return upload_client
+
+    async def _fake_upload_from_urls(_file_urls, allowed_local_dirs=None, openai_client=None):
+        del allowed_local_dirs
+        assert openai_client is upload_client
+        return {"doc.txt": "file-123"}
+
+    monkeypatch.setattr(endpoint_handlers, "attach_persistent_mcp_servers", _attach_noop)
+    monkeypatch.setattr(endpoint_handlers, "apply_openai_client_config", lambda _agency, _config: None)
+    monkeypatch.setattr(endpoint_handlers, "_acquire_agency_request_lease", _acquire)
+    monkeypatch.setattr(endpoint_handlers, "_release_agency_request_lease", _release)
+    monkeypatch.setattr(endpoint_handlers, "_build_file_upload_client", _build_upload_client)
+    monkeypatch.setattr(endpoint_handlers, "upload_from_urls", _fake_upload_from_urls)
+
+    handler = make_response_endpoint(BaseRequest, _agency_factory, verify_token=lambda: None)
+    response = await handler(
+        BaseRequest(
+            message="hello",
+            file_urls={"doc.txt": "https://example.com/doc.txt"},
+            client_config=ClientConfig(default_headers={"x-request-id": "req-1"}),
+        ),
+        token=None,
+    )
+
+    assert response["response"] == "ok"
+    assert response["file_ids_map"] == {"doc.txt": "file-123"}
+
+
+@pytest.mark.asyncio
 async def test_make_response_endpoint_serializes_singleton_agency_requests(monkeypatch) -> None:
     """Concurrent requests against a cached agency should be serialized by the handler."""
     pytest.importorskip("agents")
@@ -1036,6 +1116,95 @@ async def test_make_stream_endpoint_serializes_singleton_agency_requests(monkeyp
 
 
 @pytest.mark.asyncio
+async def test_make_stream_endpoint_builds_upload_client_after_lease(monkeypatch) -> None:
+    """Streaming upload client derivation must happen only after lease acquisition."""
+    pytest.importorskip("agents")
+
+    from agency_swarm.agent.execution_stream_response import StreamingRunResponse
+    from agency_swarm.integrations.fastapi_utils import endpoint_handlers
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import ActiveRunRegistry, make_stream_endpoint
+    from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest, ClientConfig
+
+    lease_acquired = False
+    upload_client = object()
+
+    class _HttpRequest:
+        async def is_disconnected(self) -> bool:
+            return False
+
+    class _ThreadManager:
+        def get_all_messages(self):
+            return []
+
+    class _AgentState:
+        def __init__(self):
+            self.model = "gpt-4o-mini"
+            self.model_settings = None
+
+    class _Agency:
+        def __init__(self):
+            self.agents = {"A": _AgentState()}
+            self.thread_manager = _ThreadManager()
+
+        def get_response_stream(self, **_kwargs):
+            async def _stream():
+                if False:
+                    yield {}
+
+            return StreamingRunResponse(_stream())
+
+    agency = _Agency()
+
+    def _agency_factory(**_kwargs):
+        return agency
+
+    async def _attach_noop(_agency):
+        return None
+
+    async def _acquire(_agency, is_override: bool):
+        nonlocal lease_acquired
+        assert is_override is True
+        lease_acquired = True
+        return object()
+
+    async def _release(_lease):
+        return None
+
+    def _build_upload_client(_agency, _config):
+        assert lease_acquired is True
+        return upload_client
+
+    async def _fake_upload_from_urls(_file_urls, allowed_local_dirs=None, openai_client=None):
+        del allowed_local_dirs
+        assert openai_client is upload_client
+        return {"doc.txt": "file-123"}
+
+    monkeypatch.setattr(endpoint_handlers, "attach_persistent_mcp_servers", _attach_noop)
+    monkeypatch.setattr(endpoint_handlers, "apply_openai_client_config", lambda _agency, _config: None)
+    monkeypatch.setattr(endpoint_handlers, "_acquire_agency_request_lease", _acquire)
+    monkeypatch.setattr(endpoint_handlers, "_release_agency_request_lease", _release)
+    monkeypatch.setattr(endpoint_handlers, "_build_file_upload_client", _build_upload_client)
+    monkeypatch.setattr(endpoint_handlers, "upload_from_urls", _fake_upload_from_urls)
+
+    handler = make_stream_endpoint(
+        BaseRequest,
+        _agency_factory,
+        verify_token=lambda: None,
+        run_registry=ActiveRunRegistry(),
+    )
+    response = await handler(
+        http_request=_HttpRequest(),
+        request=BaseRequest(
+            message="hello",
+            file_urls={"doc.txt": "https://example.com/doc.txt"},
+            client_config=ClientConfig(default_headers={"x-request-id": "req-1"}),
+        ),
+        token=None,
+    )
+    _chunks = [chunk async for chunk in response.body_iterator]
+
+
+@pytest.mark.asyncio
 async def test_make_response_endpoint_blocks_new_regular_requests_while_override_waits(monkeypatch) -> None:
     """Pending override requests should block new regular requests to avoid starvation."""
     pytest.importorskip("agents")
@@ -1272,3 +1441,102 @@ async def test_make_agui_endpoint_serializes_singleton_agency_requests(monkeypat
     await asyncio.gather(_run_request("a"), _run_request("b"))
 
     assert agency.max_in_flight == 1
+
+
+@pytest.mark.asyncio
+async def test_make_agui_endpoint_builds_upload_client_after_lease(monkeypatch) -> None:
+    """AG-UI upload client derivation must happen only after lease acquisition."""
+    pytest.importorskip("agents")
+
+    from types import SimpleNamespace
+
+    from agency_swarm.agent.execution_stream_response import StreamingRunResponse
+    from agency_swarm.integrations.fastapi_utils import endpoint_handlers
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import make_agui_chat_endpoint
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    lease_acquired = False
+    upload_client = object()
+
+    class _ThreadManager:
+        def get_all_messages(self):
+            return []
+
+    class _AgentState:
+        def __init__(self):
+            self.model = "gpt-4o-mini"
+            self.model_settings = None
+            self.name = "A"
+
+    class _Message:
+        def __init__(self, content: str):
+            self.content = content
+
+        def model_dump(self):
+            return {"role": "user", "content": self.content}
+
+    class _Request:
+        def __init__(self):
+            self.thread_id = "thread-1"
+            self.run_id = "run-1"
+            self.state = None
+            self.messages = [_Message("hello")]
+            self.tools = []
+            self.context = []
+            self.forwarded_props = None
+            self.chat_history = None
+            self.additional_instructions = None
+            self.user_context = None
+            self.file_ids = None
+            self.file_urls = {"doc.txt": "https://example.com/doc.txt"}
+            self.client_config = ClientConfig(default_headers={"x-request-id": "req-1"})
+
+    class _Agency:
+        def __init__(self):
+            self.agents = {"A": _AgentState()}
+            self.thread_manager = _ThreadManager()
+            self.entry_points = [SimpleNamespace(name="A")]
+
+        def get_response_stream(self, **_kwargs):
+            async def _stream():
+                if False:
+                    yield {}
+
+            return StreamingRunResponse(_stream())
+
+    agency = _Agency()
+
+    def _agency_factory(**_kwargs):
+        return agency
+
+    async def _attach_noop(_agency):
+        return None
+
+    async def _acquire(_agency, is_override: bool):
+        nonlocal lease_acquired
+        assert is_override is True
+        lease_acquired = True
+        return object()
+
+    async def _release(_lease):
+        return None
+
+    def _build_upload_client(_agency, _config):
+        assert lease_acquired is True
+        return upload_client
+
+    async def _fake_upload_from_urls(_file_urls, allowed_local_dirs=None, openai_client=None):
+        del allowed_local_dirs
+        assert openai_client is upload_client
+        return {"doc.txt": "file-123"}
+
+    monkeypatch.setattr(endpoint_handlers, "attach_persistent_mcp_servers", _attach_noop)
+    monkeypatch.setattr(endpoint_handlers, "apply_openai_client_config", lambda _agency, _config: None)
+    monkeypatch.setattr(endpoint_handlers, "_acquire_agency_request_lease", _acquire)
+    monkeypatch.setattr(endpoint_handlers, "_release_agency_request_lease", _release)
+    monkeypatch.setattr(endpoint_handlers, "_build_file_upload_client", _build_upload_client)
+    monkeypatch.setattr(endpoint_handlers, "upload_from_urls", _fake_upload_from_urls)
+
+    handler = make_agui_chat_endpoint(_Request, _agency_factory, verify_token=lambda: None)
+    response = await handler(_Request(), token=None)
+    _chunks = [chunk async for chunk in response.body_iterator]
