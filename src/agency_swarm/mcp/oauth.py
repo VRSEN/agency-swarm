@@ -9,6 +9,7 @@ import contextlib
 import json
 import logging
 import os
+import re
 import webbrowser
 from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
@@ -111,10 +112,21 @@ class FileTokenStorage:
     def _get_user_cache_dir(self) -> Path:
         """Get cache directory for current user from contextvar."""
         user_id = _user_id_context.get()
+        user_segment = "default"
         if user_id:
-            user_dir = self.base_cache_dir / user_id
-        else:
-            user_dir = self.base_cache_dir / "default"
+            # Prevent path traversal from user-provided IDs (e.g. HTTP headers).
+            sanitized = re.sub(r"[^A-Za-z0-9._-]", "_", user_id).strip("._")
+            if sanitized:
+                user_segment = sanitized[:120]
+
+        base_dir = self.base_cache_dir.expanduser().resolve()
+        user_dir = (base_dir / user_segment).resolve()
+        try:
+            user_dir.relative_to(base_dir)
+        except ValueError:
+            logger.warning("OAuth user_id resolved outside cache dir; falling back to default bucket.")
+            user_dir = base_dir / "default"
+
         user_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         return user_dir
 
