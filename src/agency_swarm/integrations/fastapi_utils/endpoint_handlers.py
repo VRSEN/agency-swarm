@@ -8,6 +8,7 @@ from collections.abc import AsyncGenerator, Callable, Sequence
 from dataclasses import dataclass, field
 from importlib import metadata
 from pathlib import Path
+from typing import cast
 
 from ag_ui.core import EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
 from ag_ui.encoder import EventEncoder
@@ -50,6 +51,48 @@ from agency_swarm.utils.usage_tracking import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _serialize_raw_responses(raw_responses: object) -> list[object]:
+    """Convert run_result.raw_responses into JSON-safe payloads without dropping fields."""
+    if not isinstance(raw_responses, list):
+        return []
+    return [serialize(response, string_output=False) for response in raw_responses]
+
+
+def _resolve_new_messages_agent(messages: list[TResponseInputItem]) -> str | None:
+    """Resolve the most recent agent name from new_messages, if available."""
+    for message in reversed(messages):
+        if isinstance(message, dict):
+            agent_name = message.get("agent")
+            if isinstance(agent_name, str) and agent_name:
+                return agent_name
+    return None
+
+
+def _build_raw_response_snapshot_messages(
+    *, raw_responses: list[object], agent_name: str | None, caller_agent: str | None = None
+) -> list[TResponseInputItem]:
+    """Build structured snapshot items that preserve raw provider responses in new_messages."""
+    snapshots: list[TResponseInputItem] = []
+    if not raw_responses:
+        return snapshots
+
+    timestamp = int(time.time() * 1_000_000)
+    for raw_response in raw_responses:
+        snapshot: dict[str, object] = {
+            "type": MessageFormatter.RAW_RESPONSE_SNAPSHOT_ORIGIN,
+            "message_origin": MessageFormatter.RAW_RESPONSE_SNAPSHOT_ORIGIN,
+            "raw_response": raw_response,
+            "agent": agent_name,
+            "callerAgent": caller_agent,
+            "history_protocol": MessageFormatter.HISTORY_PROTOCOL_RESPONSES,
+            "timestamp": timestamp,
+        }
+        snapshots.append(cast(TResponseInputItem, snapshot))
+        timestamp += 1
+
+    return snapshots
 
 
 def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
@@ -340,7 +383,17 @@ def make_response_endpoint(
         new_messages = all_messages[initial_message_count:]  # Only messages added during this request
         filtered_messages = MessageFilter.filter_messages(new_messages)
         filtered_messages = _normalize_new_messages_for_client(filtered_messages)
-        result = {"response": response.final_output, "new_messages": filtered_messages}
+        raw_responses = _serialize_raw_responses(getattr(response, "raw_responses", []))
+        filtered_messages.extend(
+            _build_raw_response_snapshot_messages(
+                raw_responses=raw_responses,
+                agent_name=_resolve_new_messages_agent(filtered_messages),
+            )
+        )
+        result = {
+            "response": response.final_output,
+            "new_messages": filtered_messages,
+        }
 
         # Extract and add usage information
         usage_stats = extract_usage_from_run_result(response)
@@ -491,13 +544,25 @@ def make_stream_endpoint(
 
                     # Extract usage from final result
                     final_result = stream.final_result if stream else None
+                    raw_responses = _serialize_raw_responses(
+                        getattr(final_result, "raw_responses", []) if final_result is not None else []
+                    )
+                    filtered_messages.extend(
+                        _build_raw_response_snapshot_messages(
+                            raw_responses=raw_responses,
+                            agent_name=_resolve_new_messages_agent(filtered_messages),
+                        )
+                    )
                     usage_stats = extract_usage_from_run_result(final_result)
                     if usage_stats:
                         # Calculate cost - model_name is auto-extracted from run_result._main_agent_model
                         usage_stats = calculate_usage_with_cost(usage_stats, run_result=final_result)
 
                     # Build result with new messages
-                    result = {"new_messages": filtered_messages, "run_id": run_id}
+                    result = {
+                        "new_messages": filtered_messages,
+                        "run_id": run_id,
+                    }
                     if active_run is not None and active_run.cancelled:
                         result["cancelled"] = True
                     if request.file_urls is not None and file_ids_map is not None:
@@ -569,6 +634,17 @@ def make_cancel_endpoint(request_model, verify_token, run_registry: ActiveRunReg
         filtered_messages = MessageFilter.filter_messages(filtered_messages)
         filtered_messages = MessageFilter.remove_orphaned_messages(filtered_messages)
         filtered_messages = _normalize_new_messages_for_client(filtered_messages)
+        raw_responses = _serialize_raw_responses(
+            getattr(active_run.stream.final_result, "raw_responses", [])
+            if active_run.stream.final_result is not None
+            else []
+        )
+        filtered_messages.extend(
+            _build_raw_response_snapshot_messages(
+                raw_responses=raw_responses,
+                agent_name=_resolve_new_messages_agent(filtered_messages),
+            )
+        )
 
         return {
             "ok": not timed_out,

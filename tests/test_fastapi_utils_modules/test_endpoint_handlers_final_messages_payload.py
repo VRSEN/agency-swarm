@@ -287,6 +287,113 @@ async def test_cancel_endpoint_rewrites_fake_ids(monkeypatch: pytest.MonkeyPatch
     assert all(m.get("id") != FAKE_RESPONSES_ID for m in result["new_messages"] if isinstance(m, dict))
 
 
+@pytest.mark.asyncio
+async def test_stream_endpoint_final_payload_includes_raw_response_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Final SSE payload should append a provider raw-response snapshot into new_messages."""
+
+    async def _noop_attach(_agency: Any) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.attach_persistent_mcp_servers",
+        _noop_attach,
+    )
+
+    thread_manager = _StubThreadManager()
+
+    async def _stream() -> AsyncGenerator[dict[str, Any]]:
+        thread_manager._messages.extend([{"type": "message", "role": "assistant", "content": "A", "agent": "AgentA"}])
+        yield {"type": "delta", "content": "streaming..."}
+
+    class _FinalResult:
+        raw_responses = [
+            {
+                "response_id": "resp_1",
+                "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
+                "output": [
+                    {
+                        "type": "web_search_call",
+                        "action": {
+                            "type": "search",
+                            "query": "agency swarm",
+                            "sources": [{"type": "url", "url": "https://example.com"}],
+                        },
+                    }
+                ],
+            }
+        ]
+
+    stream = StreamingRunResponse(_stream())
+    stream._resolve_final_result(_FinalResult())
+    agency = _StubAgency(stream, thread_manager)
+
+    def agency_factory(**_kwargs: Any) -> _StubAgency:
+        return agency
+
+    handler = make_stream_endpoint(BaseRequest, agency_factory, lambda: None, ActiveRunRegistry())
+    response = await handler(http_request=_StubRequest(), request=BaseRequest(message="hi"), token=None)
+    chunks = [chunk async for chunk in response.body_iterator]
+
+    payload = _parse_sse_messages_payload(chunks)
+
+    snapshot = next(
+        m
+        for m in payload["new_messages"]
+        if isinstance(m, dict) and m.get("message_origin") == "provider_raw_response_snapshot"
+    )
+    assert snapshot.get("type") == "provider_raw_response_snapshot"
+    parsed_snapshot = snapshot.get("raw_response")
+    assert isinstance(parsed_snapshot, dict)
+    assert parsed_snapshot == _FinalResult.raw_responses[0]
+
+
+@pytest.mark.asyncio
+async def test_cancel_endpoint_includes_raw_response_snapshot() -> None:
+    """Cancel endpoint should append raw-response snapshot messages when available."""
+
+    thread_manager = _StubThreadManager()
+    stream = StreamingRunResponse(_empty_stream())
+
+    class _FinalResult:
+        raw_responses = [
+            {
+                "response_id": "resp_cancel_1",
+                "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
+                "output": [
+                    {
+                        "type": "file_search_call",
+                        "queries": ["agency swarm"],
+                        "results": [{"file_id": "file_1", "filename": "notes.txt", "text": "matched"}],
+                    }
+                ],
+            }
+        ]
+
+    stream._resolve_final_result(_FinalResult())
+    agency = _StubAgency(stream, thread_manager)
+
+    thread_manager._messages.extend([{"type": "message", "role": "assistant", "content": "A", "agent": "AgentA"}])
+
+    run_registry = ActiveRunRegistry()
+    run_id = "run_cancel_with_raw"
+    active_run = ActiveRun(stream=stream, agency=agency, initial_message_count=0)
+    active_run.done_event.set()
+    await run_registry.register(run_id, run=active_run)
+
+    handler = make_cancel_endpoint(CancelRequest, lambda: None, run_registry)
+    result = await handler(request=CancelRequest(run_id=run_id, cancel_mode="immediate"), token=None)
+
+    snapshot = next(
+        m
+        for m in result["new_messages"]
+        if isinstance(m, dict) and m.get("message_origin") == "provider_raw_response_snapshot"
+    )
+    assert snapshot.get("type") == "provider_raw_response_snapshot"
+    parsed_snapshot = snapshot.get("raw_response")
+    assert isinstance(parsed_snapshot, dict)
+    assert parsed_snapshot == _FinalResult.raw_responses[0]
+
+
 async def _empty_stream() -> AsyncGenerator[dict[str, Any]]:
     if False:
         yield {}

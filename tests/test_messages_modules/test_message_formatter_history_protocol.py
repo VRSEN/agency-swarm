@@ -235,3 +235,28 @@ def test_resolve_history_protocol_defaults_provider_prefixed_strings_to_response
 def test_resolve_history_protocol_defaults_openai_chat_model_to_responses() -> None:
     agent = _make_chat_agent("Coordinator")
     assert MessageFormatter.resolve_history_protocol(agent) == MessageFormatter.HISTORY_PROTOCOL_RESPONSES
+
+
+def test_strip_agency_metadata_drops_raw_response_snapshot_messages() -> None:
+    messages = [
+        {
+            "type": "provider_raw_response_snapshot",
+            "raw_response": {},
+            "message_origin": MessageFormatter.RAW_RESPONSE_SNAPSHOT_ORIGIN,
+            "agent": "Coordinator",
+            "callerAgent": None,
+        },
+        {
+            "role": "user",
+            "type": "message",
+            "content": "hello",
+            "agent": "Coordinator",
+            "callerAgent": None,
+        },
+    ]
+
+    cleaned = MessageFormatter.strip_agency_metadata(messages)
+
+    assert len(cleaned) == 1
+    assert cleaned[0]["role"] == "user"
+    assert cleaned[0]["content"] == "hello"
