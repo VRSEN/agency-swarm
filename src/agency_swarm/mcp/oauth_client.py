@@ -7,10 +7,11 @@ from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 from typing import TypedDict
 
+import httpx
 from agents import Agent as AgentBase, RunContextWrapper
 from mcp import ClientSession
 from mcp.client.auth import OAuthClientProvider
-from mcp.client.streamable_http import streamablehttp_client
+from mcp.client.streamable_http import streamablehttp_client as _legacy_streamablehttp_client
 from mcp.types import (
     CallToolResult,
     GetPromptResult,
@@ -30,6 +31,11 @@ from .oauth import (
 
 logger = logging.getLogger(__name__)
 
+try:
+    from mcp.client.streamable_http import streamable_http_client as _streamable_http_client
+except ImportError:  # pragma: no cover - compatibility with older MCP SDKs
+    _streamable_http_client = None
+
 
 class OAuthHandlerMap(TypedDict, total=False):
     redirect: OAuthRedirectHandler
@@ -37,6 +43,17 @@ class OAuthHandlerMap(TypedDict, total=False):
 
 
 StreamableHTTPContext = AbstractAsyncContextManager[tuple[object, object, Callable[[], str | None]]]
+
+
+def _build_streamable_transport(
+    url: str,
+    oauth_provider: OAuthClientProvider,
+) -> tuple[StreamableHTTPContext, httpx.AsyncClient | None]:
+    """Build streamable HTTP transport with auth across MCP SDK versions."""
+    if _streamable_http_client is not None:
+        http_client = httpx.AsyncClient(auth=oauth_provider, timeout=httpx.Timeout(30.0, read=300.0))
+        return _streamable_http_client(url, http_client=http_client), http_client
+    return _legacy_streamablehttp_client(url, auth=oauth_provider), None
 
 
 class MCPServerOAuthClient:
@@ -60,6 +77,7 @@ class MCPServerOAuthClient:
         self.use_structured_content = False  # Required by Agents SDK MCP util
         self.session: ClientSession | None = None
         self._oauth_provider: OAuthClientProvider | None = None
+        self._http_client: httpx.AsyncClient | None = None
         self._transport_context: StreamableHTTPContext | None = None
         self._transport_entered = False
         self._session_context: ClientSession | None = None
@@ -101,7 +119,10 @@ class MCPServerOAuthClient:
                 callback_handler=self._callback_handler,
             )
 
-            self._transport_context = streamablehttp_client(self.oauth_config.url, auth=self._oauth_provider)
+            self._transport_context, self._http_client = _build_streamable_transport(
+                self.oauth_config.url,
+                self._oauth_provider,
+            )
             read, write, _ = await self._transport_context.__aenter__()
             self._transport_entered = True
 
@@ -297,6 +318,10 @@ class MCPServerOAuthClient:
                 self._transport_entered = False
 
         self._transport_context = None
+        if self._http_client is not None:
+            with contextlib.suppress(Exception):
+                await self._http_client.aclose()
+        self._http_client = None
 
         logger.info(f"Cleaned up OAuth MCP client: {self.name}")
 
