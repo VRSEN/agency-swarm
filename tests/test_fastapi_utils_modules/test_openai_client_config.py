@@ -391,6 +391,82 @@ async def test_make_response_endpoint_uses_existing_client_for_file_upload_heade
 
 
 @pytest.mark.asyncio
+async def test_make_response_endpoint_uses_recipient_agent_client_for_uploads(monkeypatch) -> None:
+    """Upload client should be derived from the selected recipient agent context."""
+    pytest.importorskip("agents")
+
+    from openai import AsyncOpenAI
+
+    from agency_swarm.integrations.fastapi_utils import endpoint_handlers
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import make_response_endpoint
+    from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest, ClientConfig
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    captured: dict[str, str | None] = {"api_key": None}
+
+    class _ThreadManager:
+        def get_all_messages(self):
+            return []
+
+    class _Response:
+        def __init__(self, final_output):
+            self.final_output = final_output
+
+    class _Model:
+        def __init__(self, api_key: str):
+            self.openai_client = AsyncOpenAI(api_key=api_key, base_url="https://api.agent.test/v1")
+
+    class _AgentState:
+        def __init__(self, api_key: str):
+            self.model = _Model(api_key=api_key)
+            self.model_settings = None
+
+    class _Agency:
+        def __init__(self):
+            self.agents = {
+                "FirstAgent": _AgentState(api_key="sk-first"),
+                "TargetAgent": _AgentState(api_key="sk-target"),
+            }
+            self.thread_manager = _ThreadManager()
+
+        async def get_response(self, **_kwargs):
+            return _Response("ok")
+
+    agency = _Agency()
+
+    def _agency_factory(**_kwargs):
+        return agency
+
+    async def _attach_noop(_agency):
+        return None
+
+    async def _fake_upload_from_urls(_file_urls, allowed_local_dirs=None, openai_client=None):
+        del allowed_local_dirs
+        assert openai_client is not None
+        captured["api_key"] = openai_client.api_key
+        return {"doc.txt": "file-123"}
+
+    monkeypatch.setattr(endpoint_handlers, "attach_persistent_mcp_servers", _attach_noop)
+    monkeypatch.setattr(endpoint_handlers, "apply_openai_client_config", lambda _agency, _config: None)
+    monkeypatch.setattr(endpoint_handlers, "upload_from_urls", _fake_upload_from_urls)
+
+    handler = make_response_endpoint(BaseRequest, _agency_factory, verify_token=lambda: None)
+    response = await handler(
+        BaseRequest(
+            message="hello",
+            recipient_agent="TargetAgent",
+            file_urls={"doc.txt": "https://example.com/doc.txt"},
+            client_config=ClientConfig(default_headers={"x-request-id": "req-1"}),
+        ),
+        token=None,
+    )
+
+    assert response["file_ids_map"] == {"doc.txt": "file-123"}
+    assert captured["api_key"] == "sk-target"
+
+
+@pytest.mark.asyncio
 async def test_make_response_endpoint_applies_client_config_to_agent_client_sync(monkeypatch) -> None:
     """Request client_config should provide a sync OpenAI client for attachment lookups."""
     pytest.importorskip("agents")
@@ -706,7 +782,8 @@ async def test_make_response_endpoint_builds_upload_client_after_lease(monkeypat
     async def _release(_lease):
         return None
 
-    def _build_upload_client(_agency, _config):
+    def _build_upload_client(_agency, _config, recipient_agent: str | None = None):
+        assert recipient_agent is None
         assert lease_acquired is True
         return upload_client
 
@@ -1170,7 +1247,8 @@ async def test_make_stream_endpoint_builds_upload_client_after_lease(monkeypatch
     async def _release(_lease):
         return None
 
-    def _build_upload_client(_agency, _config):
+    def _build_upload_client(_agency, _config, recipient_agent: str | None = None):
+        assert recipient_agent is None
         assert lease_acquired is True
         return upload_client
 
@@ -1521,7 +1599,8 @@ async def test_make_agui_endpoint_builds_upload_client_after_lease(monkeypatch) 
     async def _release(_lease):
         return None
 
-    def _build_upload_client(_agency, _config):
+    def _build_upload_client(_agency, _config, recipient_agent: str | None = None):
+        assert recipient_agent is None
         assert lease_acquired is True
         return upload_client
 

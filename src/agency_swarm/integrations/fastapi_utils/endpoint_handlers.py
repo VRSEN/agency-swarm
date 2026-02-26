@@ -219,7 +219,35 @@ def _has_request_openai_overrides(config: ClientConfig | None) -> bool:
     )
 
 
-def _build_file_upload_client(agency: Agency, config: ClientConfig | None) -> AsyncOpenAI | None:
+def _get_upload_client_agent(agency: Agency, recipient_agent: str | None = None) -> Agent | None:
+    """Resolve the agent context used to derive upload/chat-name OpenAI client settings."""
+    if recipient_agent:
+        selected = agency.agents.get(recipient_agent)
+        if selected is not None:
+            return selected
+
+    entry_points = getattr(agency, "entry_points", None)
+    if isinstance(entry_points, list) and entry_points:
+        first_entry = entry_points[0]
+        if isinstance(first_entry, Agent):
+            return first_entry
+        entry_name = getattr(first_entry, "name", None)
+        if isinstance(entry_name, str):
+            selected = agency.agents.get(entry_name)
+            if selected is not None:
+                return selected
+
+    if len(agency.agents) == 1:
+        return next(iter(agency.agents.values()))
+
+    return None
+
+
+def _build_file_upload_client(
+    agency: Agency,
+    config: ClientConfig | None,
+    recipient_agent: str | None = None,
+) -> AsyncOpenAI | None:
     """Build a request-scoped OpenAI client for file uploads when overrides are present."""
     if not _has_request_openai_overrides(config):
         return None
@@ -227,14 +255,13 @@ def _build_file_upload_client(agency: Agency, config: ClientConfig | None) -> As
     assert config is not None
 
     base_client: AsyncOpenAI | None = None
-    for agent in agency.agents.values():
-        base_client = _get_openai_client_from_agent(agent)
-        if base_client is not None:
-            break
-        cached_client = getattr(agent, "_openai_client", None)
-        if isinstance(cached_client, AsyncOpenAI):
-            base_client = cached_client
-            break
+    selected_agent = _get_upload_client_agent(agency, recipient_agent=recipient_agent)
+    if selected_agent is not None:
+        base_client = _get_openai_client_from_agent(selected_agent)
+        if base_client is None:
+            cached_client = getattr(selected_agent, "_openai_client", None)
+            if isinstance(cached_client, AsyncOpenAI):
+                base_client = cached_client
 
     if base_client is None:
         base_client = get_default_openai_client()
@@ -293,7 +320,11 @@ def make_response_endpoint(
                 restore_snapshot = _snapshot_agency_state(agency_instance)
                 apply_openai_client_config(agency_instance, request.client_config)
 
-            request_upload_client = _build_file_upload_client(agency_instance, request.client_config)
+            request_upload_client = _build_file_upload_client(
+                agency_instance,
+                request.client_config,
+                recipient_agent=request.recipient_agent,
+            )
 
             if request.file_urls is not None:
                 try:
@@ -402,7 +433,11 @@ def make_stream_endpoint(
                 restore_snapshot = _snapshot_agency_state(agency_instance)
                 apply_openai_client_config(agency_instance, request.client_config)
 
-            request_upload_client = _build_file_upload_client(agency_instance, request.client_config)
+            request_upload_client = _build_file_upload_client(
+                agency_instance,
+                request.client_config,
+                recipient_agent=request.recipient_agent,
+            )
             if request.file_urls is not None:
                 try:
                     file_ids_map = await upload_from_urls(
@@ -684,7 +719,7 @@ def make_agui_chat_endpoint(
                 restore_snapshot = _snapshot_agency_state(agency)
                 apply_openai_client_config(agency, request.client_config)
 
-            request_upload_client = _build_file_upload_client(agency, request.client_config)
+            request_upload_client = _build_file_upload_client(agency, request.client_config, recipient_agent=None)
             if getattr(request, "file_urls", None):
                 try:
                     file_ids_map = await upload_from_urls(
