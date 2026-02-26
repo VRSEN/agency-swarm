@@ -5,6 +5,7 @@ Tests for multimodal helper utilities.
 import base64
 from pathlib import Path
 
+import httpx
 import pytest
 
 from agency_swarm import ToolOutputFileContent, ToolOutputImage
@@ -73,3 +74,44 @@ def test_tool_output_file_from_url_returns_remote_reference():
     assert isinstance(result, ToolOutputFileContent)
     assert result.file_url == "https://example.com/archive.zip"
     assert result.filename is None
+
+
+def test_tool_output_file_from_url_keeps_remote_pdf_when_content_type_is_pdf(monkeypatch):
+    def _fake_head(url: str, *, follow_redirects: bool, timeout: float) -> httpx.Response:
+        assert url == "https://example.com/doc.pdf"
+        request = httpx.Request("HEAD", url)
+        return httpx.Response(200, headers={"content-type": "application/pdf"}, request=request)
+
+    monkeypatch.setattr("agency_swarm.tools.utils.httpx.head", _fake_head)
+
+    result = tool_output_file_from_url("https://example.com/doc.pdf")
+
+    assert result.file_url == "https://example.com/doc.pdf"
+    assert result.file_data is None
+    assert result.filename is None
+
+
+def test_tool_output_file_from_url_falls_back_to_data_url_for_pdf_served_as_octet_stream(monkeypatch):
+    pdf_bytes = b"%PDF-1.4 test-pdf-data"
+
+    def _fake_head(url: str, *, follow_redirects: bool, timeout: float) -> httpx.Response:
+        assert url == "https://example.com/doc.pdf"
+        request = httpx.Request("HEAD", url)
+        return httpx.Response(200, headers={"content-type": "application/octet-stream"}, request=request)
+
+    def _fake_get(url: str, *, follow_redirects: bool, timeout: float) -> httpx.Response:
+        assert url == "https://example.com/doc.pdf"
+        request = httpx.Request("GET", url)
+        return httpx.Response(200, content=pdf_bytes, request=request)
+
+    monkeypatch.setattr("agency_swarm.tools.utils.httpx.head", _fake_head)
+    monkeypatch.setattr("agency_swarm.tools.utils.httpx.get", _fake_get)
+
+    result = tool_output_file_from_url("https://example.com/doc.pdf")
+
+    assert result.file_url is None
+    assert result.filename == "doc.pdf"
+    assert result.file_data is not None
+    assert result.file_data.startswith("data:application/pdf;base64,")
+    encoded = result.file_data.split(",", 1)[1]
+    assert base64.b64decode(encoded) == pdf_bytes

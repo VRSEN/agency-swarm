@@ -8,6 +8,7 @@ from decimal import Decimal
 from enum import Enum
 from pathlib import Path
 from typing import Any, Literal, Optional, Union
+from urllib.parse import urlparse
 
 import httpx
 import jsonref
@@ -21,11 +22,16 @@ from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
 logger = logging.getLogger(__name__)
 
 PDF_MIME_TYPE = "application/pdf"
+URL_FETCH_TIMEOUT_SECONDS = 20.0
+
+
+def _build_data_url_from_bytes(data: bytes, mime_type: str) -> str:
+    encoded_file = base64.b64encode(data).decode("utf-8")
+    return f"data:{mime_type};base64,{encoded_file}"
 
 
 def _build_data_url(file_path: Path, mime_type: str) -> str:
-    encoded_file = base64.b64encode(file_path.read_bytes()).decode("utf-8")
-    return f"data:{mime_type};base64,{encoded_file}"
+    return _build_data_url_from_bytes(file_path.read_bytes(), mime_type)
 
 
 def _resolve_mime_type(file_path: Path) -> str:
@@ -33,6 +39,28 @@ def _resolve_mime_type(file_path: Path) -> str:
     if not mime_type:
         raise ValueError(f"Unable to determine MIME type for file: {file_path}")
     return mime_type
+
+
+def _extract_filename_from_url(url: str) -> str | None:
+    parsed = urlparse(url)
+    filename = Path(parsed.path).name
+    return filename or None
+
+
+def _is_pdf_content_type(content_type: str | None) -> bool:
+    if not content_type:
+        return False
+    normalized_content_type = content_type.split(";", 1)[0].strip().lower()
+    return normalized_content_type == PDF_MIME_TYPE
+
+
+def _inline_pdf_url_as_file_data(url: str, *, filename: str) -> ToolOutputFileContent:
+    response = httpx.get(url, follow_redirects=True, timeout=URL_FETCH_TIMEOUT_SECONDS)
+    response.raise_for_status()
+    return ToolOutputFileContent(
+        file_data=_build_data_url_from_bytes(response.content, PDF_MIME_TYPE),
+        filename=filename,
+    )
 
 
 def tool_output_image_from_path(
@@ -101,9 +129,37 @@ def tool_output_file_from_url(url: str) -> ToolOutputFileContent:
 
     Args:
         url: Publicly reachable URL for the file.
-    """
 
-    return ToolOutputFileContent(file_url=url)
+    Notes:
+        For ``.pdf`` URLs, this helper first checks the remote ``Content-Type``.
+        If the host reports a non-PDF type (for example ``application/octet-stream``),
+        it falls back to downloading and inlining the bytes as ``file_data`` with
+        ``application/pdf`` MIME to keep Responses API ingestion reliable.
+    """
+    filename = _extract_filename_from_url(url)
+    if not filename or not filename.lower().endswith(".pdf"):
+        return ToolOutputFileContent(file_url=url)
+
+    try:
+        response = httpx.head(url, follow_redirects=True, timeout=URL_FETCH_TIMEOUT_SECONDS)
+        response.raise_for_status()
+    except Exception:
+        logger.debug("Failed to inspect remote file URL %s; preserving file_url behavior.", url, exc_info=True)
+        return ToolOutputFileContent(file_url=url)
+
+    if _is_pdf_content_type(response.headers.get("content-type")):
+        return ToolOutputFileContent(file_url=url)
+
+    try:
+        return _inline_pdf_url_as_file_data(url, filename=filename)
+    except Exception:
+        logger.warning(
+            "Failed to inline PDF URL %s after non-PDF content-type (%s); preserving file_url behavior.",
+            url,
+            response.headers.get("content-type"),
+            exc_info=True,
+        )
+        return ToolOutputFileContent(file_url=url)
 
 
 def tool_output_file_from_file_id(file_id: str) -> ToolOutputFileContent:
