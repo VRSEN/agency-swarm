@@ -8,6 +8,7 @@ import gc
 from weakref import WeakKeyDictionary
 
 import pytest
+from pydantic import ValidationError
 
 from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest, ClientConfig
 
@@ -45,13 +46,17 @@ class TestClientConfig:
         assert config.litellm_keys is None
 
     def test_config_with_litellm_keys(self) -> None:
-        """Config accepts litellm_keys for provider-specific API keys."""
-        config = ClientConfig(
-            litellm_keys={
-                "anthropic": "sk-ant-xxx",
-                "gemini": "AIza...",
-            }
-        )
+        """Config accepts litellm_keys when LiteLLM is available."""
+        try:
+            config = ClientConfig(
+                litellm_keys={
+                    "anthropic": "sk-ant-xxx",
+                    "gemini": "AIza...",
+                }
+            )
+        except ValidationError as exc:
+            assert "litellm_keys requires litellm to be installed" in str(exc)
+            return
         assert config.litellm_keys is not None
         assert config.litellm_keys["anthropic"] == "sk-ant-xxx"
         assert config.litellm_keys["gemini"] == "AIza..."
