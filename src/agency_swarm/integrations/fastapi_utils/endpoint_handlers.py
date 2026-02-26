@@ -921,11 +921,15 @@ def _apply_request_scoped_openai_clients_to_agent(agent: Agent, config: ClientCo
 
     agent._openai_client = async_client
     sync_base_url = str(async_client.base_url) if getattr(async_client, "base_url", None) is not None else None
-    sync_headers = async_client.default_headers
+    sync_headers_raw = async_client.default_headers
+    sync_headers: dict[str, str] | None = None
+    if sync_headers_raw is not None:
+        # AsyncOpenAI headers may include non-string sentinel values; sync client expects plain str headers.
+        sync_headers = {key: value for key, value in sync_headers_raw.items() if isinstance(value, str)}
     agent._openai_client_sync = OpenAI(
         api_key=async_client.api_key,
         base_url=sync_base_url,
-        default_headers=dict(sync_headers) if sync_headers is not None else None,
+        default_headers=sync_headers,
     )
 
 def _apply_default_headers_to_agent_model_settings(agent: Agent, headers: dict[str, str]) -> None:
