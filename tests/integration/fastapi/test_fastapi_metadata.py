@@ -164,6 +164,11 @@ def test_metadata_capabilities_empty_for_basic_agent():
     assert response.status_code == 200
     payload = response.json()
     assert "allowed_local_file_dirs" in payload
+    nodes = payload.get("nodes", [])
+    basic_agent = next((n for n in nodes if n["id"] == "BasicAgent"), None)
+    assert basic_agent is not None
+    assert "capabilities" in basic_agent["data"]
+    assert basic_agent["data"]["capabilities"] == []
 
 
 def test_metadata_includes_allowed_local_file_dirs(tmp_path, agency_factory):
