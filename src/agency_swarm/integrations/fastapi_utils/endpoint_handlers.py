@@ -37,7 +37,7 @@ except ImportError:
 from fastapi import Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, OpenAI
 from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
@@ -120,6 +120,11 @@ def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
 
     # Apply to all agents in the agency
     for agent in agency.agents.values():
+        # File attachment handling uses agent.client / agent.client_sync directly.
+        # Keep those clients request-scoped too, so file_ids work without server env keys.
+        if openai_overrides_present:
+            _apply_request_scoped_openai_clients_to_agent(agent, config)
+
         if _agent_uses_litellm(agent):
             if config.default_headers is not None:
                 _apply_default_headers_to_agent_model_settings(agent, config.default_headers)
@@ -287,7 +292,10 @@ def make_response_endpoint(
                 result["file_ids_map"] = file_ids_map
             if request.generate_chat_name:
                 try:
-                    result["chat_name"] = await generate_chat_name(filtered_messages)
+                    result["chat_name"] = await generate_chat_name(
+                        filtered_messages,
+                        openai_client=_build_file_upload_client(request.client_config),
+                    )
                 except Exception as e:
                     # Do not add errors to the result as they might be mistaken for chat name
                     logger.error(f"Error generating chat name: {e}")
@@ -474,7 +482,10 @@ def make_stream_endpoint(
                         result["file_ids_map"] = file_ids_map
                     if request.generate_chat_name:
                         try:
-                            result["chat_name"] = await generate_chat_name(filtered_messages)
+                            result["chat_name"] = await generate_chat_name(
+                                filtered_messages,
+                                openai_client=_build_file_upload_client(request.client_config),
+                            )
                         except Exception as e:
                             logger.error(f"Error generating chat name: {e}")
                     if usage_stats:
@@ -768,8 +779,11 @@ async def exception_handler(request, exc):
     return JSONResponse(status_code=500, content={"error": error_message})
 
 
-async def generate_chat_name(new_messages: list[TResponseInputItem]):
-    client = get_default_openai_client() or AsyncOpenAI()
+async def generate_chat_name(
+    new_messages: list[TResponseInputItem],
+    openai_client: AsyncOpenAI | None = None,
+):
+    client = openai_client or get_default_openai_client() or AsyncOpenAI()
 
     class ResponseFormat(BaseModel):
         chat_name: str = Field(description="A fitting name for the provided chat history.")
@@ -872,6 +886,46 @@ def _build_openai_client_for_agent(agent: Agent, config: ClientConfig) -> AsyncO
         api_key=config.api_key,
         base_url=config.base_url,
         default_headers=config.default_headers,
+    )
+
+
+def _build_request_scoped_openai_client(agent: Agent, config: ClientConfig) -> AsyncOpenAI | None:
+    """Build a request-scoped AsyncOpenAI client for direct agent client access paths."""
+    base_client = (
+        _get_openai_client_from_agent(agent)
+        or getattr(agent, "_openai_client", None)
+        or get_default_openai_client()
+    )
+    if base_client is None:
+        # No existing client to copy from. Without an explicit api_key we can't build one safely.
+        if config.api_key is None:
+            return None
+        return AsyncOpenAI(
+            api_key=config.api_key,
+            base_url=config.base_url,
+            default_headers=config.default_headers,
+        )
+
+    return base_client.copy(
+        api_key=config.api_key,
+        base_url=config.base_url,
+        default_headers=config.default_headers,
+    )
+
+
+def _apply_request_scoped_openai_clients_to_agent(agent: Agent, config: ClientConfig) -> None:
+    """Apply request-scoped async+sync OpenAI clients used by attachment/file managers."""
+    async_client = _build_request_scoped_openai_client(agent, config)
+    if async_client is None:
+        return
+
+    agent._openai_client = async_client
+    sync_base_url = str(async_client.base_url) if getattr(async_client, "base_url", None) is not None else None
+    sync_headers = async_client.default_headers
+    agent._openai_client_sync = OpenAI(
+        api_key=async_client.api_key,
+        base_url=sync_base_url,
+        default_headers=dict(sync_headers) if sync_headers is not None else None,
     )
 
 def _apply_default_headers_to_agent_model_settings(agent: Agent, headers: dict[str, str]) -> None:
@@ -1122,21 +1176,28 @@ def _apply_litellm_config(agent: Agent, model_name: str, config: ClientConfig) -
         api_key=api_key,
     )
 
-def _snapshot_agency_state(agency: Agency) -> dict[str, tuple[str | Model | None, ModelSettings | None]]:
-    """Capture agent model/model_settings so overrides can be restored."""
-    snapshot: dict[str, tuple[str | Model | None, ModelSettings | None]] = {}
+def _snapshot_agency_state(
+    agency: Agency,
+) -> dict[str, tuple[str | Model | None, ModelSettings | None, AsyncOpenAI | None, OpenAI | None]]:
+    """Capture request-mutable agent state so overrides can be restored."""
+    snapshot: dict[str, tuple[str | Model | None, ModelSettings | None, AsyncOpenAI | None, OpenAI | None]] = {}
     for name, agent in agency.agents.items():
         model_settings = getattr(agent, "model_settings", None)
         snapshot[name] = (
             agent.model,
             copy.deepcopy(model_settings) if model_settings is not None else None,
+            getattr(agent, "_openai_client", None),
+            getattr(agent, "_openai_client_sync", None),
         )
     return snapshot
 
 
-def _restore_agency_state(agency: Agency, snapshot: dict[str, tuple[str | Model | None, ModelSettings | None]]) -> None:
-    """Restore agent model/model_settings after a request override."""
-    for name, (model, model_settings) in snapshot.items():
+def _restore_agency_state(
+    agency: Agency,
+    snapshot: dict[str, tuple[str | Model | None, ModelSettings | None, AsyncOpenAI | None, OpenAI | None]],
+) -> None:
+    """Restore agent model/model_settings/OpenAI clients after a request override."""
+    for name, (model, model_settings, openai_client, openai_client_sync) in snapshot.items():
         agent = agency.agents.get(name)
         if agent is None:
             continue
@@ -1145,6 +1206,8 @@ def _restore_agency_state(agency: Agency, snapshot: dict[str, tuple[str | Model 
             agent.model_settings = cast(ModelSettings, None)
         else:
             agent.model_settings = model_settings
+        agent._openai_client = openai_client
+        agent._openai_client_sync = openai_client_sync
 
 async def _get_agency_request_state(agency: Agency) -> _AgencyRequestState:
     """Return per-agency request coordination state for the current event loop."""
