@@ -13,6 +13,7 @@ from agency_swarm.mcp.oauth import (
     MCPServerOAuth,
     TokenCallbackRegistry,
     _listen_for_callback_once,
+    create_oauth_provider,
     default_callback_handler,
     default_redirect_handler,
     get_default_cache_dir,
@@ -384,6 +385,66 @@ class TestOAuthHandlers:
         await callback_task
         with pytest.raises(ValueError, match="OAuth error.*access_denied"):
             await listener_task
+
+
+class TestCreateOAuthProvider:
+    """Test OAuth provider handler precedence."""
+
+    async def test_uses_server_handlers_when_explicit_handlers_omitted(self, tmp_path: Path) -> None:
+        """create_oauth_provider should honor handlers configured on MCPServerOAuth."""
+
+        async def server_redirect_handler(auth_url: str) -> None:
+            _ = auth_url
+
+        async def server_callback_handler() -> tuple[str, str | None]:
+            return "server-code", "server-state"
+
+        server = MCPServerOAuth(
+            url=TEST_SERVER_URL,
+            name="provider-test-server",
+            cache_dir=tmp_path,
+            redirect_handler=server_redirect_handler,
+            callback_handler=server_callback_handler,
+            use_env_credentials=False,
+        )
+
+        provider = await create_oauth_provider(server)
+
+        assert provider.context.redirect_handler is server_redirect_handler
+        assert provider.context.callback_handler is server_callback_handler
+
+    async def test_explicit_handlers_override_server_handlers(self, tmp_path: Path) -> None:
+        """Explicit handler args must take precedence over server-level handlers."""
+
+        async def server_redirect_handler(auth_url: str) -> None:
+            _ = auth_url
+
+        async def server_callback_handler() -> tuple[str, str | None]:
+            return "server-code", "server-state"
+
+        async def explicit_redirect_handler(auth_url: str) -> None:
+            _ = auth_url
+
+        async def explicit_callback_handler() -> tuple[str, str | None]:
+            return "explicit-code", "explicit-state"
+
+        server = MCPServerOAuth(
+            url=TEST_SERVER_URL,
+            name="provider-test-explicit",
+            cache_dir=tmp_path,
+            redirect_handler=server_redirect_handler,
+            callback_handler=server_callback_handler,
+            use_env_credentials=False,
+        )
+
+        provider = await create_oauth_provider(
+            server,
+            redirect_handler=explicit_redirect_handler,
+            callback_handler=explicit_callback_handler,
+        )
+
+        assert provider.context.redirect_handler is explicit_redirect_handler
+        assert provider.context.callback_handler is explicit_callback_handler
 
 
 def test_get_default_cache_dir_respects_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
