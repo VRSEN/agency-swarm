@@ -4,7 +4,9 @@ Tests for multimodal helper utilities.
 
 import base64
 from pathlib import Path
+from unittest.mock import Mock
 
+import httpx
 import pytest
 
 from agency_swarm import ToolOutputFileContent, ToolOutputImage
@@ -73,3 +75,163 @@ def test_tool_output_file_from_url_returns_remote_reference():
     assert isinstance(result, ToolOutputFileContent)
     assert result.file_url == "https://example.com/archive.zip"
     assert result.filename is None
+
+
+def test_tool_output_file_from_url_keeps_remote_pdf_when_content_type_is_pdf(monkeypatch):
+    def _fake_head(url: str, *, follow_redirects: bool, timeout: float) -> httpx.Response:
+        assert url == "https://1.1.1.1/doc.pdf"
+        request = httpx.Request("HEAD", url)
+        return httpx.Response(200, headers={"content-type": "application/pdf"}, request=request)
+
+    monkeypatch.setattr("agency_swarm.tools.utils.httpx.head", _fake_head)
+
+    result = tool_output_file_from_url("https://1.1.1.1/doc.pdf")
+
+    assert result.file_url == "https://1.1.1.1/doc.pdf"
+    assert result.file_data is None
+    assert result.filename is None
+
+
+def test_tool_output_file_from_url_falls_back_to_data_url_for_pdf_served_as_octet_stream(monkeypatch):
+    pdf_bytes = b"%PDF-1.4 test-pdf-data"
+
+    def _fake_head(url: str, *, follow_redirects: bool, timeout: float) -> httpx.Response:
+        assert url == "https://1.1.1.1/doc.pdf"
+        request = httpx.Request("HEAD", url)
+        return httpx.Response(200, headers={"content-type": "application/octet-stream"}, request=request)
+
+    class _StreamResponse:
+        status_code = 200
+        headers: dict[str, str] = {}
+
+        def __init__(self) -> None:
+            self.request = httpx.Request("GET", "https://1.1.1.1/doc.pdf")
+
+        def __enter__(self) -> "_StreamResponse":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def iter_bytes(self):
+            yield pdf_bytes
+
+    def _fake_stream(method: str, url: str, *, follow_redirects: bool, timeout: float) -> _StreamResponse:
+        assert method == "GET"
+        assert url == "https://1.1.1.1/doc.pdf"
+        return _StreamResponse()
+
+    monkeypatch.setattr("agency_swarm.tools.utils.httpx.head", _fake_head)
+    monkeypatch.setattr("agency_swarm.tools.utils.httpx.stream", _fake_stream)
+
+    result = tool_output_file_from_url("https://1.1.1.1/doc.pdf")
+
+    assert result.file_url is None
+    assert result.filename == "doc.pdf"
+    assert result.file_data is not None
+    assert result.file_data.startswith("data:application/pdf;base64,")
+    encoded = result.file_data.split(",", 1)[1]
+    assert base64.b64decode(encoded) == pdf_bytes
+
+
+def test_tool_output_file_from_url_skips_local_fetch_for_unsafe_host(monkeypatch):
+    head_mock = Mock()
+    monkeypatch.setattr("agency_swarm.tools.utils.httpx.head", head_mock)
+
+    result = tool_output_file_from_url("http://127.0.0.1/doc.pdf")
+
+    assert result.file_url == "http://127.0.0.1/doc.pdf"
+    assert result.file_data is None
+    head_mock.assert_not_called()
+
+
+def test_tool_output_file_from_url_falls_back_to_file_url_when_pdf_exceeds_inline_limit(monkeypatch):
+    def _fake_head(url: str, *, follow_redirects: bool, timeout: float) -> httpx.Response:
+        request = httpx.Request("HEAD", url)
+        return httpx.Response(200, headers={"content-type": "application/octet-stream"}, request=request)
+
+    class _StreamResponse:
+        status_code = 200
+        headers: dict[str, str] = {}
+
+        def __init__(self) -> None:
+            self.request = httpx.Request("GET", "https://1.1.1.1/doc.pdf")
+
+        def __enter__(self) -> "_StreamResponse":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def iter_bytes(self):
+            yield b"12345"
+            yield b"67890"
+
+    def _fake_stream(method: str, url: str, *, follow_redirects: bool, timeout: float) -> _StreamResponse:
+        return _StreamResponse()
+
+    monkeypatch.setattr("agency_swarm.tools.utils.httpx.head", _fake_head)
+    monkeypatch.setattr("agency_swarm.tools.utils.httpx.stream", _fake_stream)
+    monkeypatch.setattr("agency_swarm.tools.utils.MAX_INLINE_PDF_BYTES", 6)
+
+    result = tool_output_file_from_url("https://1.1.1.1/doc.pdf")
+
+    assert result.file_url == "https://1.1.1.1/doc.pdf"
+    assert result.file_data is None
+
+
+def test_tool_output_file_from_url_preserves_file_url_for_invalid_port():
+    result = tool_output_file_from_url("https://example.com:abc/doc.pdf")
+
+    assert result.file_url == "https://example.com:abc/doc.pdf"
+    assert result.file_data is None
+
+
+def test_tool_output_file_from_url_preserves_file_url_for_invalid_ipv6_host():
+    result = tool_output_file_from_url("https://[::1/doc.pdf")
+
+    assert result.file_url == "https://[::1/doc.pdf"
+    assert result.file_data is None
+
+
+def test_tool_output_file_from_url_blocks_unsafe_redirect_targets(monkeypatch):
+    def _fake_head(url: str, *, follow_redirects: bool, timeout: float) -> httpx.Response:
+        request = httpx.Request("HEAD", url)
+        return httpx.Response(200, headers={"content-type": "application/octet-stream"}, request=request)
+
+    class _StreamResponse:
+        status_code = 302
+
+        def __init__(self) -> None:
+            self.request = httpx.Request("GET", "https://1.1.1.1/doc.pdf")
+            self.headers = {"location": "http://127.0.0.1/secret.pdf"}
+
+        def __enter__(self) -> "_StreamResponse":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def iter_bytes(self):
+            if False:
+                yield b""
+
+    def _fake_stream(method: str, url: str, *, follow_redirects: bool, timeout: float) -> _StreamResponse:
+        return _StreamResponse()
+
+    monkeypatch.setattr("agency_swarm.tools.utils.httpx.head", _fake_head)
+    monkeypatch.setattr("agency_swarm.tools.utils.httpx.stream", _fake_stream)
+
+    result = tool_output_file_from_url("https://1.1.1.1/doc.pdf")
+
+    assert result.file_url == "https://1.1.1.1/doc.pdf"
+    assert result.file_data is None
