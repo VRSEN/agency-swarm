@@ -56,6 +56,42 @@ async def test_upload_from_urls_uploads_absolute_local_path(monkeypatch, tmp_pat
 
 
 @pytest.mark.asyncio
+async def test_upload_from_urls_forwards_openai_client(monkeypatch, tmp_path):
+    """Request-scoped OpenAI client should be forwarded to upload and poll helpers."""
+    file_path = tmp_path / "doc.txt"
+    file_path.write_text("hello", encoding="utf-8")
+    client_sentinel = object()
+    seen: list[object] = []
+
+    async def fake_upload(path, openai_client=None):
+        del path
+        seen.append(openai_client)
+        return "uploaded:doc.txt"
+
+    async def fake_wait(_file_id, timeout=60, openai_client=None):
+        del timeout
+        seen.append(openai_client)
+        return None
+
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.file_handler.upload_to_openai",
+        fake_upload,
+    )
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.file_handler._wait_for_file_processed",
+        fake_wait,
+    )
+
+    result = await upload_from_urls(
+        {"doc.txt": str(file_path)},
+        allowed_local_dirs=[str(tmp_path)],
+        openai_client=client_sentinel,
+    )
+    assert result == {"doc.txt": "uploaded:doc.txt"}
+    assert seen == [client_sentinel, client_sentinel]
+
+
+@pytest.mark.asyncio
 async def test_upload_from_urls_rejects_directory(monkeypatch, tmp_path):
     """Directories should not be accepted as local file attachments."""
     directory = tmp_path / "folder"
