@@ -43,6 +43,11 @@ def set_oauth_user_id(user_id: str | None) -> None:
     logger.debug(f"OAuth user_id context set to: {user_id}")
 
 
+def get_oauth_user_id() -> str | None:
+    """Get the current OAuth user ID from context."""
+    return _user_id_context.get()
+
+
 class TokenPayload(TypedDict, total=False):
     access_token: str
     token_type: Literal["Bearer"]
