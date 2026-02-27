@@ -29,6 +29,7 @@ from pydantic import AnyUrl
 
 # Contextvar for per-user token isolation
 _user_id_context: ContextVar[str | None] = ContextVar("oauth_user_id", default=None)
+_runtime_context: ContextVar["OAuthRuntimeContext | None"] = ContextVar("oauth_runtime_context", default=None)
 
 
 def set_oauth_user_id(user_id: str | None) -> None:
@@ -59,6 +60,31 @@ class TokenPayload(TypedDict, total=False):
 
 OAuthRedirectHandler = Callable[[str], Awaitable[None]]
 OAuthCallbackHandler = Callable[[], Awaitable[tuple[str, str | None]]]
+OAuthRedirectHandlerFactory = Callable[[str | None], OAuthRedirectHandler]
+OAuthCallbackHandlerFactory = Callable[[str | None], OAuthCallbackHandler]
+
+
+@dataclass(frozen=True)
+class OAuthRuntimeContext:
+    """Request-scoped OAuth runtime context used by provider creation."""
+
+    mode: Literal["saas_stream", "local_browser"]
+    user_id: str | None
+    timeout: float | None = None
+    redirect_handler_factory: OAuthRedirectHandlerFactory | None = None
+    callback_handler_factory: OAuthCallbackHandlerFactory | None = None
+
+
+def set_oauth_runtime_context(context: OAuthRuntimeContext | None) -> None:
+    """Set request-scoped OAuth runtime context for the current task."""
+    _runtime_context.set(context)
+    if context is not None:
+        _user_id_context.set(context.user_id)
+
+
+def get_oauth_runtime_context() -> OAuthRuntimeContext | None:
+    """Return the current request-scoped OAuth runtime context."""
+    return _runtime_context.get()
 
 
 @dataclass
@@ -535,7 +561,7 @@ async def _listen_for_callback_once(redirect_uri: str, timeout: float = 300.0) -
         await server.wait_closed()
 
 
-async def default_callback_handler(redirect_uri: str | None = None) -> tuple[str, str | None]:
+async def default_callback_handler(redirect_uri: str | None = None, timeout: float = 300.0) -> tuple[str, str | None]:
     """Default handler for OAuth callback.
 
     Tries to capture the callback automatically using a local HTTP server and falls
@@ -550,7 +576,7 @@ async def default_callback_handler(redirect_uri: str | None = None) -> tuple[str
 
     if _can_use_local_callback_server(redirect_target):
         try:
-            server_task = asyncio.create_task(_listen_for_callback_once(redirect_target))
+            server_task = asyncio.create_task(_listen_for_callback_once(redirect_target, timeout=timeout))
             tasks.append(server_task)
         except OSError:
             logger.warning("Local callback server unavailable; falling back to manual entry.")
@@ -628,14 +654,26 @@ async def create_oauth_provider(
     if client_info and hasattr(storage, "set_client_info"):
         await storage.set_client_info(client_info)
 
-    # Handler precedence: explicit args > server-level handlers > defaults
-    redirect_handler = redirect_handler or server.redirect_handler or default_redirect_handler
+    runtime_context = get_oauth_runtime_context()
+    runtime_redirect_handler: OAuthRedirectHandler | None = None
+    runtime_callback_handler: OAuthCallbackHandler | None = None
+    if runtime_context is not None:
+        if runtime_context.redirect_handler_factory is not None:
+            runtime_redirect_handler = runtime_context.redirect_handler_factory(server.name)
+        if runtime_context.callback_handler_factory is not None:
+            runtime_callback_handler = runtime_context.callback_handler_factory(server.name)
+
+    # Handler precedence: explicit args > request context > server-level handlers > defaults
+    redirect_handler = (
+        redirect_handler or runtime_redirect_handler or server.redirect_handler or default_redirect_handler
+    )
     if callback_handler is None:
-        callback_handler = server.callback_handler
+        callback_handler = runtime_callback_handler or server.callback_handler
     if callback_handler is None:
+        callback_timeout = runtime_context.timeout if runtime_context and runtime_context.timeout is not None else 300.0
 
         async def _wrapped_callback_handler() -> tuple[str, str | None]:
-            return await default_callback_handler(server.get_redirect_uri())
+            return await default_callback_handler(server.get_redirect_uri(), timeout=callback_timeout)
 
         callback_handler = _wrapped_callback_handler
 

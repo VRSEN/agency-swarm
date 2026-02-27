@@ -12,12 +12,14 @@ from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 from agency_swarm.mcp.oauth import (
     FileTokenStorage,
     MCPServerOAuth,
+    OAuthRuntimeContext,
     TokenCallbackRegistry,
     _listen_for_callback_once,
     create_oauth_provider,
     default_callback_handler,
     default_redirect_handler,
     get_default_cache_dir,
+    set_oauth_runtime_context,
 )
 
 TEST_SERVER_URL = "http://localhost:8001/mcp"
@@ -455,6 +457,47 @@ class TestCreateOAuthProvider:
 
         assert provider.context.redirect_handler is explicit_redirect_handler
         assert provider.context.callback_handler is explicit_callback_handler
+
+    async def test_runtime_context_handlers_override_server_handlers(self, tmp_path: Path) -> None:
+        """Request-scoped runtime handlers should override server-level handlers."""
+
+        async def server_redirect_handler(auth_url: str) -> None:
+            _ = auth_url
+
+        async def server_callback_handler() -> tuple[str, str | None]:
+            return "server-code", "server-state"
+
+        async def runtime_redirect_handler(auth_url: str) -> None:
+            _ = auth_url
+
+        async def runtime_callback_handler() -> tuple[str, str | None]:
+            return "runtime-code", "runtime-state"
+
+        server = MCPServerOAuth(
+            url=TEST_SERVER_URL,
+            name="provider-test-runtime-context",
+            cache_dir=tmp_path,
+            redirect_handler=server_redirect_handler,
+            callback_handler=server_callback_handler,
+            use_env_credentials=False,
+        )
+
+        set_oauth_runtime_context(
+            OAuthRuntimeContext(
+                mode="saas_stream",
+                user_id="user-1",
+                timeout=600.0,
+                redirect_handler_factory=lambda _server_name: runtime_redirect_handler,
+                callback_handler_factory=lambda _server_name: runtime_callback_handler,
+            )
+        )
+        try:
+            provider = await create_oauth_provider(server)
+        finally:
+            set_oauth_runtime_context(None)
+
+        assert provider.context.redirect_handler is runtime_redirect_handler
+        assert provider.context.callback_handler is runtime_callback_handler
 
 
 class TestOAuthClientTransportCompatibility:

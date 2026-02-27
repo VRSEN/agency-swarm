@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 import logging
+import re
 import threading
 from collections.abc import Awaitable, Callable, Coroutine
 from concurrent.futures import Future
@@ -32,12 +33,16 @@ _MCPServerOAuthClient: type | None = None
 _create_oauth_provider: Callable[..., Coroutine[object, object, "OAuthClientProvider"]] | None = None
 _set_oauth_user_id: Callable[[str | None], None] | None = None
 _get_oauth_user_id: Callable[[], str | None] | None = None
+_set_oauth_runtime_context: Callable[[Any | None], None] | None = None
+_get_oauth_runtime_context: Callable[[], Any | None] | None = None
 
 try:
     from agency_swarm.mcp.oauth import (
         MCPServerOAuth as _MCPServerOAuth_impl,
         create_oauth_provider as _create_oauth_provider_impl,
+        get_oauth_runtime_context as _get_oauth_runtime_context_impl,
         get_oauth_user_id as _get_oauth_user_id_impl,
+        set_oauth_runtime_context as _set_oauth_runtime_context_impl,
         set_oauth_user_id as _set_oauth_user_id_impl,
     )
     from agency_swarm.mcp.oauth_client import MCPServerOAuthClient as _MCPServerOAuthClient_impl
@@ -47,9 +52,35 @@ try:
     _create_oauth_provider = _create_oauth_provider_impl
     _set_oauth_user_id = _set_oauth_user_id_impl
     _get_oauth_user_id = _get_oauth_user_id_impl
+    _set_oauth_runtime_context = _set_oauth_runtime_context_impl
+    _get_oauth_runtime_context = _get_oauth_runtime_context_impl
     _OAUTH_AVAILABLE = True
 except ImportError:
     logger.debug("OAuth support not available - install MCP SDK to enable")
+
+
+def _sanitize_oauth_registry_user_id(user_id: str) -> str:
+    sanitized = re.sub(r"[^A-Za-z0-9._-]", "_", user_id).strip("._")
+    if sanitized == "":
+        return "default"
+    return sanitized[:120]
+
+
+def _build_persistence_key(server: Any, oauth_user_id: str | None) -> str:
+    """Build process-level persistence key for MCP servers.
+
+    OAuth clients are keyed by (server_name, user_id) to avoid cross-user
+    session/token reuse. Non-OAuth servers keep name-only keys.
+    """
+    actual = getattr(server, "_server", server)
+    name = getattr(actual, "name", None)
+    if not isinstance(name, str) or name == "":
+        return ""
+    if _MCPServerOAuthClient is None or not isinstance(actual, _MCPServerOAuthClient):
+        return name
+    if not isinstance(oauth_user_id, str) or oauth_user_id == "":
+        return name
+    return f"{name}::{_sanitize_oauth_registry_user_id(oauth_user_id)}"
 
 
 class PersistentMCPServerManager:
@@ -70,7 +101,7 @@ class PersistentMCPServerManager:
         # Default timeouts for known methods; unknown methods use a safe default
         self._timeouts: dict[str, float] = {
             "connect": 20.0,
-            "list_tools": 30.0,  # Increased for OAuth servers (auth happens on first call)
+            "list_tools": 620.0,  # OAuth discovery can wait for user callback.
             "call_tool": 120.0,
             "cleanup": 10.0,
             "list_prompts": 10.0,
@@ -129,12 +160,19 @@ class PersistentMCPServerManager:
                     result_fut: Future = cmd["result_fut"]
                     if _set_oauth_user_id is not None:
                         _set_oauth_user_id(cast("str | None", cmd.get("oauth_user_id")))
+                    if _set_oauth_runtime_context is not None:
+                        _set_oauth_runtime_context(cmd.get("oauth_runtime_context"))
                     try:
                         method = getattr(real_server, method_name)
                         res = await method(*args, **kwargs)
                         result_fut.set_result(res)
                     except BaseException as e:  # noqa: BLE001
                         result_fut.set_exception(e)
+                    finally:
+                        if _set_oauth_runtime_context is not None:
+                            _set_oauth_runtime_context(None)
+                        if _set_oauth_user_id is not None:
+                            _set_oauth_user_id(None)
                 elif typ == "shutdown":
                     result_fut: Future = cmd["result_fut"]
                     try:
@@ -256,9 +294,9 @@ class PersistentMCPServerManager:
                     self._bg_loop = None
                     self._bg_thread = None
 
-    def register(self, server: Any) -> Any:
-        """Register (or reuse) a server by name and return the canonical instance."""
-        name = getattr(server, "name", None)
+    def register(self, server: Any, *, key: str | None = None) -> Any:
+        """Register (or reuse) a server by key and return the canonical instance."""
+        name = key or getattr(server, "name", None)
         if not isinstance(name, str) or name == "":
             # Do not persist unnamed servers
             return server
@@ -345,6 +383,7 @@ class PersistentMCPServerManager:
 
         def _post_call() -> None:
             oauth_user_id = _get_oauth_user_id() if _get_oauth_user_id is not None else None
+            oauth_runtime_context = _get_oauth_runtime_context() if _get_oauth_runtime_context is not None else None
             queue.put_nowait(
                 {
                     "type": "call",
@@ -352,6 +391,7 @@ class PersistentMCPServerManager:
                     "args": args,
                     "kwargs": kwargs,
                     "oauth_user_id": oauth_user_id,
+                    "oauth_runtime_context": oauth_runtime_context,
                     "result_fut": fut,
                 }
             )
@@ -501,14 +541,14 @@ def _process_oauth_servers(agent: "Agent", servers: list[object]) -> None:
             if client_id:
                 logger.info(f"OAuth configured for {oauth_srv.name} (client_id: {client_id[:8]}...)")
 
-            # Build handlers: config-level first, then factory overrides (for FastAPI)
+            # Build handlers: config-level first. Factory remains a compatibility fallback.
             server_handlers: OAuthHandlerMap = {}
             if oauth_srv.redirect_handler:
                 server_handlers["redirect"] = oauth_srv.redirect_handler
             if oauth_srv.callback_handler:
                 server_handlers["callback"] = oauth_srv.callback_handler
 
-            if factory is not None:
+            if factory is not None and not server_handlers:
                 new_handlers = factory(oauth_srv.name)
                 server_handlers.update(new_handlers)
 
@@ -533,8 +573,8 @@ async def _authorize_hosted_mcp_tools(agent: Any, *, cache_dir: Path | None) -> 
     OpenAI's remote MCP tool (`HostedMCPTool`) requires callers to supply an OAuth
     access token via `tool_config.authorization` for OAuth-protected servers.
 
-    For FastAPI deployments, handlers are sourced from `agent.mcp_oauth_handler_factory`
-    so the auth URL is emitted as SSE (instead of opening a browser on the server).
+    For FastAPI deployments, request-scoped OAuth context routes redirects and callbacks
+    through SSE events and callback endpoints.
     """
     if not _OAUTH_AVAILABLE or _MCPServerOAuth is None or _MCPServerOAuthClient is None:
         return
@@ -577,7 +617,6 @@ async def _authorize_hosted_mcp_tools(agent: Any, *, cache_dir: Path | None) -> 
         server_handlers: OAuthHandlerMap = {}
         if factory is not None:
             server_handlers.update(factory(server_label))
-
         handlers_arg = server_handlers if server_handlers else None
         oauth_client = oauth_client_type(oauth_srv, handlers_arg)
 
@@ -597,7 +636,7 @@ async def _authorize_hosted_mcp_tools(agent: Any, *, cache_dir: Path | None) -> 
 def _sync_oauth_client_handlers(persistent: object, candidate: object) -> bool:
     """Update cached OAuth client with per-request handlers from a new instance.
 
-    Returns True when a cached authenticated session must be reconnected.
+    Returns False because sessions are no longer invalidated when handlers refresh.
     """
     if not _OAUTH_AVAILABLE or _MCPServerOAuthClient is None:
         return False
@@ -610,23 +649,11 @@ def _sync_oauth_client_handlers(persistent: object, candidate: object) -> bool:
 
     client = cast("MCPServerOAuthClient", existing_client)
     new_instance = cast("MCPServerOAuthClient", new_client)
-    had_active_session = bool(
-        client._authenticated
-        or client.session is not None
-        or client._session_context is not None
-        or client._transport_context is not None
-    )
-    client._redirect_handler = new_instance._redirect_handler
-    client._callback_handler = new_instance._callback_handler
-    client._authenticated = False
-    client.session = None
-    client._session_context = None
-    client._session_entered = False
-    client._transport_context = None
-    client._transport_entered = False
-    client._http_client = None
-    client._oauth_provider = None
-    return had_active_session
+    if new_instance._redirect_handler is not None:
+        client._redirect_handler = new_instance._redirect_handler
+    if new_instance._callback_handler is not None:
+        client._callback_handler = new_instance._callback_handler
+    return False
 
 
 async def attach_persistent_mcp_servers(agency: Any) -> None:
@@ -643,7 +670,7 @@ async def attach_persistent_mcp_servers(agency: Any) -> None:
     oauth_token_path = getattr(agency, "oauth_token_path", None)
     if isinstance(oauth_token_path, str) and oauth_token_path != "":
         cache_dir = Path(oauth_token_path).expanduser()
-    reconnected_server_ids: set[int] = set()
+    oauth_user_id = _get_oauth_user_id() if _get_oauth_user_id is not None else None
     for agent in agents_map.values():
         await _authorize_hosted_mcp_tools(agent, cache_dir=cache_dir)
         servers = getattr(agent, "mcp_servers", None)
@@ -656,16 +683,15 @@ async def attach_persistent_mcp_servers(agency: Any) -> None:
             if not isinstance(name, str) or name == "":
                 raise ValueError(f"Server {srv} has no name provided")
 
-            persistent = default_mcp_manager.get(name)
+            key = _build_persistence_key(srv, oauth_user_id)
+            if key == "":
+                raise ValueError(f"Server {srv} has no valid persistence key")
+
+            persistent = default_mcp_manager.get(key)
             if persistent is None:
-                persistent = default_mcp_manager.register(srv)
+                persistent = default_mcp_manager.register(srv, key=key)
             else:
-                should_reconnect = _sync_oauth_client_handlers(persistent, srv)
-                persistent_real = getattr(persistent, "_server", persistent)
-                persistent_id = id(persistent_real)
-                if should_reconnect and persistent_id not in reconnected_server_ids:
-                    await default_mcp_manager.reconnect(persistent)
-                    reconnected_server_ids.add(persistent_id)
+                _sync_oauth_client_handlers(persistent, srv)
             # Replace the reference so future runs reuse the same object and ensure loop‑affine proxy
             replacement = (
                 persistent
@@ -696,12 +722,14 @@ def register_and_connect_agent_servers(agent: Any) -> None:
         _process_oauth_servers(agent, servers)
 
     server_names = []
+    oauth_user_id = _get_oauth_user_id() if _get_oauth_user_id is not None else None
     # Replace each server with the persistent instance (by name) if available
     for i, srv in enumerate(list(servers)):
         name = getattr(srv, "name", None)
         if isinstance(name, str) and name != "" and name not in server_names:
             server_names.append(name)
-            persistent = default_mcp_manager.get(name) or default_mcp_manager.register(srv)
+            key = _build_persistence_key(srv, oauth_user_id)
+            persistent = default_mcp_manager.get(key) or default_mcp_manager.register(srv, key=key)
             if persistent is not srv:
                 _sync_oauth_client_handlers(persistent, srv)
             if persistent is not servers[i]:

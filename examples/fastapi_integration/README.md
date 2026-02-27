@@ -6,6 +6,7 @@ This directory contains examples demonstrating how to integrate Agency Swarm wit
 - Serving agencies via HTTP endpoints
 - Serving standalone tools via HTTP endpoints
 - Handling streaming responses with Server-Sent Events (SSE)
+- Running OAuth flows for MCP servers in SaaS-style streaming mode
 - Properly propagating `agent` and `callerAgent` fields in events
 - Managing conversation history across requests
 
@@ -52,6 +53,22 @@ Include the `X-User-Id` header for per-user token isolation:
 headers = {"X-User-Id": "user_123"}
 response = requests.post(url, json=payload, headers=headers)
 ```
+
+### OAuth Streaming Contract (FastAPI)
+
+When OAuth is required (`MCPServerOAuth` or `HostedMCPTool` without `authorization`), use only:
+- `POST /<agency>/get_response_stream`
+
+Expected event order:
+1. `event: meta`
+2. `event: oauth_redirect` (`state`, `server`, `auth_url`)
+3. `event: oauth_status` (`status="pending"`)
+4. Keepalive comments every 15s while waiting: `: keepalive <timestamp>`
+5. `event: oauth_status` (`status="authorized"` or `error:<reason>` or `timeout`)
+6. Final `event: messages`
+7. `event: end`
+
+`POST /<agency>/get_response` returns `400` for OAuth-enabled MCP flows.
 
 ### Serving Tools
 

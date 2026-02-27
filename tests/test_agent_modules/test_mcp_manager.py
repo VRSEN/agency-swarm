@@ -180,7 +180,7 @@ def test_update_oauth_cache_dir_updates_clients(tmp_path: Path) -> None:
     assert client._oauth_provider.storage.base_cache_dir == tmp_path
 
 
-def test_sync_oauth_client_handlers_invalidates_authenticated_session() -> None:
+def test_sync_oauth_client_handlers_keeps_authenticated_session() -> None:
     oauth_config = MCPServerOAuth(url="http://localhost:8001/mcp", name="github")
 
     async def first_redirect(_auth_url: str) -> None:
@@ -212,9 +212,9 @@ def test_sync_oauth_client_handlers_invalidates_authenticated_session() -> None:
 
     assert persistent._redirect_handler is second_redirect
     assert persistent._callback_handler is second_callback
-    assert persistent._oauth_provider is None
-    assert persistent.session is None
-    assert persistent._authenticated is False
+    assert persistent._oauth_provider is not None
+    assert persistent.session is not None
+    assert persistent._authenticated is True
 
 
 @pytest.mark.asyncio
@@ -254,4 +254,35 @@ async def test_attach_persistent_updates_oauth_handlers_per_request() -> None:
         assert reused_redirect is not first_redirect
         assert reused_redirect("auth-url") == ("req2", "auth-url", "github")
     finally:
+        await default_mcp_manager.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_attach_persistent_isolates_oauth_clients_by_user_id() -> None:
+    """OAuth persistent clients should be keyed by (server_name, user_id)."""
+    await default_mcp_manager.shutdown()
+
+    try:
+        user_a_agent = SimpleNamespace(
+            mcp_servers=[MCPServerOAuth(url="http://localhost:8001/mcp", name="github")],
+        )
+        user_a_agency = SimpleNamespace(agents={"a": user_a_agent})
+        set_oauth_user_id("user-a")
+        await attach_persistent_mcp_servers(user_a_agency)
+
+        user_b_agent = SimpleNamespace(
+            mcp_servers=[MCPServerOAuth(url="http://localhost:8001/mcp", name="github")],
+        )
+        user_b_agency = SimpleNamespace(agents={"b": user_b_agent})
+        set_oauth_user_id("user-b")
+        await attach_persistent_mcp_servers(user_b_agency)
+
+        client_a = default_mcp_manager.get("github::user-a")
+        client_b = default_mcp_manager.get("github::user-b")
+
+        assert client_a is not None
+        assert client_b is not None
+        assert client_a is not client_b
+    finally:
+        set_oauth_user_id(None)
         await default_mcp_manager.shutdown()
