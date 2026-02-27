@@ -374,6 +374,31 @@ response = requests.post(cancel_url, json=payload)
 
 ---
 
+### OAuth-enabled agencies
+
+If any agent uses `MCPServerOAuth` (or you have a `HostedMCPTool` without `tool_config.authorization`), `run_fastapi` automatically:
+- Adds `/auth/callback` and `/auth/status/{state}` routes
+- Emits deterministic OAuth stream events on `/get_response_stream`:
+  - `event: oauth_redirect` with `{state, server, auth_url}`
+  - `event: oauth_status` with `{state, server, status}` where `status` is `pending`, `authorized`, `error:<reason>`, or `timeout`
+  - SSE keepalive comments every 15 seconds while OAuth is pending: `: keepalive <timestamp>`
+- Reads `X-User-Id` (if provided) to store tokens per user instead of the shared `default` bucket
+- Keeps OAuth state in an in-process registry; for multi-worker deployments, pass a shared registry (e.g., Redis-backed) via `run_fastapi(oauth_registry=...)` or use sticky routing.
+- Requires streaming: `POST /{agency}/get_response` returns `400` when OAuth-enabled MCP servers or hosted MCP tools are present. Use `POST /{agency}/get_response_stream` (or `enable_agui=True`) and buffer the stream if you need a single final response.
+- Applies a 10-minute OAuth wait timeout per request. On timeout, the stream emits `oauth_status` = `timeout` and closes cleanly.
+
+You do not need custom handlers. FastAPI wiring is request-scoped and carries the OAuth prompts automatically.
+
+<Note>
+For OAuth-protected FastMCP servers, schema discovery (`list_tools`) is auth-protected. That means OAuth may start before model streaming begins.
+</Note>
+
+<Note>
+Set `redirect_uri` on `MCPServerOAuth` to the publicly reachable URL that forwards to the FastAPI `/auth/callback` route (for example, your ingress hostname plus `/auth/callback`). You can also set `OAUTH_CALLBACK_URL` or `<SERVER>_REDIRECT_URI` as a fallback. If you do not override it, `MCPServerOAuth` defaults to `http://localhost:8000/auth/callback` for local development. In production, you must expose and route the callback path back to the issuing pod (sticky routing or shared state), or the OAuth flow will time out.
+</Note>
+
+---
+
 ## Serving Standalone Tools
 
 Expose tools as simple HTTP endpoints for external systems, webhooks, or other agents to call directly without agency orchestration.

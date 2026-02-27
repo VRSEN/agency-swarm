@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 import logging
 import time
@@ -8,8 +9,9 @@ from collections.abc import AsyncGenerator, Callable, Sequence
 from dataclasses import dataclass, field
 from importlib import metadata
 from pathlib import Path
+from typing import Any
 
-from ag_ui.core import EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
+from ag_ui.core import BaseEvent, EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
 from ag_ui.encoder import EventEncoder
 from agents import Model, OpenAIChatCompletionsModel, OpenAIResponsesModel, TResponseInputItem, output_guardrail
 from agents.exceptions import OutputGuardrailTripwireTriggered
@@ -23,7 +25,7 @@ try:
 except ImportError:
     _LITELLM_AVAILABLE = False
     LitellmModel = None  # type: ignore[misc, assignment]
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from openai import AsyncOpenAI
@@ -38,6 +40,12 @@ from agency_swarm import (
 from agency_swarm.agent.execution_stream_response import StreamingRunResponse
 from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_urls
 from agency_swarm.integrations.fastapi_utils.logging_middleware import get_logs_endpoint_impl
+from agency_swarm.integrations.fastapi_utils.oauth_support import (
+    FastAPIOAuthConfig,
+    FastAPIOAuthRuntime,
+    has_hosted_mcp_tools_missing_authorization,
+    is_oauth_server,
+)
 from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
 from agency_swarm.messages import MessageFilter, MessageFormatter
 from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
@@ -50,6 +58,26 @@ from agency_swarm.utils.usage_tracking import (
 )
 
 logger = logging.getLogger(__name__)
+
+OAUTH_KEEPALIVE_SECONDS = 15.0
+
+
+def _sse_keepalive_comment() -> str:
+    return f": keepalive {int(time.time())}\n\n"
+
+
+def _update_oauth_pending(current: bool, payload: dict[str, Any]) -> bool:
+    event_type = payload.get("type")
+    if event_type == "oauth_redirect":
+        return True
+    if event_type != "oauth_status":
+        return current
+    status = payload.get("status")
+    if status == "pending":
+        return True
+    if isinstance(status, str) and (status == "authorized" or status == "timeout" or status.startswith("error:")):
+        return False
+    return current
 
 
 def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
@@ -290,14 +318,94 @@ def get_verify_token(app_token):
     return verify_token
 
 
+def _set_oauth_user_context(user_id: str | None) -> None:
+    """Set the OAuth user ID contextvar for per-user token isolation.
+
+    Must be called BEFORE MCP server connections are established.
+    """
+    try:
+        from agency_swarm.mcp.oauth import set_oauth_user_id
+
+        set_oauth_user_id(user_id)
+    except ImportError:
+        pass  # OAuth extras not installed
+
+
+def _set_oauth_runtime_context(runtime: FastAPIOAuthRuntime | None, user_id: str | None) -> None:
+    """Set request-scoped OAuth runtime context for provider creation."""
+    try:
+        from agency_swarm.mcp.oauth import OAuthRuntimeContext, set_oauth_runtime_context
+    except ImportError:
+        return
+
+    if runtime is None:
+        set_oauth_runtime_context(None)
+        return
+
+    set_oauth_runtime_context(
+        OAuthRuntimeContext(
+            mode="saas_stream",
+            user_id=user_id,
+            timeout=runtime.timeout,
+            redirect_handler_factory=runtime.redirect_handler_factory(),
+            callback_handler_factory=runtime.callback_handler_factory(),
+        )
+    )
+
+
+def _clear_oauth_request_context() -> None:
+    """Clear OAuth request context at the end of request handling."""
+    _set_oauth_user_context(None)
+    _set_oauth_runtime_context(None, None)
+
+
+def _prepare_oauth_runtime(
+    agency_instance: Agency,
+    oauth_runtime: FastAPIOAuthRuntime | None,
+    user_id: str | None,
+) -> FastAPIOAuthRuntime | None:
+    """Attach per-request OAuth helpers and propagate user_id.
+
+    This sets the user_id in both the agency's user_context (for run-time hooks)
+    and the OAuth contextvar (for token storage during MCP server connection).
+    """
+    # Always set OAuth user context for token isolation, even without oauth_runtime
+    _set_oauth_user_context(user_id)
+    _set_oauth_runtime_context(oauth_runtime, user_id)
+
+    agency_instance.user_context = dict(getattr(agency_instance, "user_context", {}))
+    if user_id is not None:
+        agency_instance.user_context["user_id"] = user_id
+
+    return oauth_runtime
+
+
+def _has_oauth_servers(agency_instance: Agency) -> bool:
+    agents_map = getattr(agency_instance, "agents", {})
+    if not isinstance(agents_map, dict):
+        return False
+    for agent in agents_map.values():
+        servers = getattr(agent, "mcp_servers", None)
+        if isinstance(servers, list) and any(is_oauth_server(srv) for srv in servers):
+            return True
+    return False
+
+
 # Non‑streaming response endpoint
 def make_response_endpoint(
     request_model,
     agency_factory: Callable[..., Agency],
     verify_token,
     allowed_local_dirs: Sequence[str | Path] | None = None,
+    oauth_config: FastAPIOAuthConfig | None = None,
 ):
-    async def handler(request: request_model, token: str = Depends(verify_token)):
+    user_header = oauth_config.user_header if oauth_config else "X-User-Id"
+
+    async def handler(
+        request: request_model,
+        token: str = Depends(verify_token),
+        user_id: str | None = Header(default=None, alias=user_header),
+    ):
         if request.chat_history is not None:
             # Chat history is now a flat list
             def load_callback() -> list:
@@ -316,48 +424,65 @@ def make_response_endpoint(
             except Exception as e:
                 return {"error": f"Error downloading file from provided urls: {e}"}
 
+        oauth_runtime = None
+        if oauth_config:
+            oauth_runtime = FastAPIOAuthRuntime(oauth_config.registry, user_id, timeout=oauth_config.timeout)
+
         agency_instance = agency_factory(load_threads_callback=load_callback)
 
         # Apply custom OpenAI client configuration if provided
         if request.client_config is not None:
             apply_openai_client_config(agency_instance, request.client_config)
 
-        # Attach persistent MCP servers and ensure connections before handling the request
-        await attach_persistent_mcp_servers(agency_instance)
+        if oauth_runtime and (
+            _has_oauth_servers(agency_instance) or has_hosted_mcp_tools_missing_authorization(agency_instance)
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "OAuth-enabled MCP servers and hosted MCP tools require /get_response_stream for redirect events"
+                ),
+            )
+        oauth_runtime = _prepare_oauth_runtime(agency_instance, oauth_runtime, user_id)
+        try:
+            # Attach persistent MCP servers and ensure connections before handling the request
+            await attach_persistent_mcp_servers(agency_instance)
 
-        # Capture initial message count to identify new messages
-        initial_message_count = len(agency_instance.thread_manager.get_all_messages())
+            # Capture initial message count to identify new messages
+            initial_message_count = len(agency_instance.thread_manager.get_all_messages())
 
-        response = await agency_instance.get_response(
-            message=request.message,
-            recipient_agent=request.recipient_agent,
-            context_override=request.user_context,
-            additional_instructions=request.additional_instructions,
-            file_ids=combined_file_ids,
-        )
-        # Get only new messages added during this request
-        all_messages = agency_instance.thread_manager.get_all_messages()
-        new_messages = all_messages[initial_message_count:]  # Only messages added during this request
-        filtered_messages = MessageFilter.filter_messages(new_messages)
-        filtered_messages = _normalize_new_messages_for_client(filtered_messages)
-        result = {"response": response.final_output, "new_messages": filtered_messages}
+            response = await agency_instance.get_response(
+                message=request.message,
+                recipient_agent=request.recipient_agent,
+                context_override=request.user_context,
+                additional_instructions=request.additional_instructions,
+                file_ids=combined_file_ids,
+            )
+            # Get only new messages added during this request
+            all_messages = agency_instance.thread_manager.get_all_messages()
+            new_messages = all_messages[initial_message_count:]  # Only messages added during this request
+            filtered_messages = MessageFilter.filter_messages(new_messages)
+            filtered_messages = _normalize_new_messages_for_client(filtered_messages)
+            result = {"response": response.final_output, "new_messages": filtered_messages}
 
-        # Extract and add usage information
-        usage_stats = extract_usage_from_run_result(response)
-        if usage_stats:
-            # Calculate cost - model_name is auto-extracted from run_result._main_agent_model
-            usage_stats = calculate_usage_with_cost(usage_stats, run_result=response)
-            result["usage"] = usage_stats.to_dict()
+            # Extract and add usage information
+            usage_stats = extract_usage_from_run_result(response)
+            if usage_stats:
+                # Calculate cost - model_name is auto-extracted from run_result._main_agent_model
+                usage_stats = calculate_usage_with_cost(usage_stats, run_result=response)
+                result["usage"] = usage_stats.to_dict()
 
-        if request.file_urls is not None and file_ids_map is not None:
-            result["file_ids_map"] = file_ids_map
-        if request.generate_chat_name:
-            try:
-                result["chat_name"] = await generate_chat_name(filtered_messages)
-            except Exception as e:
-                # Do not add errors to the result as they might be mistaken for chat name
-                logger.error(f"Error generating chat name: {e}")
-        return result
+            if request.file_urls is not None and file_ids_map is not None:
+                result["file_ids_map"] = file_ids_map
+            if request.generate_chat_name:
+                try:
+                    result["chat_name"] = await generate_chat_name(filtered_messages)
+                except Exception as e:
+                    # Do not add errors to the result as they might be mistaken for chat name
+                    logger.error(f"Error generating chat name: {e}")
+            return result
+        finally:
+            _clear_oauth_request_context()
 
     return handler
 
@@ -369,11 +494,15 @@ def make_stream_endpoint(
     verify_token,
     run_registry: ActiveRunRegistry,
     allowed_local_dirs: Sequence[str | Path] | None = None,
+    oauth_config: FastAPIOAuthConfig | None = None,
 ):
+    user_header = oauth_config.user_header if oauth_config else "X-User-Id"
+
     async def handler(
         http_request: Request,
         request: request_model,
         token: str = Depends(verify_token),
+        user_id: str | None = Header(default=None, alias=user_header),
     ):
         if request.chat_history is not None:
             # Chat history is now a flat list
@@ -411,13 +540,17 @@ def make_stream_endpoint(
                     },
                 )
 
+        oauth_runtime = None
+        if oauth_config:
+            oauth_runtime = FastAPIOAuthRuntime(oauth_config.registry, user_id, timeout=oauth_config.timeout)
+
         agency_instance = agency_factory(load_threads_callback=load_callback)
 
         # Apply custom OpenAI client configuration if provided
         if request.client_config is not None:
             apply_openai_client_config(agency_instance, request.client_config)
 
-        await attach_persistent_mcp_servers(agency_instance)
+        oauth_runtime = _prepare_oauth_runtime(agency_instance, oauth_runtime, user_id)
 
         # Generate unique run_id for this streaming session
         run_id = str(uuid.uuid4())
@@ -426,10 +559,34 @@ def make_stream_endpoint(
             # Capture initial message count to identify new messages
             initial_message_count = len(agency_instance.thread_manager.get_all_messages())
 
-            stream = None
             active_run: ActiveRun | None = None
+            stream_events = None
+            stream_task: asyncio.Task | None = None
+            oauth_pending = False
+
+            async def _emit_oauth(payload: dict[str, Any]) -> AsyncGenerator[str]:
+                event_type = payload.get("type")
+                data = {
+                    "state": payload.get("state"),
+                    "server": payload.get("server"),
+                }
+                if event_type == "oauth_redirect":
+                    data["auth_url"] = payload.get("auth_url")
+                    name = "oauth_redirect"
+                elif event_type == "oauth_status":
+                    data["status"] = payload.get("status")
+                    name = "oauth_status"
+                else:
+                    return
+                yield f"event: {name}\ndata: {json.dumps(data)}\n\n"
+
+            queue_task: asyncio.Task | None = (
+                asyncio.create_task(oauth_runtime.next_event()) if oauth_runtime is not None else None
+            )
+            keepalive_task: asyncio.Task | None = None
+
             try:
-                stream = agency_instance.get_response_stream(
+                stream_events = agency_instance.get_response_stream(
                     message=request.message,
                     recipient_agent=request.recipient_agent,
                     context_override=request.user_context,
@@ -438,31 +595,107 @@ def make_stream_endpoint(
                 )
 
                 active_run = ActiveRun(
-                    stream=stream,
+                    stream=stream_events,
                     agency=agency_instance,
                     initial_message_count=initial_message_count,
                 )
                 await run_registry.register(run_id, active_run)
 
-                # Now send run_id - client can safely call cancel endpoint
+                # Emit run metadata once cancellation can be honored by the registry.
                 yield f"event: meta\ndata: {json.dumps({'run_id': run_id})}\n\n"
 
-                async for event in stream:
-                    # Check if client disconnected (tab close, refresh, etc.)
-                    if await http_request.is_disconnected():
-                        logger.info(f"Client disconnected, cancelling run {run_id}")
-                        stream.cancel(mode="immediate")
-                        if active_run is not None:
-                            active_run.cancelled = True
-                            active_run.cancel_mode = "immediate"
-                        break
+                if oauth_runtime:
+                    connect_task = asyncio.create_task(attach_persistent_mcp_servers(agency_instance))
+                    while True:
+                        wait_set = {connect_task}
+                        if queue_task:
+                            wait_set.add(queue_task)
+                        if keepalive_task:
+                            wait_set.add(keepalive_task)
+                        done, _ = await asyncio.wait(wait_set, return_when=asyncio.FIRST_COMPLETED)
 
-                    try:
-                        data = serialize(event)
-                        yield "data: " + json.dumps({"data": data}) + "\n\n"
-                    except Exception as e:
-                        yield "data: " + json.dumps({"error": f"Failed to serialize event: {e}"}) + "\n\n"
+                        if queue_task and queue_task in done:
+                            try:
+                                payload = queue_task.result()
+                                oauth_pending = _update_oauth_pending(oauth_pending, payload)
+                                async for oauth_chunk in _emit_oauth(payload):
+                                    yield oauth_chunk
+                                if oauth_pending and keepalive_task is None:
+                                    keepalive_task = asyncio.create_task(asyncio.sleep(OAUTH_KEEPALIVE_SECONDS))
+                                if not oauth_pending and keepalive_task is not None:
+                                    keepalive_task.cancel()
+                                    with contextlib.suppress(asyncio.CancelledError):
+                                        await keepalive_task
+                                    keepalive_task = None
+                            finally:
+                                queue_task = asyncio.create_task(oauth_runtime.next_event())
 
+                        if keepalive_task and keepalive_task in done:
+                            if oauth_pending:
+                                yield _sse_keepalive_comment()
+                                keepalive_task = asyncio.create_task(asyncio.sleep(OAUTH_KEEPALIVE_SECONDS))
+                            else:
+                                keepalive_task = None
+
+                        if connect_task in done:
+                            await connect_task
+                            break
+                else:
+                    await attach_persistent_mcp_servers(agency_instance)
+
+                stream_task = asyncio.create_task(stream_events.__anext__())
+                while stream_task:
+                    wait_set = {stream_task}
+                    if queue_task:
+                        wait_set.add(queue_task)
+                    if keepalive_task:
+                        wait_set.add(keepalive_task)
+
+                    done, _ = await asyncio.wait(wait_set, return_when=asyncio.FIRST_COMPLETED)
+
+                    if queue_task and queue_task in done:
+                        try:
+                            payload = queue_task.result()
+                            oauth_pending = _update_oauth_pending(oauth_pending, payload)
+                            async for oauth_chunk in _emit_oauth(payload):
+                                yield oauth_chunk
+                            if oauth_pending and keepalive_task is None:
+                                keepalive_task = asyncio.create_task(asyncio.sleep(OAUTH_KEEPALIVE_SECONDS))
+                            if not oauth_pending and keepalive_task is not None:
+                                keepalive_task.cancel()
+                                with contextlib.suppress(asyncio.CancelledError):
+                                    await keepalive_task
+                                keepalive_task = None
+                        finally:
+                            queue_task = asyncio.create_task(oauth_runtime.next_event()) if oauth_runtime else None
+
+                    if keepalive_task and keepalive_task in done:
+                        if oauth_pending:
+                            yield _sse_keepalive_comment()
+                            keepalive_task = asyncio.create_task(asyncio.sleep(OAUTH_KEEPALIVE_SECONDS))
+                        else:
+                            keepalive_task = None
+
+                    if stream_task in done:
+                        try:
+                            event = stream_task.result()
+                        except StopAsyncIteration:
+                            break
+                        except Exception as exc:
+                            raise exc
+                        if await http_request.is_disconnected():
+                            logger.info(f"Client disconnected, cancelling run {run_id}")
+                            stream_events.cancel(mode="immediate")
+                            if active_run is not None:
+                                active_run.cancelled = True
+                                active_run.cancel_mode = "immediate"
+                            break
+                        try:
+                            data = serialize(event)
+                            yield "data: " + json.dumps({"data": data}) + "\n\n"
+                        except Exception as e:
+                            yield "data: " + json.dumps({"error": f"Failed to serialize event: {e}"}) + "\n\n"
+                        stream_task = asyncio.create_task(stream_events.__anext__())
             except Exception as exc:
                 if isinstance(exc, OutputGuardrailTripwireTriggered):
                     yield (
@@ -490,12 +723,11 @@ def make_stream_endpoint(
                     filtered_messages = _normalize_new_messages_for_client(filtered_messages)
 
                     # Extract usage from final result
-                    final_result = stream.final_result if stream else None
+                    final_result = stream_events.final_result if stream_events else None
                     usage_stats = extract_usage_from_run_result(final_result)
                     if usage_stats:
                         # Calculate cost - model_name is auto-extracted from run_result._main_agent_model
                         usage_stats = calculate_usage_with_cost(usage_stats, run_result=final_result)
-
                     # Build result with new messages
                     result = {"new_messages": filtered_messages, "run_id": run_id}
                     if active_run is not None and active_run.cancelled:
@@ -517,7 +749,23 @@ def make_stream_endpoint(
                     yield "data: " + json.dumps({"error": f"Error building response: {e}"}) + "\n\n"
                     yield "event: end\ndata: [DONE]\n\n"
                 finally:
+                    if keepalive_task and not keepalive_task.done():
+                        keepalive_task.cancel()
+                        with contextlib.suppress(asyncio.CancelledError):
+                            await keepalive_task
+                    if queue_task and not queue_task.done():
+                        queue_task.cancel()
+                        with contextlib.suppress(asyncio.CancelledError):
+                            await queue_task
+                    if stream_task and not stream_task.done():
+                        stream_task.cancel()
+                        with contextlib.suppress(asyncio.CancelledError):
+                            await stream_task
+                    if stream_events:
+                        with contextlib.suppress(Exception):
+                            await stream_events.aclose()
                     await run_registry.finish(run_id)
+                    _clear_oauth_request_context()
 
         return StreamingResponse(
             event_generator(),
@@ -587,8 +835,15 @@ def make_agui_chat_endpoint(
     agency_factory: Callable[..., Agency],
     verify_token,
     allowed_local_dirs: Sequence[str | Path] | None = None,
+    oauth_config: FastAPIOAuthConfig | None = None,
 ):
-    async def handler(request: request_model, token: str = Depends(verify_token)):
+    user_header = oauth_config.user_header if oauth_config else "X-User-Id"
+
+    async def handler(
+        request: request_model,
+        token: str = Depends(verify_token),
+        user_id: str | None = Header(default=None, alias=user_header),
+    ):
         """Accepts AG-UI `RunAgentInput`, returns an AG-UI event stream."""
 
         encoder = EventEncoder()
@@ -616,12 +871,23 @@ def make_agui_chat_endpoint(
                     media_type=encoder.get_content_type(),
                 )
 
-        if request.chat_history is not None:
+        # Determine the message source and extract input message
+        # Priority: chat_history (if has content) > messages (if has content)
+        has_chat_history = request.chat_history is not None and len(request.chat_history) > 0
+        has_messages = request.messages is not None and len(request.messages) > 0
+
+        if has_chat_history:
             # Chat history is now a flat list
             def load_callback() -> list:
                 return request.chat_history
 
-        elif request.messages is not None:
+            # Extract input message from last chat_history entry
+            last_chat_msg = request.chat_history[-1]
+            input_message = last_chat_msg.get("content", "")
+            # Snapshot is empty since we're using chat_history format
+            initial_snapshot: list = []
+
+        elif has_messages:
             # Pull the default agent from the agency
             agency = agency_factory()
             default_agent = agency.entry_points[0]
@@ -639,10 +905,22 @@ def make_agui_chat_endpoint(
                         msg["timestamp"] = int(time.time() * 1000)
                 return agui_messages
 
-        else:
+            # Extract input message from last AG-UI message
+            input_message = request.messages[-1].content
+            # Store snapshot in dict format for AG-UI protocol
+            initial_snapshot = [message.model_dump() for message in request.messages]
 
+        else:
+            # No messages available - will return error in event_generator
             def load_callback() -> list:
                 return []
+
+            input_message = None
+            initial_snapshot = []
+
+        oauth_runtime = None
+        if oauth_config:
+            oauth_runtime = FastAPIOAuthRuntime(oauth_config.registry, user_id, timeout=oauth_config.timeout)
 
         # Choose / build an agent – here we just create a demo agent each time.
         agency = agency_factory(load_threads_callback=load_callback)
@@ -651,9 +929,31 @@ def make_agui_chat_endpoint(
         if request.client_config is not None:
             apply_openai_client_config(agency, request.client_config)
 
-        await attach_persistent_mcp_servers(agency)
+        oauth_runtime = _prepare_oauth_runtime(agency, oauth_runtime, user_id)
 
         async def event_generator() -> AsyncGenerator[str]:
+            queue_task: asyncio.Task | None = (
+                asyncio.create_task(oauth_runtime.next_event()) if oauth_runtime is not None else None
+            )
+            keepalive_task: asyncio.Task | None = None
+            oauth_pending = False
+
+            async def _emit_oauth(payload: dict[str, Any]) -> AsyncGenerator[str]:
+                event_type = payload.get("type")
+                data = {
+                    "state": payload.get("state"),
+                    "server": payload.get("server"),
+                }
+                if event_type == "oauth_redirect":
+                    data["auth_url"] = payload.get("auth_url")
+                    name = "oauth_redirect"
+                elif event_type == "oauth_status":
+                    data["status"] = payload.get("status")
+                    name = "oauth_status"
+                else:
+                    return
+                yield f"event: {name}\ndata: {json.dumps(data)}\n\n"
+
             # Emit RUN_STARTED first.
             yield encoder.encode(
                 RunStartedEvent(
@@ -663,32 +963,120 @@ def make_agui_chat_endpoint(
                 )
             )
 
+            stream_events: Any | None = None
+            stream_task: asyncio.Task | None = None
             try:
+                # Handle error case: no messages available
+                if input_message is None:
+                    raise ValueError(
+                        "No messages provided. Either 'messages' or 'chat_history' must contain at least one message."
+                    )
+
+                if oauth_runtime:
+                    connect_task = asyncio.create_task(attach_persistent_mcp_servers(agency))
+                    while True:
+                        wait_set = {connect_task}
+                        if queue_task:
+                            wait_set.add(queue_task)
+                        if keepalive_task:
+                            wait_set.add(keepalive_task)
+                        done, _ = await asyncio.wait(wait_set, return_when=asyncio.FIRST_COMPLETED)
+
+                        if queue_task and queue_task in done:
+                            try:
+                                payload = queue_task.result()
+                                oauth_pending = _update_oauth_pending(oauth_pending, payload)
+                                async for oauth_chunk in _emit_oauth(payload):
+                                    yield oauth_chunk
+                                if oauth_pending and keepalive_task is None:
+                                    keepalive_task = asyncio.create_task(asyncio.sleep(OAUTH_KEEPALIVE_SECONDS))
+                                if not oauth_pending and keepalive_task is not None:
+                                    keepalive_task.cancel()
+                                    with contextlib.suppress(asyncio.CancelledError):
+                                        await keepalive_task
+                                    keepalive_task = None
+                            finally:
+                                queue_task = asyncio.create_task(oauth_runtime.next_event())
+
+                        if keepalive_task and keepalive_task in done:
+                            if oauth_pending:
+                                yield _sse_keepalive_comment()
+                                keepalive_task = asyncio.create_task(asyncio.sleep(OAUTH_KEEPALIVE_SECONDS))
+                            else:
+                                keepalive_task = None
+
+                        if connect_task in done:
+                            await connect_task
+                            break
+                else:
+                    await attach_persistent_mcp_servers(agency)
+
                 # Create AguiAdapter instance with clean state for this request
                 agui_adapter = AguiAdapter()
 
-                # Store in dict format to avoid converting to classes
-                snapshot_messages = [message.model_dump() for message in request.messages]
-                async for event in agency.get_response_stream(
-                    message=request.messages[-1].content,
+                # Use the pre-computed snapshot
+                snapshot_messages = list(initial_snapshot)
+                stream_events = agency.get_response_stream(
+                    message=input_message,
                     context_override=request.user_context,
                     additional_instructions=request.additional_instructions,
                     file_ids=combined_file_ids or None,
-                ):
-                    agui_event = agui_adapter.openai_to_agui_events(
-                        event,
-                        run_id=request.run_id,
-                    )
-                    if agui_event:
-                        agui_events = agui_event if isinstance(agui_event, list) else [agui_event]
-                        for agui_evt in agui_events:
-                            if isinstance(agui_evt, MessagesSnapshotEvent):
-                                snapshot_messages.append(agui_evt.messages[0].model_dump())
-                                yield encoder.encode(
-                                    MessagesSnapshotEvent(type=EventType.MESSAGES_SNAPSHOT, messages=snapshot_messages)
-                                )
-                            else:
-                                yield encoder.encode(agui_evt)
+                )
+                stream_task = asyncio.create_task(stream_events.__anext__())
+                while stream_task:
+                    wait_set = {stream_task}
+                    if queue_task:
+                        wait_set.add(queue_task)
+                    if keepalive_task:
+                        wait_set.add(keepalive_task)
+
+                    done, _ = await asyncio.wait(wait_set, return_when=asyncio.FIRST_COMPLETED)
+
+                    if queue_task and queue_task in done:
+                        try:
+                            payload = queue_task.result()
+                            oauth_pending = _update_oauth_pending(oauth_pending, payload)
+                            async for oauth_chunk in _emit_oauth(payload):
+                                yield oauth_chunk
+                            if oauth_pending and keepalive_task is None:
+                                keepalive_task = asyncio.create_task(asyncio.sleep(OAUTH_KEEPALIVE_SECONDS))
+                            if not oauth_pending and keepalive_task is not None:
+                                keepalive_task.cancel()
+                                with contextlib.suppress(asyncio.CancelledError):
+                                    await keepalive_task
+                                keepalive_task = None
+                        finally:
+                            queue_task = asyncio.create_task(oauth_runtime.next_event()) if oauth_runtime else None
+
+                    if keepalive_task and keepalive_task in done:
+                        if oauth_pending:
+                            yield _sse_keepalive_comment()
+                            keepalive_task = asyncio.create_task(asyncio.sleep(OAUTH_KEEPALIVE_SECONDS))
+                        else:
+                            keepalive_task = None
+
+                    if stream_task in done:
+                        try:
+                            stream_event = stream_task.result()
+                        except StopAsyncIteration:
+                            break
+                        agui_event = agui_adapter.openai_to_agui_events(
+                            stream_event,
+                            run_id=request.run_id,
+                        )
+                        if agui_event:
+                            agui_events: list[BaseEvent] = agui_event if isinstance(agui_event, list) else [agui_event]
+                            for agui_event_item in agui_events:
+                                if isinstance(agui_event_item, MessagesSnapshotEvent):
+                                    snapshot_messages.append(agui_event_item.messages[0].model_dump())
+                                    yield encoder.encode(
+                                        MessagesSnapshotEvent(
+                                            type=EventType.MESSAGES_SNAPSHOT, messages=snapshot_messages
+                                        )
+                                    )
+                                else:
+                                    yield encoder.encode(agui_event_item)
+                        stream_task = asyncio.create_task(stream_events.__anext__())
 
                 yield encoder.encode(
                     RunFinishedEvent(
@@ -703,6 +1091,23 @@ def make_agui_chat_endpoint(
                 tb_str = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
                 error_message = f"{str(exc)}\n\nTraceback:\n{tb_str}"
                 yield encoder.encode(RunErrorEvent(type=EventType.RUN_ERROR, message=error_message))
+            finally:
+                if keepalive_task and not keepalive_task.done():
+                    keepalive_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await keepalive_task
+                if queue_task and not queue_task.done():
+                    queue_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await queue_task
+                if stream_task and not stream_task.done():
+                    stream_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await stream_task
+                if stream_events:
+                    with contextlib.suppress(Exception):
+                        await stream_events.aclose()
+                _clear_oauth_request_context()
 
         return StreamingResponse(event_generator(), media_type=encoder.get_content_type())
 

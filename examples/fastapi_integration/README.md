@@ -1,19 +1,20 @@
-# FastAPI Integration Example
+# FastAPI Integration Examples
 
-> **Full Guide:** The canonical FastAPI documentation lives in `docs/additional-features/fastapi-integration.mdx`. This README only summarizes the runnable sample.
+> **Full Guide:** The canonical FastAPI documentation lives in `docs/additional-features/fastapi-integration.mdx`. This README only summarizes the runnable samples.
 
-This example demonstrates how to properly integrate Agency Swarm with FastAPI, including:
+This directory contains examples demonstrating how to integrate Agency Swarm with FastAPI, including:
 - Serving agencies via HTTP endpoints
 - Serving standalone tools via HTTP endpoints
 - Handling streaming responses with Server-Sent Events (SSE)
+- Running OAuth flows for MCP servers in SaaS-style streaming mode
 - Properly propagating `agent` and `callerAgent` fields in events
 - Managing conversation history across requests
-- Accessing OpenAPI schemas for tool integration
 
 ## Files
 
 - `server.py` - FastAPI server that exposes an agency with two communicating agents
 - `client.py` - Python client showing how to interact with the API endpoints
+- `notion_hosted_mcp_tool.py` - Notion hosted MCP via `HostedMCPTool` + FastAPI OAuth SSE flow
 
 ## Setup
 
@@ -44,6 +45,30 @@ The server will start on http://localhost:8080 with these endpoints:
 - `POST /my-agency/get_response` - Regular response endpoint
 - `POST /my-agency/get_response_stream` - SSE streaming endpoint
 - `GET /my-agency/get_metadata` - Agency structure metadata
+
+### Multi-User Support
+
+Include the `X-User-Id` header for per-user token isolation:
+```python
+headers = {"X-User-Id": "user_123"}
+response = requests.post(url, json=payload, headers=headers)
+```
+
+### OAuth Streaming Contract (FastAPI)
+
+When OAuth is required (`MCPServerOAuth` or `HostedMCPTool` without `authorization`), use only:
+- `POST /<agency>/get_response_stream`
+
+Expected event order:
+1. `event: meta`
+2. `event: oauth_redirect` (`state`, `server`, `auth_url`)
+3. `event: oauth_status` (`status="pending"`)
+4. Keepalive comments every 15s while waiting: `: keepalive <timestamp>`
+5. `event: oauth_status` (`status="authorized"` or `error:<reason>` or `timeout`)
+6. Final `event: messages`
+7. `event: end`
+
+`POST /<agency>/get_response` returns `400` for OAuth-enabled MCP flows.
 
 ### Serving Tools
 

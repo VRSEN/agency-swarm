@@ -114,7 +114,7 @@ def _move_symlink_with_overwrite_safety(source_path: Path, destination: Path) ->
     return destination
 
 
-class PresentFiles(BaseTool):  # type: ignore[misc]
+class PresentFiles(BaseTool):  # type: ignore[metaclass]
     """
     Returns metadata for local files and ensures they persist by moving them into the MNT directory.
     Use this tool when you want to show a local file to the user in the chat UI.

@@ -39,11 +39,14 @@ async def test_mcp_config_convert_schemas_to_strict_false(mock_manager, mock_get
     mock_manager.ensure_connected = AsyncMock()
 
     # Create agent with mcp_config setting convert_schemas_to_strict=False
-    Agent(
+    agent = Agent(
         name="TestAgent",
         mcp_servers=[server],
         mcp_config={"convert_schemas_to_strict": False},
     )
+
+    # Conversion is lazy; trigger it explicitly for the test
+    agent.ensure_mcp_tools()
 
     # Verify convert_schemas_to_strict was passed as False
     assert len(convert_strict_values) == 1
@@ -83,11 +86,14 @@ async def test_mcp_config_convert_schemas_to_strict_true(mock_manager, mock_get_
     mock_manager.ensure_connected = AsyncMock()
 
     # Create agent with mcp_config setting convert_schemas_to_strict=True
-    Agent(
+    agent = Agent(
         name="TestAgent",
         mcp_servers=[server],
         mcp_config={"convert_schemas_to_strict": True},
     )
+
+    # Conversion is lazy; trigger it explicitly for the test
+    agent.ensure_mcp_tools()
 
     # Verify convert_schemas_to_strict was passed as True
     assert len(convert_strict_values) == 1
@@ -127,10 +133,13 @@ async def test_mcp_config_default_convert_schemas_to_strict(mock_manager, mock_g
     mock_manager.ensure_connected = AsyncMock()
 
     # Create agent without mcp_config (should default to False)
-    Agent(
+    agent = Agent(
         name="TestAgent",
         mcp_servers=[server],
     )
+
+    # Conversion is lazy; trigger it explicitly for the test
+    agent.ensure_mcp_tools()
 
     # Verify convert_schemas_to_strict defaults to False
     assert len(convert_strict_values) == 1
@@ -170,11 +179,14 @@ async def test_mcp_config_empty_defaults_to_false(mock_manager, mock_get_functio
     mock_manager.ensure_connected = AsyncMock()
 
     # Create agent with empty mcp_config
-    Agent(
+    agent = Agent(
         name="TestAgent",
         mcp_servers=[server],
         mcp_config={},
     )
+
+    # Conversion is lazy; trigger it explicitly for the test
+    agent.ensure_mcp_tools()
 
     # Verify convert_schemas_to_strict defaults to False
     assert len(convert_strict_values) == 1
