@@ -1,0 +1,96 @@
+---
+title: "OpenClaw"
+description: "Deploy OpenClaw on Agencii with one click, BYOK keys, and the standard Agency Swarm stream contract."
+icon: "plug"
+---
+
+```python main.py
+from agency import create_agency
+from agency_swarm.integrations.fastapi import run_fastapi
+from agency_swarm.integrations.openclaw import attach_openclaw_to_fastapi
+
+app = run_fastapi(
+    agencies={"openclaw": create_agency},
+    return_app=True,
+    app_token_env="APP_TOKEN",
+)
+if app is None:
+    raise RuntimeError("FastAPI app failed to start")
+
+attach_openclaw_to_fastapi(app)
+```
+
+OpenClaw on Agencii v1 is built for a simple path: deploy once, bring your own keys, and use the same frontend stream parser you already use for Agency Swarm.
+
+## What You Get
+
+- One-click deploy from the OpenClaw starter template in Agencii Marketplace.
+- Standard Agency Swarm endpoints stay unchanged (including stream and cancel).
+- OpenClaw proxy endpoints mounted at:
+  - `POST /openclaw/v1/responses`
+  - `GET /openclaw/health`
+- Default OpenClaw model id: `openclaw:main`.
+
+## BYOK Keys (Required)
+
+Set provider keys in the Agencii key modal. Do not collect raw keys in onboarding forms.
+
+Common keys:
+
+- `OPENAI_API_KEY`
+- `ANTHROPIC_API_KEY`
+- Other provider keys supported by your selected model.
+
+<Note>
+OpenClaw integration passes environment keys through to the runtime. This keeps key handling in one secure place.
+</Note>
+
+## `/mnt` Persistence Mapping
+
+Runtime defaults are wired for E2B persistent storage:
+
+- `OPENCLAW_HOME=/mnt/openclaw`
+- `OPENCLAW_STATE_DIR=/mnt/openclaw/state`
+- `OPENCLAW_CONFIG_PATH=/mnt/openclaw/openclaw.json`
+- `OPENCLAW_LOG_PATH=/mnt/openclaw/logs/openclaw-gateway.log`
+- `OPENCLAW_PORT=18789`
+- `OPENCLAW_PROVIDER_MODEL=openai/gpt-4o-mini` (can be changed)
+
+The generated OpenClaw config enables the Responses endpoint:
+
+- `gateway.http.endpoints.responses.enabled=true`
+
+`openclaw:main` is the stable model id exposed to your agents.  
+The proxy maps it to `OPENCLAW_PROVIDER_MODEL` for upstream execution.
+
+## Streaming + Cancel Contract
+
+- Keep using Agency Swarm stream endpoint: `/{agency_name}/get_response_stream`.
+- Event contract stays the same: `meta`, `data`, `messages`, `end`.
+- Cancel stays on the existing endpoint: `/{agency_name}/cancel_response_stream`.
+- Cancellation behavior uses the same internal run registry (`ActiveRunRegistry`) as other Agency Swarm streams.
+
+## Onboarding UX (Marketplace)
+
+Use minimal onboarding fields for v1:
+
+1. `agent_name`
+2. `agent_description`
+3. `openclaw_model` (default `openclaw:main`)
+4. `agent_instructions` (optional)
+5. `openclaw_config_overrides_json` (optional)
+
+Use this with [Marketplace onboarding](/platform/marketplace/onboarding) so users can deploy in one flow.
+
+## Implementation Files
+
+- `src/agency_swarm/integrations/openclaw.py`
+- `tests/integration/fastapi/test_openclaw_integration.py`
+
+## Related Pages
+
+- [Starter Template](/welcome/getting-started/starter-template)
+- [Platform Overview](/platform/overview)
+- [Web API](/platform/integrations/web-api)
+- [Streaming](/additional-features/streaming)
+- [FastAPI Integration](/additional-features/fastapi-integration)

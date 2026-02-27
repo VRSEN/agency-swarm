@@ -55,6 +55,13 @@ from .context import MasterContext  # noqa: E402
 from .hooks import PersistenceHooks  # noqa: E402
 from .integrations.fastapi import run_fastapi  # noqa: E402
 from .integrations.mcp_server import run_mcp  # noqa: E402
+from .integrations.openclaw import (  # noqa: E402
+    OpenClawIntegrationConfig,
+    OpenClawRuntime,
+    attach_openclaw_to_fastapi,
+    build_openclaw_responses_model,
+    create_openclaw_proxy_router,
+)
 from .tools import (  # noqa: E402
     BaseTool,
     CodeInterpreter,
@@ -104,6 +111,11 @@ __all__ = [
     "SendMessage",
     "run_fastapi",
     "run_mcp",
+    "OpenClawIntegrationConfig",
+    "OpenClawRuntime",
+    "create_openclaw_proxy_router",
+    "attach_openclaw_to_fastapi",
+    "build_openclaw_responses_model",
     # Re-exports from Agents SDK
     "ModelSettings",
     "OpenAIChatCompletionsModel",
