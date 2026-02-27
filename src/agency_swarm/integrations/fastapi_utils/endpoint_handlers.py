@@ -50,6 +50,11 @@ from agency_swarm import (
 from agency_swarm.agent.execution_stream_response import StreamingRunResponse
 from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_urls
 from agency_swarm.integrations.fastapi_utils.logging_middleware import get_logs_endpoint_impl
+from agency_swarm.integrations.fastapi_utils.override_policy import (
+    RequestOverridePolicy,
+    _get_openai_client_from_agent,
+    get_allowed_dirs_for_metadata,
+)
 from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
 from agency_swarm.messages import MessageFilter, MessageFormatter
 from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
@@ -62,6 +67,11 @@ from agency_swarm.utils.usage_tracking import (
 )
 
 logger = logging.getLogger(__name__)
+
+type _AgencyStateSnapshot = dict[
+    str,
+    tuple[str | Model | None, ModelSettings | None, AsyncOpenAI | None, OpenAI | None],
+]
 
 
 @dataclass
@@ -82,6 +92,32 @@ class _AgencyRequestState:
 class _AgencyRequestLease:
     state: _AgencyRequestState
     is_override: bool
+
+
+@dataclass
+class _RequestOverrideSession:
+    """Track request override lifecycle for one handler invocation."""
+
+    agency: Agency
+    policy: RequestOverridePolicy
+    lease: _AgencyRequestLease | None = None
+    restore_snapshot: _AgencyStateSnapshot | None = None
+    _is_cleaned: bool = False
+
+    async def acquire(self) -> None:
+        self.lease = await _acquire_agency_request_lease(self.agency, is_override=self.policy.has_client_overrides)
+        if self.policy.has_client_overrides and self.policy.config is not None:
+            self.restore_snapshot = _snapshot_agency_state(self.agency)
+            apply_openai_client_config(self.agency, self.policy.config)
+
+    async def cleanup(self) -> None:
+        if self._is_cleaned:
+            return
+        self._is_cleaned = True
+        if self.restore_snapshot is not None:
+            _restore_agency_state(self.agency, self.restore_snapshot)
+        if self.lease is not None:
+            await _release_agency_request_lease(self.lease)
 
 
 _AGENCY_REQUEST_STATES: WeakKeyDictionary[Agency, dict[asyncio.AbstractEventLoop, _AgencyRequestState]] = (
@@ -204,43 +240,12 @@ def get_verify_token(app_token):
 
 def _has_request_client_overrides(config: ClientConfig | None) -> bool:
     """Return True when request client_config carries any override values."""
-    return config is not None and (
-        config.base_url is not None
-        or config.api_key is not None
-        or config.default_headers is not None
-        or config.litellm_keys is not None
-    )
+    return RequestOverridePolicy(config).has_client_overrides
 
 
 def _has_request_openai_overrides(config: ClientConfig | None) -> bool:
     """Return True when request client_config carries OpenAI client overrides."""
-    return config is not None and (
-        config.base_url is not None or config.api_key is not None or config.default_headers is not None
-    )
-
-
-def _get_upload_client_agent(agency: Agency, recipient_agent: str | None = None) -> Agent | None:
-    """Resolve the agent context used to derive upload/chat-name OpenAI client settings."""
-    if recipient_agent:
-        selected = agency.agents.get(recipient_agent)
-        if selected is not None:
-            return selected
-
-    entry_points = getattr(agency, "entry_points", None)
-    if isinstance(entry_points, list) and entry_points:
-        first_entry = entry_points[0]
-        if isinstance(first_entry, Agent):
-            return first_entry
-        entry_name = getattr(first_entry, "name", None)
-        if isinstance(entry_name, str):
-            selected = agency.agents.get(entry_name)
-            if selected is not None:
-                return selected
-
-    if len(agency.agents) == 1:
-        return next(iter(agency.agents.values()))
-
-    return None
+    return RequestOverridePolicy(config).has_openai_overrides
 
 
 def _build_file_upload_client(
@@ -249,38 +254,7 @@ def _build_file_upload_client(
     recipient_agent: str | None = None,
 ) -> AsyncOpenAI | None:
     """Build a request-scoped OpenAI client for file uploads when overrides are present."""
-    if not _has_request_openai_overrides(config):
-        return None
-
-    assert config is not None
-
-    base_client: AsyncOpenAI | None = None
-    selected_agent = _get_upload_client_agent(agency, recipient_agent=recipient_agent)
-    if selected_agent is not None:
-        base_client = _get_openai_client_from_agent(selected_agent)
-        if base_client is None:
-            cached_client = getattr(selected_agent, "_openai_client", None)
-            if isinstance(cached_client, AsyncOpenAI):
-                base_client = cached_client
-
-    if base_client is None:
-        base_client = get_default_openai_client()
-
-    if base_client is None:
-        if config.api_key is None:
-            # No baseline client and no request api_key: fall back to default env behavior.
-            return None
-        return AsyncOpenAI(
-            api_key=config.api_key,
-            base_url=config.base_url,
-            default_headers=config.default_headers,
-        )
-
-    return base_client.copy(
-        api_key=config.api_key,
-        base_url=config.base_url,
-        default_headers=config.default_headers,
-    )
+    return RequestOverridePolicy(config).build_file_upload_client(agency, recipient_agent=recipient_agent)
 
 
 # Non‑streaming response endpoint
@@ -301,24 +275,15 @@ def make_response_endpoint(
                 return []
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
-        has_client_overrides = _has_request_client_overrides(request.client_config)
+        override_policy = RequestOverridePolicy(request.client_config)
+        override_session = _RequestOverrideSession(agency=agency_instance, policy=override_policy)
         request_upload_client: AsyncOpenAI | None = None
 
         combined_file_ids = request.file_ids
         file_ids_map = None
-        agency_lease: _AgencyRequestLease | None = None
-        restore_snapshot = None
 
         try:
-            agency_lease = await _acquire_agency_request_lease(
-                agency_instance,
-                is_override=has_client_overrides,
-            )
-
-            # Apply client overrides inside try so partial mutations are always rolled back.
-            if has_client_overrides and request.client_config is not None:
-                restore_snapshot = _snapshot_agency_state(agency_instance)
-                apply_openai_client_config(agency_instance, request.client_config)
+            await override_session.acquire()
 
             request_upload_client = _build_file_upload_client(
                 agency_instance,
@@ -377,10 +342,7 @@ def make_response_endpoint(
                     logger.error(f"Error generating chat name: {e}")
             return result
         finally:
-            if restore_snapshot is not None:
-                _restore_agency_state(agency_instance, restore_snapshot)
-            if agency_lease is not None:
-                await _release_agency_request_lease(agency_lease)
+            await override_session.cleanup()
 
     return handler
 
@@ -408,30 +370,18 @@ def make_stream_endpoint(
                 return []
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
-        has_client_overrides = _has_request_client_overrides(request.client_config)
+        override_policy = RequestOverridePolicy(request.client_config)
+        override_session = _RequestOverrideSession(agency=agency_instance, policy=override_policy)
         request_upload_client: AsyncOpenAI | None = None
 
         combined_file_ids = request.file_ids
         file_ids_map = None
-        agency_lease: _AgencyRequestLease | None = None
-        restore_snapshot = None
 
         async def cleanup_setup_context() -> None:
-            if restore_snapshot is not None:
-                _restore_agency_state(agency_instance, restore_snapshot)
-            if agency_lease is not None:
-                await _release_agency_request_lease(agency_lease)
+            await override_session.cleanup()
 
         try:
-            agency_lease = await _acquire_agency_request_lease(
-                agency_instance,
-                is_override=has_client_overrides,
-            )
-
-            # Apply client overrides inside try so partial mutations are always rolled back.
-            if has_client_overrides and request.client_config is not None:
-                restore_snapshot = _snapshot_agency_state(agency_instance)
-                apply_openai_client_config(agency_instance, request.client_config)
+            await override_session.acquire()
 
             request_upload_client = _build_file_upload_client(
                 agency_instance,
@@ -483,10 +433,7 @@ def make_stream_endpoint(
                 if cleanup_completed:
                     return
                 cleanup_completed = True
-                if restore_snapshot is not None:
-                    _restore_agency_state(agency_instance, restore_snapshot)
-                if agency_lease is not None:
-                    await _release_agency_request_lease(agency_lease)
+                await override_session.cleanup()
 
         async def event_generator():
             # Capture initial message count to identify new messages
@@ -696,28 +643,15 @@ def make_agui_chat_endpoint(
 
         # Choose / build an agent – here we just create a demo agent each time.
         agency = agency_factory(load_threads_callback=load_callback)
-        has_client_overrides = _has_request_client_overrides(request.client_config)
+        override_policy = RequestOverridePolicy(request.client_config)
+        override_session = _RequestOverrideSession(agency=agency, policy=override_policy)
         request_upload_client: AsyncOpenAI | None = None
 
-        agency_lease: _AgencyRequestLease | None = None
-        restore_snapshot = None
-
         async def cleanup_setup_context() -> None:
-            if restore_snapshot is not None:
-                _restore_agency_state(agency, restore_snapshot)
-            if agency_lease is not None:
-                await _release_agency_request_lease(agency_lease)
+            await override_session.cleanup()
 
         try:
-            agency_lease = await _acquire_agency_request_lease(
-                agency,
-                is_override=has_client_overrides,
-            )
-
-            # Apply client overrides inside try so partial mutations are always rolled back.
-            if has_client_overrides and request.client_config is not None:
-                restore_snapshot = _snapshot_agency_state(agency)
-                apply_openai_client_config(agency, request.client_config)
+            await override_session.acquire()
 
             request_upload_client = _build_file_upload_client(agency, request.client_config, recipient_agent=None)
             if getattr(request, "file_urls", None):
@@ -760,10 +694,7 @@ def make_agui_chat_endpoint(
                 if cleanup_completed:
                     return
                 cleanup_completed = True
-                if restore_snapshot is not None:
-                    _restore_agency_state(agency, restore_snapshot)
-                if agency_lease is not None:
-                    await _release_agency_request_lease(agency_lease)
+                await override_session.cleanup()
 
         async def event_generator() -> AsyncGenerator[str]:
             # Emit RUN_STARTED first.
@@ -853,7 +784,7 @@ def make_metadata_endpoint(
         if allowed_local_dirs is None:
             metadata_with_version["allowed_local_file_dirs"] = None
         else:
-            metadata_with_version["allowed_local_file_dirs"] = _get_allowed_dirs_for_metadata(allowed_local_dirs)
+            metadata_with_version["allowed_local_file_dirs"] = get_allowed_dirs_for_metadata(allowed_local_dirs)
         return metadata_with_version
 
     return handler
@@ -945,31 +876,6 @@ def _get_agency_swarm_version() -> str | None:
     except metadata.PackageNotFoundError:
         logger.debug("agency-swarm package metadata not found; returning no version")
         return None
-
-
-def _get_allowed_dirs_for_metadata(allowed_local_dirs: Sequence[str | Path]) -> list[str]:
-    """Return validated allowlist entries without expanding them into resolved server paths."""
-    visible_dirs: list[str] = []
-    for entry in allowed_local_dirs:
-        path = Path(entry).expanduser()
-        if not path.exists():
-            logger.warning("Allowed directory not found (skipping): %s", entry)
-            continue
-        if not path.is_dir():
-            logger.warning("Allowed path must be a directory (skipping): %s", entry)
-            continue
-        visible_dirs.append(str(entry))
-    return visible_dirs
-
-
-def _get_openai_client_from_agent(agent: Agent) -> AsyncOpenAI | None:
-    """Return the agent's current OpenAI client, if directly accessible."""
-    model = agent.model
-    for attr in ("openai_client", "client", "_client"):
-        maybe = getattr(model, attr, None)
-        if isinstance(maybe, AsyncOpenAI):
-            return maybe
-    return None
 
 
 def _build_openai_client_for_agent(agent: Agent, config: ClientConfig) -> AsyncOpenAI | None:
@@ -1297,9 +1203,9 @@ def _apply_litellm_config(agent: Agent, model_name: str, config: ClientConfig) -
 
 def _snapshot_agency_state(
     agency: Agency,
-) -> dict[str, tuple[str | Model | None, ModelSettings | None, AsyncOpenAI | None, OpenAI | None]]:
+) -> _AgencyStateSnapshot:
     """Capture request-mutable agent state so overrides can be restored."""
-    snapshot: dict[str, tuple[str | Model | None, ModelSettings | None, AsyncOpenAI | None, OpenAI | None]] = {}
+    snapshot: _AgencyStateSnapshot = {}
     for name, agent in agency.agents.items():
         model_settings = getattr(agent, "model_settings", None)
         snapshot[name] = (
@@ -1313,7 +1219,7 @@ def _snapshot_agency_state(
 
 def _restore_agency_state(
     agency: Agency,
-    snapshot: dict[str, tuple[str | Model | None, ModelSettings | None, AsyncOpenAI | None, OpenAI | None]],
+    snapshot: _AgencyStateSnapshot,
 ) -> None:
     """Restore agent model/model_settings/OpenAI clients after a request override."""
     for name, (model, model_settings, openai_client, openai_client_sync) in snapshot.items():
