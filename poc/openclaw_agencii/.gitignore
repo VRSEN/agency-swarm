@@ -1,0 +1,10 @@
+# Local reference clones (not committed)
+references/
+
+# Local runtime artifacts
+*.log
+.env
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
