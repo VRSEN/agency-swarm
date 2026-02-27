@@ -48,7 +48,7 @@ from agency_swarm import (
     RunContextWrapper,
 )
 from agency_swarm.agent.execution_stream_response import StreamingRunResponse
-from agency_swarm.integrations.fastapi_utils.file_handler import _normalize_allowed_dirs, upload_from_urls
+from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_urls
 from agency_swarm.integrations.fastapi_utils.logging_middleware import get_logs_endpoint_impl
 from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
 from agency_swarm.messages import MessageFilter, MessageFormatter
@@ -853,8 +853,7 @@ def make_metadata_endpoint(
         if allowed_local_dirs is None:
             metadata_with_version["allowed_local_file_dirs"] = None
         else:
-            normalized_dirs = _normalize_allowed_dirs(allowed_local_dirs, skip_missing=True) or []
-            metadata_with_version["allowed_local_file_dirs"] = [str(p) for p in normalized_dirs]
+            metadata_with_version["allowed_local_file_dirs"] = _get_allowed_dirs_for_metadata(allowed_local_dirs)
         return metadata_with_version
 
     return handler
@@ -948,6 +947,21 @@ def _get_agency_swarm_version() -> str | None:
         return None
 
 
+def _get_allowed_dirs_for_metadata(allowed_local_dirs: Sequence[str | Path]) -> list[str]:
+    """Return validated allowlist entries without expanding them into resolved server paths."""
+    visible_dirs: list[str] = []
+    for entry in allowed_local_dirs:
+        path = Path(entry).expanduser()
+        if not path.exists():
+            logger.warning("Allowed directory not found (skipping): %s", entry)
+            continue
+        if not path.is_dir():
+            logger.warning("Allowed path must be a directory (skipping): %s", entry)
+            continue
+        visible_dirs.append(str(entry))
+    return visible_dirs
+
+
 def _get_openai_client_from_agent(agent: Agent) -> AsyncOpenAI | None:
     """Return the agent's current OpenAI client, if directly accessible."""
     model = agent.model
@@ -958,18 +972,22 @@ def _get_openai_client_from_agent(agent: Agent) -> AsyncOpenAI | None:
     return None
 
 
-def _build_openai_client_for_agent(agent: Agent, config: ClientConfig) -> AsyncOpenAI:
+def _build_openai_client_for_agent(agent: Agent, config: ClientConfig) -> AsyncOpenAI | None:
     """Build an AsyncOpenAI client by layering config over existing defaults.
 
     Priority:
     - explicit values from `config` win
     - otherwise fall back to the agent's existing OpenAI client (if any)
     - otherwise fall back to the global default OpenAI client (if any)
-    - otherwise fall back to a fresh AsyncOpenAI() using environment variables
+    - otherwise:
+      - if `config` only includes default_headers, skip client replacement (no baseline client to copy)
+      - else create a fresh AsyncOpenAI() using environment variables/request overrides
     """
     base_client = _get_openai_client_from_agent(agent) or get_default_openai_client()
 
     if base_client is None:
+        if config.api_key is None and config.base_url is None:
+            return None
         # Allow request-provided api_key/base_url to work even when the server has no OPENAI_API_KEY.
         return AsyncOpenAI(
             api_key=config.api_key,

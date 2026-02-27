@@ -268,6 +268,48 @@ def test_metadata_skips_missing_allowed_dirs(tmp_path, agency_factory):
     assert payload["allowed_local_file_dirs"] == []
 
 
+def test_metadata_skips_non_directory_allowed_dirs(tmp_path, agency_factory):
+    """Non-directory allowlist entries should be ignored instead of breaking metadata."""
+    file_entry = tmp_path / "not-a-directory.txt"
+    file_entry.write_text("x", encoding="utf-8")
+
+    app = run_fastapi(
+        agencies={"test_agency": agency_factory},
+        return_app=True,
+        app_token_env="",
+        allowed_local_file_dirs=[str(file_entry)],
+    )
+    client = TestClient(app)
+
+    response = client.get("/test_agency/get_metadata")
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["allowed_local_file_dirs"] == []
+
+
+def test_metadata_preserves_configured_allowlist_strings(tmp_path, monkeypatch, agency_factory):
+    """Metadata should return configured allowlist strings without resolving home paths."""
+    fake_home = tmp_path / "fake-home"
+    allowed_dir = fake_home / "uploads"
+    allowed_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(fake_home))
+
+    app = run_fastapi(
+        agencies={"test_agency": agency_factory},
+        return_app=True,
+        app_token_env="",
+        allowed_local_file_dirs=["~/uploads"],
+    )
+    client = TestClient(app)
+
+    response = client.get("/test_agency/get_metadata")
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["allowed_local_file_dirs"] == ["~/uploads"]
+
+
 def test_tool_endpoint_handles_nested_schema():
     """Test that tool endpoints work with nested Pydantic models."""
 
