@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import inspect
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +15,7 @@ from fastapi.testclient import TestClient
 from agency_swarm import run_fastapi
 from agency_swarm.integrations.openclaw import (
     OpenClawIntegrationConfig,
+    OpenClawRuntime,
     attach_openclaw_to_fastapi,
 )
 
@@ -213,3 +216,74 @@ def test_cancel_endpoint_behavior_remains_on_existing_agency_route(
 
     proxy_cancel = client.post("/openclaw/cancel_response_stream", json={"run_id": "missing-run"})
     assert proxy_cancel.status_code == 404
+
+
+def test_openclaw_ensure_layout_creates_config_parent(tmp_path: Path) -> None:
+    config = _build_openclaw_config(tmp_path)
+    custom_config_path = tmp_path / "config-root" / "nested" / "openclaw.json"
+    runtime = OpenClawRuntime(replace(config, config_path=custom_config_path))
+
+    runtime.ensure_layout()
+
+    assert custom_config_path.exists()
+    assert custom_config_path.parent.is_dir()
+
+
+def test_openclaw_startup_and_shutdown_handlers_are_sync(tmp_path: Path) -> None:
+    app = FastAPI()
+    attach_openclaw_to_fastapi(app, _build_openclaw_config(tmp_path))
+
+    startup_handlers = [handler for handler in app.router.on_startup if handler.__name__ == "_startup_openclaw_runtime"]
+    shutdown_handlers = [
+        handler for handler in app.router.on_shutdown if handler.__name__ == "_shutdown_openclaw_runtime"
+    ]
+
+    assert startup_handlers, "startup handler not registered"
+    assert shutdown_handlers, "shutdown handler not registered"
+    assert not inspect.iscoroutinefunction(startup_handlers[0])
+    assert not inspect.iscoroutinefunction(shutdown_handlers[0])
+
+
+def test_openclaw_proxy_requires_app_token(
+    monkeypatch: pytest.MonkeyPatch,
+    agency_factory,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("APP_TOKEN", "secret-token")
+
+    class _FakeAsyncClient:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            return None
+
+        async def __aenter__(self) -> _FakeAsyncClient:
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def post(self, url: str, *, headers: dict[str, str], json: dict[str, Any]) -> httpx.Response:
+            return httpx.Response(
+                status_code=200,
+                content=b'{"ok": true}',
+                headers={"content-type": "application/json"},
+            )
+
+    monkeypatch.setattr("agency_swarm.integrations.openclaw.httpx.AsyncClient", _FakeAsyncClient)
+
+    app = run_fastapi(agencies={"secure": agency_factory}, return_app=True, app_token_env="APP_TOKEN")
+    assert app is not None
+    attach_openclaw_to_fastapi(app, _build_openclaw_config(tmp_path))
+    client = TestClient(app)
+
+    unauthorized = client.post(
+        "/openclaw/v1/responses",
+        json={"model": "openclaw:main", "input": "hello"},
+    )
+    assert unauthorized.status_code in (401, 403)
+
+    authorized = client.post(
+        "/openclaw/v1/responses",
+        json={"model": "openclaw:main", "input": "hello"},
+        headers={"Authorization": "Bearer secret-token"},
+    )
+    assert authorized.status_code == 200

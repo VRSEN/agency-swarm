@@ -103,6 +103,7 @@ def run_fastapi(
     normalized_allowed_dirs = _normalize_allowed_dirs(allowed_local_file_dirs)
 
     app = FastAPI(servers=[{"url": base_url}])
+    app.state.verify_token = verify_token
 
     # Setup logging if enabled
     if enable_logging:
