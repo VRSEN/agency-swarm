@@ -101,7 +101,7 @@
                 "pages": [
                   "additional-features/guardrails/overview",
                   "additional-features/guardrails/input-guardrails",
-                  "additional-features/guardrails/output-guardrails"
+              "additional-features/guardrails/output-guardrails"
                 ]
               },
               "additional-features/streaming",
@@ -167,6 +167,7 @@
               "platform/integrations/whatsapp-integration",
               "platform/integrations/zapier-integration",
               "platform/integrations/n8n-integration",
+              "platform/integrations/openclaw-integration",
               "platform/integrations/web-api",
               "platform/integrations/widget"
             ]
