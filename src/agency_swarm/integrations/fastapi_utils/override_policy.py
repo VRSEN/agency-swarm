@@ -12,40 +12,6 @@ from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
 logger = logging.getLogger(__name__)
 
 
-def _get_openai_client_from_agent(agent: Agent) -> AsyncOpenAI | None:
-    """Return the agent's current OpenAI client, if directly accessible."""
-    model = agent.model
-    for attr in ("openai_client", "client", "_client"):
-        maybe = getattr(model, attr, None)
-        if isinstance(maybe, AsyncOpenAI):
-            return maybe
-    return None
-
-
-def _get_upload_client_agent(agency: Agency, recipient_agent: str | None = None) -> Agent | None:
-    """Resolve the agent context used to derive upload/chat-name OpenAI client settings."""
-    if recipient_agent:
-        selected = agency.agents.get(recipient_agent)
-        if selected is not None:
-            return selected
-
-    entry_points = getattr(agency, "entry_points", None)
-    if isinstance(entry_points, list) and entry_points:
-        first_entry = entry_points[0]
-        if isinstance(first_entry, Agent):
-            return first_entry
-        entry_name = getattr(first_entry, "name", None)
-        if isinstance(entry_name, str):
-            selected = agency.agents.get(entry_name)
-            if selected is not None:
-                return selected
-
-    if len(agency.agents) == 1:
-        return next(iter(agency.agents.values()))
-
-    return None
-
-
 def get_allowed_dirs_for_metadata(allowed_local_dirs: Sequence[str | Path]) -> list[str]:
     """Return validated allowlist entries without expanding them into resolved server paths."""
     visible_dirs: list[str] = []
@@ -122,3 +88,37 @@ class RequestOverridePolicy:
             base_url=self.config.base_url,
             default_headers=self.config.default_headers,
         )
+
+
+def _get_openai_client_from_agent(agent: Agent) -> AsyncOpenAI | None:
+    """Return the agent's current OpenAI client, if directly accessible."""
+    model = agent.model
+    for attr in ("openai_client", "client", "_client"):
+        maybe = getattr(model, attr, None)
+        if isinstance(maybe, AsyncOpenAI):
+            return maybe
+    return None
+
+
+def _get_upload_client_agent(agency: Agency, recipient_agent: str | None = None) -> Agent | None:
+    """Resolve the agent context used to derive upload/chat-name OpenAI client settings."""
+    if recipient_agent:
+        selected = agency.agents.get(recipient_agent)
+        if selected is not None:
+            return selected
+
+    entry_points = getattr(agency, "entry_points", None)
+    if isinstance(entry_points, list) and entry_points:
+        first_entry = entry_points[0]
+        if isinstance(first_entry, Agent):
+            return first_entry
+        entry_name = getattr(first_entry, "name", None)
+        if isinstance(entry_name, str):
+            selected = agency.agents.get(entry_name)
+            if selected is not None:
+                return selected
+
+    if len(agency.agents) == 1:
+        return next(iter(agency.agents.values()))
+
+    return None
