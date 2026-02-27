@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 async def upload_from_urls(
     file_map: dict[str, str],
     allowed_local_dirs: Sequence[str | Path] | None = None,
+    openai_client: AsyncOpenAI | None = None,
 ) -> dict[str, str]:
     """
     Upload files from URLs or local absolute paths to OpenAI.
@@ -37,13 +38,16 @@ async def upload_from_urls(
     allowed_remote_schemes = {"http", "https"}
     names_order = list(file_map.keys())
     allowed_dirs: list[Path] | None = None
+    allowed_dirs_initialized = False
 
     def _get_allowed_dirs() -> list[Path] | None:
-        nonlocal allowed_dirs
-        if allowed_local_dirs is None:
-            return None
-        if allowed_dirs is None:
-            allowed_dirs = _normalize_allowed_dirs(allowed_local_dirs)
+        nonlocal allowed_dirs, allowed_dirs_initialized
+        if not allowed_dirs_initialized:
+            if allowed_local_dirs is None:
+                allowed_dirs = None
+            else:
+                allowed_dirs = _normalize_allowed_dirs(allowed_local_dirs, skip_missing=True)
+            allowed_dirs_initialized = True
         return allowed_dirs
 
     local_files: dict[str, Path] = {}
@@ -105,19 +109,30 @@ async def upload_from_urls(
     if remote_files:
         with tempfile.TemporaryDirectory() as tmp:
             paths = await asyncio.gather(*[download_file(url, name, tmp) for name, url in remote_files.items()])
-            ids = await asyncio.gather(*[upload_to_openai(p) for p in paths])
+            if openai_client is None:
+                ids = await asyncio.gather(*[upload_to_openai(p) for p in paths])
+            else:
+                ids = await asyncio.gather(*[upload_to_openai(p, openai_client=openai_client) for p in paths])
             remote_file_ids = dict(zip(remote_files.keys(), ids, strict=True))
 
     # Upload local files
     local_file_ids: dict[str, str] = {}
     if local_files:
-        ids = await asyncio.gather(*[upload_to_openai(str(p)) for p in local_files.values()])
+        if openai_client is None:
+            ids = await asyncio.gather(*[upload_to_openai(str(p)) for p in local_files.values()])
+        else:
+            ids = await asyncio.gather(
+                *[upload_to_openai(str(p), openai_client=openai_client) for p in local_files.values()]
+            )
         local_file_ids = dict(zip(local_files.keys(), ids, strict=True))
 
     all_ids = {**remote_file_ids, **local_file_ids}
     ordered_ids = [all_ids[name] for name in names_order]
 
-    await asyncio.gather(*[_wait_for_file_processed(fid) for fid in ordered_ids])
+    if openai_client is None:
+        await asyncio.gather(*[_wait_for_file_processed(fid) for fid in ordered_ids])
+    else:
+        await asyncio.gather(*[_wait_for_file_processed(fid, openai_client=openai_client) for fid in ordered_ids])
 
     return dict(zip(names_order, ordered_ids, strict=True))
 
@@ -127,12 +142,12 @@ async def upload_from_urls(
 # ============================================================
 
 
-def _get_openai_client() -> AsyncOpenAI:
-    return AsyncOpenAI()
+def _get_openai_client(openai_client: AsyncOpenAI | None = None) -> AsyncOpenAI:
+    return openai_client if openai_client is not None else AsyncOpenAI()
 
 
-async def upload_to_openai(file_path: str) -> str:
-    client = _get_openai_client()
+async def upload_to_openai(file_path: str, openai_client: AsyncOpenAI | None = None) -> str:
+    client = _get_openai_client(openai_client=openai_client)
     try:
         with open(file_path, "rb") as f:
             uploaded = await client.files.create(file=f, purpose="assistants")
@@ -142,8 +157,8 @@ async def upload_to_openai(file_path: str) -> str:
         raise
 
 
-async def _wait_for_file_processed(file_id: str, timeout: int = 60) -> None:
-    client = _get_openai_client()
+async def _wait_for_file_processed(file_id: str, timeout: int = 60, openai_client: AsyncOpenAI | None = None) -> None:
+    client = _get_openai_client(openai_client=openai_client)
     for _ in range(timeout):
         try:
             info = await client.files.retrieve(file_id)
@@ -214,6 +229,8 @@ async def download_file(url: str, name: str, save_dir: str) -> str:
 
 def _normalize_allowed_dirs(
     allowed_local_dirs: Sequence[str | Path] | None,
+    *,
+    skip_missing: bool = True,
 ) -> list[Path] | None:
     if allowed_local_dirs is None:
         return None
@@ -222,6 +239,9 @@ def _normalize_allowed_dirs(
     for entry in allowed_local_dirs:
         path = Path(entry).expanduser().resolve()
         if not path.exists():
+            if skip_missing:
+                logger.warning("Allowed directory not found (skipping): %s", entry)
+                continue
             raise FileNotFoundError(f"Allowed directory not found: {entry}")
         if not path.is_dir():
             raise NotADirectoryError(f"Allowed path must be a directory: {entry}")
