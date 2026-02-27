@@ -14,10 +14,18 @@ async def test_agui_file_urls_error_emits_lifecycle_events(tmp_path):
 
     encoder = EventEncoder()
 
+    class _AgentStub:
+        name = "A"
+
+    class _AgencyStub:
+        def __init__(self):
+            self.entry_points = [_AgentStub()]
+            self.agents = {"A": _AgentStub()}
+
     # Build handler with no allowlist so local file triggers a PermissionError.
     handler = make_agui_chat_endpoint(
         RunAgentInputCustom,
-        agency_factory=lambda **_: None,  # not reached on error path
+        agency_factory=lambda **_: _AgencyStub(),
         verify_token=lambda: None,
         allowed_local_dirs=None,
     )
