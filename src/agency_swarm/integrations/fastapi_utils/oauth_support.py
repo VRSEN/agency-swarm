@@ -35,6 +35,7 @@ class OAuthFlowState:
     user_id: str | None
     code: str | None = None
     error: str | None = None
+    status: str = "pending"
     event: asyncio.Event = field(default_factory=asyncio.Event)
     created_at: float = field(default_factory=time.time)
 
@@ -76,6 +77,8 @@ class OAuthStateRegistry:
                 flow.server_name = server_name
                 flow.user_id = user_id or flow.user_id
                 flow.error = None
+                flow.code = None
+                flow.status = "pending"
             return flow
 
     async def set_code(self, *, state: str, code: str, user_id: str | None) -> OAuthFlowState:
@@ -89,6 +92,9 @@ class OAuthStateRegistry:
             else:
                 if flow.user_id and user_id and flow.user_id != user_id:
                     flow.error = "user_mismatch"
+                    flow.status = "error:user_mismatch"
+                else:
+                    flow.status = "authorized"
                 flow.code = code
             flow.event.set()
             return flow
@@ -104,6 +110,20 @@ class OAuthStateRegistry:
                 self._flows[state] = flow
             else:
                 flow.error = error_msg
+            flow.status = f"error:{error_msg}"
+            flow.event.set()
+            return flow
+
+    async def set_timeout(self, *, state: str) -> OAuthFlowState:
+        """Mark an OAuth flow as timed out and release any waiters."""
+        async with self._lock:
+            self._prune_expired_locked()
+            flow = self._flows.get(state)
+            if flow is None:
+                flow = OAuthFlowState(state=state, auth_url="", server_name=None, user_id=None)
+                self._flows[state] = flow
+            flow.status = "timeout"
+            flow.error = None
             flow.event.set()
             return flow
 
@@ -113,6 +133,7 @@ class OAuthStateRegistry:
         try:
             await asyncio.wait_for(flow.event.wait(), timeout=timeout)
         except TimeoutError as exc:  # pragma: no cover - timeout exercised in runtime paths
+            await self.set_timeout(state=state)
             raise OAuthFlowError(f"Timed out waiting for OAuth callback for state={state}") from exc
 
         if flow.error:
@@ -130,12 +151,9 @@ class OAuthStateRegistry:
             flow = self._flows.get(state)
             if flow is None:
                 return {"state": state, "status": "unknown"}
-            status = "authorized" if flow.code else "pending"
-            if flow.error:
-                status = f"error:{flow.error}"
             return {
                 "state": state,
-                "status": status,
+                "status": flow.status,
                 "auth_url": flow.auth_url,
                 "server_name": flow.server_name,
                 "user_id": flow.user_id,
@@ -214,6 +232,7 @@ class FastAPIOAuthRuntime:
             state=state, auth_url=auth_url, server_name=server_name, user_id=self.user_id
         )
         await self._queue.put({"type": "oauth_redirect", "state": state, "auth_url": auth_url, "server": server_name})
+        await self._queue.put({"type": "oauth_status", "state": state, "status": "pending", "server": server_name})
 
     async def wait_for_code(self, server_name: str | None) -> tuple[str, str | None]:
         """Block until the callback delivers code/state for the provided server."""
@@ -221,13 +240,43 @@ class FastAPIOAuthRuntime:
         if key is None or key not in self._state_by_server:
             raise OAuthFlowError("OAuth state not initialized before callback wait")
         state = self._state_by_server[key]
-        code, resolved_state = await self.registry.wait_for_code(state=state, timeout=self.timeout)
-        await self._queue.put({"type": "oauth_authorized", "state": resolved_state, "server": server_name})
+        try:
+            code, resolved_state = await self.registry.wait_for_code(state=state, timeout=self.timeout)
+        except OAuthFlowError:
+            snapshot = await self.registry.get_status(state)
+            await self._queue.put(
+                {
+                    "type": "oauth_status",
+                    "state": state,
+                    "status": snapshot.get("status", "error:unknown"),
+                    "server": server_name,
+                }
+            )
+            raise
+        await self._queue.put(
+            {"type": "oauth_status", "state": resolved_state, "status": "authorized", "server": server_name}
+        )
         return code, resolved_state
 
     async def next_event(self) -> dict[str, Any]:
         """Return the next OAuth event destined for the SSE stream."""
         return await self._queue.get()
+
+    def redirect_handler_factory(self):
+        """Build per-server redirect handlers for request-scoped OAuth runtime context."""
+
+        def _factory(server_name: str | None):
+            return lambda auth_url, server_name=server_name: self.handle_redirect(auth_url, server_name)
+
+        return _factory
+
+    def callback_handler_factory(self):
+        """Build per-server callback handlers for request-scoped OAuth runtime context."""
+
+        def _factory(server_name: str | None):
+            return lambda server_name=server_name: self.wait_for_code(server_name)
+
+        return _factory
 
     def install_handler_factory(self, agent: Any) -> None:
         """Attach per-server handler factory to agents with OAuth servers.
@@ -246,10 +295,13 @@ class FastAPIOAuthRuntime:
         if not has_oauth_servers and not has_hosted_mcp_tools:
             return
 
+        redirect_factory = self.redirect_handler_factory()
+        callback_factory = self.callback_handler_factory()
+
         def _factory(server_name: str) -> dict[str, Any]:
             return {
-                "redirect": lambda auth_url, server_name=server_name: self.handle_redirect(auth_url, server_name),
-                "callback": lambda server_name=server_name: self.wait_for_code(server_name),
+                "redirect": redirect_factory(server_name),
+                "callback": callback_factory(server_name),
             }
 
         agent.mcp_oauth_handler_factory = _factory
@@ -261,4 +313,4 @@ class FastAPIOAuthConfig:
 
     registry: OAuthStateRegistry
     user_header: str = "X-User-Id"
-    timeout: float | None = 900.0
+    timeout: float | None = 600.0
