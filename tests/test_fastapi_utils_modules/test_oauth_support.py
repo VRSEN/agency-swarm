@@ -31,6 +31,11 @@ async def test_runtime_records_redirect_and_completes_on_callback() -> None:
     assert redirect_event["state"] == "test-state"
     assert redirect_event["auth_url"] == auth_url
 
+    pending_event = await asyncio.wait_for(runtime.next_event(), timeout=0.1)
+    assert pending_event["type"] == "oauth_status"
+    assert pending_event["state"] == "test-state"
+    assert pending_event["status"] == "pending"
+
     wait_task = asyncio.create_task(runtime.wait_for_code("github"))
     await registry.set_code(state="test-state", code="code-123", user_id="user-1")
     code, state = await asyncio.wait_for(wait_task, timeout=0.25)
@@ -38,9 +43,10 @@ async def test_runtime_records_redirect_and_completes_on_callback() -> None:
     assert code == "code-123"
     assert state == "test-state"
 
-    authorized_event = await asyncio.wait_for(runtime.next_event(), timeout=0.1)
-    assert authorized_event["type"] == "oauth_authorized"
-    assert authorized_event["state"] == "test-state"
+    status_event = await asyncio.wait_for(runtime.next_event(), timeout=0.1)
+    assert status_event["type"] == "oauth_status"
+    assert status_event["state"] == "test-state"
+    assert status_event["status"] == "authorized"
 
 
 @pytest.mark.asyncio
@@ -71,6 +77,27 @@ async def test_wait_for_code_times_out_cleanly() -> None:
 
     with pytest.raises(OAuthFlowError):
         await registry.wait_for_code(state="no-callback", timeout=0.01)
+
+    status = await registry.get_status("no-callback")
+    assert status["status"] == "timeout"
+
+
+@pytest.mark.asyncio
+async def test_runtime_emits_timeout_status_event() -> None:
+    registry = OAuthStateRegistry()
+    runtime = FastAPIOAuthRuntime(registry, user_id=None, timeout=0.01)
+    await runtime.handle_redirect("https://idp.example.com/authorize?state=timeout-state", "github")
+
+    # Drain redirect + pending events emitted by handle_redirect
+    await asyncio.wait_for(runtime.next_event(), timeout=0.1)
+    await asyncio.wait_for(runtime.next_event(), timeout=0.1)
+
+    with pytest.raises(OAuthFlowError):
+        await runtime.wait_for_code("github")
+
+    timeout_event = await asyncio.wait_for(runtime.next_event(), timeout=0.1)
+    assert timeout_event["type"] == "oauth_status"
+    assert timeout_event["status"] == "timeout"
 
 
 @pytest.mark.asyncio
