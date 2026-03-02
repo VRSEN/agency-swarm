@@ -454,6 +454,7 @@ def _normalize_tools(tools: Any) -> list[dict[str, Any]]:
         function_name: str | None = None
         function_description: str | None = None
         function_parameters: dict[str, Any] | None = None
+        function_strict: bool | None = None
 
         if isinstance(function_payload, dict):
             raw_name = function_payload.get("name")
@@ -468,10 +469,29 @@ def _normalize_tools(tools: Any) -> list[dict[str, Any]]:
             if isinstance(raw_parameters, dict):
                 function_parameters = raw_parameters
 
+            raw_strict = function_payload.get("strict")
+            if isinstance(raw_strict, bool):
+                function_strict = raw_strict
+
         if function_name is None:
             raw_name = tool.get("name")
             if isinstance(raw_name, str) and raw_name:
                 function_name = raw_name
+
+        if function_description is None:
+            raw_description = tool.get("description")
+            if isinstance(raw_description, str) and raw_description:
+                function_description = raw_description
+
+        if function_parameters is None:
+            raw_parameters = tool.get("parameters")
+            if isinstance(raw_parameters, dict):
+                function_parameters = raw_parameters
+
+        if function_strict is None:
+            raw_strict = tool.get("strict")
+            if isinstance(raw_strict, bool):
+                function_strict = raw_strict
 
         if function_name is None:
             continue
@@ -481,6 +501,8 @@ def _normalize_tools(tools: Any) -> list[dict[str, Any]]:
             normalized_function["description"] = function_description
         if function_parameters is not None:
             normalized_function["parameters"] = function_parameters
+        if function_strict is not None:
+            normalized_function["strict"] = function_strict
         normalized_tools.append({"type": "function", "function": normalized_function})
 
     return normalized_tools

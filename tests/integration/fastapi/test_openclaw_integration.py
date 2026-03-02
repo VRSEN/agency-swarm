@@ -118,6 +118,13 @@ def test_openclaw_proxy_filters_request_keys_and_normalizes_payload(
             "stream": False,
             "tools": [
                 {"type": "function", "function": {"name": "calc", "parameters": {"type": "object"}}},
+                {
+                    "type": "function",
+                    "name": "summarize",
+                    "description": "Summarize text",
+                    "parameters": {"type": "object", "properties": {"text": {"type": "string"}}},
+                    "strict": True,
+                },
                 {"type": "web_search"},
             ],
             "tool_choice": {"type": "function", "name": "calc"},
@@ -155,7 +162,18 @@ def test_openclaw_proxy_filters_request_keys_and_normalizes_payload(
     assert forwarded["input"] == [
         {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hello"}]}
     ]
-    assert forwarded["tools"] == [{"type": "function", "function": {"name": "calc", "parameters": {"type": "object"}}}]
+    assert forwarded["tools"] == [
+        {"type": "function", "function": {"name": "calc", "parameters": {"type": "object"}}},
+        {
+            "type": "function",
+            "function": {
+                "name": "summarize",
+                "description": "Summarize text",
+                "parameters": {"type": "object", "properties": {"text": {"type": "string"}}},
+                "strict": True,
+            },
+        },
+    ]
     assert forwarded["tool_choice"] == {"type": "function", "function": {"name": "calc"}}
     assert forwarded["metadata"] == {"attempt": "1", "scope": '{"a": 1}', "label": "ok"}
     assert captured["headers"]["Authorization"] == "Bearer gateway-token"
