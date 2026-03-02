@@ -21,7 +21,15 @@ def test_import_agency_swarm_does_not_eager_import_openclaw_module() -> None:
 
 def test_openclaw_exports_load_module_lazily() -> None:
     output = _run_inline(
-        "import agency_swarm, sys; _ = agency_swarm.attach_openclaw_to_fastapi; "
-        "print('agency_swarm.integrations.openclaw' in sys.modules)"
+        "import importlib.util, agency_swarm, sys; "
+        "has_deps = importlib.util.find_spec('fastapi') is not None and importlib.util.find_spec('httpx') is not None; "
+        "print('skip' if not has_deps else ('agency_swarm.integrations.openclaw' in sys.modules)); "
+        "_ = agency_swarm.attach_openclaw_to_fastapi if has_deps else None; "
+        "print('skip' if not has_deps else ('agency_swarm.integrations.openclaw' in sys.modules))"
     )
-    assert output == "True"
+    lines = output.splitlines()
+    assert len(lines) == 2
+    if lines[0] == "skip":
+        assert lines[1] == "skip"
+    else:
+        assert lines == ["False", "True"]

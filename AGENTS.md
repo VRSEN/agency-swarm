@@ -293,12 +293,12 @@ Strictness
 ### PR Comment Review Loop (Mandatory for Local Coding Work)
 - If you are doing coding work locally (outside GitHub UI) for an open PR and you can post GitHub comments, you must run this loop:
   - Open the PR and review every active comment thread; resolve every correct finding before finalizing work.
-  - Run local Codex CLI review against `origin/main` (`codex review --base origin/main`).
-  - Reruns are mandatory: if the local review reports findings, fix them and rerun until the verdict is clean (`no issues found` or equivalent).
-  - Post exactly `@codex review` on the PR.
-  - Wait about 10 minutes.
-  - Check PR comments no more than once per minute.
-  - Address review feedback and repeat until there are no unresolved Codex findings.
+  - Run local Codex CLI review first with `high` or `extra-high` reasoning effort and save output to a fixed artifact path.
+  - Preferred command (if available in installed CLI): `codex review --base origin/main -c model_reasoning_effort="<high|extra-high>" > /tmp/codex_review_<short_sha>.txt 2>&1`
+  - Required fallback when `codex review` is unavailable: run equivalent `codex exec` review against `origin/main` and save to the same artifact pattern.
+  - Never stream full Codex output to chat updates; read only targeted excerpts from the artifact (for example with `rg` or `tail -n`).
+  - Post `@codex review` on the PR only when local Codex CLI is unavailable, explicitly requested by the user, or required by the merge gate for current head SHA.
+  - If PR Codex review is requested, poll for updates every 60 seconds for up to 10 minutes; apply valid findings and repeat until there are no unresolved Codex findings on the latest head SHA.
 - Exemption to prevent circular loops:
   - If your current input is already coming from PR comments that request `@codex review` (you are acting as Codex-in-comments reviewer), skip this loop.
 

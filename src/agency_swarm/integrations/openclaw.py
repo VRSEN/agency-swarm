@@ -45,6 +45,28 @@ _OPENRESPONSES_ALLOWED_KEYS: tuple[str, ...] = (
 )
 _ALLOWED_TOOL_CHOICE_VALUES = {"auto", "none", "required"}
 _PROVIDER_ENV_KEYS = ("OPENAI_API_KEY", "ANTHROPIC_API_KEY")
+_RESPONSE_HEADER_BLOCKLIST = {"content-length", "transfer-encoding", "connection"}
+
+
+def _extract_port_from_gateway_command(command: list[str]) -> int | None:
+    for idx, arg in enumerate(command):
+        value: str | None = None
+        if arg == "--port":
+            if idx + 1 >= len(command):
+                return None
+            value = command[idx + 1]
+        elif arg.startswith("--port="):
+            value = arg.split("=", 1)[1]
+
+        if value is None:
+            continue
+
+        try:
+            port = int(value)
+        except ValueError:
+            return None
+        return port if 1 <= port <= 65535 else None
+    return None
 
 
 def _read_bool_env(name: str, default: bool) -> bool:
@@ -84,11 +106,22 @@ class OpenClawIntegrationConfig:
         log_path = (
             Path(os.getenv("OPENCLAW_LOG_PATH", str(home_dir / "logs" / "openclaw-gateway.log"))).expanduser().resolve()
         )
+        configured_port = int(os.getenv("OPENCLAW_PORT", "18789"))
+        gateway_command = os.getenv("OPENCLAW_GATEWAY_COMMAND")
+        resolved_port = configured_port
+        if gateway_command:
+            try:
+                command_parts = shlex.split(gateway_command)
+            except ValueError:
+                command_parts = []
+            command_port = _extract_port_from_gateway_command(command_parts)
+            if command_port is not None:
+                resolved_port = command_port
 
         return cls(
             autostart=_read_bool_env("OPENCLAW_AUTOSTART", default=True),
             host=os.getenv("OPENCLAW_HOST", "127.0.0.1"),
-            port=int(os.getenv("OPENCLAW_PORT", "18789")),
+            port=resolved_port,
             gateway_token=os.getenv("OPENCLAW_GATEWAY_TOKEN", "openclaw-local-token"),
             home_dir=home_dir,
             state_dir=state_dir,
@@ -98,7 +131,7 @@ class OpenClawIntegrationConfig:
             proxy_timeout_seconds=float(os.getenv("OPENCLAW_PROXY_TIMEOUT_SECONDS", "120")),
             default_model=os.getenv("OPENCLAW_DEFAULT_MODEL", DEFAULT_OPENCLAW_MODEL),
             provider_model=os.getenv("OPENCLAW_PROVIDER_MODEL", "openai/gpt-5-mini"),
-            gateway_command=os.getenv("OPENCLAW_GATEWAY_COMMAND"),
+            gateway_command=gateway_command,
         )
 
 
@@ -260,6 +293,12 @@ class OpenClawRuntime:
         if self.is_running:
             return
 
+        if self._is_port_open():
+            raise RuntimeError(
+                f"OpenClaw runtime port {self.config.port} is already in use at {self.upstream_base_url}. "
+                "Set OPENCLAW_AUTOSTART=false to use an externally managed gateway."
+            )
+
         self.ensure_layout()
         command = self._resolve_gateway_command()
 
@@ -277,14 +316,21 @@ class OpenClawRuntime:
             logger.warning("No provider API keys found in env (checked: %s)", ", ".join(_PROVIDER_ENV_KEYS))
 
         self._log_handle = self.config.log_path.open("ab", buffering=0)
-        self._process = subprocess.Popen(
-            command,
-            cwd=str(self.config.home_dir),
-            env=env,
-            stdout=self._log_handle,
-            stderr=subprocess.STDOUT,
-            start_new_session=True,
-        )
+        try:
+            self._process = subprocess.Popen(
+                command,
+                cwd=str(self.config.home_dir),
+                env=env,
+                stdout=self._log_handle,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+        except Exception:
+            if self._log_handle is not None:
+                self._log_handle.close()
+                self._log_handle = None
+            self._process = None
+            raise
 
         try:
             deadline = time.time() + self.config.startup_timeout_seconds
@@ -484,7 +530,10 @@ def _normalize_metadata(metadata: Any) -> dict[str, str] | None:
         if isinstance(value, str):
             normalized[key] = value
             continue
-        normalized[key] = json.dumps(value, ensure_ascii=False)
+        try:
+            normalized[key] = json.dumps(value, ensure_ascii=False)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"metadata['{key}'] must be JSON-serializable") from exc
     return normalized
 
 
@@ -542,9 +591,38 @@ def _make_upstream_headers(token: str) -> dict[str, str]:
     return headers
 
 
+def _passthrough_response_headers(upstream: httpx.Response) -> dict[str, str]:
+    return {key: value for key, value in upstream.headers.items() if key.lower() not in _RESPONSE_HEADER_BLOCKLIST}
+
+
 def _forward_response_passthrough(upstream: httpx.Response) -> Response:
-    content_type = upstream.headers.get("content-type", "application/json")
-    return Response(content=upstream.content, status_code=upstream.status_code, media_type=content_type)
+    headers = _passthrough_response_headers(upstream)
+    content_type = headers.pop("content-type", "application/json")
+    return Response(
+        content=upstream.content, status_code=upstream.status_code, media_type=content_type, headers=headers
+    )
+
+
+def _is_upstream_port_open(config: OpenClawIntegrationConfig, timeout: float = 0.5) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(timeout)
+        try:
+            sock.connect((config.host, config.port))
+        except OSError:
+            return False
+    return True
+
+
+async def _close_stream_resources(stream_context: Any, client: httpx.AsyncClient) -> None:
+    try:
+        await stream_context.__aexit__(None, None, None)
+    except Exception:
+        logger.warning("OpenClaw stream context cleanup failed", exc_info=True)
+
+    try:
+        await client.aclose()
+    except Exception:
+        logger.warning("OpenClaw client cleanup failed", exc_info=True)
 
 
 async def _stream_upstream(
@@ -555,8 +633,7 @@ async def _stream_upstream(
             if chunk:
                 yield chunk
     finally:
-        await stream_context.__aexit__(None, None, None)
-        await client.aclose()
+        await _close_stream_resources(stream_context, client)
 
 
 def create_openclaw_proxy_router(
@@ -609,23 +686,30 @@ def create_openclaw_proxy_router(
             try:
                 body = await upstream.aread()
             finally:
-                await stream_context.__aexit__(None, None, None)
-                await client.aclose()
+                await _close_stream_resources(stream_context, client)
+            headers = _passthrough_response_headers(upstream)
+            content_type = headers.pop("content-type", "application/json")
             return Response(
                 content=body,
                 status_code=upstream.status_code,
-                media_type=upstream.headers.get("content-type", "application/json"),
+                media_type=content_type,
+                headers=headers,
             )
 
+        response_headers = _passthrough_response_headers(upstream)
+        response_content_type = response_headers.pop("content-type", "text/event-stream")
         return StreamingResponse(
             _stream_upstream(upstream, stream_context, client),
             status_code=upstream.status_code,
-            media_type=upstream.headers.get("content-type", "text/event-stream"),
+            media_type=response_content_type,
+            headers=response_headers,
         )
 
     @router.get("/health", dependencies=dependencies)
     async def openclaw_proxy_health() -> JSONResponse:
-        return JSONResponse({"ok": True, "upstream_base_url": config.upstream_base_url})
+        is_healthy = _is_upstream_port_open(config)
+        status_code = 200 if is_healthy else 503
+        return JSONResponse({"ok": is_healthy, "upstream_base_url": config.upstream_base_url}, status_code=status_code)
 
     return router
 
@@ -671,7 +755,7 @@ def build_openclaw_responses_model(
     resolved_base_url = (
         base_url or os.getenv("OPENCLAW_PROXY_BASE_URL") or "http://127.0.0.1:8000/openclaw/v1"
     ).rstrip("/")
-    resolved_api_key = api_key or os.getenv("OPENCLAW_PROXY_API_KEY") or "sk-openclaw-proxy"
+    resolved_api_key = api_key or os.getenv("OPENCLAW_PROXY_API_KEY") or os.getenv("APP_TOKEN") or "sk-openclaw-proxy"
 
     client = AsyncOpenAI(base_url=resolved_base_url, api_key=resolved_api_key)
     return OpenAIResponsesModel(model=model, openai_client=client)
