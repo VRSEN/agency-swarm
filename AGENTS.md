@@ -18,7 +18,7 @@ Begin each task after reviewing this readiness checklist:
 - Restate the user's intent and the active task in your responses to the user when it helps clarity; when asked about anything, answer concisely and explicitly before elaborating.
 - Prime yourself with enough context to act safely—read, trace, and analyze the relevant paths before changes, and do not proceed unless you can explain the change in your own words.
 - Use fresh tool outputs before acting; do not rely on memory.
-- Before editing, sync with upstream when tracking exists: if `git rev-parse --abbrev-ref --symbolic-full-name @{u}` succeeds, run `git fetch origin` and verify `git rev-list --left-right --count HEAD...@{u}` is `0 0`; if no upstream is configured, proceed without the parity check.
+- Mandatory start state: before any new task, run `git fetch origin` and rebase your working branch onto `origin/main` from the VRSEN remote (or create a fresh branch from `origin/main`). Do not start analysis, edits, or tests until this succeeds.
 - Complete one change at a time; stash unrelated work before starting another.
 - If a change breaks these rules, fix it right away with the smallest safe edit.
 - Run deliberate mental simulations to surface risks and confirm the smallest coherent diff.
@@ -282,7 +282,7 @@ Strictness
 - Never commit or push unless you have verified the changes are correct and improve the codebase.
 - Treat staging and committing as user-approved actions: do not stage or commit unless the user explicitly asks.
 - Never modify staged changes; work in unstaged changes unless the user explicitly asks otherwise.
-- For PR work, default to remote-tracking truth: if local and upstream differ, sync to upstream before new edits; when the user indicates remote commits are authoritative, hard-reset local branch to upstream first.
+- For PR work, treat `origin/main` (VRSEN remote) as source of truth: start every task from the latest remote `main` via fetch + rebase/branch-from-main, then begin edits.
 - Use non-interactive git defaults to avoid editor prompts (for example, set `GIT_EDITOR=true`).
 - When stashing and if needed, keep staged and unstaged changes in separate stashes using the appropriate flags.
 - If pre-commit hooks modify files (it means you forgot to run mandatory `make format`), stage the hook-modified files and re-run the commit with the same message.
