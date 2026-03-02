@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import inspect
+import json
+import subprocess
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -13,6 +15,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from agency_swarm import run_fastapi
+from agency_swarm.integrations import openclaw as openclaw_mod
 from agency_swarm.integrations.openclaw import (
     OpenClawIntegrationConfig,
     OpenClawRuntime,
@@ -508,3 +511,185 @@ def test_openclaw_failed_startup_cleans_process_and_log_handle(
     assert fake_process.killed is True
     assert runtime._process is None
     assert runtime._log_handle is None
+
+
+def test_openclaw_from_env_handles_boolean_and_unparseable_gateway_command(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("OPENCLAW_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("OPENCLAW_AUTOSTART", "false")
+    monkeypatch.setenv("OPENCLAW_GATEWAY_COMMAND", 'openclaw gateway --port "broken')
+    monkeypatch.setenv("OPENCLAW_PORT", "19001")
+
+    config = OpenClawIntegrationConfig.from_env()
+
+    assert config.autostart is False
+    assert config.port == 19001
+    assert config.gateway_command == 'openclaw gateway --port "broken'
+
+
+def test_openclaw_extract_port_parser_handles_edge_values() -> None:
+    assert openclaw_mod._extract_port_from_gateway_command(["openclaw", "gateway", "--port", "19000"]) == 19000
+    assert openclaw_mod._extract_port_from_gateway_command(["openclaw", "gateway", "--port=19000"]) == 19000
+    assert openclaw_mod._extract_port_from_gateway_command(["openclaw", "gateway", "--port"]) is None
+    assert openclaw_mod._extract_port_from_gateway_command(["openclaw", "gateway", "--port=abc"]) is None
+    assert openclaw_mod._extract_port_from_gateway_command(["openclaw", "gateway", "--port=70000"]) is None
+
+
+def test_openclaw_merge_provider_keys_from_dotenv_loads_only_missing_keys(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    dotenv_path = tmp_path / "openclaw.env"
+    dotenv_path.write_text(
+        "OPENAI_API_KEY=from_dotenv\nANTHROPIC_API_KEY=anthropic_dotenv\nIGNORED=value\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("OPENCLAW_DOTENV_PATH", str(dotenv_path))
+
+    runtime = OpenClawRuntime(_build_openclaw_config(tmp_path))
+    env = {"OPENAI_API_KEY": "already_set"}
+
+    runtime._merge_provider_keys_from_dotenv(env)
+
+    assert env["OPENAI_API_KEY"] == "already_set"
+    assert env["ANTHROPIC_API_KEY"] == "anthropic_dotenv"
+    assert "IGNORED" not in env
+
+
+def test_openclaw_ensure_layout_normalizes_existing_non_dict_config_sections(tmp_path: Path) -> None:
+    config = _build_openclaw_config(tmp_path)
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps(
+            {
+                "gateway": [],
+                "agents": {"defaults": []},
+            }
+        ),
+        encoding="utf-8",
+    )
+    runtime = OpenClawRuntime(config)
+
+    runtime.ensure_layout()
+
+    saved = json.loads(config.config_path.read_text(encoding="utf-8"))
+    assert saved["gateway"]["auth"]["mode"] == "token"
+    assert saved["gateway"]["http"]["endpoints"]["responses"]["enabled"] is True
+    assert saved["agents"]["defaults"]["model"] == {"primary": "openai/gpt-5-mini"}
+
+
+def test_openclaw_resolve_gateway_command_errors_when_binary_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config = replace(_build_openclaw_config(tmp_path), gateway_command=None)
+    runtime = OpenClawRuntime(config)
+    monkeypatch.setattr("agency_swarm.integrations.openclaw.shutil.which", lambda _name: None)
+
+    with pytest.raises(RuntimeError, match="OpenClaw runtime unavailable"):
+        runtime._resolve_gateway_command()
+
+
+def test_openclaw_stop_forces_kill_on_timeout_and_closes_log_handle(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config = _build_openclaw_config(tmp_path)
+    runtime = OpenClawRuntime(config)
+
+    class _SlowProcess:
+        pid = 5555
+
+        def __init__(self) -> None:
+            self.wait_calls = 0
+            self.killed = False
+
+        def poll(self) -> int | None:
+            return None
+
+        def terminate(self) -> None:
+            return None
+
+        def kill(self) -> None:
+            self.killed = True
+
+        def wait(self, timeout: float | None = None) -> int:
+            self.wait_calls += 1
+            if self.wait_calls == 1:
+                raise subprocess.TimeoutExpired(cmd="openclaw", timeout=timeout or 0)
+            return 0
+
+    process = _SlowProcess()
+    runtime._process = process  # type: ignore[assignment]
+    config.log_path.parent.mkdir(parents=True, exist_ok=True)
+    runtime._log_handle = config.log_path.open("ab")
+    monkeypatch.setattr("agency_swarm.integrations.openclaw.os.killpg", lambda pid, sig: process.kill())
+
+    runtime.stop()
+
+    assert process.killed is True
+    assert runtime._process is None
+    assert runtime._log_handle is None
+
+
+def test_openclaw_health_returns_runtime_snapshot(tmp_path: Path) -> None:
+    runtime = OpenClawRuntime(_build_openclaw_config(tmp_path))
+
+    payload = runtime.health()
+
+    assert payload["running"] is False
+    assert payload["upstream_base_url"] == "http://127.0.0.1:18789"
+    assert payload["home_dir"].endswith("openclaw")
+    assert payload["state_dir"].endswith("openclaw/state")
+
+
+def test_openclaw_proxy_rejects_invalid_json_body(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("agency_swarm.integrations.openclaw._is_upstream_port_open", lambda _config: True)
+    app = FastAPI()
+    attach_openclaw_to_fastapi(app, _build_openclaw_config(tmp_path))
+    client = TestClient(app)
+
+    response = client.post("/openclaw/v1/responses", data="{bad json", headers={"content-type": "application/json"})
+
+    assert response.status_code == 400
+    assert "Invalid JSON body" in response.json()["detail"]
+
+
+def test_openclaw_normalization_validation_error_paths() -> None:
+    with pytest.raises(ValueError, match="model is required"):
+        normalize_openclaw_responses_request({"input": "hello"})
+    with pytest.raises(ValueError, match="input is required"):
+        normalize_openclaw_responses_request({"model": "openclaw:main"})
+    with pytest.raises(ValueError, match="input must be a string or list"):
+        normalize_openclaw_responses_request({"model": "openclaw:main", "input": {"bad": "shape"}})
+    with pytest.raises(ValueError, match="input list items must be JSON objects"):
+        normalize_openclaw_responses_request({"model": "openclaw:main", "input": ["bad"]})
+    with pytest.raises(ValueError, match="input message role must be a non-empty string"):
+        normalize_openclaw_responses_request(
+            {"model": "openclaw:main", "input": [{"type": "message", "content": "missing role"}]}
+        )
+    with pytest.raises(ValueError, match="input message content must be a string or list"):
+        normalize_openclaw_responses_request(
+            {"model": "openclaw:main", "input": [{"role": "user", "content": {"bad": "shape"}}]}
+        )
+
+    normalized = normalize_openclaw_responses_request(
+        {
+            "model": "openclaw:main",
+            "input": "hello",
+            "tool_choice": "unsupported",
+            "metadata": "bad-metadata",
+        }
+    )
+    assert "tool_choice" not in normalized
+    assert "metadata" not in normalized
+
+
+def test_openclaw_header_helpers() -> None:
+    assert openclaw_mod._make_upstream_headers("") == {"Content-Type": "application/json"}
+    assert openclaw_mod._make_upstream_headers("token") == {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer token",
+    }
