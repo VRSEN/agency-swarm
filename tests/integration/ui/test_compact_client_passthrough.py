@@ -1,8 +1,10 @@
 import pytest
 
 from agency_swarm import Agent
+from agency_swarm.ui.demos.compact import compact_thread
 from agency_swarm.ui.demos.launcher import TerminalDemoLauncher
 from agency_swarm.utils.thread import ThreadManager
+from examples.interactive.terminal_demo import create_demo_agency
 
 
 def _seed_messages(agent_name: str) -> list[dict[str, str]]:
@@ -67,6 +69,12 @@ class _SessionAgency:
         self.thread_manager = ThreadManager()
 
 
+class _CompactAgency:
+    def __init__(self, entry_points):
+        self.entry_points = entry_points
+        self.thread_manager = ThreadManager()
+
+
 @pytest.mark.asyncio
 async def test_compact_uses_entry_agent_client_sync_and_model_passthrough():
     # Use a non-GPT model to exercise the non-OpenAI reasoning branch
@@ -105,6 +113,44 @@ async def test_compact_omits_reasoning_param_for_openai_model():
     last = fake_client.calls[-1]
     assert last["model"] == "gpt-5-mini"
     assert last["reasoning"] is None
+
+
+@pytest.mark.asyncio
+async def test_compact_integration_minimal() -> None:
+    agency = create_demo_agency()
+    agency.thread_manager.add_message({"role": "user", "content": "hello"})
+    agency.thread_manager.add_message({"role": "assistant", "agent": "bot", "content": "hi"})
+
+    TerminalDemoLauncher.set_current_chat_id("chat_integration_original")
+
+    class _Resp:
+        output_text = "integration summary"
+
+    entry_agent = agency.entry_points[0]
+    entry_agent.client_sync.responses.create = lambda **kwargs: _Resp()  # type: ignore[attr-defined]
+
+    chat_id = await TerminalDemoLauncher.compact_thread(agency, [])
+    assert chat_id.startswith("run_demo_chat_")
+
+    messages = agency.thread_manager.get_all_messages()
+    assert len(messages) == 1
+    summary = messages[0]
+    assert summary["role"] == "system"
+    assert summary["content"].startswith("System summary (generated via /compact")
+
+    summary_lower = summary["content"].lower()
+    assert "rs_" not in summary_lower
+    assert "msg_" not in summary_lower
+    assert "agent_run_" not in summary_lower
+    assert "parent_run_id" not in summary_lower
+    assert "call_id" not in summary_lower
+
+
+@pytest.mark.asyncio
+async def test_compact_thread_requires_entry_points() -> None:
+    agency = _CompactAgency(entry_points=[])
+    with pytest.raises(RuntimeError, match="Agency has no entry points"):
+        await compact_thread(agency, [])
 
 
 @pytest.mark.asyncio

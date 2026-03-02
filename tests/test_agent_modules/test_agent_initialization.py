@@ -332,6 +332,10 @@ def test_agent_initialization_misc_deprecations_warn_only():
             file_search=True,
             refresh_from_id="old",
             send_message_tool_class=object,
+            examples=[
+                {"role": "user", "content": "Hi"},
+                {"role": "assistant", "content": "Hello"},
+            ],
         )
 
 

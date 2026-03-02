@@ -216,7 +216,8 @@ def test_agency_warmup_failure_does_not_abort_initialization(tmp_path, monkeypat
         cache_conversation_starters=True,
     )
 
-    Agency(agent)
+    agency = Agency(agent)
+    assert "WarmupFailAgent" in agency.agents
 
 
 def test_agency_warmup_supports_quick_replies_without_starter_cache_flag(tmp_path, monkeypatch) -> None:

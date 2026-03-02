@@ -56,7 +56,11 @@ def test_prepare_history_for_runner_allows_explicit_protocol_label_on_plain_mess
     agent = _make_responses_agent("AgentA")
     context = _make_context(thread_manager)
 
-    MessageFormatter.prepare_history_for_runner([], agent, None, agency_context=context)
+    history = MessageFormatter.prepare_history_for_runner([], agent, None, agency_context=context)
+    assert len(history) == 1
+    assert history[0]["role"] == "user"
+    assert history[0]["content"] == "hello"
+    assert "history_protocol" not in history[0]
 
 
 def test_prepare_history_for_runner_allows_shared_plain_history_across_protocols() -> None:
@@ -127,7 +131,10 @@ def test_prepare_history_for_runner_allows_openai_chat_model_function_call_histo
     agent = _make_chat_agent("Coordinator")
     context = _make_context(thread_manager)
 
-    MessageFormatter.prepare_history_for_runner([], agent, None, agency_context=context)
+    history = MessageFormatter.prepare_history_for_runner([], agent, None, agency_context=context)
+    assert len(history) == 1
+    assert history[0]["type"] == "function_call"
+    assert history[0]["call_id"] == "call-1"
 
 
 def test_prepare_history_for_runner_prefers_responses_markers_for_legacy_mixed_items() -> None:
@@ -224,7 +231,10 @@ def test_prepare_history_for_runner_allows_litellm_function_call_history(model_n
     agent = _make_litellm_agent("Coordinator", model_name)
     context = _make_context(thread_manager)
 
-    MessageFormatter.prepare_history_for_runner([], agent, None, agency_context=context)
+    history = MessageFormatter.prepare_history_for_runner([], agent, None, agency_context=context)
+    assert len(history) == 1
+    assert history[0]["type"] == "function_call"
+    assert history[0]["call_id"] == "call-1"
 
 
 def test_resolve_history_protocol_defaults_provider_prefixed_strings_to_responses() -> None:

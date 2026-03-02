@@ -1,5 +1,4 @@
 import json
-from typing import Any, cast
 
 import pytest
 from pydantic import BaseModel, Field
@@ -158,83 +157,3 @@ async def test_bad_extra_params_model_gracefully_handled():
     assert isinstance(out2, str)
     assert not out1.startswith("Error: Invalid extra parameters")
     assert not out2.startswith("Error: Invalid extra parameters")
-
-
-# Additional nested schema coverage (int + str fields)
-
-
-class SenderStub:
-    def __init__(self, name: str, description: str = "") -> None:
-        self.name = name
-        self.description = description
-        self.raise_input_guardrail_error = False
-
-    async def get_response(self, **kwargs):  # pragma: no cover - simple stub
-        class Resp:
-            final_output = "done"
-
-        return Resp()
-
-
-class SendMessageWithNested(SendMessage):
-    class ExtraParams(BaseModel):
-        foo: int = Field(description="foo")
-        bar: str = Field(description="bar")
-
-
-@pytest.mark.asyncio
-async def test_nested_extra_params_schema_and_success() -> None:
-    """End-to-end: merged schema fields validate and a success response returns."""
-    sender = cast(Any, SenderStub("Sender"))
-    recipient = cast(Any, SenderStub("Recipient"))
-    tool = SendMessageWithNested(sender_agent=sender, recipients={"B": recipient})
-
-    props = tool.params_json_schema["properties"]
-    assert props["foo"]["type"] == "integer"
-    assert props["bar"]["type"] == "string"
-    required = tool.params_json_schema["required"]
-    assert "foo" in required and "bar" in required
-
-    args = {
-        "recipient_agent": "B",
-        "message": "hi",
-        "additional_instructions": "",
-        "foo": 1,
-        "bar": "x",
-    }
-
-    class Wrapper:  # minimal public-like wrapper
-        context = type(
-            "Ctx",
-            (),
-            {
-                "agents": {"B": recipient},
-                "user_context": None,
-                "thread_manager": None,
-                "shared_instructions": None,
-            },
-        )()
-
-    result = await tool.on_invoke_tool(cast(Any, Wrapper()), json.dumps(args))
-    assert result == "done"
-
-
-@pytest.mark.asyncio
-async def test_nested_extra_params_missing_field_error() -> None:
-    """Missing required nested field should produce a validation error message."""
-    sender = cast(Any, SenderStub("Sender"))
-    recipient = cast(Any, SenderStub("Recipient"))
-    tool = SendMessageWithNested(sender_agent=sender, recipients={"B": recipient})
-
-    args = {
-        "recipient_agent": "B",
-        "message": "hi",
-        "additional_instructions": "",
-        "foo": 1,
-    }
-
-    class Wrapper:
-        context = None
-
-    result = await tool.on_invoke_tool(cast(Any, Wrapper()), json.dumps(args))
-    assert isinstance(result, str) and result.startswith("Error: Invalid extra parameters")

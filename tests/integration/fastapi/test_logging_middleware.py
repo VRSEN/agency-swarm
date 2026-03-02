@@ -295,6 +295,8 @@ class TestConditionalFileHandler:
             # Should not raise exception
             with patch("builtins.open", side_effect=OSError("write error")):
                 handler.emit(record)
+        log_file = Path(temp_logs_dir) / "error-test.jsonl"
+        assert not log_file.exists()
 
 
 class TestSetupEnhancedLogging:

@@ -3,6 +3,8 @@ from collections.abc import AsyncGenerator
 from typing import Any, cast
 
 import pytest
+from ag_ui.core import EventType, RunErrorEvent, RunFinishedEvent, RunStartedEvent
+from ag_ui.encoder import EventEncoder
 from agents.items import MessageOutputItem
 from agents.models.fake_id import FAKE_RESPONSES_ID
 from agents.stream_events import RawResponsesStreamEvent
@@ -14,10 +16,11 @@ from agency_swarm.agent.execution_stream_response import StreamingRunResponse
 from agency_swarm.integrations.fastapi_utils.endpoint_handlers import (
     ActiveRun,
     ActiveRunRegistry,
+    make_agui_chat_endpoint,
     make_cancel_endpoint,
     make_stream_endpoint,
 )
-from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest, CancelRequest
+from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest, CancelRequest, RunAgentInputCustom
 
 
 class _StubRequest:
@@ -285,6 +288,48 @@ async def test_cancel_endpoint_rewrites_fake_ids(monkeypatch: pytest.MonkeyPatch
 
     assert "new_messages" in result
     assert all(m.get("id") != FAKE_RESPONSES_ID for m in result["new_messages"] if isinstance(m, dict))
+
+
+@pytest.mark.asyncio
+async def test_agui_file_urls_error_emits_lifecycle_events(tmp_path) -> None:
+    """file_urls failures should emit run started/error/finished events to avoid client hangs."""
+    encoder = EventEncoder()
+    handler = make_agui_chat_endpoint(
+        RunAgentInputCustom,
+        agency_factory=lambda **_: None,
+        verify_token=lambda: None,
+        allowed_local_dirs=None,
+    )
+
+    file_path = tmp_path / "local.txt"
+    file_path.write_text("hello", encoding="utf-8")
+
+    request = RunAgentInputCustom(
+        thread_id="thread-1",
+        run_id="run-1",
+        state=None,
+        messages=[],
+        tools=[],
+        context=[],
+        forwarded_props=None,
+        file_urls={"local.txt": str(file_path)},
+        file_ids=None,
+    )
+
+    response = await handler(request, token=None)
+    chunks = [chunk async for chunk in response.body_iterator]
+
+    expected_events = [
+        RunStartedEvent(type=EventType.RUN_STARTED, thread_id="thread-1", run_id="run-1"),
+        RunErrorEvent(
+            type=EventType.RUN_ERROR,
+            message="Error downloading file from provided urls: Local file access is disabled for this server.",
+        ),
+        RunFinishedEvent(type=EventType.RUN_FINISHED, thread_id="thread-1", run_id="run-1"),
+    ]
+    expected_chunks = [encoder.encode(event) for event in expected_events]
+    assert chunks == expected_chunks
+    assert response.media_type == encoder.get_content_type()
 
 
 async def _empty_stream() -> AsyncGenerator[dict[str, Any]]:
