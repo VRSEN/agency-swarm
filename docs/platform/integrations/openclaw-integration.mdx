@@ -25,8 +25,8 @@ On Agencii, you can deploy your own OpenClaw instance with the official template
   <Card title="OpenClaw Starter Template" icon="github" href="https://github.com/agency-ai-solutions/openclaw-starter-template">
     Create your repo from this template.
   </Card>
-  <Card title="Marketplace Onboarding" icon="store" href="/platform/marketplace/onboarding">
-    Configure onboarding form fields for your users.
+  <Card title="Starter Template Guide" icon="rocket" href="/welcome/getting-started/starter-template">
+    Follow the same template-first deployment flow used across Agencii.
   </Card>
 </CardGroup>
 
@@ -49,13 +49,6 @@ On Agencii, you can deploy your own OpenClaw instance with the official template
 
   <Step title="Connect the repository in Agencii">
     In Agencii, connect your GitHub account and select the repository you created from the template.
-  </Step>
-
-  <Step title="Configure onboarding form (Marketplace)">
-    If you plan to publish this template in Marketplace, add `onboarding_tool.py` in your repository root and define the onboarding fields.
-    This is the form users fill before deployment.
-
-    Use [Marketplace Onboarding](/platform/marketplace/onboarding) as the implementation guide.
   </Step>
 
   <Step title="Add provider keys in Agencii">
@@ -82,18 +75,18 @@ On Agencii, you can deploy your own OpenClaw instance with the official template
 ## What You Get After Deploy
 
 - A deployable OpenClaw-based agency on Agencii
-- Your normal Agencii chat flow keeps working
+- You chat in your normal Agencii workspace UI
 - Persistent OpenClaw files under `/mnt/openclaw`
-- Default OpenClaw model id: `openclaw:main`
+- Your own isolated runtime and data directory
 
 ## Keys And Security
 
 Use BYOK in the Agencii key modal. Do not collect raw API keys in onboarding forms.
 
 <Warning>
-This setup is intended as your personal OpenClaw instance. Do not share one instance across untrusted users.
-Provider API keys you add in Agencii are available inside the running sandbox environment so OpenClaw can call model providers.
-Review [OpenClaw Security](https://docs.openclaw.ai/gateway/security) before opening wider access.
+Use one OpenClaw deployment per trusted team or workspace.
+Provider keys you add in Agencii are injected into the running sandbox so OpenClaw can call model providers.
+Follow [OpenClaw Security](https://docs.openclaw.ai/gateway/security) before exposing access.
 </Warning>
 
 ## If Something Is Not Working
@@ -105,67 +98,11 @@ Review [OpenClaw Security](https://docs.openclaw.ai/gateway/security) before ope
 - Data does not persist between restarts:
   - check that `/mnt` is mounted and writable in your runtime
 
-<Accordion title="Advanced: technical details" defaultOpen={false}>
+## Technical Reference
 
-### OpenClaw model defaults
+For implementation details (routes, runtime defaults, model alias behavior, and manual wiring), see:
 
-- Stable model id in agency config: `openclaw:main`
-- `openclaw:main` maps to `OPENCLAW_PROVIDER_MODEL`
-- Default provider model: `OPENCLAW_PROVIDER_MODEL=openai/gpt-5-mini`
-
-### OpenClaw proxy endpoints
-
-- `POST /openclaw/v1/responses`
-- `GET /openclaw/health`
-
-### Agency Swarm endpoints (unchanged)
-
-- `POST /{agency_name}/get_response_stream`
-- `POST /{agency_name}/cancel_response_stream`
-
-### Stream and cancel behavior
-
-- Stream event sequence: `meta`, `data`, `messages`, `end`
-- Cancellation uses the existing run registry behavior (`ActiveRunRegistry`)
-
-### Runtime persistence defaults
-
-- `OPENCLAW_HOME=/mnt/openclaw`
-- `OPENCLAW_STATE_DIR=/mnt/openclaw/state`
-- `OPENCLAW_CONFIG_PATH=/mnt/openclaw/openclaw.json`
-- `OPENCLAW_LOG_PATH=/mnt/openclaw/logs/openclaw-gateway.log`
-- `OPENCLAW_PORT=18789`
-
-Generated OpenClaw config enables:
-
-- `gateway.http.endpoints.responses.enabled=true`
-
-### Marketplace onboarding fields (v1)
-
-1. `agent_name`
-2. `agent_description`
-3. `openclaw_model` (default `openclaw:main`)
-4. `agent_instructions` (optional)
-5. `openclaw_config_overrides_json` (optional)
-
-### Manual FastAPI wiring
-
-```python main.py
-from agency import create_agency
-from agency_swarm.integrations.fastapi import run_fastapi
-from agency_swarm.integrations.openclaw import attach_openclaw_to_fastapi
-
-app = run_fastapi(
-    agencies={"openclaw": create_agency},
-    return_app=True,
-    app_token_env="APP_TOKEN",
-)
-if app is None:
-    raise RuntimeError("FastAPI app failed to start")
-
-attach_openclaw_to_fastapi(app)
-```
-</Accordion>
+- [OpenClaw Integration Technical Reference](https://github.com/VRSEN/agency-swarm/blob/main/src/agency_swarm/integrations/README.md)
 
 ## Learn More
 
@@ -177,8 +114,8 @@ attach_openclaw_to_fastapi(app)
   <Card title="Starter Template" icon="layer-group" href="/welcome/getting-started/starter-template">
     Review the template-first repository flow.
   </Card>
-  <Card title="Marketplace Onboarding" icon="store" href="/platform/marketplace/onboarding">
-    Define onboarding fields for your users.
+  <Card title="OpenClaw Docs" icon="book-open" href="https://docs.openclaw.ai/start/getting-started">
+    Learn OpenClaw setup and capabilities directly from the OpenClaw docs.
   </Card>
   <Card title="Platform Overview" icon="book-open" href="/platform/overview">
     See how deployment and hosting work in Agencii.
