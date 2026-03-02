@@ -74,6 +74,29 @@ Before you start, make sure you have:
   </Step>
 </Steps>
 
+## Customize Your Assistant (OpenClaw Basics)
+
+OpenClaw already has a built-in way to customize instructions. You do not need to invent a new format.
+
+On first start, OpenClaw creates starter files in its workspace (persisted under `/mnt/openclaw` on Agencii). The most important files are:
+
+- `AGENTS.md`: main operating rules and priorities
+- `SOUL.md`: personality, tone, and boundaries
+- `USER.md`: who you are and how the agent should speak to you
+- `IDENTITY.md`: assistant name and identity style
+- `TOOLS.md`: tool usage notes and conventions
+- `HEARTBEAT.md`: optional checklist for proactive heartbeat runs
+- `BOOTSTRAP.md`: one-time first-run ritual file for a brand-new workspace
+- `MEMORY.md` and `memory/*.md`: long-term and daily memory notes
+
+`SOUL.md` absolutely affects behavior. When you change it, OpenClaw uses that new persona guidance in future runs.
+
+Beginner best practice:
+
+1. Start with `AGENTS.md` and `SOUL.md`.
+2. Keep both files short and clear.
+3. Put stable preferences in `USER.md` and durable facts in `MEMORY.md`.
+
 ## What You Get After Deploy
 
 - A deployable OpenClaw-based agency on Agencii
