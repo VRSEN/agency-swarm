@@ -268,7 +268,12 @@ class OpenClawRuntime:
 
     def _resolve_gateway_command(self) -> list[str]:
         if self.config.gateway_command:
-            command = shlex.split(self.config.gateway_command)
+            try:
+                command = shlex.split(self.config.gateway_command)
+            except ValueError as exc:
+                raise RuntimeError(
+                    "Invalid OPENCLAW_GATEWAY_COMMAND value. Please verify shell quoting and command format."
+                ) from exc
         elif shutil.which("openclaw"):
             command = ["openclaw", "gateway"]
         else:
@@ -348,23 +353,33 @@ class OpenClawRuntime:
     def _cleanup_after_failed_start(self) -> None:
         process = self._process
         self._process = None
-        if process is not None and process.poll() is None:
-            try:
-                os.killpg(process.pid, signal.SIGTERM)
-            except Exception:
-                process.terminate()
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
+        try:
+            if process is not None and process.poll() is None:
                 try:
-                    os.killpg(process.pid, signal.SIGKILL)
+                    os.killpg(process.pid, signal.SIGTERM)
                 except Exception:
-                    process.kill()
-                process.wait(timeout=5)
-
-        if self._log_handle is not None:
-            self._log_handle.close()
-            self._log_handle = None
+                    process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except Exception:
+                        process.kill()
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        logger.warning("OpenClaw process did not stop during failed-start cleanup")
+        except Exception:
+            logger.warning("Unexpected error during failed-start cleanup", exc_info=True)
+        finally:
+            if self._log_handle is not None:
+                try:
+                    self._log_handle.close()
+                except Exception:
+                    logger.warning("OpenClaw log handle cleanup failed", exc_info=True)
+                finally:
+                    self._log_handle = None
 
     def stop(self) -> None:
         if self._process is None:
@@ -696,8 +711,17 @@ def create_openclaw_proxy_router(
         try:
             upstream = await stream_context.__aenter__()
         except httpx.HTTPError as exc:
-            await client.aclose()
+            try:
+                await client.aclose()
+            except Exception:
+                logger.warning("OpenClaw client cleanup failed", exc_info=True)
             raise HTTPException(status_code=502, detail=f"OpenClaw stream connection failed: {exc}") from exc
+        except Exception:
+            try:
+                await client.aclose()
+            except Exception:
+                logger.warning("OpenClaw client cleanup failed", exc_info=True)
+            raise
 
         if upstream.status_code >= 400:
             try:

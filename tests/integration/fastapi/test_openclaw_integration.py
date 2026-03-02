@@ -294,6 +294,46 @@ def test_openclaw_stream_error_path_preserves_upstream_payload_when_stream_conte
     assert captured["closed"] is True
 
 
+def test_openclaw_stream_connect_non_http_error_closes_client(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    captured: dict[str, Any] = {"closed": False}
+
+    class _FailingStreamContext:
+        async def __aenter__(self) -> None:
+            raise RuntimeError("stream boot failed")
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    class _FakeAsyncClient:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            return None
+
+        def stream(
+            self, method: str, url: str, *, headers: dict[str, str], json: dict[str, Any]
+        ) -> _FailingStreamContext:
+            return _FailingStreamContext()
+
+        async def aclose(self) -> None:
+            captured["closed"] = True
+
+    monkeypatch.setattr("agency_swarm.integrations.openclaw.httpx.AsyncClient", _FakeAsyncClient)
+
+    app = FastAPI()
+    attach_openclaw_to_fastapi(app, _build_openclaw_config(tmp_path))
+    client = TestClient(app, raise_server_exceptions=False)
+
+    response = client.post(
+        "/openclaw/v1/responses",
+        json={"model": "openclaw:main", "input": "hello", "stream": True},
+    )
+
+    assert response.status_code == 500
+    assert captured["closed"] is True
+
+
 def test_cancel_endpoint_behavior_remains_on_existing_agency_route(
     agency_factory,
     tmp_path: Path,
@@ -513,6 +553,46 @@ def test_openclaw_failed_startup_cleans_process_and_log_handle(
     assert runtime._log_handle is None
 
 
+def test_openclaw_failed_startup_cleanup_closes_log_handle_when_kill_wait_times_out(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config = _build_openclaw_config(tmp_path)
+    runtime = OpenClawRuntime(config)
+    runtime.config.log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    class _UnstoppableProcess:
+        pid = 4242
+
+        def __init__(self) -> None:
+            self.killed = False
+
+        def poll(self) -> int | None:
+            return None
+
+        def terminate(self) -> None:
+            return None
+
+        def kill(self) -> None:
+            self.killed = True
+
+        def wait(self, timeout: float | None = None) -> int:
+            raise subprocess.TimeoutExpired(cmd="openclaw", timeout=timeout or 0)
+
+    process = _UnstoppableProcess()
+    runtime._process = process  # type: ignore[assignment]
+    log_handle = config.log_path.open("ab")
+    runtime._log_handle = log_handle
+    monkeypatch.setattr("agency_swarm.integrations.openclaw.os.killpg", lambda pid, sig: process.kill())
+
+    runtime._cleanup_after_failed_start()
+
+    assert process.killed is True
+    assert runtime._process is None
+    assert runtime._log_handle is None
+    assert log_handle.closed is True
+
+
 def test_openclaw_from_env_handles_boolean_and_unparseable_gateway_command(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -589,6 +669,15 @@ def test_openclaw_resolve_gateway_command_errors_when_binary_is_unavailable(
     monkeypatch.setattr("agency_swarm.integrations.openclaw.shutil.which", lambda _name: None)
 
     with pytest.raises(RuntimeError, match="OpenClaw runtime unavailable"):
+        runtime._resolve_gateway_command()
+
+
+def test_openclaw_resolve_gateway_command_reports_invalid_shell_quoting(tmp_path: Path) -> None:
+    runtime = OpenClawRuntime(
+        replace(_build_openclaw_config(tmp_path), gateway_command='openclaw gateway --port "broken')
+    )
+
+    with pytest.raises(RuntimeError, match="Invalid OPENCLAW_GATEWAY_COMMAND"):
         runtime._resolve_gateway_command()
 
 
