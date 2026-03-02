@@ -332,10 +332,21 @@ def test_agent_initialization_misc_deprecations_warn_only():
             file_search=True,
             refresh_from_id="old",
             send_message_tool_class=object,
-            examples=[
-                {"role": "user", "content": "Hi"},
-                {"role": "assistant", "content": "Hello"},
-            ],
+        )
+
+
+def test_agent_initialization_examples_deprecation() -> None:
+    """Deprecated examples parameter must fail fast."""
+    examples = [
+        {"role": "user", "content": "Hi"},
+        {"role": "assistant", "content": "Hello"},
+    ]
+
+    with pytest.raises(TypeError, match=r"Deprecated Agent parameters are not supported"):
+        Agent(
+            name="TestAgent",
+            instructions="You are helpful.",
+            examples=examples,
         )
 
 
