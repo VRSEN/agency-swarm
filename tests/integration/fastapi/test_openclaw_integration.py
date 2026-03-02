@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import inspect
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +15,7 @@ from fastapi.testclient import TestClient
 from agency_swarm import run_fastapi
 from agency_swarm.integrations.openclaw import (
     OpenClawIntegrationConfig,
+    OpenClawRuntime,
     attach_openclaw_to_fastapi,
 )
 
@@ -213,3 +216,124 @@ def test_cancel_endpoint_behavior_remains_on_existing_agency_route(
 
     proxy_cancel = client.post("/openclaw/cancel_response_stream", json={"run_id": "missing-run"})
     assert proxy_cancel.status_code == 404
+
+
+def test_openclaw_proxy_uses_app_token_auth_when_attached_to_run_fastapi(
+    monkeypatch: pytest.MonkeyPatch,
+    agency_factory,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("APP_TOKEN", "secret-token")
+
+    class _FakeAsyncClient:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            return None
+
+        async def __aenter__(self) -> _FakeAsyncClient:
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def post(self, url: str, *, headers: dict[str, str], json: dict[str, Any]) -> httpx.Response:
+            return httpx.Response(
+                status_code=200,
+                content=b'{"ok": true}',
+                headers={"content-type": "application/json"},
+            )
+
+    monkeypatch.setattr("agency_swarm.integrations.openclaw.httpx.AsyncClient", _FakeAsyncClient)
+
+    app = run_fastapi(agencies={"secure": agency_factory}, return_app=True, app_token_env="APP_TOKEN")
+    assert app is not None
+    attach_openclaw_to_fastapi(app, _build_openclaw_config(tmp_path))
+    client = TestClient(app)
+
+    unauthorized = client.post("/openclaw/v1/responses", json={"model": "openclaw:main", "input": "hello"})
+    assert unauthorized.status_code in (401, 403)
+
+    authorized = client.post(
+        "/openclaw/v1/responses",
+        json={"model": "openclaw:main", "input": "hello"},
+        headers={"Authorization": "Bearer secret-token"},
+    )
+    assert authorized.status_code == 200
+
+
+def test_openclaw_ensure_layout_creates_config_parent_dir(tmp_path: Path) -> None:
+    config = _build_openclaw_config(tmp_path)
+    custom_config_path = tmp_path / "external" / "nested" / "openclaw.json"
+    runtime = OpenClawRuntime(replace(config, config_path=custom_config_path))
+
+    runtime.ensure_layout()
+
+    assert custom_config_path.exists()
+    assert custom_config_path.parent.is_dir()
+
+
+def test_openclaw_startup_shutdown_handlers_are_sync_functions(tmp_path: Path) -> None:
+    app = FastAPI()
+    attach_openclaw_to_fastapi(app, _build_openclaw_config(tmp_path))
+
+    startup_handlers = [handler for handler in app.router.on_startup if handler.__name__ == "_startup_openclaw_runtime"]
+    shutdown_handlers = [
+        handler for handler in app.router.on_shutdown if handler.__name__ == "_shutdown_openclaw_runtime"
+    ]
+
+    assert startup_handlers
+    assert shutdown_handlers
+    assert not inspect.iscoroutinefunction(startup_handlers[0])
+    assert not inspect.iscoroutinefunction(shutdown_handlers[0])
+
+
+def test_openclaw_gateway_command_port_detection_supports_equals_syntax(tmp_path: Path) -> None:
+    config = _build_openclaw_config(tmp_path)
+    runtime = OpenClawRuntime(replace(config, gateway_command="openclaw gateway --port=19000"))
+
+    command = runtime._resolve_gateway_command()
+    port_args = [arg for arg in command if arg == "--port" or arg.startswith("--port=")]
+    assert port_args == ["--port=19000"]
+
+
+def test_openclaw_failed_startup_cleans_process_and_log_handle(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config = _build_openclaw_config(tmp_path)
+    runtime = OpenClawRuntime(replace(config, startup_timeout_seconds=0.01))
+    runtime.config.log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    class _FakeProcess:
+        def __init__(self) -> None:
+            self.pid = 4242
+            self.killed = False
+
+        def poll(self) -> int | None:
+            return None if not self.killed else -9
+
+        def terminate(self) -> None:
+            self.killed = True
+
+        def kill(self) -> None:
+            self.killed = True
+
+        def wait(self, timeout: float | None = None) -> int:
+            self.killed = True
+            return 0
+
+    fake_process = _FakeProcess()
+
+    monkeypatch.setattr(runtime, "ensure_layout", lambda: None)
+    monkeypatch.setattr(runtime, "_resolve_gateway_command", lambda: ["openclaw", "gateway"])
+    monkeypatch.setattr(runtime, "_merge_provider_keys_from_dotenv", lambda env: None)
+    monkeypatch.setattr(runtime, "_is_port_open", lambda: False)
+    monkeypatch.setattr("agency_swarm.integrations.openclaw.subprocess.Popen", lambda *a, **k: fake_process)
+    monkeypatch.setattr("agency_swarm.integrations.openclaw.os.killpg", lambda pid, sig: fake_process.terminate())
+    monkeypatch.setattr("agency_swarm.integrations.openclaw.time.sleep", lambda _delay: None)
+
+    with pytest.raises(TimeoutError):
+        runtime.start()
+
+    assert fake_process.killed is True
+    assert runtime._process is None
+    assert runtime._log_handle is None

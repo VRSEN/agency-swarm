@@ -1,3 +1,4 @@
+import importlib
 import importlib.util
 
 from dotenv import load_dotenv
@@ -55,13 +56,6 @@ from .context import MasterContext  # noqa: E402
 from .hooks import PersistenceHooks  # noqa: E402
 from .integrations.fastapi import run_fastapi  # noqa: E402
 from .integrations.mcp_server import run_mcp  # noqa: E402
-from .integrations.openclaw import (  # noqa: E402
-    OpenClawIntegrationConfig,
-    OpenClawRuntime,
-    attach_openclaw_to_fastapi,
-    build_openclaw_responses_model,
-    create_openclaw_proxy_router,
-)
 from .tools import (  # noqa: E402
     BaseTool,
     CodeInterpreter,
@@ -111,11 +105,6 @@ __all__ = [
     "SendMessage",
     "run_fastapi",
     "run_mcp",
-    "OpenClawIntegrationConfig",
-    "OpenClawRuntime",
-    "create_openclaw_proxy_router",
-    "attach_openclaw_to_fastapi",
-    "build_openclaw_responses_model",
     # Re-exports from Agents SDK
     "ModelSettings",
     "OpenAIChatCompletionsModel",
@@ -181,6 +170,15 @@ __all__ = [
     "tool_output_file_from_file_id",
 ]
 
+_OPENCLAW_EXPORTS = {
+    "OpenClawIntegrationConfig",
+    "OpenClawRuntime",
+    "create_openclaw_proxy_router",
+    "attach_openclaw_to_fastapi",
+    "build_openclaw_responses_model",
+}
+__all__.extend(sorted(_OPENCLAW_EXPORTS))
+
 # Conditionally add LitellmModel if available
 if _LITELLM_AVAILABLE:
     __all__.append("LitellmModel")
@@ -203,4 +201,15 @@ def __getattr__(name: str):
 
         globals()[name] = IPythonInterpreter
         return IPythonInterpreter
+    if name in _OPENCLAW_EXPORTS:
+        try:
+            module = importlib.import_module(".integrations.openclaw", package=__name__)
+        except ModuleNotFoundError as exc:
+            raise ImportError(
+                "OpenClaw FastAPI integration requires optional dependencies. "
+                "Install with `pip install 'agency-swarm[fastapi]'`."
+            ) from exc
+        value = getattr(module, name)
+        globals()[name] = value
+        return value
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")

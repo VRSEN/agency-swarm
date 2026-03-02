@@ -9,7 +9,7 @@ import signal
 import socket
 import subprocess
 import time
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -17,7 +17,7 @@ from typing import Any
 import httpx
 from agents import OpenAIResponsesModel
 from dotenv import dotenv_values
-from fastapi import APIRouter, FastAPI, HTTPException, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from openai import AsyncOpenAI
 
@@ -176,6 +176,7 @@ class OpenClawRuntime:
     def ensure_layout(self) -> None:
         self.config.home_dir.mkdir(parents=True, exist_ok=True)
         self.config.state_dir.mkdir(parents=True, exist_ok=True)
+        self.config.config_path.parent.mkdir(parents=True, exist_ok=True)
         self.config.log_path.parent.mkdir(parents=True, exist_ok=True)
 
         if self.config.config_path.exists():
@@ -242,7 +243,7 @@ class OpenClawRuntime:
                 "or set OPENCLAW_GATEWAY_COMMAND to a deterministic command."
             )
 
-        if "--port" not in command:
+        if not any(arg == "--port" or arg.startswith("--port=") for arg in command):
             command.extend(["--port", str(self.config.port)])
         return command
 
@@ -285,18 +286,44 @@ class OpenClawRuntime:
             start_new_session=True,
         )
 
-        deadline = time.time() + self.config.startup_timeout_seconds
-        while time.time() < deadline:
-            if self._process.poll() is not None:
-                raise RuntimeError(
-                    f"OpenClaw exited early with code {self._process.returncode}. Check logs at {self.config.log_path}."
-                )
-            if self._is_port_open():
-                logger.info("OpenClaw runtime listening at %s", self.upstream_base_url)
-                return
-            time.sleep(0.4)
+        try:
+            deadline = time.time() + self.config.startup_timeout_seconds
+            while time.time() < deadline:
+                if self._process.poll() is not None:
+                    raise RuntimeError(
+                        f"OpenClaw exited early with code {self._process.returncode}. "
+                        f"Check logs at {self.config.log_path}."
+                    )
+                if self._is_port_open():
+                    logger.info("OpenClaw runtime listening at %s", self.upstream_base_url)
+                    return
+                time.sleep(0.4)
 
-        raise TimeoutError(f"Timed out waiting for OpenClaw at {self.upstream_base_url}")
+            raise TimeoutError(f"Timed out waiting for OpenClaw at {self.upstream_base_url}")
+        except Exception:
+            self._cleanup_after_failed_start()
+            raise
+
+    def _cleanup_after_failed_start(self) -> None:
+        process = self._process
+        self._process = None
+        if process is not None and process.poll() is None:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except Exception:
+                process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except Exception:
+                    process.kill()
+                process.wait(timeout=5)
+
+        if self._log_handle is not None:
+            self._log_handle.close()
+            self._log_handle = None
 
     def stop(self) -> None:
         if self._process is None:
@@ -532,13 +559,17 @@ async def _stream_upstream(
         await client.aclose()
 
 
-def create_openclaw_proxy_router(config: OpenClawIntegrationConfig) -> APIRouter:
+def create_openclaw_proxy_router(
+    config: OpenClawIntegrationConfig,
+    verify_token: Callable[..., Any] | None = None,
+) -> APIRouter:
     """Create a FastAPI router exposing OpenClaw Open Responses proxy endpoints."""
     router = APIRouter()
     upstream_url = f"{config.upstream_base_url.rstrip('/')}/v1/responses"
     upstream_headers = _make_upstream_headers(config.gateway_token)
+    dependencies = [Depends(verify_token)] if verify_token is not None else None
 
-    @router.post("/v1/responses")
+    @router.post("/v1/responses", dependencies=dependencies)
     async def proxy_responses(request: Request) -> Response:
         try:
             payload = await request.json()
@@ -592,7 +623,7 @@ def create_openclaw_proxy_router(config: OpenClawIntegrationConfig) -> APIRouter
             media_type=upstream.headers.get("content-type", "text/event-stream"),
         )
 
-    @router.get("/health")
+    @router.get("/health", dependencies=dependencies)
     async def openclaw_proxy_health() -> JSONResponse:
         return JSONResponse({"ok": True, "upstream_base_url": config.upstream_base_url})
 
@@ -602,24 +633,30 @@ def create_openclaw_proxy_router(config: OpenClawIntegrationConfig) -> APIRouter
 def attach_openclaw_to_fastapi(
     app: FastAPI,
     config: OpenClawIntegrationConfig | None = None,
+    verify_token: Callable[..., Any] | None = None,
 ) -> OpenClawRuntime:
     """Attach OpenClaw proxy routes and runtime lifecycle to a FastAPI app."""
     resolved_config = config or OpenClawIntegrationConfig.from_env()
+    resolved_verify_token = verify_token or getattr(app.state, "verify_token", None)
     runtime = OpenClawRuntime(resolved_config)
 
-    app.include_router(create_openclaw_proxy_router(resolved_config), prefix="/openclaw", tags=["openclaw"])
+    app.include_router(
+        create_openclaw_proxy_router(resolved_config, verify_token=resolved_verify_token),
+        prefix="/openclaw",
+        tags=["openclaw"],
+    )
     app.state.openclaw_runtime = runtime
     app.state.openclaw_config = resolved_config
 
     @app.on_event("startup")
-    async def _startup_openclaw_runtime() -> None:
+    def _startup_openclaw_runtime() -> None:
         if resolved_config.autostart:
             runtime.start()
         else:
             logger.info("OpenClaw runtime autostart disabled")
 
     @app.on_event("shutdown")
-    async def _shutdown_openclaw_runtime() -> None:
+    def _shutdown_openclaw_runtime() -> None:
         runtime.stop()
 
     return runtime
