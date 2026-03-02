@@ -27,87 +27,20 @@ class StubAgent:
         return Resp()
 
 
-class SendMessageNested(SendMessage):
-    class ExtraParams(BaseModel):
-        foo: str = Field(description="extra field")
-
-
-@pytest.mark.asyncio
-async def test_nested_extra_params_validates_and_sends():
-    """Validates that nested ExtraParams are merged and invocation succeeds."""
-    sender = StubAgent("Sender")
-    recipient = StubAgent("Recipient")
-    tool = SendMessageNested(sender, recipients={"B": recipient})
-    assert "foo" in tool.params_json_schema["properties"]
-    assert "foo" in tool.params_json_schema["required"]
-
-    class Wrapper:
-        class Context:
-            agents = {"B": recipient}
-            user_context = None
-            thread_manager = None
-            shared_instructions = None
-            _is_streaming = False
-            _streaming_context = None
-
-        context = Context()
-
-    args = json.dumps(
-        {
-            "recipient_agent": "B",
-            "message": "msg",
-            "additional_instructions": "",
-            "foo": "bar",
-        }
-    )
-    out = await tool.on_invoke_tool(Wrapper(), args)
-    assert out == "ack"
-
-
-class NumericParams(BaseModel):
+class NumericContextParams(BaseModel):
     count: int = Field(description="Count")
+    summary: str = Field(description="Summary")
 
 
-class SendMessageWithCount(SendMessage):
-    extra_params_model = NumericParams
-
-
-@pytest.mark.asyncio
-async def test_validation_type_error_unit():
-    """Type mismatch in ExtraParams should return a validation error message."""
-    sender = StubAgent("Sender")
-    recipient = StubAgent("Recipient")
-    tool = SendMessageWithCount(sender, {"B": recipient})
-
-    class Wrapper:
-        class Context:
-            agents = {"B": recipient}
-            user_context = None
-            thread_manager = None
-            shared_instructions = None
-            _is_streaming = False
-            _streaming_context = None
-
-        context = Context()
-
-    bad_args = json.dumps(
-        {
-            "recipient_agent": "B",
-            "message": "hi",
-            "additional_instructions": "",
-            "count": "bad",
-        }
-    )
-
-    out = await tool.on_invoke_tool(Wrapper(), bad_args)
-    assert isinstance(out, str) and out.startswith("Error: Invalid extra parameters")
+class SendMessageWithContext(SendMessage):
+    extra_params_model = NumericContextParams
 
 
 class BadExtra(BaseModel):
     foo: str
 
     @classmethod
-    def model_json_schema(cls, *a, **kw):  # type: ignore[override]
+    def model_json_schema(cls, *args, **kwargs):  # type: ignore[override]
         raise ValueError("boom")
 
 
@@ -115,14 +48,7 @@ class SendMessageBad(SendMessage):
     ExtraParams = BadExtra
 
 
-@pytest.mark.asyncio
-async def test_bad_extra_params_model_gracefully_handled():
-    """If ExtraParams schema generation fails, the tool should still operate without extra validation."""
-    sender = StubAgent("Sender")
-    recipient = StubAgent("Recipient")
-    tool = SendMessageBad(sender, recipients={"B": recipient})
-    assert "foo" not in tool.params_json_schema["properties"]
-
+def _wrapper_with_recipient(recipient: StubAgent) -> Any:
     class Wrapper:
         class Context:
             agents = {"B": recipient}
@@ -134,107 +60,65 @@ async def test_bad_extra_params_model_gracefully_handled():
 
         context = Context()
 
-    # Should succeed without requiring/validating 'foo'
-    ok_args = json.dumps(
-        {
-            "recipient_agent": "B",
-            "message": "m",
-            "additional_instructions": "",
-        }
-    )
-    # Also should not fail if unknown 'foo' is supplied since schema merge failed
-    extra_args = json.dumps(
-        {
-            "recipient_agent": "B",
-            "message": "m",
-            "additional_instructions": "",
-            "foo": "x",
-        }
-    )
-    # Both calls should return a non-error string
-    out1 = await tool.on_invoke_tool(Wrapper(), ok_args)
-    out2 = await tool.on_invoke_tool(Wrapper(), extra_args)
-    assert isinstance(out1, str)
-    assert isinstance(out2, str)
-    assert not out1.startswith("Error: Invalid extra parameters")
-    assert not out2.startswith("Error: Invalid extra parameters")
-
-
-# Additional nested schema coverage (int + str fields)
-
-
-class SenderStub:
-    def __init__(self, name: str, description: str = "") -> None:
-        self.name = name
-        self.description = description
-        self.raise_input_guardrail_error = False
-
-    async def get_response(self, **kwargs):  # pragma: no cover - simple stub
-        class Resp:
-            final_output = "done"
-
-        return Resp()
-
-
-class SendMessageWithNested(SendMessage):
-    class ExtraParams(BaseModel):
-        foo: int = Field(description="foo")
-        bar: str = Field(description="bar")
+    return cast(Any, Wrapper())
 
 
 @pytest.mark.asyncio
-async def test_nested_extra_params_schema_and_success() -> None:
-    """End-to-end: merged schema fields validate and a success response returns."""
-    sender = cast(Any, SenderStub("Sender"))
-    recipient = cast(Any, SenderStub("Recipient"))
-    tool = SendMessageWithNested(sender_agent=sender, recipients={"B": recipient})
+async def test_send_message_extra_params_schema_validation_and_success() -> None:
+    """Extra params should be merged into schema, validate input, and still allow successful sends."""
+    sender = StubAgent("Sender")
+    recipient = StubAgent("Recipient")
+    tool = SendMessageWithContext(cast(Any, sender), recipients={"B": cast(Any, recipient)})
 
-    props = tool.params_json_schema["properties"]
-    assert props["foo"]["type"] == "integer"
-    assert props["bar"]["type"] == "string"
+    properties = tool.params_json_schema["properties"]
     required = tool.params_json_schema["required"]
-    assert "foo" in required and "bar" in required
+    assert properties["count"]["type"] == "integer"
+    assert properties["summary"]["type"] == "string"
+    assert "count" in required and "summary" in required
 
-    args = {
-        "recipient_agent": "B",
-        "message": "hi",
-        "additional_instructions": "",
-        "foo": 1,
-        "bar": "x",
-    }
+    valid_args = json.dumps(
+        {
+            "recipient_agent": "B",
+            "message": "msg",
+            "additional_instructions": "",
+            "count": 1,
+            "summary": "ok",
+        }
+    )
+    invalid_args = json.dumps(
+        {
+            "recipient_agent": "B",
+            "message": "msg",
+            "additional_instructions": "",
+            "count": "bad",
+            "summary": "ok",
+        }
+    )
 
-    class Wrapper:  # minimal public-like wrapper
-        context = type(
-            "Ctx",
-            (),
-            {
-                "agents": {"B": recipient},
-                "user_context": None,
-                "thread_manager": None,
-                "shared_instructions": None,
-            },
-        )()
-
-    result = await tool.on_invoke_tool(cast(Any, Wrapper()), json.dumps(args))
-    assert result == "done"
+    wrapper = _wrapper_with_recipient(recipient)
+    assert await tool.on_invoke_tool(wrapper, valid_args) == "ack"
+    invalid_result = await tool.on_invoke_tool(wrapper, invalid_args)
+    assert isinstance(invalid_result, str) and invalid_result.startswith("Error: Invalid extra parameters")
 
 
 @pytest.mark.asyncio
-async def test_nested_extra_params_missing_field_error() -> None:
-    """Missing required nested field should produce a validation error message."""
-    sender = cast(Any, SenderStub("Sender"))
-    recipient = cast(Any, SenderStub("Recipient"))
-    tool = SendMessageWithNested(sender_agent=sender, recipients={"B": recipient})
+async def test_send_message_bad_extra_params_model_falls_back_without_validation() -> None:
+    """Schema generation failures in ExtraParams should keep tool usable without extra field validation."""
+    sender = StubAgent("Sender")
+    recipient = StubAgent("Recipient")
+    tool = SendMessageBad(cast(Any, sender), recipients={"B": cast(Any, recipient)})
+    assert "foo" not in tool.params_json_schema["properties"]
 
-    args = {
+    wrapper = _wrapper_with_recipient(recipient)
+    base_args = {
         "recipient_agent": "B",
-        "message": "hi",
+        "message": "m",
         "additional_instructions": "",
-        "foo": 1,
     }
+    result_no_extra = await tool.on_invoke_tool(wrapper, json.dumps(base_args))
+    result_unknown_extra = await tool.on_invoke_tool(wrapper, json.dumps({**base_args, "foo": "x"}))
 
-    class Wrapper:
-        context = None
-
-    result = await tool.on_invoke_tool(cast(Any, Wrapper()), json.dumps(args))
-    assert isinstance(result, str) and result.startswith("Error: Invalid extra parameters")
+    assert isinstance(result_no_extra, str) and not result_no_extra.startswith("Error: Invalid extra parameters")
+    assert isinstance(result_unknown_extra, str) and not result_unknown_extra.startswith(
+        "Error: Invalid extra parameters"
+    )

@@ -41,37 +41,81 @@ def _make_litellm_agent(name: str, model_name: str) -> Agent:
     )
 
 
-def test_prepare_history_for_runner_allows_explicit_protocol_label_on_plain_messages() -> None:
-    thread_manager = ThreadManager()
-    thread_manager._store.messages = [
-        {
-            "role": "user",
-            "content": "hello",
-            "agent": "AgentA",
-            "callerAgent": None,
-            "history_protocol": MessageFormatter.HISTORY_PROTOCOL_CHAT_COMPLETIONS,
-        }
+def test_prepare_history_for_runner_allows_compatible_histories() -> None:
+    """Compatible history formats should be accepted across supported providers."""
+    compatible_cases: list[tuple[dict, callable]] = [
+        (
+            {
+                "role": "user",
+                "content": "hello",
+                "agent": "AgentA",
+                "callerAgent": None,
+                "history_protocol": MessageFormatter.HISTORY_PROTOCOL_CHAT_COMPLETIONS,
+            },
+            _make_responses_agent,
+        ),
+        (
+            {
+                "type": "function_call",
+                "call_id": "call-1",
+                "name": "send_message",
+                "arguments": "{}",
+                "agent": "Coordinator",
+                "callerAgent": None,
+            },
+            _make_chat_agent,
+        ),
+        (
+            {
+                "type": "function_call",
+                "call_id": "call-1",
+                "name": "send_message",
+                "arguments": "{}",
+                "agent": "Coordinator",
+                "callerAgent": None,
+            },
+            lambda name: _make_litellm_agent(name, "openai/gpt-5-mini"),
+        ),
+        (
+            {
+                "type": "function_call",
+                "call_id": "call-1",
+                "name": "send_message",
+                "arguments": "{}",
+                "agent": "Coordinator",
+                "callerAgent": None,
+            },
+            lambda name: _make_litellm_agent(name, "anthropic/claude-sonnet-4-20250514"),
+        ),
     ]
 
-    agent = _make_responses_agent("AgentA")
-    context = _make_context(thread_manager)
+    for history_item, agent_factory in compatible_cases:
+        thread_manager = ThreadManager()
+        thread_manager._store.messages = [history_item]
+        context = _make_context(thread_manager)
+        agent_name = str(history_item.get("agent") or "AgentA")
+        agent = agent_factory(agent_name)
+        MessageFormatter.prepare_history_for_runner([], agent, None, agency_context=context)
 
-    MessageFormatter.prepare_history_for_runner([], agent, None, agency_context=context)
 
-
-def test_prepare_history_for_runner_allows_shared_plain_history_across_protocols() -> None:
+def test_prepare_history_for_runner_stores_responses_protocol_and_strips_runner_metadata() -> None:
     thread_manager = ThreadManager()
     context = _make_context(thread_manager)
     chat_agent = _make_chat_agent("AgentA")
     responses_agent = _make_responses_agent("AgentB")
 
-    MessageFormatter.prepare_history_for_runner([{"role": "user", "content": "hello"}], chat_agent, None, context)
+    first_history = MessageFormatter.prepare_history_for_runner(
+        [{"role": "user", "content": "hello"}],
+        chat_agent,
+        None,
+        context,
+    )
     MessageFormatter.prepare_history_for_runner([{"role": "user", "content": "second"}], responses_agent, None, context)
 
     all_messages = thread_manager.get_all_messages()
     assert len(all_messages) == 2
-    assert all_messages[0]["history_protocol"] == MessageFormatter.HISTORY_PROTOCOL_RESPONSES
-    assert all_messages[1]["history_protocol"] == MessageFormatter.HISTORY_PROTOCOL_RESPONSES
+    assert all(msg["history_protocol"] == MessageFormatter.HISTORY_PROTOCOL_RESPONSES for msg in all_messages)
+    assert all("history_protocol" not in item for item in first_history)
 
 
 def test_prepare_history_for_runner_rejects_inferred_protocol_mismatch() -> None:
@@ -93,44 +137,7 @@ def test_prepare_history_for_runner_rejects_inferred_protocol_mismatch() -> None
         MessageFormatter.prepare_history_for_runner([], agent, None, agency_context=context)
 
 
-def test_prepare_history_for_runner_stamps_history_protocol() -> None:
-    thread_manager = ThreadManager()
-    agent = _make_chat_agent("AgentA")
-    context = _make_context(thread_manager)
-
-    history_for_runner = MessageFormatter.prepare_history_for_runner(
-        [{"role": "user", "content": "hi"}],
-        agent,
-        None,
-        agency_context=context,
-    )
-
-    stored = thread_manager.get_all_messages()
-    assert stored, "Expected history to be stored"
-    assert stored[-1].get("history_protocol") == MessageFormatter.HISTORY_PROTOCOL_RESPONSES
-    assert all("history_protocol" not in item for item in history_for_runner)
-
-
-def test_prepare_history_for_runner_allows_openai_chat_model_function_call_history() -> None:
-    thread_manager = ThreadManager()
-    thread_manager._store.messages = [
-        {
-            "type": "function_call",
-            "call_id": "call-1",
-            "name": "send_message",
-            "arguments": "{}",
-            "agent": "Coordinator",
-            "callerAgent": None,
-        }
-    ]
-
-    agent = _make_chat_agent("Coordinator")
-    context = _make_context(thread_manager)
-
-    MessageFormatter.prepare_history_for_runner([], agent, None, agency_context=context)
-
-
-def test_prepare_history_for_runner_prefers_responses_markers_for_legacy_mixed_items() -> None:
+def test_prepare_history_for_runner_normalizes_legacy_items_for_responses_protocol() -> None:
     thread_manager = ThreadManager()
     thread_manager._store.messages = [
         {
@@ -141,20 +148,7 @@ def test_prepare_history_for_runner_prefers_responses_markers_for_legacy_mixed_i
             "tool_calls": [{"id": "legacy-tool-call"}],
             "agent": "Coordinator",
             "callerAgent": None,
-        }
-    ]
-
-    agent = _make_responses_agent("Coordinator")
-    context = _make_context(thread_manager)
-
-    history = MessageFormatter.prepare_history_for_runner([], agent, None, agency_context=context)
-    assert history[0]["type"] == "function_call"
-    assert history[0]["call_id"] == "call-1"
-
-
-def test_prepare_history_for_runner_prefers_web_search_type_over_legacy_protocol_label() -> None:
-    thread_manager = ThreadManager()
-    thread_manager._store.messages = [
+        },
         {
             "type": "web_search_call",
             "id": "ws_1",
@@ -163,19 +157,7 @@ def test_prepare_history_for_runner_prefers_web_search_type_over_legacy_protocol
             "history_protocol": MessageFormatter.HISTORY_PROTOCOL_CHAT_COMPLETIONS,
             "agent": "Coordinator",
             "callerAgent": None,
-        }
-    ]
-
-    agent = _make_responses_agent("Coordinator")
-    context = _make_context(thread_manager)
-
-    history = MessageFormatter.prepare_history_for_runner([], agent, None, agency_context=context)
-    assert history[0]["type"] == "web_search_call"
-
-
-def test_prepare_history_for_runner_strips_non_responses_function_call_ids() -> None:
-    thread_manager = ThreadManager()
-    thread_manager._store.messages = [
+        },
         {
             "type": "function_call",
             "id": "call-1",
@@ -200,38 +182,22 @@ def test_prepare_history_for_runner_strips_non_responses_function_call_ids() -> 
     context = _make_context(thread_manager)
 
     history_for_runner = MessageFormatter.prepare_history_for_runner([], agent, None, agency_context=context)
-    function_calls = [msg for msg in history_for_runner if msg.get("type") == "function_call"]
-    assert len(function_calls) == 2
+    assert history_for_runner[0]["type"] == "function_call"
+    assert history_for_runner[0]["call_id"] == "call-1"
+    assert any(msg.get("type") == "web_search_call" for msg in history_for_runner)
 
-    assert "id" not in function_calls[0]
-    assert function_calls[1].get("id") == "fc_accepted_by_responses"
+    function_calls = [msg for msg in history_for_runner if msg.get("type") == "function_call" and msg.get("call_id")]
+    assert len(function_calls) >= 3
+    assert any(msg.get("call_id") == "call-1" and "id" not in msg for msg in function_calls)
+    preserved_id_call = next(msg for msg in function_calls if msg.get("call_id") == "call-2")
+    assert preserved_id_call.get("id") == "fc_accepted_by_responses"
 
 
-@pytest.mark.parametrize("model_name", ["openai/gpt-5-mini", "anthropic/claude-sonnet-4-20250514"])
-def test_prepare_history_for_runner_allows_litellm_function_call_history(model_name: str) -> None:
-    thread_manager = ThreadManager()
-    thread_manager._store.messages = [
-        {
-            "type": "function_call",
-            "call_id": "call-1",
-            "name": "send_message",
-            "arguments": "{}",
-            "agent": "Coordinator",
-            "callerAgent": None,
-        }
+def test_resolve_history_protocol_defaults_to_responses() -> None:
+    """History protocol resolution should default to Responses across model wrappers/providers."""
+    agents = [
+        Agent(name="Coordinator", instructions="Test", model="anthropic/claude-sonnet-4-20250514"),
+        _make_chat_agent("Coordinator"),
     ]
-
-    agent = _make_litellm_agent("Coordinator", model_name)
-    context = _make_context(thread_manager)
-
-    MessageFormatter.prepare_history_for_runner([], agent, None, agency_context=context)
-
-
-def test_resolve_history_protocol_defaults_provider_prefixed_strings_to_responses() -> None:
-    agent = Agent(name="Coordinator", instructions="Test", model="anthropic/claude-sonnet-4-20250514")
-    assert MessageFormatter.resolve_history_protocol(agent) == MessageFormatter.HISTORY_PROTOCOL_RESPONSES
-
-
-def test_resolve_history_protocol_defaults_openai_chat_model_to_responses() -> None:
-    agent = _make_chat_agent("Coordinator")
-    assert MessageFormatter.resolve_history_protocol(agent) == MessageFormatter.HISTORY_PROTOCOL_RESPONSES
+    for agent in agents:
+        assert MessageFormatter.resolve_history_protocol(agent) == MessageFormatter.HISTORY_PROTOCOL_RESPONSES

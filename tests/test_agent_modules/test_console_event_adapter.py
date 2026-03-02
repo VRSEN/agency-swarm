@@ -1,8 +1,6 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from agency_swarm.ui.core.console_event_adapter import ConsoleEventAdapter
 
 
@@ -108,63 +106,46 @@ def test_cleanup_live_display_resets_state():
     assert adapter._reasoning_final_rendered is False
 
 
-@pytest.mark.parametrize(
-    ("msg_type", "sender", "receiver", "snippet"),
-    [
+def test_update_console_formats_headers():
+    adapter = ConsoleEventAdapter()
+
+    cases = [
         ("function", "Builder", "User", "🛠️  Executing Function"),  # Two spaces after emoji
         ("function_output", "Builder", "User", "⚙️ Function Output"),
         ("text", "AgentA", "AgentB", "AgentA → 🤖 AgentB"),
         ("text", "user", "AgentB", "👤 user → 🤖 AgentB"),
-    ],
-)
-def test_update_console_formats_headers(msg_type, sender, receiver, snippet):
-    adapter = ConsoleEventAdapter()
+    ]
 
-    with patch.object(adapter.console, "print") as mock_print, patch.object(adapter.console, "rule") as mock_rule:
-        adapter._update_console(msg_type, sender, receiver, "Body")
-
-    printed = mock_print.call_args[0][0]
-    assert snippet in printed
-    mock_rule.assert_called_once()
+    for msg_type, sender, receiver, snippet in cases:
+        with patch.object(adapter.console, "print") as mock_print, patch.object(adapter.console, "rule") as mock_rule:
+            adapter._update_console(msg_type, sender, receiver, "Body")
+        printed = mock_print.call_args[0][0]
+        assert snippet in printed
+        mock_rule.assert_called_once()
 
 
-def test_update_console_can_skip_separator():
+def test_update_console_separator_and_event_dispatch_behavior():
+    """Console update should honor separator flags and route/ignore events correctly."""
     adapter = ConsoleEventAdapter()
 
     with patch.object(adapter.console, "print"), patch.object(adapter.console, "rule") as mock_rule:
         adapter._update_console("text", "Agent", "user", "Body", add_separator=False)
-
     mock_rule.assert_not_called()
 
-
-def test_unknown_event_is_ignored():
-    adapter = ConsoleEventAdapter()
-    event = SimpleNamespace(type="unexpected")
-
     with patch.object(adapter.console, "print") as mock_print, patch.object(adapter.console, "rule") as mock_rule:
-        adapter.openai_to_message_output(event, recipient_agent="Agent")
-
+        adapter.openai_to_message_output(SimpleNamespace(type="unexpected"), recipient_agent="Agent")
     mock_print.assert_not_called()
     mock_rule.assert_not_called()
 
-
-def test_output_text_delta_does_not_trigger_console_update():
-    adapter = ConsoleEventAdapter()
-    event = raw_event("response.output_text.delta", delta="Hello")
-
     with patch.object(adapter, "_update_console") as mock_update:
-        adapter.openai_to_message_output(event, recipient_agent="Agent")
-
+        adapter.openai_to_message_output(
+            raw_event("response.output_text.delta", delta="Hello"), recipient_agent="Agent"
+        )
     mock_update.assert_not_called()
 
-
-def test_raw_response_event_delegates_to_patched_handler():
-    adapter = ConsoleEventAdapter()
-    event = raw_event("response.output_text.delta", delta="Hi")
-
     with patch.object(ConsoleEventAdapter, "_handle_raw_response_event") as mock_handler:
+        event = raw_event("response.output_text.delta", delta="Hi")
         adapter.openai_to_message_output(event, recipient_agent="Agent")
-
     mock_handler.assert_called_once_with(event.data, "Agent", "user")
 
 
@@ -187,36 +168,32 @@ def test_apply_patch_call_displays_header_and_path():
     assert any("src/main.py" in str(text) for text in printed_texts)
 
 
-@pytest.mark.parametrize(
-    ("op_type", "expected_label"),
-    [
+def test_apply_patch_call_shows_correct_operation_label():
+    """apply_patch_call should map operation types to their display labels."""
+    adapter = ConsoleEventAdapter()
+
+    cases = [
         ("create_file", "Creating"),
         ("update_file", "Updating"),
         ("delete_file", "Deleting"),
-    ],
-)
-def test_apply_patch_call_shows_correct_operation_label(op_type, expected_label):
-    """Test that apply_patch_call shows the correct label for each operation type."""
+    ]
+    for op_type, expected_label in cases:
+        operation = SimpleNamespace(
+            type=op_type, path="file.txt", diff="+content" if op_type != "delete_file" else None
+        )
+        item = SimpleNamespace(type="apply_patch_call", operation=operation)
+        event = raw_event("response.output_item.done", item=item)
+
+        with patch.object(adapter.console, "print") as mock_print, patch.object(adapter.console, "rule"):
+            adapter.openai_to_message_output(event, recipient_agent="Agent")
+
+        printed_texts = [str(call.args[0]) for call in mock_print.call_args_list]
+        assert any(expected_label in text for text in printed_texts)
+
+
+def test_apply_patch_call_renders_diff_and_non_diff_paths() -> None:
+    """apply_patch_call should render diff panels only when operation+diff content exists."""
     adapter = ConsoleEventAdapter()
-
-    operation = SimpleNamespace(type=op_type, path="file.txt", diff="+content" if op_type != "delete_file" else None)
-    item = SimpleNamespace(type="apply_patch_call", operation=operation)
-    event = raw_event("response.output_item.done", item=item)
-
-    with patch.object(adapter.console, "print") as mock_print, patch.object(adapter.console, "rule"):
-        adapter.openai_to_message_output(event, recipient_agent="Agent")
-
-    printed_texts = [str(call.args[0]) for call in mock_print.call_args_list]
-    assert any(expected_label in text for text in printed_texts)
-
-
-def test_apply_patch_call_displays_diff_panel():
-    """Test that apply_patch_call displays a diff panel when diff is present."""
-    adapter = ConsoleEventAdapter()
-
-    operation = SimpleNamespace(type="update_file", path="file.py", diff="+new line\n-old line")
-    item = SimpleNamespace(type="apply_patch_call", operation=operation)
-    event = raw_event("response.output_item.done", item=item)
 
     with (
         patch.object(adapter.console, "print"),
@@ -224,44 +201,40 @@ def test_apply_patch_call_displays_diff_panel():
         patch("agency_swarm.ui.core.console_event_adapter.Panel") as mock_panel,
         patch("agency_swarm.ui.core.console_event_adapter.Syntax") as mock_syntax,
     ):
-        adapter.openai_to_message_output(event, recipient_agent="Agent")
-
+        update_event = raw_event(
+            "response.output_item.done",
+            item=SimpleNamespace(
+                type="apply_patch_call",
+                operation=SimpleNamespace(type="update_file", path="file.py", diff="+new line\n-old line"),
+            ),
+        )
+        adapter.openai_to_message_output(update_event, recipient_agent="Agent")
     mock_syntax.assert_called_once()
     mock_panel.assert_called_once()
-
-
-def test_apply_patch_call_no_diff_panel_for_delete():
-    """Test that delete operations don't show a diff panel but still return True."""
-    adapter = ConsoleEventAdapter()
-
-    operation = SimpleNamespace(type="delete_file", path="file.txt")
-    item = SimpleNamespace(type="apply_patch_call", operation=operation)
-    event = raw_event("response.output_item.done", item=item)
 
     with (
         patch.object(adapter.console, "print"),
         patch.object(adapter.console, "rule") as mock_rule,
         patch("agency_swarm.ui.core.console_event_adapter.Panel") as mock_panel,
     ):
-        adapter.openai_to_message_output(event, recipient_agent="Agent")
-
+        delete_event = raw_event(
+            "response.output_item.done",
+            item=SimpleNamespace(
+                type="apply_patch_call", operation=SimpleNamespace(type="delete_file", path="file.txt")
+            ),
+        )
+        adapter.openai_to_message_output(delete_event, recipient_agent="Agent")
     mock_panel.assert_not_called()
-    mock_rule.assert_called_once()  # Rule should still be called since content was displayed
-
-
-def test_apply_patch_call_no_operation_no_separator():
-    """Test that apply_patch_call with no operation doesn't print a separator."""
-    adapter = ConsoleEventAdapter()
-
-    item = SimpleNamespace(type="apply_patch_call", operation=None)
-    event = raw_event("response.output_item.done", item=item)
+    mock_rule.assert_called_once()
 
     with (
         patch.object(adapter.console, "print") as mock_print,
         patch.object(adapter.console, "rule") as mock_rule,
     ):
-        adapter.openai_to_message_output(event, recipient_agent="Agent")
-
+        no_op_event = raw_event(
+            "response.output_item.done", item=SimpleNamespace(type="apply_patch_call", operation=None)
+        )
+        adapter.openai_to_message_output(no_op_event, recipient_agent="Agent")
     mock_print.assert_not_called()
     mock_rule.assert_not_called()
 
@@ -269,13 +242,9 @@ def test_apply_patch_call_no_operation_no_separator():
 # --- Tests for shell_call formatting ---
 
 
-def test_shell_call_displays_header_and_commands():
-    """Test that shell_call events display the tool header and commands."""
+def test_shell_call_rendering_variants() -> None:
+    """Shell and local shell events should render commands, while empty calls stay silent."""
     adapter = ConsoleEventAdapter()
-
-    action = SimpleNamespace(commands=["pwd", "ls -la"])
-    item = SimpleNamespace(type="shell_call", action=action)
-    event = raw_event("response.output_item.done", item=item)
 
     with (
         patch.object(adapter.console, "print") as mock_print,
@@ -283,23 +252,15 @@ def test_shell_call_displays_header_and_commands():
         patch("agency_swarm.ui.core.console_event_adapter.Panel"),
         patch("agency_swarm.ui.core.console_event_adapter.Syntax") as mock_syntax,
     ):
-        adapter.openai_to_message_output(event, recipient_agent="Agent")
-
+        shell_event = raw_event(
+            "response.output_item.done",
+            item=SimpleNamespace(type="shell_call", action=SimpleNamespace(commands=["pwd", "ls -la"])),
+        )
+        adapter.openai_to_message_output(shell_event, recipient_agent="Agent")
     printed_texts = [str(call.args[0]) for call in mock_print.call_args_list]
     assert any("Shell" in text for text in printed_texts)
-    # Check that Syntax was called with the commands
-    syntax_call_args = mock_syntax.call_args[0][0]
-    assert "$ pwd" in syntax_call_args
-    assert "$ ls -la" in syntax_call_args
-
-
-def test_local_shell_call_displays_header_and_command():
-    """Test that local_shell_call events display the tool header and command."""
-    adapter = ConsoleEventAdapter()
-
-    action = SimpleNamespace(command=["ls", "-la", "/tmp"], working_directory="/home/user")
-    item = SimpleNamespace(type="local_shell_call", action=action)
-    event = raw_event("response.output_item.done", item=item)
+    syntax_payload = mock_syntax.call_args[0][0]
+    assert "$ pwd" in syntax_payload and "$ ls -la" in syntax_payload
 
     with (
         patch.object(adapter.console, "print") as mock_print,
@@ -307,31 +268,29 @@ def test_local_shell_call_displays_header_and_command():
         patch("agency_swarm.ui.core.console_event_adapter.Panel"),
         patch("agency_swarm.ui.core.console_event_adapter.Syntax") as mock_syntax,
     ):
-        adapter.openai_to_message_output(event, recipient_agent="Agent")
-
+        local_shell_event = raw_event(
+            "response.output_item.done",
+            item=SimpleNamespace(
+                type="local_shell_call",
+                action=SimpleNamespace(command=["ls", "-la", "/tmp"], working_directory="/home/user"),
+            ),
+        )
+        adapter.openai_to_message_output(local_shell_event, recipient_agent="Agent")
     printed_texts = [str(call.args[0]) for call in mock_print.call_args_list]
     assert any("Local Shell" in text for text in printed_texts)
     assert any("/home/user" in str(text) for text in printed_texts)
-    # Check that Syntax was called with the joined command
-    syntax_call_args = mock_syntax.call_args[0][0]
-    assert "$ ls -la /tmp" in syntax_call_args
-
-
-def test_shell_call_empty_commands_no_output():
-    """Test that shell_call with empty commands doesn't display anything or separator."""
-    adapter = ConsoleEventAdapter()
-
-    action = SimpleNamespace(commands=[])
-    item = SimpleNamespace(type="shell_call", action=action)
-    event = raw_event("response.output_item.done", item=item)
+    assert "$ ls -la /tmp" in mock_syntax.call_args[0][0]
 
     with (
         patch.object(adapter.console, "print") as mock_print,
         patch.object(adapter.console, "rule") as mock_rule,
         patch("agency_swarm.ui.core.console_event_adapter.Panel") as mock_panel,
     ):
-        adapter.openai_to_message_output(event, recipient_agent="Agent")
-
+        empty_event = raw_event(
+            "response.output_item.done",
+            item=SimpleNamespace(type="shell_call", action=SimpleNamespace(commands=[])),
+        )
+        adapter.openai_to_message_output(empty_event, recipient_agent="Agent")
     mock_print.assert_not_called()
     mock_panel.assert_not_called()
     mock_rule.assert_not_called()
@@ -340,37 +299,17 @@ def test_shell_call_empty_commands_no_output():
 # --- Tests for Rich escape functionality ---
 
 
-def test_function_output_escapes_rich_markup():
-    """Test that function_output content escapes Rich markup brackets."""
+def test_rich_markup_escaping_rules_by_message_type() -> None:
+    """Function/function_output should escape rich markup while text should preserve markdown content."""
     adapter = ConsoleEventAdapter()
+    cases = [
+        ("function_output", "[build-system]", "\\[build-system]"),
+        ("function", '{"section": "[red]"}', "\\[red]"),
+        ("text", "[bold]test[/bold]", "[bold]test[/bold]"),
+    ]
 
-    with patch.object(adapter.console, "print") as mock_print, patch.object(adapter.console, "rule"):
-        adapter._update_console("function_output", "Agent", "user", "[build-system]")
-
-    printed = mock_print.call_args[0][0]
-    # The escaped version should contain the literal brackets (escaped as \[)
-    assert "\\[build-system\\]" in printed or "[build-system]" not in printed.replace("\\[", "X")
-
-
-def test_function_escapes_rich_markup():
-    """Test that function content (tool arguments) escapes Rich markup brackets."""
-    adapter = ConsoleEventAdapter()
-
-    with patch.object(adapter.console, "print") as mock_print, patch.object(adapter.console, "rule"):
-        adapter._update_console("function", "Agent", "user", '{"section": "[red]"}')
-
-    printed = mock_print.call_args[0][0]
-    # The escaped version should contain the literal [red]
-    assert "\\[red\\]" in printed or "[red]" not in printed.replace("\\[", "X")
-
-
-def test_text_does_not_escape_rich_markup():
-    """Test that text messages don't escape Rich markup (they use Markdown rendering)."""
-    adapter = ConsoleEventAdapter()
-
-    with patch.object(adapter.console, "print") as mock_print, patch.object(adapter.console, "rule"):
-        adapter._update_console("text", "Agent", "user", "[bold]test[/bold]")
-
-    printed = mock_print.call_args[0][0]
-    # Text should NOT be escaped - the original markup should be present
-    assert "[bold]test[/bold]" in printed
+    for msg_type, body, expected_token in cases:
+        with patch.object(adapter.console, "print") as mock_print, patch.object(adapter.console, "rule"):
+            adapter._update_console(msg_type, "Agent", "user", body)
+        printed = str(mock_print.call_args[0][0])
+        assert expected_token in printed
