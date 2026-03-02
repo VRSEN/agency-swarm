@@ -31,7 +31,7 @@ def _build_openclaw_config(tmp_path: Path) -> OpenClawIntegrationConfig:
         startup_timeout_seconds=5.0,
         proxy_timeout_seconds=30.0,
         default_model="openclaw:main",
-        provider_model="openai/gpt-4o-mini",
+        provider_model="openai/gpt-5-mini",
         gateway_command="openclaw gateway",
     )
 
@@ -126,7 +126,7 @@ def test_openclaw_proxy_filters_request_keys_and_normalizes_payload(
     }
     assert "include" not in forwarded
     assert "parallel_tool_calls" not in forwarded
-    assert forwarded["model"] == "openai/gpt-4o-mini"
+    assert forwarded["model"] == "openai/gpt-5-mini"
     assert forwarded["input"] == [
         {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hello"}]}
     ]
