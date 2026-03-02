@@ -101,7 +101,7 @@
                 "pages": [
                   "additional-features/guardrails/overview",
                   "additional-features/guardrails/input-guardrails",
-              "additional-features/guardrails/output-guardrails"
+                  "additional-features/guardrails/output-guardrails"
                 ]
               },
               "additional-features/streaming",

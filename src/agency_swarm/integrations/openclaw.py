@@ -46,7 +46,7 @@ _OPENRESPONSES_ALLOWED_KEYS: tuple[str, ...] = (
 )
 _ALLOWED_TOOL_CHOICE_VALUES = {"auto", "none", "required"}
 _PROVIDER_ENV_KEYS = ("OPENAI_API_KEY", "ANTHROPIC_API_KEY")
-_RESPONSE_HEADER_BLOCKLIST = {"content-length", "transfer-encoding", "connection"}
+_RESPONSE_HEADER_BLOCKLIST = {"content-length", "transfer-encoding", "connection", "content-encoding"}
 
 
 def _extract_port_from_gateway_command(command: list[str]) -> int | None:

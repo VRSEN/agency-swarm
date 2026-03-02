@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import inspect
 import json
 import subprocess
@@ -103,8 +104,13 @@ def test_openclaw_proxy_filters_request_keys_and_normalizes_payload(
             captured["json"] = json
             return httpx.Response(
                 status_code=200,
-                content=b'{"ok": true}',
-                headers={"content-type": "application/json", "retry-after": "3", "x-request-id": "req-non-stream"},
+                content=gzip.compress(b'{"ok": true}'),
+                headers={
+                    "content-type": "application/json",
+                    "retry-after": "3",
+                    "x-request-id": "req-non-stream",
+                    "content-encoding": "gzip",
+                },
             )
 
     monkeypatch.setattr("agency_swarm.integrations.openclaw.httpx.AsyncClient", _FakeAsyncClient)
@@ -140,6 +146,7 @@ def test_openclaw_proxy_filters_request_keys_and_normalizes_payload(
     assert response.status_code == 200
     assert response.headers["retry-after"] == "3"
     assert response.headers["x-request-id"] == "req-non-stream"
+    assert response.headers.get("content-encoding") is None
     forwarded = captured["json"]
     assert set(forwarded.keys()) <= {
         "model",
