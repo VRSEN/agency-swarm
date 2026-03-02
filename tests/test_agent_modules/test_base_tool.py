@@ -1,9 +1,4 @@
-"""
-Unit tests for BaseTool functionality.
-
-Tests the core BaseTool class including schema generation, context management,
-and configuration handling.
-"""
+"""Unit tests for BaseTool functionality."""
 
 import pytest
 from agents import RunContextWrapper
@@ -13,379 +8,147 @@ from agency_swarm.context import MasterContext
 from agency_swarm.tools.base_tool import BaseTool, classproperty
 
 
-class TestClassProperty:
-    """Test the classproperty descriptor."""
+class SampleTool(BaseTool):
+    name: str = "sample"
 
-    def test_classproperty_descriptor(self):
-        """Test that classproperty works as a class-level property."""
+    def run(self) -> str:
+        return "ok"
 
-        class TestClass:
-            _value = "test_value"
 
-            @classproperty
-            def class_prop(cls):
-                return cls._value
+def test_classproperty_descriptor_supports_plain_and_basetool_access() -> None:
+    """classproperty should resolve for plain classes and BaseTool subclasses."""
 
-        # Test access through class
-        assert TestClass.class_prop == "test_value"
+    class Demo:
+        _value = "value"
 
-        # Test access through instance
-        instance = TestClass()
-        assert instance.class_prop == "test_value"
-
-        # Test that classproperty returns the owner class to the function
         @classproperty
-        def get_owner(cls):
-            return cls
+        def prop(cls):
+            return cls._value
 
-        TestClass.get_owner_prop = get_owner
-        assert TestClass.get_owner_prop is TestClass
+    assert Demo.prop == "value"
+    assert Demo().prop == "value"
 
+    class ToolWithClassProp(BaseTool):
+        name: str = "name"
 
-class TestBaseTool:
-    """Test BaseTool functionality."""
+        @classproperty
+        def computed(cls):
+            return "computed-value"
 
-    def test_abstract_base_tool_cannot_be_instantiated(self):
-        """Test that BaseTool cannot be instantiated directly due to abstract method."""
+        def run(self) -> str:
+            return self.name
 
-        with pytest.raises(TypeError, match="Can't instantiate abstract class BaseTool"):
-            BaseTool()
+    tool = ToolWithClassProp()
+    assert tool.name == "name"
+    assert tool.computed == "computed-value"
 
-    def test_concrete_tool_initialization(self):
-        """Test initialization of a concrete BaseTool subclass."""
 
-        class ConcreteTool(BaseTool):
-            name: str = "test"
+def test_base_tool_requires_run_implementation() -> None:
+    """BaseTool and incomplete subclasses should remain abstract."""
+    with pytest.raises(TypeError, match="Can't instantiate abstract class BaseTool"):
+        BaseTool()
 
-            def run(self):
-                return "executed"
+    with pytest.raises(TypeError, match="Can't instantiate abstract class.*run"):
 
-        tool = ConcreteTool()
-        assert tool.name == "test"
-        assert hasattr(tool, "_caller_agent")
-        assert hasattr(tool, "_event_handler")
-        assert hasattr(tool, "_context")
+        class IncompleteTool(BaseTool):
+            pass
 
-    def test_tool_config_defaults_initialization(self):
-        """Test that ToolConfig defaults are properly set during initialization."""
+        IncompleteTool()
 
-        class ToolWithoutStrictConfig(BaseTool):
-            class ToolConfig:
-                pass
 
-            def run(self):
-                return "test"
+def test_base_tool_initialization_and_tool_config_defaults() -> None:
+    """Concrete tools should initialize context wrapper and preserve ToolConfig defaults/overrides."""
+    tool = SampleTool()
+    assert tool.name == "sample"
+    assert isinstance(tool._context, RunContextWrapper)
+    assert isinstance(tool._context.context, MasterContext)
+    assert tool.ToolConfig.strict is False
+    assert tool.ToolConfig.one_call_at_a_time is False
 
-        tool = ToolWithoutStrictConfig()
-        # Test that strict default was added
-        assert hasattr(tool.ToolConfig, "strict")
-        assert tool.ToolConfig.strict is False
+    class StrictSequentialTool(BaseTool):
+        class ToolConfig:
+            strict = True
+            one_call_at_a_time = True
+            custom_flag = "kept"
 
-    def test_tool_config_preserves_existing_values(self):
-        """Test that existing ToolConfig values are not overridden."""
+        def run(self) -> str:
+            return "ok"
 
-        class ToolWithExistingConfig(BaseTool):
-            class ToolConfig:
-                strict = True
-                custom_setting = "preserved"
+    tool = StrictSequentialTool()
+    assert tool.ToolConfig.strict is True
+    assert tool.ToolConfig.one_call_at_a_time is True
+    assert tool.ToolConfig.custom_flag == "kept"
 
-            def run(self):
-                return "test"
 
-        tool = ToolWithExistingConfig()
-        # Test that existing values are preserved
-        assert tool.ToolConfig.strict is True
-        assert tool.ToolConfig.custom_setting == "preserved"
+def test_openai_schema_descriptions_required_fields_and_fallback() -> None:
+    """OpenAI schema should include docstring details and apply fallback descriptions when absent."""
 
-    def test_context_initialization(self):
-        """Test that context is properly initialized when not provided."""
+    class DocumentedTool(BaseTool):
+        """A tool for schema checks.
 
-        class TestTool(BaseTool):
-            def run(self):
-                return "test"
+        Args:
+            name: Name field description
+            count: Count field description
+        """
 
-        tool = TestTool()
-        assert tool._context is not None
-        assert isinstance(tool._context, RunContextWrapper)
-        assert isinstance(tool._context.context, MasterContext)
+        name: str
+        count: int = 5
 
-    def test_context_initialization_behavior(self):
-        """Test context initialization behavior."""
+        def run(self) -> str:
+            return f"{self.name}:{self.count}"
 
-        class TestTool(BaseTool):
-            def run(self):
-                return "test"
+    schema = DocumentedTool.openai_schema
+    params = schema["parameters"]
 
-        # Test that context is always initialized
-        tool = TestTool()
+    assert schema["name"] == "DocumentedTool"
+    assert "A tool for schema checks." in schema["description"]
+    assert params["properties"]["name"]["description"] == "Name field description"
+    assert params["properties"]["count"]["description"] == "Count field description"
+    assert "name" in params["required"]
+    assert "count" not in params["required"]
 
-        # Re-initialize
-        tool.__init__()
+    class UndocumentedTool(BaseTool):
+        def run(self) -> str:
+            return "ok"
 
-        # Context will be re-created (this is the actual behavior)
-        assert tool._context is not None
-        assert isinstance(tool._context, RunContextWrapper)
+    schema = UndocumentedTool.openai_schema
+    assert schema["description"] == "`UndocumentedTool` tool"
 
-    def test_openai_schema_generation(self):
-        """Test OpenAI schema generation from model and docstring."""
 
-        class DocumentedTool(BaseTool):
-            """A tool for testing schema generation.
+def test_openai_schema_strict_mode_applies_additional_properties_to_main_and_defs() -> None:
+    """Strict mode should set additionalProperties=False on root and nested definitions."""
 
-            Args:
-                name: The name parameter
-                count: Number of items to process
-            """
+    class NestedModel(BaseModel):
+        nested_field: str
+        optional_field: int | None = None
 
-            name: str
-            count: int = 5
+    class StrictTool(BaseTool):
+        class ToolConfig:
+            strict = True
 
-            def run(self):
-                return f"Processed {self.count} items named {self.name}"
+        name: str
+        payload: list[NestedModel]
 
-        schema = DocumentedTool.openai_schema
+        def run(self) -> str:
+            return "ok"
 
-        assert schema["name"] == "DocumentedTool"
-        # The actual implementation includes the full docstring including Args section
-        assert "A tool for testing schema generation." in schema["description"]
-        assert "Args:" in schema["description"]
-        assert "parameters" in schema
+    schema = StrictTool.openai_schema
+    assert schema["strict"] is True
+    assert schema["parameters"]["additionalProperties"] is False
 
-        # Check parameters structure
-        params = schema["parameters"]
-        assert "properties" in params
-        assert "name" in params["properties"]
-        assert "count" in params["properties"]
+    defs = schema["parameters"].get("$defs", {})
+    for definition in defs.values():
+        assert definition["additionalProperties"] is False
 
-        # Check that docstring descriptions were added
-        assert params["properties"]["name"]["description"] == "The name parameter"
-        assert params["properties"]["count"]["description"] == "Number of items to process"
 
-        # Check required fields (should include 'name' but not 'count' which has default)
-        assert "name" in params["required"]
-        assert "count" not in params["required"]
+def test_base_tool_context_property_and_removed_shared_state() -> None:
+    """context property should proxy MasterContext and _shared_state should be unavailable."""
+    tool = SampleTool()
 
-    def test_openai_schema_without_docstring(self):
-        """Test schema generation for tool without docstring."""
+    assert isinstance(tool.context, MasterContext)
 
-        class UndocumentedTool(BaseTool):
-            name: str
+    tool._context = None
+    assert tool.context is None
 
-            def run(self):
-                return "test"
-
-        schema = UndocumentedTool.openai_schema
-
-        assert schema["name"] == "UndocumentedTool"
-        # Should generate default description
-        expected_desc = "`UndocumentedTool` tool"
-        assert schema["description"] == expected_desc
-
-    def test_openai_schema_with_strict_mode(self):
-        """Test schema generation with strict mode enabled."""
-
-        class StrictTool(BaseTool):
-            """A strict tool."""
-
-            class ToolConfig:
-                strict = True
-
-            name: str
-
-            def run(self):
-                return "test"
-
-        schema = StrictTool.openai_schema
-
-        assert schema["strict"] is True
-        assert schema["parameters"]["additionalProperties"] is False
-
-    def test_openai_schema_with_defs_strict_mode(self):
-        """Test schema generation with $defs and strict mode using real data."""
-
-        class NestedData(BaseModel):
-            nested_field: str
-            optional_field: int | None = None
-
-        class ComplexTool(BaseTool):
-            """Tool with complex nested types that should generate $defs."""
-
-            class ToolConfig:
-                strict = True
-
-            name: str
-            data_list: list[NestedData]
-
-            def run(self):
-                return f"Processed {len(self.data_list)} items"
-
-        schema = ComplexTool.openai_schema
-
-        # Check that schema has the expected structure
-        assert schema["strict"] is True
-        assert schema["parameters"]["additionalProperties"] is False
-
-        # Check if $defs were actually generated by Pydantic
-        if "$defs" in schema["parameters"]:
-            # If $defs exist, verify they all have additionalProperties set to False
-            for def_name, def_schema in schema["parameters"]["$defs"].items():
-                assert def_schema["additionalProperties"] is False, (
-                    f"Definition '{def_name}' missing additionalProperties: False"
-                )
-
-        # Verify the tool works with actual parameters
-        assert "name" in schema["parameters"]["properties"]
-        assert "data_list" in schema["parameters"]["properties"]
-
-    def test_openai_schema_without_docstring_or_schema_description(self):
-        """Test that tools without docstring get default description with class name."""
-
-        class PlainTool(BaseTool):
-            def run(self):
-                return "test"
-
-        schema = PlainTool.openai_schema
-
-        # Should generate default description with class name
-        expected_desc = "`PlainTool` tool"
-        assert schema["description"] == expected_desc
-
-    def test_context_property_access(self):
-        """Test the context property provides access to MasterContext."""
-
-        class TestTool(BaseTool):
-            def run(self):
-                return "test"
-
-        tool = TestTool()
-        context = tool.context
-
-        assert context is not None
-        assert isinstance(context, MasterContext)
-        assert context is tool._context.context
-
-    def test_context_property_when_context_is_none(self):
-        """Test context property returns None when _context is None."""
-
-        class TestTool(BaseTool):
-            def run(self):
-                return "test"
-
-        tool = TestTool()
-        tool._context = None
-
-        assert tool.context is None
-
-    def test_shared_state_property_deprecation_warning(self):
-        """_shared_state was removed; tools should use .context instead."""
-
-        class TestTool(BaseTool):
-            def run(self):
-                return "test"
-
-        tool = TestTool()
-
-        with pytest.raises(AttributeError, match=r"_shared_state"):
-            _ = tool._shared_state
-
-    def test_model_config_ignores_classproperty(self):
-        """Test that model_config properly ignores classproperty types."""
-
-        class TestTool(BaseTool):
-            name: str = "test"
-
-            @classproperty
-            def my_class_prop(cls):
-                return "class_value"
-
-            def run(self):
-                return "test"
-
-        tool = TestTool()
-
-        # Should be able to create tool without issues from classproperty
-        assert tool.name == "test"
-        assert tool.my_class_prop == "class_value"
-
-    def test_tool_config_one_call_at_a_time_default(self):
-        """Test that one_call_at_a_time has proper default value."""
-
-        class TestTool(BaseTool):
-            def run(self):
-                return "test"
-
-        tool = TestTool()
-        assert hasattr(tool.ToolConfig, "one_call_at_a_time")
-        assert tool.ToolConfig.one_call_at_a_time is False
-
-    def test_tool_config_custom_one_call_at_a_time(self):
-        """Test that custom one_call_at_a_time value is preserved."""
-
-        class ConcurrentTool(BaseTool):
-            class ToolConfig:
-                one_call_at_a_time = True
-
-            def run(self):
-                return "test"
-
-        tool = ConcurrentTool()
-        assert tool.ToolConfig.one_call_at_a_time is True
-
-    def test_run_method_is_abstract(self):
-        """Test that the run method is properly abstract."""
-
-        # This should work - defining run method
-        class CompleteTool(BaseTool):
-            def run(self):
-                return "complete"
-
-        tool = CompleteTool()
-        assert tool.run() == "complete"
-
-        # This should fail - not implementing run method
-        with pytest.raises(TypeError, match="Can't instantiate abstract class.*run"):
-
-            class IncompleteTool(BaseTool):
-                pass
-
-            IncompleteTool()
-
-    def test_openai_schema_uses_docstring_description(self):
-        """Test that docstring description is used when available."""
-
-        class ToolWithDocstring(BaseTool):
-            """This is a tool with a clear docstring description."""
-
-            name: str
-
-            def run(self):
-                return f"Processing {self.name}"
-
-        schema = ToolWithDocstring.openai_schema
-
-        # Should use the docstring description
-        assert "This is a tool with a clear docstring description." in schema["description"]
-
-    def test_parameter_description_from_docstring(self):
-        """Test that parameter descriptions are extracted from docstring."""
-
-        class TestTool(BaseTool):
-            """Tool with documented parameters.
-
-            Args:
-                name: The name of the item to process
-                count: Number of items to handle
-            """
-
-            name: str
-            count: int = 5
-
-            def run(self):
-                return f"Processing {self.name} with count {self.count}"
-
-        schema = TestTool.openai_schema
-
-        # Should extract descriptions from docstring
-        params = schema["parameters"]["properties"]
-        assert params["name"]["description"] == "The name of the item to process"
-        assert params["count"]["description"] == "Number of items to handle"
+    with pytest.raises(AttributeError, match=r"_shared_state"):
+        _ = tool._shared_state

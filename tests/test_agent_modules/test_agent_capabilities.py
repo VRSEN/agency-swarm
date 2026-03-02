@@ -28,121 +28,8 @@ def sample_function_tool() -> str:
     return "sample"
 
 
-def test_empty_agent_has_no_capabilities():
-    """Agent with no tools or special features has empty capabilities."""
-    agent = Agent(name="EmptyAgent", instructions="Test")
-    capabilities = get_agent_capabilities(agent)
-    assert capabilities == []
-
-
-def test_agent_with_custom_basetool():
-    """Agent with BaseTool has 'tools' capability."""
-    agent = Agent(name="ToolAgent", instructions="Test", tools=[SampleTool])
-    capabilities = get_agent_capabilities(agent)
-    assert "tools" in capabilities
-    assert len(capabilities) == 1
-
-
-def test_agent_with_function_tool():
-    """Agent with @function_tool has 'tools' capability."""
-    agent = Agent(name="FunctionAgent", instructions="Test", tools=[sample_function_tool])
-    capabilities = get_agent_capabilities(agent)
-    assert "tools" in capabilities
-    assert len(capabilities) == 1
-
-
-def test_agent_with_multiple_custom_tools():
-    """Agent with multiple custom tools has single 'tools' capability."""
-    agent = Agent(name="MultiToolAgent", instructions="Test", tools=[SampleTool, sample_function_tool])
-    capabilities = get_agent_capabilities(agent)
-    assert "tools" in capabilities
-    assert capabilities.count("tools") == 1
-
-
-def test_agent_with_file_search():
-    """Agent with FileSearchTool has 'file_search' capability."""
-    agent = Agent(name="FileSearchAgent", instructions="Test", tools=[FileSearchTool(vector_store_ids=["vs_123"])])
-    capabilities = get_agent_capabilities(agent)
-    assert "file_search" in capabilities
-    assert "tools" not in capabilities
-
-
-def test_agent_with_code_interpreter():
-    """Agent with CodeInterpreterTool has 'code_interpreter' capability."""
-    agent = Agent(name="CodeAgent", instructions="Test", tools=[CodeInterpreterTool(tool_config=CodeInterpreter())])
-    capabilities = get_agent_capabilities(agent)
-    assert "code_interpreter" in capabilities
-    assert "tools" not in capabilities
-
-
-def test_agent_with_web_search():
-    """Agent with WebSearchTool has 'web_search' capability."""
-    agent = Agent(name="WebAgent", instructions="Test", tools=[WebSearchTool()])
-    capabilities = get_agent_capabilities(agent)
-    assert "web_search" in capabilities
-    assert "tools" not in capabilities
-
-
-def test_agent_with_hosted_tools_and_custom_tools():
-    """Agent with both hosted and custom tools has all capabilities."""
-    agent = Agent(
-        name="MixedAgent",
-        instructions="Test",
-        tools=[
-            SampleTool,
-            FileSearchTool(vector_store_ids=["vs_123"]),
-            CodeInterpreterTool(tool_config=CodeInterpreter()),
-        ],
-    )
-    capabilities = get_agent_capabilities(agent)
-    assert "tools" in capabilities
-    assert "file_search" in capabilities
-    assert "code_interpreter" in capabilities
-    assert "web_search" not in capabilities
-
-
-def test_agent_with_reasoning_model_o1():
-    """Agent with o1 model has 'reasoning' capability."""
-    agent = Agent(name="ReasoningAgent", instructions="Test", model="o1-preview")
-    capabilities = get_agent_capabilities(agent)
-    assert "reasoning" in capabilities
-
-
-def test_agent_with_reasoning_model_o3():
-    """Agent with o3 model has 'reasoning' capability."""
-    agent = Agent(name="ReasoningAgent", instructions="Test", model="o3")
-    capabilities = get_agent_capabilities(agent)
-    assert "reasoning" in capabilities
-
-
-def test_agent_with_reasoning_model_gpt51():
-    """Agent with gpt-5-mini model has 'reasoning' capability."""
-    agent = Agent(name="ReasoningAgent", instructions="Test", model="gpt-5-mini")
-    capabilities = get_agent_capabilities(agent)
-    assert "reasoning" in capabilities
-
-
-def test_agent_with_non_reasoning_model():
-    """Agent with a non-reasoning model does NOT have 'reasoning' capability."""
-    agent = Agent(name="NonReasoningAgent", instructions="Test", model="gpt-4.1")
-    capabilities = get_agent_capabilities(agent)
-    assert "reasoning" not in capabilities
-
-
-def test_agent_with_reasoning_parameter():
-    """Agent with reasoning parameter in model_settings has 'reasoning' capability."""
-    agent = Agent(
-        name="ReasoningAgent",
-        instructions="Test",
-        model="gpt-5-mini",
-        model_settings=ModelSettings(reasoning=Reasoning(effort="high")),
-    )
-    capabilities = get_agent_capabilities(agent)
-    assert "reasoning" in capabilities
-
-
-def test_agent_with_mcp_server():
-    """Agent with MCP servers has 'tools' capability."""
+def test_agent_capabilities_case_table() -> None:
+    """Capability detection should stay stable for key tool/model combinations."""
     mcp_server = MCPServerStdio(
         name="test_server",
         params={
@@ -151,22 +38,77 @@ def test_agent_with_mcp_server():
         },
         client_session_timeout_seconds=20,
     )
-    agent = Agent(name="MCPAgent", instructions="Test", mcp_servers=[mcp_server])
-    capabilities = get_agent_capabilities(agent)
-    assert "tools" in capabilities
-
-
-def test_agent_with_hosted_mcp_tool():
-    """Agent with HostedMCPTool advertises hosted MCP capability."""
     hosted_mcp = HostedMCPTool(tool_config=Mcp(server_label="test", server_url="https://example.com"))
-    agent = Agent(name="HostedMCPAgent", instructions="Test", tools=[hosted_mcp])
+
+    cases: list[tuple[Agent, set[str]]] = [
+        (Agent(name="EmptyAgent", instructions="Test"), set()),
+        (Agent(name="BaseToolAgent", instructions="Test", tools=[SampleTool]), {"tools"}),
+        (Agent(name="FunctionToolAgent", instructions="Test", tools=[sample_function_tool]), {"tools"}),
+        (
+            Agent(name="HostedToolsAgent", instructions="Test", tools=[FileSearchTool(vector_store_ids=["vs_123"])]),
+            {"file_search"},
+        ),
+        (
+            Agent(name="CodeAgent", instructions="Test", tools=[CodeInterpreterTool(tool_config=CodeInterpreter())]),
+            {"code_interpreter"},
+        ),
+        (Agent(name="WebAgent", instructions="Test", tools=[WebSearchTool()]), {"web_search"}),
+        (Agent(name="HostedMcpAgent", instructions="Test", tools=[hosted_mcp]), {"hosted_mcp"}),
+        (Agent(name="McpServerAgent", instructions="Test", mcp_servers=[mcp_server]), {"tools"}),
+        (
+            Agent(
+                name="MixedAgent",
+                instructions="Test",
+                tools=[
+                    SampleTool,
+                    FileSearchTool(vector_store_ids=["vs_123"]),
+                    CodeInterpreterTool(tool_config=CodeInterpreter()),
+                ],
+            ),
+            {"tools", "file_search", "code_interpreter"},
+        ),
+    ]
+    for agent, expected in cases:
+        assert set(get_agent_capabilities(agent)) == expected
+
+
+def test_reasoning_capability_from_model_or_settings() -> None:
+    """Reasoning capability should be detected from either model name or explicit settings."""
+    cases: list[tuple[Agent, bool]] = [
+        (Agent(name="O1Agent", instructions="Test", model="o1-preview"), True),
+        (Agent(name="O3Agent", instructions="Test", model="o3"), True),
+        (Agent(name="Gpt5Agent", instructions="Test", model="gpt-5-mini"), True),
+        (Agent(name="NonReasoningAgent", instructions="Test", model="gpt-4.1"), False),
+        (
+            Agent(
+                name="ReasoningSettingAgent",
+                instructions="Test",
+                model="gpt-4.1",
+                model_settings=ModelSettings(reasoning=Reasoning(effort="high")),
+            ),
+            True,
+        ),
+    ]
+    for agent, expected in cases:
+        capabilities = get_agent_capabilities(agent)
+        assert ("reasoning" in capabilities) is expected
+
+
+def test_capabilities_order_and_uniqueness() -> None:
+    """Capability order should be deterministic and not duplicate values."""
+    agent = Agent(
+        name="OrderedAgent",
+        instructions="Test",
+        model="gpt-5-mini",
+        tools=[WebSearchTool(), SampleTool, CodeInterpreterTool(tool_config=CodeInterpreter())],
+    )
     capabilities = get_agent_capabilities(agent)
-    assert "hosted_mcp" in capabilities
-    assert "tools" not in capabilities
+    assert capabilities == ["tools", "reasoning", "code_interpreter", "web_search"]
+    assert len(capabilities) == len(set(capabilities))
 
 
-def test_agent_with_all_capabilities():
-    """Agent with all capability types returns complete list."""
+def test_agent_with_all_capabilities() -> None:
+    """Agent with custom + hosted + reasoning capabilities should expose the full set."""
     agent = Agent(
         name="FullAgent",
         instructions="Test",
@@ -179,30 +121,4 @@ def test_agent_with_all_capabilities():
         ],
         model_settings=ModelSettings(reasoning=Reasoning(effort="high")),
     )
-    capabilities = get_agent_capabilities(agent)
-    assert set(capabilities) == {"tools", "reasoning", "file_search", "code_interpreter", "web_search"}
-
-
-def test_capabilities_are_unique():
-    """Capabilities list contains no duplicates."""
-    agent = Agent(
-        name="Agent",
-        instructions="Test",
-        tools=[SampleTool, sample_function_tool, FileSearchTool(vector_store_ids=["vs_123"])],
-    )
-    capabilities = get_agent_capabilities(agent)
-    assert len(capabilities) == len(set(capabilities))
-
-
-def test_capabilities_order_is_consistent():
-    """Capabilities are returned in consistent order."""
-    agent = Agent(
-        name="Agent",
-        instructions="Test",
-        model="gpt-5-mini",
-        tools=[WebSearchTool(), SampleTool, CodeInterpreterTool(tool_config=CodeInterpreter())],
-    )
-    capabilities = get_agent_capabilities(agent)
-    # Expected order: tools, reasoning, code_interpreter, web_search, file_search
-    expected = ["tools", "reasoning", "code_interpreter", "web_search"]
-    assert capabilities == expected
+    assert set(get_agent_capabilities(agent)) == {"tools", "reasoning", "file_search", "code_interpreter", "web_search"}

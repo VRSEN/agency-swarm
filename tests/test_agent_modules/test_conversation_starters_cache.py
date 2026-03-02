@@ -287,22 +287,20 @@ async def test_starter_cache_skips_hooks_override(tmp_path, monkeypatch) -> None
     assert hooks.agent_started >= 1
 
 
-def test_is_simple_text_message_requires_single_user_item() -> None:
-    items = [
-        {"role": "system", "content": "You are helpful."},
-        {"role": "user", "content": "Hello there."},
+def test_is_simple_text_message_rejects_invalid_user_item_shapes() -> None:
+    invalid_cases = [
+        [
+            {"role": "system", "content": "You are helpful."},
+            {"role": "user", "content": "Hello there."},
+        ],
+        [
+            {"role": "user", "content": "Hello."},
+            {"role": "user", "content": "Follow-up."},
+        ],
     ]
 
-    assert is_simple_text_message(items) is False
-
-
-def test_is_simple_text_message_rejects_multiple_user_items() -> None:
-    items = [
-        {"role": "user", "content": "Hello."},
-        {"role": "user", "content": "Follow-up."},
-    ]
-
-    assert is_simple_text_message(items) is False
+    for items in invalid_cases:
+        assert is_simple_text_message(items) is False
 
 
 @pytest.mark.asyncio
@@ -340,7 +338,7 @@ async def test_warm_conversation_starters_cache_uses_runtime_tools(tmp_path, mon
     )
 
 
-def test_starter_cache_fingerprint_includes_guardrails() -> None:
+def test_starter_cache_fingerprint_changes_for_guardrails_runtime_tools_and_handoffs() -> None:
     agent_with_guardrails = Agent(
         name="GuardrailAgent",
         instructions="You are helpful.",
@@ -355,14 +353,10 @@ def test_starter_cache_fingerprint_includes_guardrails() -> None:
         input_guardrails=[],
         output_guardrails=[],
     )
+    assert compute_starter_cache_fingerprint(agent_with_guardrails) != compute_starter_cache_fingerprint(
+        agent_without_guardrails
+    )
 
-    fingerprint_with = compute_starter_cache_fingerprint(agent_with_guardrails)
-    fingerprint_without = compute_starter_cache_fingerprint(agent_without_guardrails)
-
-    assert fingerprint_with != fingerprint_without
-
-
-def test_starter_cache_fingerprint_includes_runtime_send_message_tools() -> None:
     sender = Agent(
         name="SenderAgent",
         instructions="You are helpful.",
@@ -374,32 +368,26 @@ def test_starter_cache_fingerprint_includes_runtime_send_message_tools() -> None
         model="gpt-5-mini",
     )
     runtime_state = AgentRuntimeState()
-
     fingerprint_before = compute_starter_cache_fingerprint(sender, runtime_state=runtime_state)
     sender.register_subagent(recipient, runtime_state=runtime_state)
     fingerprint_after = compute_starter_cache_fingerprint(sender, runtime_state=runtime_state)
-
     assert fingerprint_before != fingerprint_after
 
-
-def test_starter_cache_fingerprint_includes_runtime_handoffs() -> None:
-    sender = Agent(
+    handoff_sender = Agent(
         name="HandoffSender",
         instructions="You are helpful.",
         model="gpt-5-mini",
     )
-    recipient = Agent(
+    handoff_recipient = Agent(
         name="HandoffRecipient",
         instructions="You are helpful.",
         model="gpt-5-mini",
     )
-    runtime_state = AgentRuntimeState()
-
-    fingerprint_before = compute_starter_cache_fingerprint(sender, runtime_state=runtime_state)
-    runtime_state.handoffs.append(Handoff().create_handoff(recipient))
-    fingerprint_after = compute_starter_cache_fingerprint(sender, runtime_state=runtime_state)
-
-    assert fingerprint_before != fingerprint_after
+    handoff_runtime = AgentRuntimeState()
+    handoff_before = compute_starter_cache_fingerprint(handoff_sender, runtime_state=handoff_runtime)
+    handoff_runtime.handoffs.append(Handoff().create_handoff(handoff_recipient))
+    handoff_after = compute_starter_cache_fingerprint(handoff_sender, runtime_state=handoff_runtime)
+    assert handoff_before != handoff_after
 
 
 def test_cached_handoff_output_preserves_type() -> None:

@@ -3,9 +3,14 @@ Integration test for SendMessage concurrent blocking behavior.
 Tests both same-agent (blocking) and different-agent (no blocking) scenarios.
 """
 
+import asyncio
+import json
+from types import MethodType, SimpleNamespace
+
 import pytest
 
 from agency_swarm import Agency, Agent
+from agency_swarm.context import MasterContext
 
 
 @pytest.mark.asyncio
@@ -105,3 +110,61 @@ async def test_messages_to_different_agents():
     assert not blocking_error_found, "Unexpected blocking error when sending to different agents"
     assert worker1_responded, "Worker1 should have responded"
     assert worker2_responded, "Worker2 should have responded"
+
+
+@pytest.mark.asyncio
+async def test_pending_guard_is_isolated_between_agencies_that_share_agents():
+    """A pending send in one agency should not block the same recipient in another agency."""
+    gate = asyncio.Event()
+    first_call_pending = {"value": False}
+    sender = Agent(name="Coordinator", instructions="Coordinate tasks", model="gpt-5-mini")
+    recipient = Agent(name="Worker", instructions="Handle tasks", model="gpt-5-mini")
+
+    async def waiting_response(self, **_kwargs):
+        if not first_call_pending["value"]:
+            first_call_pending["value"] = True
+            await gate.wait()
+        return SimpleNamespace(final_output=f"{self.name} result")
+
+    recipient.get_response = MethodType(waiting_response, recipient)
+
+    agency_one = Agency(sender, recipient, communication_flows=[sender > recipient])
+    agency_two = Agency(sender, recipient, communication_flows=[sender > recipient])
+
+    runtime_one = agency_one.get_agent_runtime_state(sender.name)
+    runtime_two = agency_two.get_agent_runtime_state(sender.name)
+    send_tool_one = next(iter(runtime_one.send_message_tools.values()))
+    send_tool_two = next(iter(runtime_two.send_message_tools.values()))
+
+    wrapper_one = SimpleNamespace(
+        context=MasterContext(
+            thread_manager=agency_one.thread_manager,
+            agents=agency_one.agents,
+            shared_instructions=agency_one.shared_instructions,
+        )
+    )
+    wrapper_two = SimpleNamespace(
+        context=MasterContext(
+            thread_manager=agency_two.thread_manager,
+            agents=agency_two.agents,
+            shared_instructions=agency_two.shared_instructions,
+        )
+    )
+    payload = json.dumps(
+        {
+            "recipient_agent": recipient.name,
+            "message": "Task",
+            "additional_instructions": "",
+        }
+    )
+
+    first_task = asyncio.create_task(send_tool_one.on_invoke_tool(wrapper_one, payload))
+    await asyncio.sleep(0)
+    second_result = await send_tool_two.on_invoke_tool(wrapper_two, payload)
+
+    gate.set()
+    first_result = await first_task
+
+    assert isinstance(first_result, str) and first_result.endswith("result")
+    assert isinstance(second_result, str) and second_result.endswith("result")
+    assert "Cannot send another message" not in second_result

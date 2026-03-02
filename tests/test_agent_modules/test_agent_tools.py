@@ -19,52 +19,36 @@ def _hosted_tool_types() -> list[object]:
     return hosted_tools
 
 
-def _tool_type_id(tool_type: object) -> str:
-    tool_class = get_origin(tool_type) or tool_type
-    return getattr(tool_class, "__name__", str(tool_class))
+def test_validate_hosted_tools_rejects_uninitialized_hosted_tool_classes() -> None:
+    """All hosted tool classes must be instantiated before validation."""
+    for tool_type in _hosted_tool_types():
+        with pytest.raises(TypeError):
+            validate_hosted_tools([tool_type])
 
 
-@pytest.mark.parametrize("tool_type", _hosted_tool_types(), ids=_tool_type_id)
-def test_validate_hosted_tools_rejects_uninitialized_hosted_tool_classes(tool_type: object) -> None:
-    """Uninitialized hosted tool classes should raise TypeError."""
-    with pytest.raises(TypeError):
-        validate_hosted_tools([tool_type])
-
-
-def test_validate_tools_rejects_uninitialized_function_tool_class() -> None:
-    """Uninitialized FunctionTool classes should raise TypeError."""
-    with pytest.raises(TypeError):
-        validate_tools([FunctionTool])
-
-
-def test_validate_tools_rejects_invalid_tool_object() -> None:
-    """Invalid tool entries should raise TypeError."""
-    with pytest.raises(TypeError):
-        validate_tools([object()])
-
-
-def test_validate_tools_rejects_basetool_instance() -> None:
-    """BaseTool instances should raise TypeError."""
+def test_validate_tools_rejects_invalid_entries() -> None:
+    """FunctionTool classes, invalid objects, and BaseTool instances should fail validation."""
 
     class SampleTool(BaseTool):
         def run(self) -> str:
             return "ok"
 
-    with pytest.raises(TypeError):
-        validate_tools([SampleTool()])
+    invalid_cases: list[list[object]] = [
+        [FunctionTool],
+        [object()],
+        [SampleTool()],
+    ]
+    for tools in invalid_cases:
+        with pytest.raises(TypeError):
+            validate_tools(tools)
 
 
-def test_validate_tools_accepts_basetool_class() -> None:
-    """BaseTool classes are valid Agent tool inputs and should be accepted."""
+def test_validate_tools_accepts_supported_entries() -> None:
+    """BaseTool classes and initialized hosted tools should pass validation."""
 
     class SampleTool(BaseTool):
         def run(self) -> str:
             return "ok"
 
     validate_tools([SampleTool])
-
-
-def test_validate_hosted_tools_accepts_initialized_computer_tool() -> None:
-    """Initialized hosted tool instances should pass validation."""
-    tool = ComputerTool(computer=object())
-    validate_hosted_tools([tool])
+    validate_hosted_tools([ComputerTool(computer=object())])

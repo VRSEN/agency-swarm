@@ -171,7 +171,9 @@ After each meaningful tool call or code edit, validate the result in 1-2 lines a
   - Aim to document a single behavior (docstring + descriptive name) so intent stays obvious
   - Test behavior, not implementation details; avoid testing private APIs or patching private attributes or methods unless necessary
   - Use real framework objects when practical, leaning on the concrete OpenAI/Agents SDK models so mypy can verify attribute access instead of tolerating generic mocks
-  - Update existing tests before adding new ones unless the coverage gap is clear and documented
+  - When functionality changes (especially new features or user-visible behavior), update coverage, usually by extending existing tests.
+  - For non-functional changes, do not add new tests by default; adjust existing tests only when needed for correctness, stability, or clarity.
+  - Add a new test only when existing tests cannot cleanly cover the changed behavior without hurting test organization.
   - Use focused runs during debugging to minimize noise
   - Follow the testing pyramid and prevent duplicate assertions across unit and integration levels
   - Use precise, restrictive assertions, enforce a single canonical order, and avoid OR or alternative cases
@@ -241,7 +243,6 @@ Avoid growing already large files. Prefer extracting focused modules. If you mus
   - Avoid root-level tests (organize by module)
 - Name test files clearly (e.g. `test_thread_isolation.py`), avoid generic root names
 - Symmetry required: tests should mirror `src/`. Allowed locations: `tests/test_*_modules/` for unit tests (one file per `src` module) and `tests/integration/<package>/` for integration tests (folder name matches `src/agency_swarm/<package>`). Enforce this structure.
-- Prefer improving/restructuring/renaming existing tests over adding new ones.
 - Avoid tests that create a false sense of security; we discourage unit tests that do not reflect real behavior.
 - Retire unit tests that mask gaps in real behavior; prefer integration coverage that exercises the full agent/tool flow before trusting functionality.
 - Remove dead code when it is in scope.
