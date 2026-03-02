@@ -139,7 +139,7 @@ class OpenClawRuntime:
         values = dotenv_values(dotenv_path)
         loaded_keys: list[str] = []
         for key, value in values.items():
-            if not isinstance(key, str) or not key.endswith("_API_KEY"):
+            if not isinstance(key, str) or key not in _PROVIDER_ENV_KEYS:
                 continue
             if not isinstance(value, str) or not value.strip():
                 continue
