@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -281,13 +282,7 @@ class OpenClawRuntime:
         return command
 
     def _is_port_open(self) -> bool:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.settimeout(0.5)
-            try:
-                sock.connect((self.config.host, self.config.port))
-            except OSError:
-                return False
-        return True
+        return _is_upstream_port_open(self.config, timeout=0.5)
 
     def start(self) -> None:
         if self.is_running:
@@ -707,7 +702,7 @@ def create_openclaw_proxy_router(
 
     @router.get("/health", dependencies=dependencies)
     async def openclaw_proxy_health() -> JSONResponse:
-        is_healthy = _is_upstream_port_open(config)
+        is_healthy = await asyncio.to_thread(_is_upstream_port_open, config)
         status_code = 200 if is_healthy else 503
         return JSONResponse({"ok": is_healthy, "upstream_base_url": config.upstream_base_url}, status_code=status_code)
 
