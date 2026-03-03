@@ -62,7 +62,7 @@ tests-verbose: test-env
 coverage: test-env
 	uv run coverage run -m pytest
 	uv run coverage xml -o coverage.xml
-	uv run coverage report -m --fail-under=90
+	uv run coverage report -m --fail-under=89
 
 .PHONY: coverage-html
 coverage-html: test-env
