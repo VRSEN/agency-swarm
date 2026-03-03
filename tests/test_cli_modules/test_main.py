@@ -152,6 +152,7 @@ def test_main_unknown_command_falls_back_to_message(
 
 def test_module_entrypoint_executes_main(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     monkeypatch.setattr(sys, "argv", ["agency-swarm"])
+    monkeypatch.delitem(sys.modules, "agency_swarm.cli.main", raising=False)
 
     runpy.run_module("agency_swarm.cli.main", run_name="__main__")
 
