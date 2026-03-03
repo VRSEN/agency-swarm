@@ -13,12 +13,14 @@ class RealtimeDemoLauncher:
         *,
         host: str = "0.0.0.0",
         port: int = 8000,
+        provider: str = "openai",
         model: str = "gpt-realtime",
         voice: str | None = "alloy",
         turn_detection: dict[str, Any] | None = None,
         input_audio_format: str | None = None,
         output_audio_format: str | None = None,
         input_audio_noise_reduction: dict[str, Any] | None = None,
+        provider_options: dict[str, Any] | None = None,
         cors_origins: list[str] | None = None,
     ) -> None:
         """Start the realtime demo server and keep it running until interrupted."""
@@ -60,9 +62,15 @@ class RealtimeDemoLauncher:
             output_audio_format=output_audio_format,
             turn_detection=turn_detection,
             input_audio_noise_reduction=input_audio_noise_reduction,
+            provider=provider,
         )
         realtime_agency = agency.to_realtime(entry_agent)
-        session_factory = RealtimeSessionFactory(realtime_agency, base_settings)
+        session_factory = RealtimeSessionFactory(
+            realtime_agency,
+            base_settings,
+            provider=provider,
+            provider_options=provider_options,
+        )
         app = create_realtime_demo_app(
             session_factory,
             static_dir=demo_static_dir,
