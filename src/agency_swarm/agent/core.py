@@ -12,6 +12,7 @@ from agents import (
     Tool,
     TResponseInputItem,
     WebSearchTool,
+    function_tool,
 )
 from openai import AsyncOpenAI, OpenAI
 from pydantic import StringConstraints, TypeAdapter, ValidationError
@@ -227,6 +228,8 @@ class Agent(BaseAgent[MasterContext]):
         self._conversation_starters_fingerprint = None
         self._conversation_starters_warmup_started = False
         self._mcp_tools_initialized = False
+        self._mcp_tools_deferred = False
+        self._deferred_mcp_servers: list[Any] = []
 
         # Initialize execution handler
         self._execution = Execution(self)
@@ -364,9 +367,61 @@ class Agent(BaseAgent[MasterContext]):
         """Lazily convert MCP servers to tools on first use."""
         if self._mcp_tools_initialized:
             return
+        if self._should_defer_mcp_tool_initialization():
+            self._deferred_mcp_servers = list(self.mcp_servers)
+            self.mcp_servers.clear()
+            self._install_mcp_activation_tool()
+            self._mcp_tools_initialized = True
+            self._mcp_tools_deferred = True
+            return
         convert_mcp_servers_to_tools(self)
         self._ensure_web_search_sources_include()
         self._mcp_tools_initialized = True
+
+    def _should_defer_mcp_tool_initialization(self) -> bool:
+        """Return True when OAuth MCP discovery should be model-triggered in SaaS streaming mode."""
+        try:
+            from agency_swarm.mcp.oauth import MCPServerOAuth, get_oauth_runtime_context
+            from agency_swarm.mcp.oauth_client import MCPServerOAuthClient
+        except ImportError:
+            return False
+
+        runtime_context = get_oauth_runtime_context()
+        if runtime_context is None or runtime_context.mode != "saas_stream":
+            return False
+
+        servers = getattr(self, "mcp_servers", None)
+        if not isinstance(servers, list) or len(servers) == 0:
+            return False
+
+        for server in servers:
+            actual = getattr(server, "_server", server)
+            if isinstance(actual, MCPServerOAuth) or isinstance(actual, MCPServerOAuthClient):
+                return True
+        return False
+
+    def _install_mcp_activation_tool(self) -> None:
+        """Add a tool that activates MCP discovery only when the model explicitly requests it."""
+        existing_names = {getattr(tool, "name", "") for tool in self.tools}
+        tool_name = "activate_mcp_tools"
+        if tool_name in existing_names:
+            return
+
+        @function_tool(name_override=tool_name)
+        def _activate_mcp_tools() -> str:
+            if self._deferred_mcp_servers and len(self.mcp_servers) == 0:
+                self.mcp_servers.extend(self._deferred_mcp_servers)
+            try:
+                convert_mcp_servers_to_tools(self)
+            except Exception as exc:
+                return f"Failed to activate MCP tools: {exc}"
+
+            self._mcp_tools_deferred = False
+            self._deferred_mcp_servers = []
+            self._ensure_web_search_sources_include()
+            return "MCP tools are activated. Continue with MCP-dependent actions in your next response."
+
+        self.add_tool(_activate_mcp_tools)
 
     def _ensure_web_search_sources_include(self) -> None:
         """Ensure web search sources are included when a WebSearchTool is present."""

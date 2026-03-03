@@ -28,8 +28,9 @@ Use this when your agency runs on a server and users authenticate from a web/mob
 - **Hosted MCP** (Notion): Configure `MCPServerOAuth(url=..., name=...)` and deploy your agency.
 - **Self-hosted MCP** (GitHub/Google): Run your OAuth-enabled MCP server + deploy your agency.
 - **HostedMCPTool (remote MCP)**: If you use `HostedMCPTool`, OAuth tokens must be provided via `tool_config.authorization`. In FastAPI, Agency Swarm will surface the auth URL via `event: oauth_redirect` and inject the access token once authorized.
+- **Deferred auth trigger:** SaaS mode does not force OAuth discovery on the first user message. The model gets an `activate_mcp_tools` tool and OAuth starts only when that tool is invoked.
 - **Streaming is required**: OAuth authorization is delivered via `event: oauth_redirect`, so use `POST /{agency}/get_response_stream`. The non-streaming `POST /{agency}/get_response` endpoint is not compatible with OAuth-enabled MCP servers.
-- **Deterministic stream contract:** `meta` -> `oauth_redirect` -> `oauth_status` (`pending`) -> keepalive comments every 15s while waiting -> terminal `oauth_status` (`authorized`, `error:<reason>`, or `timeout`) -> `messages` -> `end`.
+- **Deterministic stream contract after activation:** `meta` -> `oauth_redirect` -> `oauth_status` (`pending`) -> keepalive comments every 15s while waiting -> terminal `oauth_status` (`authorized`, `error:<reason>`, or `timeout`) -> `messages` -> `end`.
 - **Bounded wait:** SaaS OAuth waits up to 10 minutes before emitting `oauth_status` = `timeout`.
 - **Discovery-time auth:** with standard FastMCP auth, MCP schema discovery (`list_tools`) is protected, so OAuth can happen before the model starts generating output.
 - **Per-user token isolation**: Send `X-User-Id` so each user gets their own token bucket.
