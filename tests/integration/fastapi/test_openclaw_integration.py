@@ -364,6 +364,7 @@ def test_openclaw_proxy_uses_app_token_auth_when_attached_to_run_fastapi(
     tmp_path: Path,
 ) -> None:
     monkeypatch.setenv("APP_TOKEN", "secret-token")
+    monkeypatch.setattr("agency_swarm.integrations.openclaw._is_upstream_port_open", lambda _config: True)
 
     class _FakeAsyncClient:
         def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -392,12 +393,19 @@ def test_openclaw_proxy_uses_app_token_auth_when_attached_to_run_fastapi(
     unauthorized = client.post("/openclaw/v1/responses", json={"model": "openclaw:main", "input": "hello"})
     assert unauthorized.status_code in (401, 403)
 
+    health_unauthorized = client.get("/openclaw/health")
+    assert health_unauthorized.status_code in (401, 403)
+
     authorized = client.post(
         "/openclaw/v1/responses",
         json={"model": "openclaw:main", "input": "hello"},
         headers={"Authorization": "Bearer secret-token"},
     )
     assert authorized.status_code == 200
+
+    health_authorized = client.get("/openclaw/health", headers={"Authorization": "Bearer secret-token"})
+    assert health_authorized.status_code == 200
+    assert health_authorized.json() == {"ok": True, "upstream_base_url": "http://127.0.0.1:18789"}
 
 
 def test_openclaw_ensure_layout_creates_config_parent_dir(tmp_path: Path) -> None:
@@ -614,6 +622,28 @@ def test_openclaw_from_env_handles_boolean_and_unparseable_gateway_command(
     assert config.autostart is False
     assert config.port == 19001
     assert config.gateway_command == 'openclaw gateway --port "broken'
+
+
+def test_openclaw_from_env_defaults_gateway_token_to_app_token(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("OPENCLAW_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("APP_TOKEN", "app-token")
+    monkeypatch.delenv("OPENCLAW_GATEWAY_TOKEN", raising=False)
+
+    config = OpenClawIntegrationConfig.from_env()
+
+    assert config.gateway_token == "app-token"
+
+
+def test_openclaw_from_env_defaults_gateway_token_to_local_value_when_unset(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("OPENCLAW_HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("OPENCLAW_GATEWAY_TOKEN", raising=False)
+    monkeypatch.delenv("APP_TOKEN", raising=False)
+
+    config = OpenClawIntegrationConfig.from_env()
+
+    assert config.gateway_token == "openclaw-local-token"
 
 
 def test_openclaw_extract_port_parser_handles_edge_values() -> None:

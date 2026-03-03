@@ -78,6 +78,13 @@ def _read_bool_env(name: str, default: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _default_gateway_token() -> str:
+    app_token = os.getenv("APP_TOKEN", "").strip()
+    if app_token:
+        return app_token
+    return "openclaw-local-token"
+
+
 @dataclass(frozen=True)
 class OpenClawIntegrationConfig:
     """Runtime and proxy settings for OpenClaw integration."""
@@ -124,7 +131,7 @@ class OpenClawIntegrationConfig:
             autostart=_read_bool_env("OPENCLAW_AUTOSTART", default=True),
             host=os.getenv("OPENCLAW_HOST", "127.0.0.1"),
             port=resolved_port,
-            gateway_token=os.getenv("OPENCLAW_GATEWAY_TOKEN", "openclaw-local-token"),
+            gateway_token=os.getenv("OPENCLAW_GATEWAY_TOKEN") or _default_gateway_token(),
             home_dir=home_dir,
             state_dir=state_dir,
             config_path=config_path,
@@ -678,9 +685,9 @@ def create_openclaw_proxy_router(
     router = APIRouter()
     upstream_url = f"{config.upstream_base_url.rstrip('/')}/v1/responses"
     upstream_headers = _make_upstream_headers(config.gateway_token)
-    dependencies = [Depends(verify_token)] if verify_token is not None else None
+    response_dependencies = [Depends(verify_token)] if verify_token is not None else None
 
-    @router.post("/v1/responses", dependencies=dependencies)
+    @router.post("/v1/responses", dependencies=response_dependencies)
     async def proxy_responses(request: Request) -> Response:
         try:
             payload = await request.json()
@@ -748,7 +755,7 @@ def create_openclaw_proxy_router(
             headers=response_headers,
         )
 
-    @router.get("/health", dependencies=dependencies)
+    @router.get("/health", dependencies=response_dependencies)
     async def openclaw_proxy_health() -> JSONResponse:
         is_healthy = await asyncio.to_thread(_is_upstream_port_open, config)
         status_code = 200 if is_healthy else 503
