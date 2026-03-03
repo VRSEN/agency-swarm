@@ -7,7 +7,7 @@ import logging
 from collections.abc import Mapping
 from typing import Any
 
-from agents.realtime import OpenAIRealtimeWebSocketModel
+from agents.realtime import OpenAIRealtimeWebSocketModel, RealtimeModelConfig
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ class XAIRealtimeWebSocketModel(OpenAIRealtimeWebSocketModel):
         super().__init__()
         self._xai_content_parts: dict[tuple[str, int], dict[str, object]] = {}
 
-    async def connect(self, options: dict[str, object]) -> None:  # type: ignore[override]
+    async def connect(self, options: RealtimeModelConfig) -> None:
         # Use a safe default before connect; negotiated session codec may override it.
         self._set_audio_format("pcm16")
         await super().connect(options)

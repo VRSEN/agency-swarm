@@ -39,14 +39,14 @@ def _wrap_instructions(
 ) -> str | Callable[[RunContextWrapper[Any], SDKRealtimeAgent[MasterContext]], Awaitable[str]] | None:
     instructions = agent.instructions
     if instructions is None or isinstance(instructions, str):
-        return cast(str | None, instructions)
+        return instructions
 
     typed = cast(Callable[[RunContextWrapper[Any], Agent], Awaitable[str] | str], instructions)
 
     async def _wrapped(ctx: RunContextWrapper[Any], _: SDKRealtimeAgent[MasterContext]) -> str:
         result = typed(ctx, agent)
         if inspect.isawaitable(result):
-            return cast(str, await result)
-        return cast(str, result)
+            return await result
+        return result
 
     return _wrapped

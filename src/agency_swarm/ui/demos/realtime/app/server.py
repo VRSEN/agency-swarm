@@ -193,6 +193,11 @@ class RealtimeWebSocketManager:
         elif event.type == "tool_end":
             base_event["tool"] = event.tool.name
             base_event["output"] = str(event.output)
+        elif event.type == "tool_approval_required":
+            base_event["agent"] = event.agent.name
+            base_event["tool"] = event.tool.name
+            base_event["call_id"] = event.call_id
+            base_event["arguments"] = event.arguments
         elif event.type == "audio":
             base_event["audio"] = base64.b64encode(event.audio.data).decode("utf-8")
         elif event.type == "audio_interrupted":
@@ -343,7 +348,7 @@ def create_realtime_demo_app(
                             else [{"type": "input_image", "image_url": data_url, "detail": "high"}]
                         ),
                     }
-                    await manager.send_user_message(session_id, cast(RealtimeUserInputMessage, user_msg))
+                    await manager.send_user_message(session_id, user_msg)
                     await websocket.send_text(
                         json.dumps(
                             {
