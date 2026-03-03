@@ -5,6 +5,14 @@ on:
     branches:
       - main
   pull_request:
+    paths:
+      - ".github/workflows/tests.yml"
+      - "Makefile"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "src/**"
+      - "tests/**"
+      - "examples/**"
 
 env:
   UV_FROZEN: "1"

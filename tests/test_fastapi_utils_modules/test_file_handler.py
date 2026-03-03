@@ -325,6 +325,24 @@ async def test_upload_from_urls_skips_missing_allowlist_when_valid_dir_exists(mo
 
 
 @pytest.mark.asyncio
+async def test_upload_from_urls_rejects_non_directory_allowlist_even_with_valid_dir(tmp_path):
+    """Non-directory allowlist entries should fail fast instead of being silently ignored."""
+    allowed_dir = tmp_path / "allowed"
+    allowed_dir.mkdir()
+    file_path = allowed_dir / "doc.txt"
+    file_path.write_text("hello", encoding="utf-8")
+
+    non_directory_entry = tmp_path / "not-a-dir.txt"
+    non_directory_entry.write_text("x", encoding="utf-8")
+
+    with pytest.raises(NotADirectoryError, match="Allowed path must be a directory"):
+        await upload_from_urls(
+            {"doc.txt": str(file_path)},
+            allowed_local_dirs=[str(allowed_dir), str(non_directory_entry)],
+        )
+
+
+@pytest.mark.asyncio
 async def test_upload_from_urls_rejects_relative_path():
     """Relative paths should be rejected as unsupported scheme."""
     with pytest.raises(ValueError, match="Unsupported URL scheme"):
