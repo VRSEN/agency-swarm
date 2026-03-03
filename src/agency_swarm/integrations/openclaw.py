@@ -46,7 +46,8 @@ _OPENRESPONSES_ALLOWED_KEYS: tuple[str, ...] = (
 )
 _ALLOWED_TOOL_CHOICE_VALUES = {"auto", "none", "required"}
 _PROVIDER_ENV_KEYS = ("OPENAI_API_KEY", "ANTHROPIC_API_KEY")
-_RESPONSE_HEADER_BLOCKLIST = {"content-length", "transfer-encoding", "connection", "content-encoding"}
+_RESPONSE_HEADER_BLOCKLIST = {"content-length", "transfer-encoding", "connection"}
+_RESPONSE_HEADER_BLOCKLIST_DECODED = _RESPONSE_HEADER_BLOCKLIST | {"content-encoding"}
 
 
 def _extract_port_from_gateway_command(command: list[str]) -> int | None:
@@ -623,12 +624,13 @@ def _make_upstream_headers(token: str) -> dict[str, str]:
     return headers
 
 
-def _passthrough_response_headers(upstream: httpx.Response) -> dict[str, str]:
-    return {key: value for key, value in upstream.headers.items() if key.lower() not in _RESPONSE_HEADER_BLOCKLIST}
+def _passthrough_response_headers(upstream: httpx.Response, *, decoded_body: bool = False) -> dict[str, str]:
+    blocked = _RESPONSE_HEADER_BLOCKLIST_DECODED if decoded_body else _RESPONSE_HEADER_BLOCKLIST
+    return {key: value for key, value in upstream.headers.items() if key.lower() not in blocked}
 
 
 def _forward_response_passthrough(upstream: httpx.Response) -> Response:
-    headers = _passthrough_response_headers(upstream)
+    headers = _passthrough_response_headers(upstream, decoded_body=True)
     content_type = headers.pop("content-type", "application/json")
     return Response(
         content=upstream.content, status_code=upstream.status_code, media_type=content_type, headers=headers
@@ -728,7 +730,7 @@ def create_openclaw_proxy_router(
                 body = await upstream.aread()
             finally:
                 await _close_stream_resources(stream_context, client)
-            headers = _passthrough_response_headers(upstream)
+            headers = _passthrough_response_headers(upstream, decoded_body=True)
             content_type = headers.pop("content-type", "application/json")
             return Response(
                 content=body,
@@ -737,7 +739,7 @@ def create_openclaw_proxy_router(
                 headers=headers,
             )
 
-        response_headers = _passthrough_response_headers(upstream)
+        response_headers = _passthrough_response_headers(upstream, decoded_body=False)
         response_content_type = response_headers.pop("content-type", "text/event-stream")
         return StreamingResponse(
             _stream_upstream(upstream, stream_context, client),

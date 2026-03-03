@@ -789,3 +789,16 @@ def test_openclaw_header_helpers() -> None:
         "Content-Type": "application/json",
         "Authorization": "Bearer token",
     }
+
+    upstream = httpx.Response(
+        status_code=200,
+        content=gzip.compress(b"ok"),
+        headers={
+            "content-type": "application/json",
+            "x-request-id": "req-1",
+            "content-encoding": "gzip",
+            "content-length": "2",
+        },
+    )
+    assert "content-encoding" in openclaw_mod._passthrough_response_headers(upstream, decoded_body=False)
+    assert "content-encoding" not in openclaw_mod._passthrough_response_headers(upstream, decoded_body=True)
