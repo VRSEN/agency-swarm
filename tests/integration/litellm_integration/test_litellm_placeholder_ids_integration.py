@@ -82,5 +82,27 @@ def test_litellm_placeholder_ids_are_not_persisted() -> None:
     assert len(messages) >= 6, "Expected multiple conversation items after two turns"
     assert not placeholder_items, "Placeholder IDs should not be persisted after normalization"
 
-    call_ids = {msg.get("call_id") for msg in messages if msg.get("type") == "function_call_output"}
-    assert len(call_ids) >= 1, "Tool call outputs should be captured with unique call_ids"
+    function_calls = [msg for msg in messages if msg.get("type") == "function_call"]
+    function_outputs = [msg for msg in messages if msg.get("type") == "function_call_output"]
+
+    function_call_ids = [msg.get("call_id") for msg in function_calls]
+    output_call_ids = [msg.get("call_id") for msg in function_outputs]
+
+    assert len(function_call_ids) >= 1, "Expected at least one function call in persisted history"
+    assert all(isinstance(call_id, str) and call_id for call_id in function_call_ids)
+    assert len(function_call_ids) == len(set(function_call_ids))
+    assert set(function_call_ids) <= set(output_call_ids), "Each function call should have a matching output"
+
+    for i, msg in enumerate(messages):
+        if msg.get("type") != "function_call":
+            continue
+        call_id = msg.get("call_id")
+        output_idx = None
+        for j in range(i + 1, len(messages)):
+            if messages[j].get("type") == "function_call_output" and messages[j].get("call_id") == call_id:
+                output_idx = j
+                break
+        assert output_idx is not None, f"Missing function_call_output for call_id={call_id}"
+        between = messages[i + 1 : output_idx]
+        assistant_between = [item for item in between if item.get("role") == "assistant"]
+        assert not assistant_between, "Tool call/results should remain consecutive without assistant inserts"

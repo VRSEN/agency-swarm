@@ -1,14 +1,32 @@
+import asyncio
+import dataclasses
+import inspect
+import json
 from collections.abc import AsyncIterator
+from types import SimpleNamespace
 
 import pytest
 from agents import Tool
-from agents.agent_output import AgentOutputSchemaBase
+from agents.agent_output import AgentOutputSchema, AgentOutputSchemaBase
 from agents.handoffs import Handoff as SDKHandoff
 from agents.items import HandoffOutputItem, ModelResponse, TResponseInputItem, TResponseStreamEvent
 from agents.lifecycle import RunHooksBase
 from agents.model_settings import ModelSettings
 from agents.models.interface import Model, ModelTracing
+from agents.tool import (
+    ApplyPatchTool,
+    CodeInterpreterTool,
+    ComputerTool,
+    FileSearchTool,
+    FunctionTool,
+    HostedMCPTool,
+    ImageGenerationTool,
+    LocalShellTool,
+    ShellTool,
+    WebSearchTool,
+)
 from openai.types.responses.response_prompt_param import ResponsePromptParam
+from pydantic import BaseModel
 
 from agency_swarm import Agency, Agent, GuardrailFunctionOutput, RunContextWrapper, input_guardrail, output_guardrail
 from agency_swarm.agent.context_types import AgencyContext, AgentRuntimeState
@@ -16,8 +34,18 @@ from agency_swarm.agent.conversation_starters_cache import (
     build_run_items_from_cached,
     compute_starter_cache_fingerprint,
     extract_final_output_text,
+    extract_starter_segment,
+    extract_text_from_content,
+    extract_user_text,
     is_simple_text_message,
     load_cached_starter,
+    load_cached_starters,
+    match_conversation_starter,
+    merge_cacheable_starters,
+    parse_cached_output,
+    prepare_cached_items_for_replay,
+    reorder_cached_items_for_tools,
+    save_cached_starter,
 )
 from agency_swarm.context import MasterContext
 from agency_swarm.tools.send_message import Handoff
@@ -408,3 +436,293 @@ def test_cached_handoff_output_preserves_type() -> None:
 
     assert len(run_items) == 1
     assert isinstance(run_items[0], HandoffOutputItem)
+
+
+def test_merge_cacheable_starters_deduplicates_and_ignores_blank() -> None:
+    merged = merge_cacheable_starters(
+        conversation_starters=["Hi", "  hi  ", "", "Hello"],
+        quick_replies=["HI", "hello", "Yo"],
+    )
+
+    assert merged == ["Hi", "Hello", "Yo"]
+
+
+def test_text_extraction_helpers_handle_mixed_shapes() -> None:
+    assert extract_text_from_content("hello") == "hello"
+    assert extract_text_from_content([{"text": "Hello"}, {"text": " world"}]) == "Hello world"
+    assert extract_text_from_content([{"type": "input_text"}, 123]) is None
+
+    items: list[TResponseInputItem] = [
+        "skip-me",
+        {"role": "assistant", "content": "Not user"},
+        {"role": "user", "content": [{"type": "input_text", "text": "Final user text"}]},
+    ]
+    assert extract_user_text(items) == "Final user text"
+
+
+def test_match_and_segment_helpers_respect_user_boundaries() -> None:
+    match_items: list[TResponseInputItem] = [
+        {"role": "user", "content": "Hi there"},
+        {"role": "assistant", "type": "message", "content": "Hello"},
+    ]
+    items: list[TResponseInputItem] = [
+        {"role": "user", "content": "Hi there"},
+        {"role": "assistant", "type": "message", "content": "Hello"},
+        {"role": "user", "callerAgent": "Worker", "content": "Nested user"},
+        {"role": "assistant", "type": "message", "content": "Nested reply"},
+        {"role": "user", "content": "Second question"},
+    ]
+
+    assert match_conversation_starter(match_items, None) is None
+    assert match_conversation_starter(match_items, ["unknown"]) is None
+    assert match_conversation_starter(match_items, ["HI THERE"]) == "HI THERE"
+
+    segment = extract_starter_segment(items, "hi there")
+    assert segment is not None
+    assert segment[0]["content"] == "Hi there"
+    assert segment[-1]["content"] == "Nested reply"
+    assert extract_starter_segment(items, "missing") is None
+    assert extract_starter_segment(items, "   ") is None
+
+
+def test_reorder_cached_items_for_tools_places_child_items_after_call() -> None:
+    call_item = {"type": "function_call", "agent": "Primary", "call_id": "call_1", "agent_run_id": "run_1"}
+    child_item = {"type": "message", "agent": "Worker", "parent_run_id": "call_1"}
+    unrelated = {"type": "message", "agent": "Primary", "role": "assistant"}
+
+    reordered = reorder_cached_items_for_tools([child_item, call_item, unrelated], "Primary")
+    assert reordered[0] is call_item
+    assert reordered[1] is child_item
+    assert reordered[2] is unrelated
+    assert reorder_cached_items_for_tools([], "Primary") == []
+
+
+def test_load_cached_starter_validates_payload_shapes(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AGENCY_SWARM_CHATS_DIR", str(tmp_path))
+    starter = "Hello starter"
+    items = [{"type": "message", "role": "assistant", "content": "cached"}]
+    saved = save_cached_starter("CacheAgent", starter, items, metadata={"fingerprint": "fp"})
+    cache_file = next((tmp_path / "starter_cache").glob("*.json"))
+
+    assert load_cached_starter("CacheAgent", starter, expected_fingerprint="fp") == saved
+    assert load_cached_starter("CacheAgent", starter, expected_fingerprint="mismatch") is None
+
+    cache_file.write_text("{", encoding="utf-8")
+    assert load_cached_starter("CacheAgent", starter) is None
+
+    cache_file.write_text(json.dumps(["not", "dict"]), encoding="utf-8")
+    assert load_cached_starter("CacheAgent", starter) is None
+
+    cache_file.write_text(json.dumps({"items": "bad"}), encoding="utf-8")
+    assert load_cached_starter("CacheAgent", starter) is None
+
+    cache_file.write_text(
+        json.dumps({"prompt": 1, "items": items, "metadata": {"source": "chat_history"}}),
+        encoding="utf-8",
+    )
+    assert load_cached_starter("CacheAgent", starter) is None
+
+
+def test_load_cached_starters_skips_blank_inputs(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AGENCY_SWARM_CHATS_DIR", str(tmp_path))
+    save_cached_starter("CacheAgent", "hello", [{"type": "message", "role": "assistant", "content": "cached"}])
+
+    loaded = load_cached_starters("CacheAgent", [" ", "", "hello"])
+    assert list(loaded.keys()) == ["hello"]
+
+
+def test_prepare_cached_items_for_replay_rewrites_ids_and_call_pairs() -> None:
+    items: list[TResponseInputItem] = [
+        "skip",
+        {"type": "message", "role": "assistant", "content": "hello"},
+        {"type": "function_call", "role": "assistant", "agent": "AgentA", "call_id": "old_call", "id": "fc_old"},
+        {"type": "function_call_output", "call_id": "old_call", "output": "done", "id": "out_old"},
+        {"type": "function_call", "role": "assistant", "call_id": 123},
+        {"type": "function_call_output", "call_id": 123, "output": "fallback"},
+    ]
+
+    replayed = prepare_cached_items_for_replay(items, run_trace_id="trace_1", parent_run_id="parent_1")
+    assert len(replayed) == 5
+    assert all(item["run_trace_id"] == "trace_1" for item in replayed)
+    assert all(item["parent_run_id"] == "parent_1" for item in replayed)
+    assert replayed[0]["id"].startswith("msg_")
+
+    call_item = replayed[1]
+    output_item = replayed[2]
+    assert call_item["id"].startswith("fc_")
+    assert call_item["call_id"] == output_item["call_id"]
+    assert "id" not in output_item
+
+    fallback_call_item = replayed[3]
+    fallback_output_item = replayed[4]
+    assert fallback_call_item["call_id"] == fallback_output_item["call_id"]
+    assert fallback_call_item["call_id"].startswith("call_")
+
+    without_parent = prepare_cached_items_for_replay(items, run_trace_id="trace_2", parent_run_id=None)
+    assert all("parent_run_id" not in item for item in without_parent)
+
+
+class _StructuredOutput(BaseModel):
+    answer: str
+
+
+def test_parse_cached_output_handles_plain_and_structured_values() -> None:
+    assert parse_cached_output("plain", None) == "plain"
+    assert parse_cached_output("plain", str) == "plain"
+    assert parse_cached_output("plain", AgentOutputSchema(str)) == "plain"
+
+    parsed = parse_cached_output('{"answer":"yes"}', _StructuredOutput)
+    assert isinstance(parsed, _StructuredOutput)
+    assert parsed.answer == "yes"
+
+    parsed_schema = parse_cached_output('{"answer":"yes"}', AgentOutputSchema(_StructuredOutput))
+    assert isinstance(parsed_schema, _StructuredOutput)
+    assert parsed_schema.answer == "yes"
+
+
+def test_build_run_items_from_cached_maps_tool_calls_and_outputs() -> None:
+    agent = Agent(name="BuildAgent", instructions="Test", model="gpt-5-mini")
+    items: list[TResponseInputItem] = [
+        "skip",
+        {"type": "message", "role": "assistant", "content": "Assistant reply"},
+        {"type": "function_call", "agent": "BuildAgent", "call_id": "call_1", "name": "do_work", "arguments": "{}"},
+        {"type": "function_call_output", "call_id": "call_1", "output": "done"},
+        {"type": "reasoning", "id": "bad", "summary": "invalid"},
+    ]
+
+    run_items = build_run_items_from_cached(agent, items)
+
+    assert len(run_items) == 3
+    assert run_items[0].type == "message_output_item"
+    assert run_items[1].type == "tool_call_item"
+    assert run_items[2].type == "tool_call_output_item"
+
+
+def _make_fingerprint_agent(*, tools: list[object], mcp_config: object, output_type: object = None) -> object:
+    return SimpleNamespace(
+        instructions="Base instructions",
+        prompt=None,
+        model="gpt-5-mini",
+        model_settings=None,
+        input_guardrails=[],
+        output_guardrails=[],
+        tools=tools,
+        tool_use_behavior="run_llm_again",
+        reset_tool_choice=True,
+        mcp_servers=[],
+        mcp_config=mcp_config,
+        handoffs=[],
+        output_type=output_type,
+    )
+
+
+def test_compute_starter_cache_fingerprint_ignores_sensitive_mcp_values() -> None:
+    tool = FunctionTool(
+        name="echo",
+        description="echo",
+        params_json_schema={"type": "object", "properties": {"message": {"type": "string"}}},
+        on_invoke_tool=lambda _wrapper, _json: asyncio.sleep(0, result="ok"),
+        strict_json_schema=True,
+    )
+    first = _make_fingerprint_agent(
+        tools=[tool],
+        mcp_config={"api_key": "secret-one", "authorization": "Bearer A", "safe": "same"},
+    )
+    second = _make_fingerprint_agent(
+        tools=[tool],
+        mcp_config={"api_key": "secret-two", "authorization": "Bearer B", "safe": "same"},
+    )
+
+    assert compute_starter_cache_fingerprint(first) == compute_starter_cache_fingerprint(second)
+
+
+def test_compute_starter_cache_fingerprint_changes_for_non_sensitive_values() -> None:
+    agent_a = _make_fingerprint_agent(tools=[], mcp_config={"region": "eu"})
+    agent_b = _make_fingerprint_agent(tools=[], mcp_config={"region": "us"})
+    assert compute_starter_cache_fingerprint(agent_a) != compute_starter_cache_fingerprint(agent_b)
+
+
+def test_compute_starter_cache_fingerprint_handles_callable_and_dataclass_inputs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    @dataclasses.dataclass
+    class _Config:
+        retries: int
+        secret_token: str
+
+    class _CallableWithoutQualname:
+        __name__ = "callable_no_qualname"
+
+        def __call__(self) -> str:
+            return "ok"
+
+    def raising_getsource(_value: object) -> str:
+        raise OSError("source unavailable")
+
+    monkeypatch.setattr(inspect, "getsource", raising_getsource)
+    callable_instructions = _CallableWithoutQualname()
+    agent = _make_fingerprint_agent(
+        tools=[],
+        mcp_config=_Config(retries=3, secret_token="token"),
+        output_type=AgentOutputSchema(_StructuredOutput),
+    )
+
+    fingerprint = compute_starter_cache_fingerprint(
+        agent,
+        instructions_override=callable_instructions,
+        use_instructions_override=True,
+        shared_instructions=123,
+    )
+    assert isinstance(fingerprint, str)
+    assert len(fingerprint) == 64
+
+
+class _DummyExecutor:
+    __name__ = "dummy_executor"
+
+    async def __call__(self, *args: object, **kwargs: object) -> dict[str, object]:
+        return {"stdout": "", "stderr": "", "exit_code": 0}
+
+
+class _DummyEditor:
+    async def apply(self, patch: str) -> str:  # noqa: ARG002
+        return "ok"
+
+
+def test_compute_starter_cache_fingerprint_supports_tool_signature_variants() -> None:
+    async def _invoke(_wrapper: object, _arguments_json: str) -> str:
+        return "ok"
+
+    tools = [
+        FunctionTool(
+            name="fn_tool",
+            description="function tool",
+            params_json_schema={"type": "object", "properties": {"value": {"type": "string"}}},
+            on_invoke_tool=_invoke,
+            strict_json_schema=True,
+        ),
+        FileSearchTool(vector_store_ids=["vs_1"]),
+        WebSearchTool(),
+        HostedMCPTool(
+            tool_config={
+                "type": "mcp",
+                "server_label": "srv",
+                "server_url": "https://example.com",
+                "allowed_tools": ["search"],
+                "authorization": "secret-token",
+            }
+        ),
+        CodeInterpreterTool(tool_config={"type": "code_interpreter"}),
+        ImageGenerationTool(tool_config={"type": "image_generation"}),
+        ComputerTool(computer={"environment": "browser"}),
+        ShellTool(executor=_DummyExecutor()),
+        LocalShellTool(executor=_DummyExecutor()),
+        ApplyPatchTool(editor=_DummyEditor()),
+        object(),
+    ]
+
+    fingerprints = [
+        compute_starter_cache_fingerprint(_make_fingerprint_agent(tools=[tool], mcp_config={})) for tool in tools
+    ]
+
+    assert all(isinstance(fingerprint, str) and len(fingerprint) == 64 for fingerprint in fingerprints)

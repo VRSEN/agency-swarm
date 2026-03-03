@@ -4,6 +4,7 @@ import threading
 import time
 import typing
 from collections.abc import AsyncIterator
+from types import SimpleNamespace
 
 import pytest
 from agents import Tool
@@ -23,7 +24,14 @@ from agency_swarm.agent.core import Agent
 from agency_swarm.context import MasterContext
 from agency_swarm.utils import usage_tracking
 from agency_swarm.utils.thread import ThreadManager
-from agency_swarm.utils.usage_tracking import UsageStats, calculate_usage_with_cost, extract_usage_from_run_result
+from agency_swarm.utils.usage_tracking import (
+    UsageStats,
+    calculate_openai_cost,
+    calculate_usage_with_cost,
+    extract_usage_from_run_result,
+    format_usage_for_display,
+    get_model_pricing,
+)
 
 
 class _HasSubAgentResponsesWithModel(typing.Protocol):
@@ -317,3 +325,165 @@ def test_load_pricing_data_does_not_cache_invalid_json(tmp_path, monkeypatch) ->
     pricing_file.write_text('{"test/model": {"input_cost_per_token": 1}}', encoding="utf-8")
     second = usage_tracking.load_pricing_data()
     assert "test/model" in second
+
+
+def test_load_pricing_data_returns_empty_when_file_missing(tmp_path, monkeypatch) -> None:
+    missing_file = tmp_path / "missing_pricing.json"
+    monkeypatch.setattr(usage_tracking, "PRICING_FILE_PATH", missing_file)
+    monkeypatch.setattr(usage_tracking, "_PRICING_DATA_CACHE", None)
+
+    assert usage_tracking.load_pricing_data() == {}
+
+
+def test_load_pricing_data_handles_non_dict_payload_and_coerces_bool_prices(tmp_path, monkeypatch) -> None:
+    pricing_file = tmp_path / "pricing.json"
+    monkeypatch.setattr(usage_tracking, "PRICING_FILE_PATH", pricing_file)
+
+    pricing_file.write_text('["unexpected"]', encoding="utf-8")
+    monkeypatch.setattr(usage_tracking, "_PRICING_DATA_CACHE", None)
+    assert usage_tracking.load_pricing_data() == {}
+
+    pricing_file.write_text(
+        '{"test/model":{"input_cost_per_token":true,"output_cost_per_token":2,"cache_read_input_token_cost":false}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(usage_tracking, "_PRICING_DATA_CACHE", None)
+    loaded = usage_tracking.load_pricing_data()
+    assert loaded["test/model"]["input_cost_per_token"] == 0.0
+    assert loaded["test/model"]["cache_read_input_token_cost"] == 0.0
+    assert loaded["test/model"]["output_cost_per_token"] == 2.0
+
+
+def test_get_model_pricing_resolves_provider_and_version_fallbacks() -> None:
+    pricing_data = {
+        "azure/gpt-4o": {"input_cost_per_token": 2.0},
+        "gpt-4o": {"input_cost_per_token": 1.0},
+    }
+
+    assert get_model_pricing("azure/gpt-4o", pricing_data) == pricing_data["azure/gpt-4o"]
+    assert get_model_pricing("openai/gpt-4o", pricing_data) == pricing_data["gpt-4o"]
+    assert get_model_pricing("gpt-4o-2024-05-13", pricing_data) == pricing_data["gpt-4o"]
+    assert get_model_pricing("gpt-4o-mini", pricing_data) == pricing_data["gpt-4o"]
+    assert get_model_pricing("missing-model", pricing_data) is None
+
+
+def test_calculate_openai_cost_handles_cached_and_reasoning_tokens() -> None:
+    pricing_data = {
+        "test/model": {
+            "input_cost_per_token": 1.0,
+            "output_cost_per_token": 2.0,
+            "cache_read_input_token_cost": 0.5,
+            "output_cost_per_reasoning_token": 3.0,
+        }
+    }
+
+    cost = calculate_openai_cost(
+        model_name="test/model",
+        input_tokens=10,
+        output_tokens=2,
+        cached_tokens=4,
+        reasoning_tokens=1,
+        pricing_data=pricing_data,
+    )
+    assert cost == pytest.approx(15.0)
+    assert calculate_openai_cost("missing", 1, 1, pricing_data=pricing_data) == 0.0
+
+
+def test_extract_usage_from_run_result_skips_malformed_subagent_entries() -> None:
+    usage = Usage(
+        requests=1,
+        input_tokens=5,
+        output_tokens=3,
+        total_tokens=8,
+        input_tokens_details=InputTokensDetails(cached_tokens=1),
+        output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
+    )
+    run_result = _make_run_result(usage=usage)
+    typing.cast(_HasSubAgentResponsesWithModel, run_result)._sub_agent_responses_with_model = [
+        ("broken", typing.cast(ModelResponse, object())),
+    ]
+
+    stats = extract_usage_from_run_result(run_result)
+    assert stats is not None
+    assert stats.request_count == 1
+    assert stats.total_tokens == 8
+
+
+def test_extract_usage_from_run_result_returns_none_for_unusable_context_wrapper() -> None:
+    run_result = SimpleNamespace(context_wrapper=object())
+    assert extract_usage_from_run_result(typing.cast(RunResult, run_result)) is None
+
+
+def test_calculate_usage_with_cost_falls_back_to_full_litellm_path() -> None:
+    usage_stats = UsageStats(
+        request_count=1,
+        cached_tokens=0,
+        input_tokens=2,
+        output_tokens=3,
+        total_tokens=5,
+        total_cost=0.0,
+        reasoning_tokens=None,
+        audio_tokens=None,
+    )
+    pricing_data = {
+        "litellm/anthropic/claude-sonnet-4": {
+            "input_cost_per_token": 1.0,
+            "output_cost_per_token": 2.0,
+            "cache_read_input_token_cost": 0.0,
+            "output_cost_per_reasoning_token": 0.0,
+        }
+    }
+
+    result = calculate_usage_with_cost(
+        usage_stats,
+        model_name="litellm/anthropic/claude-sonnet-4",
+        pricing_data=pricing_data,
+    )
+    assert result.total_cost == pytest.approx(8.0)
+
+
+def test_calculate_usage_with_cost_handles_run_result_without_model_name() -> None:
+    usage = Usage(
+        requests=1,
+        input_tokens=2,
+        output_tokens=1,
+        total_tokens=3,
+        input_tokens_details=InputTokensDetails(cached_tokens=0),
+        output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
+    )
+    response = ModelResponse(output=[], usage=usage, response_id=None)
+    run_result = SimpleNamespace(raw_responses=[response], _sub_agent_responses_with_model=[])
+
+    usage_stats = UsageStats(
+        request_count=1,
+        cached_tokens=0,
+        input_tokens=2,
+        output_tokens=1,
+        total_tokens=3,
+        total_cost=123.0,
+        reasoning_tokens=None,
+        audio_tokens=None,
+    )
+    with_cost = calculate_usage_with_cost(usage_stats, run_result=typing.cast(RunResult, run_result))
+    assert with_cost.total_cost == 0.0
+
+
+def test_format_usage_for_display_includes_optional_fields() -> None:
+    usage_stats = UsageStats(
+        request_count=2,
+        cached_tokens=3,
+        input_tokens=10,
+        output_tokens=7,
+        total_tokens=17,
+        total_cost=1.234567,
+        reasoning_tokens=2,
+        audio_tokens=1,
+    )
+
+    formatted = format_usage_for_display(usage_stats, model_name="gpt-5-mini")
+    assert "Model: gpt-5-mini" in formatted
+    assert "Requests: 2" in formatted
+    assert "Cached: 3" in formatted
+    assert "Reasoning: 2" in formatted
+    assert "Audio: 1" in formatted
+    assert "Cost: $1.234567" in formatted

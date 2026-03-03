@@ -58,6 +58,7 @@ jobs:
       - name: Run tests with coverage
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: make coverage
 
   tests_py312:
@@ -79,4 +80,5 @@ jobs:
       - name: Run tests with coverage (3.12)
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: make coverage
