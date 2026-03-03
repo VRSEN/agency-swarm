@@ -59,6 +59,8 @@ response = requests.post(url, json=payload, headers=headers)
 When OAuth is required (`MCPServerOAuth` or `HostedMCPTool` without `authorization`), use only:
 - `POST /<agency>/get_response_stream`
 
+In SaaS mode, OAuth MCP discovery is deferred. The model first gets an `activate_mcp_tools` tool; OAuth starts when that tool is invoked.
+
 Expected event order:
 1. `event: meta`
 2. `event: oauth_redirect` (`state`, `server`, `auth_url`)
