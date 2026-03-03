@@ -74,6 +74,69 @@ Before you start, make sure you have:
   </Step>
 </Steps>
 
+## Run OpenClaw Locally (Agency + FastAPI)
+
+If you want to test locally before deploying, use the same starter template:
+
+1. Clone: [agency-ai-solutions/openclaw-starter-template](https://github.com/agency-ai-solutions/openclaw-starter-template)
+2. Create `.env` from `.env.template`
+3. Add your provider key and app token:
+   - `OPENAI_API_KEY=...` (or another provider key)
+   - `APP_TOKEN=local-openclaw-token`
+4. Use writable local paths (if `/mnt` is not available on your machine):
+   - `OPENCLAW_HOME=/tmp/openclaw-local`
+   - `OPENCLAW_STATE_DIR=/tmp/openclaw-local/state`
+   - `OPENCLAW_CONFIG_PATH=/tmp/openclaw-local/openclaw.json`
+   - `OPENCLAW_LOG_PATH=/tmp/openclaw-local/logs/openclaw-gateway.log`
+5. Install and run:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python main.py
+```
+
+6. Verify health:
+
+```bash
+curl -H "Authorization: Bearer local-openclaw-token" \
+  http://127.0.0.1:8080/openclaw/health
+```
+
+7. Send a direct Open Responses request through the OpenClaw proxy:
+
+```bash
+curl -H "Authorization: Bearer local-openclaw-token" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"openclaw:main","input":"Say hello in five words.","stream":false}' \
+  http://127.0.0.1:8080/openclaw/v1/responses
+```
+
+8. Test the Agency Swarm streaming endpoint (same endpoint your frontend uses):
+
+```bash
+curl -N -H "Authorization: Bearer local-openclaw-token" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Say hello in one short sentence."}' \
+  http://127.0.0.1:8080/openclaw/get_response_stream
+```
+
+Expected stream events include: `meta`, `data`, `messages`, `end`.
+
+## Architecture (Local Or Agencii)
+
+```mermaid
+flowchart LR
+    A["User request (UI or curl)"] --> B["Agency Swarm FastAPI (:8080)"]
+    B --> C["Agency route /openclaw/get_response_stream"]
+    C --> D["OpenAI Responses client (model: openclaw:main)"]
+    D --> E["Local proxy /openclaw/v1/responses"]
+    E --> F["OpenClaw gateway (:18789)"]
+    F --> G["Model provider API (OpenAI/Anthropic)"]
+    F --> H["Persistent state under /mnt/openclaw (or /tmp locally)"]
+```
+
 ## Customize Your Assistant (OpenClaw Basics)
 
 OpenClaw already has a built-in way to customize instructions. You do not need to invent a new format.
@@ -129,15 +192,10 @@ For implementation details (routes, runtime defaults, model alias behavior, and 
 
 - [OpenClaw Integration Technical Reference](https://github.com/VRSEN/agency-swarm/blob/main/src/agency_swarm/integrations/README.md)
 
-## Learn More
-
-- [OpenClaw Getting Started](https://docs.openclaw.ai/start/getting-started)
-- [OpenClaw Security](https://docs.openclaw.ai/gateway/security)
-
 ## Next Steps
 <CardGroup cols={2}>
-  <Card title="OpenClaw Docs" icon="book-open" href="https://docs.openclaw.ai/start/getting-started">
-    Learn OpenClaw setup and capabilities directly from the OpenClaw docs.
+  <Card title="OpenClaw Getting Started" icon="book-open" href="https://docs.openclaw.ai/start/getting-started">
+    Learn OpenClaw features and setup patterns from the official docs.
   </Card>
   <Card title="Platform Overview" icon="book-open" href="/platform/overview">
     See how deployment and hosting work in Agencii.
