@@ -899,6 +899,42 @@ def test_openclaw_stop_forces_kill_on_timeout_and_closes_log_handle(
     assert runtime._log_handle is None
 
 
+def test_openclaw_stop_tolerates_second_wait_timeout_after_sigkill(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config = _build_openclaw_config(tmp_path)
+    runtime = OpenClawRuntime(config)
+
+    class _StuckProcess:
+        pid = 6000
+
+        def poll(self) -> int | None:
+            return None
+
+        def terminate(self) -> None:
+            return None
+
+        def kill(self) -> None:
+            return None
+
+        def wait(self, timeout: float | None = None) -> int:
+            raise subprocess.TimeoutExpired(cmd="openclaw", timeout=timeout or 0)
+
+    process = _StuckProcess()
+    runtime._process = process  # type: ignore[assignment]
+    config.log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_handle = config.log_path.open("ab")
+    runtime._log_handle = log_handle
+    monkeypatch.setattr("agency_swarm.integrations.openclaw.os.killpg", lambda pid, sig: process.kill())
+
+    runtime.stop()
+
+    assert runtime._process is None
+    assert runtime._log_handle is None
+    assert log_handle.closed is True
+
+
 def test_openclaw_health_returns_runtime_snapshot(tmp_path: Path) -> None:
     runtime = OpenClawRuntime(_build_openclaw_config(tmp_path))
 

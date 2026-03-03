@@ -480,7 +480,10 @@ class OpenClawRuntime:
                 os.killpg(process.pid, signal.SIGKILL)
             except Exception:
                 process.kill()
-            process.wait(timeout=5)
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                logger.warning("OpenClaw process did not stop after SIGKILL")
         finally:
             if self._log_handle is not None:
                 self._log_handle.close()
