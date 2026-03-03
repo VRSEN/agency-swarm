@@ -515,6 +515,10 @@ def test_openclaw_start_closes_log_handle_when_popen_fails(monkeypatch: pytest.M
     monkeypatch.setattr(runtime, "_is_port_open", lambda: False)
     monkeypatch.setattr("pathlib.Path.open", _tracked_open)
     monkeypatch.setattr("agency_swarm.integrations.openclaw.subprocess.Popen", _raise_popen)
+    monkeypatch.setattr(
+        "agency_swarm.integrations.openclaw._select_compatible_node_binary",
+        lambda: ("/opt/homebrew/bin/node", (22, 22, 0)),
+    )
 
     with pytest.raises(OSError, match="spawn failed"):
         runtime.start()
@@ -559,6 +563,10 @@ def test_openclaw_failed_startup_cleans_process_and_log_handle(
     monkeypatch.setattr("agency_swarm.integrations.openclaw.subprocess.Popen", lambda *a, **k: fake_process)
     monkeypatch.setattr("agency_swarm.integrations.openclaw.os.killpg", lambda pid, sig: fake_process.terminate())
     monkeypatch.setattr("agency_swarm.integrations.openclaw.time.sleep", lambda _delay: None)
+    monkeypatch.setattr(
+        "agency_swarm.integrations.openclaw._select_compatible_node_binary",
+        lambda: ("/opt/homebrew/bin/node", (22, 22, 0)),
+    )
 
     with pytest.raises(TimeoutError):
         runtime.start()
@@ -652,6 +660,76 @@ def test_openclaw_extract_port_parser_handles_edge_values() -> None:
     assert openclaw_mod._extract_port_from_gateway_command(["openclaw", "gateway", "--port"]) is None
     assert openclaw_mod._extract_port_from_gateway_command(["openclaw", "gateway", "--port=abc"]) is None
     assert openclaw_mod._extract_port_from_gateway_command(["openclaw", "gateway", "--port=70000"]) is None
+
+
+def test_openclaw_select_compatible_node_binary_prefers_explicit_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENCLAW_NODE_BIN", "/custom/node")
+
+    def _fake_run(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        binary = command[0]
+        versions = {
+            "/custom/node": "v22.12.1\n",
+            "/tmp/path-node": "v20.18.3\n",
+        }
+        if binary in versions:
+            return subprocess.CompletedProcess(command, 0, versions[binary], "")
+        raise FileNotFoundError(binary)
+
+    monkeypatch.setattr(openclaw_mod.shutil, "which", lambda name: "/tmp/path-node" if name == "node" else None)
+    monkeypatch.setattr(openclaw_mod.subprocess, "run", _fake_run)
+
+    binary, version = openclaw_mod._select_compatible_node_binary()
+
+    assert binary == "/custom/node"
+    assert version == (22, 12, 1)
+
+
+def test_openclaw_select_compatible_node_binary_uses_fallback_candidates(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OPENCLAW_NODE_BIN", raising=False)
+
+    def _fake_run(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        binary = command[0]
+        versions = {
+            "/tmp/path-node": "v20.18.3\n",
+            "/opt/homebrew/bin/node": "v22.22.0\n",
+            "/usr/local/bin/node": "v18.20.0\n",
+        }
+        if binary in versions:
+            return subprocess.CompletedProcess(command, 0, versions[binary], "")
+        raise FileNotFoundError(binary)
+
+    monkeypatch.setattr(openclaw_mod.shutil, "which", lambda name: "/tmp/path-node" if name == "node" else None)
+    monkeypatch.setattr(openclaw_mod.subprocess, "run", _fake_run)
+
+    binary, version = openclaw_mod._select_compatible_node_binary()
+
+    assert binary == "/opt/homebrew/bin/node"
+    assert version == (22, 22, 0)
+
+
+def test_openclaw_select_compatible_node_binary_reports_highest_detected_when_incompatible(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENCLAW_NODE_BIN", raising=False)
+
+    def _fake_run(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        binary = command[0]
+        versions = {
+            "/tmp/path-node": "v20.18.3\n",
+            "/opt/homebrew/bin/node": "v21.9.0\n",
+            "/usr/local/bin/node": "v19.4.0\n",
+        }
+        if binary in versions:
+            return subprocess.CompletedProcess(command, 0, versions[binary], "")
+        raise FileNotFoundError(binary)
+
+    monkeypatch.setattr(openclaw_mod.shutil, "which", lambda name: "/tmp/path-node" if name == "node" else None)
+    monkeypatch.setattr(openclaw_mod.subprocess, "run", _fake_run)
+
+    binary, version = openclaw_mod._select_compatible_node_binary()
+
+    assert binary is None
+    assert version == (21, 9, 0)
 
 
 def test_openclaw_merge_provider_keys_from_dotenv_loads_only_missing_keys(

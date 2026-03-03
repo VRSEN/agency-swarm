@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import shlex
 import shutil
 import signal
@@ -48,6 +49,8 @@ _ALLOWED_TOOL_CHOICE_VALUES = {"auto", "none", "required"}
 _PROVIDER_ENV_KEYS = ("OPENAI_API_KEY", "ANTHROPIC_API_KEY")
 _RESPONSE_HEADER_BLOCKLIST = {"content-length", "transfer-encoding", "connection"}
 _RESPONSE_HEADER_BLOCKLIST_DECODED = _RESPONSE_HEADER_BLOCKLIST | {"content-encoding"}
+_MIN_NODE_VERSION = (22, 12, 0)
+_DEFAULT_NODE_CANDIDATES = ("/opt/homebrew/bin/node", "/usr/local/bin/node")
 
 
 def _extract_port_from_gateway_command(command: list[str]) -> int | None:
@@ -83,6 +86,57 @@ def _default_gateway_token() -> str:
     if app_token:
         return app_token
     return "openclaw-local-token"
+
+
+def _parse_node_semver(raw: str) -> tuple[int, int, int] | None:
+    match = re.search(r"v?(\d+)\.(\d+)\.(\d+)", raw.strip())
+    if not match:
+        return None
+    return (int(match.group(1)), int(match.group(2)), int(match.group(3)))
+
+
+def _read_node_version(binary_path: str) -> tuple[int, int, int] | None:
+    try:
+        completed = subprocess.run(
+            [binary_path, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+    except Exception:
+        return None
+    if completed.returncode != 0:
+        return None
+    version_text = completed.stdout.strip() or completed.stderr.strip()
+    return _parse_node_semver(version_text)
+
+
+def _select_compatible_node_binary() -> tuple[str | None, tuple[int, int, int] | None]:
+    candidates: list[str] = []
+    explicit = os.getenv("OPENCLAW_NODE_BIN")
+    if explicit:
+        candidates.append(explicit)
+    path_node = shutil.which("node")
+    if path_node:
+        candidates.append(path_node)
+    candidates.extend(_DEFAULT_NODE_CANDIDATES)
+
+    seen: set[str] = set()
+    best_detected: tuple[int, int, int] | None = None
+    for candidate in candidates:
+        resolved = str(Path(candidate).expanduser())
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        version = _read_node_version(resolved)
+        if version is None:
+            continue
+        if best_detected is None or version > best_detected:
+            best_detected = version
+        if version >= _MIN_NODE_VERSION:
+            return resolved, version
+    return None, best_detected
 
 
 @dataclass(frozen=True)
@@ -316,6 +370,24 @@ class OpenClawRuntime:
         env["OPENCLAW_CONFIG_PATH"] = str(self.config.config_path)
         env["OPENCLAW_LOG_PATH"] = str(self.config.log_path)
         env["OPENCLAW_GATEWAY_TOKEN"] = self.config.gateway_token
+
+        node_binary, detected_node_version = _select_compatible_node_binary()
+        if node_binary is None:
+            detected = "."
+            if detected_node_version is not None:
+                detected = (
+                    f"; detected highest available node "
+                    f"{detected_node_version[0]}.{detected_node_version[1]}.{detected_node_version[2]}."
+                )
+            raise RuntimeError(
+                "OpenClaw requires Node >= "
+                f"{_MIN_NODE_VERSION[0]}.{_MIN_NODE_VERSION[1]}.{_MIN_NODE_VERSION[2]}{detected} "
+                "Install a compatible Node version or set OPENCLAW_NODE_BIN to a compatible binary path."
+            )
+        node_bin_dir = str(Path(node_binary).resolve().parent)
+        path_parts = env.get("PATH", "").split(os.pathsep) if env.get("PATH") else []
+        if not path_parts or path_parts[0] != node_bin_dir:
+            env["PATH"] = os.pathsep.join([node_bin_dir, *path_parts]) if path_parts else node_bin_dir
 
         self._merge_provider_keys_from_dotenv(env)
 
