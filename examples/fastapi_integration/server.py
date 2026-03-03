@@ -11,13 +11,25 @@ To run:
 """
 
 import os
+import shutil
 import sys
+import tempfile
+from pathlib import Path
 from typing import Literal
 
 # Path setup for standalone examples
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "src")))
 
-from agency_swarm import Agency, Agent, function_tool, run_fastapi
+from agency_swarm import (
+    Agency,
+    Agent,
+    Handoff,
+    ModelSettings,
+    Reasoning,
+    WebSearchTool,
+    function_tool,
+    run_fastapi,
+)
 
 # --- Simple Tools --- #
 
@@ -52,8 +64,15 @@ def create_agency(load_threads_callback=None):
     agent = Agent(
         name="UserSupportAgent",
         description="Receives and coordinates user requests.",
-        instructions="You are UserSupportAgent. Route and handle user requests as needed.",
-        tools=[],
+        instructions=(
+            "You are UserSupportAgent. Route and handle user requests as needed. "
+            "Use your file tools when the user asks about files or asks to analyze data."
+        ),
+        files_folder=_prepare_runtime_files_folder(),
+        include_search_results=True,
+        tools=[WebSearchTool()],
+        model="gpt-5-mini",
+        model_settings=ModelSettings(reasoning=Reasoning(effort="low", summary="auto")),
     )
 
     # Second agent - performs tasks
@@ -62,18 +81,32 @@ def create_agency(load_threads_callback=None):
         description="Handles all math queries using CalculationTool.",
         instructions="You are MathAgent. Use CalculationTool for arithmetic questions.",
         tools=[CalculationTool],
+        model="gpt-5-mini",
+        model_settings=ModelSettings(reasoning=Reasoning(effort="high", summary="auto")),
     )
 
     # Create agency with communication flow
     agency = Agency(
         agent,
         agent2,
-        communication_flows=[agent > agent2],
+        communication_flows=[(agent, agent2, Handoff)],
         shared_instructions="Demonstrate inter-agent communication.",
         load_threads_callback=load_threads_callback,
     )
 
     return agency
+
+
+def _prepare_runtime_files_folder() -> str:
+    """Create a disposable copy of examples/data for file-tool testing."""
+    source_folder = Path(__file__).resolve().parent.parent / "data"
+    if not source_folder.exists():
+        raise FileNotFoundError(f"Expected example data directory at: {source_folder}")
+
+    runtime_root = Path(tempfile.mkdtemp(prefix="agency-swarm-fastapi-files-"))
+    files_folder = runtime_root / "files"
+    shutil.copytree(source_folder, files_folder)
+    return str(files_folder)
 
 
 # --- Main --- #
