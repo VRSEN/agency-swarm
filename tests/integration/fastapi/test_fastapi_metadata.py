@@ -45,6 +45,7 @@ def test_metadata_endpoint_includes_version(monkeypatch, agency_factory):
     assert response.status_code == 200
     payload = response.json()
     assert payload["agency_swarm_version"] == expected_version
+    assert "allowed_local_file_dirs" in payload
 
 
 def test_metadata_endpoint_omits_missing_version(monkeypatch, agency_factory):
@@ -60,6 +61,7 @@ def test_metadata_endpoint_omits_missing_version(monkeypatch, agency_factory):
     assert response.status_code == 200
     payload = response.json()
     assert "agency_swarm_version" not in payload
+    assert "allowed_local_file_dirs" in payload
 
 
 def test_metadata_includes_agent_capabilities():
@@ -114,6 +116,7 @@ def test_metadata_includes_agent_capabilities():
 
     assert response.status_code == 200
     payload = response.json()
+    assert "allowed_local_file_dirs" in payload
 
     # Find agents in nodes
     nodes = payload.get("nodes", [])
@@ -160,12 +163,32 @@ def test_metadata_capabilities_empty_for_basic_agent():
 
     assert response.status_code == 200
     payload = response.json()
-
+    assert "allowed_local_file_dirs" in payload
     nodes = payload.get("nodes", [])
     basic_agent = next((n for n in nodes if n["id"] == "BasicAgent"), None)
     assert basic_agent is not None
     assert "capabilities" in basic_agent["data"]
     assert basic_agent["data"]["capabilities"] == []
+
+
+def test_metadata_includes_allowed_local_file_dirs(tmp_path, agency_factory):
+    """Metadata should expose the allowed local file directories configuration."""
+    allowed_dir = tmp_path / "uploads"
+    allowed_dir.mkdir(parents=True, exist_ok=True)
+
+    app = run_fastapi(
+        agencies={"test_agency": agency_factory},
+        return_app=True,
+        app_token_env="",
+        allowed_local_file_dirs=[str(allowed_dir)],
+    )
+    client = TestClient(app)
+
+    response = client.get("/test_agency/get_metadata")
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["allowed_local_file_dirs"] == [str(allowed_dir.resolve())]
 
 
 def test_metadata_includes_quick_replies() -> None:
@@ -224,6 +247,67 @@ def test_metadata_includes_tool_input_schema():
     input_schema = tools[0].get("inputSchema")
     assert isinstance(input_schema, dict)
     assert "text" in input_schema.get("properties", {})
+
+
+def test_metadata_skips_missing_allowed_dirs(tmp_path, agency_factory):
+    """Missing allowed local file directories should be omitted from metadata."""
+    missing_dir = tmp_path / "missing-uploads"
+
+    app = run_fastapi(
+        agencies={"test_agency": agency_factory},
+        return_app=True,
+        app_token_env="",
+        allowed_local_file_dirs=[str(missing_dir)],
+    )
+    client = TestClient(app)
+
+    response = client.get("/test_agency/get_metadata")
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["allowed_local_file_dirs"] == []
+
+
+def test_metadata_skips_non_directory_allowed_dirs(tmp_path, agency_factory):
+    """Non-directory allowlist entries should be ignored instead of breaking metadata."""
+    file_entry = tmp_path / "not-a-directory.txt"
+    file_entry.write_text("x", encoding="utf-8")
+
+    app = run_fastapi(
+        agencies={"test_agency": agency_factory},
+        return_app=True,
+        app_token_env="",
+        allowed_local_file_dirs=[str(file_entry)],
+    )
+    client = TestClient(app)
+
+    response = client.get("/test_agency/get_metadata")
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["allowed_local_file_dirs"] == []
+
+
+def test_metadata_preserves_configured_allowlist_strings(tmp_path, monkeypatch, agency_factory):
+    """Metadata should return configured allowlist strings without resolving home paths."""
+    fake_home = tmp_path / "fake-home"
+    allowed_dir = fake_home / "uploads"
+    allowed_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(fake_home))
+
+    app = run_fastapi(
+        agencies={"test_agency": agency_factory},
+        return_app=True,
+        app_token_env="",
+        allowed_local_file_dirs=["~/uploads"],
+    )
+    client = TestClient(app)
+
+    response = client.get("/test_agency/get_metadata")
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["allowed_local_file_dirs"] == ["~/uploads"]
 
 
 def test_tool_endpoint_handles_nested_schema():

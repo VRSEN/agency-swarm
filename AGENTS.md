@@ -94,6 +94,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - Use 8th grade language in all user responses.
 - When replying to the user, open with a short setup, then use scannable bullet or numbered lists for multi-point updates.
 - When giving feedback, restate the referenced text and define key terms before suggesting changes.
+- Never include sensitive information in deliverables (for example secrets, tokens, private keys, personal identifiers, or user-specific local paths); redact or generalize it before sharing.
 
 ## 🔴 SAFETY PROTOCOLS
 

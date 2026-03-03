@@ -453,4 +453,8 @@ Then pass absolute file paths in `file_urls`:
 
 Invalid paths return an `error` field in the response body.
 
+<Note>
+`allowed_local_file_dirs` uses strict request-time validation for invalid entries: if an entry exists but is not a directory, local `file_urls` requests fail with an error. Missing directories are skipped and can be created later. The `/get_metadata` field `allowed_local_file_dirs` lists only currently usable directory entries.
+</Note>
+
 </Accordion>
