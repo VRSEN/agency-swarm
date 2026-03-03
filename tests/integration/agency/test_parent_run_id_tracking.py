@@ -19,11 +19,13 @@ logger = logging.getLogger(__name__)
 
 
 def _assert_non_empty_agent_run_ids(messages: list[dict[str, Any]]) -> None:
-    run_id_messages = [msg for msg in messages if "agent_run_id" in msg]
-    assert run_id_messages, "Expected persisted messages with agent_run_id metadata"
-    assert all(isinstance(msg.get("agent_run_id"), str) and msg.get("agent_run_id") for msg in run_id_messages), (
-        f"Found empty or invalid agent_run_id values: {run_id_messages}"
-    )
+    agent_messages = [msg for msg in messages if msg.get("agent")]
+    assert agent_messages, "Expected persisted messages with agent metadata"
+
+    missing_or_invalid = [
+        msg for msg in agent_messages if not isinstance(msg.get("agent_run_id"), str) or not msg.get("agent_run_id")
+    ]
+    assert not missing_or_invalid, f"Found messages with missing or invalid agent_run_id: {missing_or_invalid}"
 
 
 @pytest.fixture(scope="function")

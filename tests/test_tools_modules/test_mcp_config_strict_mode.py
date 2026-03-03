@@ -60,4 +60,7 @@ async def test_mcp_config_convert_schemas_to_strict_is_propagated(
 
     Agent(**agent_kwargs)
 
-    assert observed_convert_values == [expected_strict]
+    assert len(observed_convert_values) == 1
+    observed_value = observed_convert_values[0]
+    assert type(observed_value) is bool
+    assert observed_value is expected_strict
