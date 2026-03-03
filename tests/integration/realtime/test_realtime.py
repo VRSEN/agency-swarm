@@ -13,11 +13,7 @@ from agency_swarm.utils.thread import ThreadManager
 def _build_simple_realtime_agency() -> Agency:
     """Create a tiny agency with a concierge handing off to billing."""
     billing = Agent(name="Billing", instructions="Handle billing questions.")
-    concierge = Agent(
-        name="Concierge",
-        instructions="Route requests.",
-        send_message_tool_class=SendMessageHandoff,
-    )
+    concierge = Agent(name="Concierge", instructions="Route requests.")
     return Agency(
         concierge,
         communication_flows=[
@@ -252,9 +248,9 @@ def test_run_realtime_supports_xai_provider_defaults(monkeypatch: pytest.MonkeyP
 
     def capture_init(self, realtime_agency, base_model_settings, **kwargs):  # type: ignore[no-untyped-def]
         captured["provider"] = kwargs.get("provider")
-        captured["provider_options"] = kwargs.get("provider_options")
         captured["model_name"] = base_model_settings.get("model_name")
         original_init(self, realtime_agency, base_model_settings, **kwargs)
+        captured["provider_options"] = dict(self._provider_options)
 
     monkeypatch.setattr(realtime_module.RealtimeSessionFactory, "__init__", capture_init)
 

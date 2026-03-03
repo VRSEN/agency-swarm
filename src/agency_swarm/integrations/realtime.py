@@ -10,7 +10,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any, Literal, assert_never, cast
 
-from agents.realtime import RealtimeRunner, RealtimeSession
+from agents.realtime import RealtimeModelConfig, RealtimeRunner, RealtimeSession
 from agents.realtime.config import (
     RealtimeInputAudioNoiseReductionConfig,
     RealtimeSessionModelSettings,
@@ -30,6 +30,7 @@ from agents.realtime.events import (
     RealtimeInputAudioTimeoutTriggered,
     RealtimeRawModelEvent,
     RealtimeSessionEvent,
+    RealtimeToolApprovalRequired,
     RealtimeToolEnd,
     RealtimeToolStart,
 )
@@ -137,6 +138,14 @@ def _serialize_event(event: RealtimeSessionEvent) -> dict[str, Any] | None:
             "agent": event.agent.name,
             "tool": getattr(event.tool, "name", str(event.tool)),
             "output": str(event.output),
+        }
+    if isinstance(event, RealtimeToolApprovalRequired):
+        return {
+            "type": "tool_approval_required",
+            "agent": event.agent.name,
+            "tool": getattr(event.tool, "name", str(event.tool)),
+            "call_id": event.call_id,
+            "arguments": event.arguments,
         }
     if isinstance(event, RealtimeHistoryUpdated):
         sanitized_history = [
@@ -378,7 +387,7 @@ class RealtimeSessionFactory:
                     merged_settings[key] = value
 
         model_settings = cast(RealtimeSessionModelSettings, merged_settings)
-        model_config: dict[str, Any] = {"initial_model_settings": model_settings}
+        model_config: RealtimeModelConfig = {"initial_model_settings": model_settings}
         for option_key in ("url", "api_key", "headers"):
             option_value = self._provider_options.get(option_key)
             if option_value:

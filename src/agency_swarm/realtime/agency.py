@@ -149,7 +149,7 @@ def _wrap_is_enabled(
     async def _wrapped(ctx: RunContextWrapper[Any], _: SDKRealtimeAgent[MasterContext]) -> bool:
         result = is_enabled(ctx, source_agent)
         if inspect.isawaitable(result):
-            return bool(await cast(Awaitable[Any], result))
+            return bool(await result)
         return bool(result)
 
     return _wrapped
