@@ -292,6 +292,8 @@ Strictness
 ### PR Comment Review Loop (Mandatory for Local Coding Work)
 - If you are doing coding work locally (outside GitHub UI) for an open PR and you can post GitHub comments, you must run this loop:
   - Open the PR and review every active comment thread; resolve every correct finding before finalizing work.
+  - Run local Codex CLI review against `origin/main` (`codex review --base origin/main`).
+  - Reruns are mandatory: if the local review reports findings, fix them and rerun until the verdict is clean (`no issues found` or equivalent).
   - Post exactly `@codex review` on the PR.
   - Wait about 10 minutes.
   - Check PR comments no more than once per minute.
@@ -322,6 +324,7 @@ Strictness
 - Sensible, non-brittle tests; avoid duplicate or root-level tests
 - Changes covered by tests (integration/unit or explicit user manual confirmation)
 - All tests pass
+- Local Codex CLI review reruns completed with a clean verdict against `origin/main`
 - Example scripts execute and output as expected
 
 ## Iterative Polishing (consider this after any set of changes is made)
