@@ -1,13 +1,16 @@
 import base64
+import ipaddress
 import json
 import logging
 import mimetypes
+import socket
 from collections.abc import Callable
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
 from pathlib import Path
 from typing import Any, Literal, Optional, Union
+from urllib.parse import urlparse
 
 import httpx
 import jsonref
@@ -21,11 +24,19 @@ from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
 logger = logging.getLogger(__name__)
 
 PDF_MIME_TYPE = "application/pdf"
+URL_FETCH_TIMEOUT_SECONDS = 20.0
+MAX_INLINE_PDF_BYTES = 10 * 1024 * 1024
+MAX_FETCH_REDIRECTS = 5
+REDIRECT_STATUS_CODES = {301, 302, 303, 307, 308}
+
+
+def _build_data_url_from_bytes(data: bytes, mime_type: str) -> str:
+    encoded_file = base64.b64encode(data).decode("utf-8")
+    return f"data:{mime_type};base64,{encoded_file}"
 
 
 def _build_data_url(file_path: Path, mime_type: str) -> str:
-    encoded_file = base64.b64encode(file_path.read_bytes()).decode("utf-8")
-    return f"data:{mime_type};base64,{encoded_file}"
+    return _build_data_url_from_bytes(file_path.read_bytes(), mime_type)
 
 
 def _resolve_mime_type(file_path: Path) -> str:
@@ -33,6 +44,134 @@ def _resolve_mime_type(file_path: Path) -> str:
     if not mime_type:
         raise ValueError(f"Unable to determine MIME type for file: {file_path}")
     return mime_type
+
+
+def _extract_filename_from_url(url: str) -> str | None:
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return None
+    filename = Path(parsed.path).name
+    return filename or None
+
+
+def _is_global_ip_address(value: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return ip.is_global
+
+
+def _is_remote_host_safe_for_fetch(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    if parsed.scheme not in {"http", "https"}:
+        return False
+
+    try:
+        parsed_port = parsed.port
+    except ValueError:
+        return False
+
+    hostname = parsed.hostname
+    if not hostname:
+        return False
+    if hostname.lower() in {"localhost", "localhost.localdomain"}:
+        return False
+
+    # Direct IPs are validated without DNS lookups.
+    if _is_global_ip_address(hostname):
+        return True
+
+    if _is_global_ip_address(hostname.strip("[]")):
+        return True
+
+    port = parsed_port or (443 if parsed.scheme == "https" else 80)
+    try:
+        addr_infos = socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        return False
+
+    resolved_ips: set[str] = set()
+    for entry in addr_infos:
+        socket_address = entry[4]
+        if not isinstance(socket_address, tuple) or not socket_address:
+            continue
+        host = socket_address[0]
+        if isinstance(host, str):
+            resolved_ips.add(host)
+    if not resolved_ips:
+        return False
+
+    return all(_is_global_ip_address(ip.strip("[]")) for ip in resolved_ips)
+
+
+def _is_pdf_content_type(content_type: str | None) -> bool:
+    if not content_type:
+        return False
+    normalized_content_type = content_type.split(";", 1)[0].strip().lower()
+    return normalized_content_type == PDF_MIME_TYPE
+
+
+def _resolve_redirect_target(response: httpx.Response) -> str:
+    location = response.headers.get("location")
+    if not location:
+        raise ValueError("Redirect response missing Location header")
+    request_url = getattr(response, "request", None)
+    if request_url is None:
+        raise ValueError("Redirect response missing request URL")
+    return str(request_url.url.join(location))
+
+
+def _fetch_remote_headers(url: str) -> httpx.Headers:
+    current_url = url
+    for _ in range(MAX_FETCH_REDIRECTS + 1):
+        response = httpx.head(current_url, follow_redirects=False, timeout=URL_FETCH_TIMEOUT_SECONDS)
+        if response.status_code in REDIRECT_STATUS_CODES:
+            next_url = _resolve_redirect_target(response)
+            if not _is_remote_host_safe_for_fetch(next_url):
+                raise ValueError(f"Unsafe redirect target: {next_url}")
+            current_url = next_url
+            continue
+        response.raise_for_status()
+        return response.headers
+
+    raise ValueError(f"Exceeded max redirects ({MAX_FETCH_REDIRECTS}) while fetching headers: {url}")
+
+
+def _download_with_size_limit(url: str, *, max_bytes: int) -> bytes:
+    current_url = url
+    for _ in range(MAX_FETCH_REDIRECTS + 1):
+        buffer = bytearray()
+        with httpx.stream("GET", current_url, follow_redirects=False, timeout=URL_FETCH_TIMEOUT_SECONDS) as response:
+            if response.status_code in REDIRECT_STATUS_CODES:
+                next_url = _resolve_redirect_target(response)
+                if not _is_remote_host_safe_for_fetch(next_url):
+                    raise ValueError(f"Unsafe redirect target: {next_url}")
+                current_url = next_url
+                continue
+
+            response.raise_for_status()
+            for chunk in response.iter_bytes():
+                if not chunk:
+                    continue
+                buffer.extend(chunk)
+                if len(buffer) > max_bytes:
+                    raise ValueError(f"Remote file exceeds max inline size ({max_bytes} bytes)")
+            return bytes(buffer)
+
+    raise ValueError(f"Exceeded max redirects ({MAX_FETCH_REDIRECTS}) while downloading: {url}")
+
+
+def _inline_pdf_url_as_file_data(url: str, *, filename: str) -> ToolOutputFileContent:
+    content = _download_with_size_limit(url, max_bytes=MAX_INLINE_PDF_BYTES)
+    return ToolOutputFileContent(
+        file_data=_build_data_url_from_bytes(content, PDF_MIME_TYPE),
+        filename=filename,
+    )
 
 
 def tool_output_image_from_path(
@@ -101,9 +240,40 @@ def tool_output_file_from_url(url: str) -> ToolOutputFileContent:
 
     Args:
         url: Publicly reachable URL for the file.
-    """
 
-    return ToolOutputFileContent(file_url=url)
+    Notes:
+        For ``.pdf`` URLs, this helper first checks the remote ``Content-Type``.
+        If the host reports a non-PDF type (for example ``application/octet-stream``),
+        it falls back to downloading and inlining the bytes as ``file_data`` with
+        ``application/pdf`` MIME to keep Responses API ingestion reliable.
+    """
+    filename = _extract_filename_from_url(url)
+    if not filename or not filename.lower().endswith(".pdf"):
+        return ToolOutputFileContent(file_url=url)
+
+    if not _is_remote_host_safe_for_fetch(url):
+        logger.warning("Skipping local fetch for potentially unsafe remote PDF URL %s.", url)
+        return ToolOutputFileContent(file_url=url)
+
+    try:
+        response_headers = _fetch_remote_headers(url)
+    except Exception:
+        logger.debug("Failed to inspect remote file URL %s; preserving file_url behavior.", url, exc_info=True)
+        return ToolOutputFileContent(file_url=url)
+
+    if _is_pdf_content_type(response_headers.get("content-type")):
+        return ToolOutputFileContent(file_url=url)
+
+    try:
+        return _inline_pdf_url_as_file_data(url, filename=filename)
+    except Exception:
+        logger.warning(
+            "Failed to inline PDF URL %s after non-PDF content-type (%s); preserving file_url behavior.",
+            url,
+            response_headers.get("content-type"),
+            exc_info=True,
+        )
+        return ToolOutputFileContent(file_url=url)
 
 
 def tool_output_file_from_file_id(file_id: str) -> ToolOutputFileContent:
