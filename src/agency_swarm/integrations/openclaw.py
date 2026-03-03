@@ -787,7 +787,13 @@ def create_openclaw_proxy_router(
                 raise HTTPException(status_code=502, detail=f"OpenClaw request failed: {exc}") from exc
             return _forward_response_passthrough(upstream)
 
-        client = httpx.AsyncClient(timeout=None)
+        stream_timeout = httpx.Timeout(
+            connect=config.proxy_timeout_seconds,
+            read=None,
+            write=config.proxy_timeout_seconds,
+            pool=config.proxy_timeout_seconds,
+        )
+        client = httpx.AsyncClient(timeout=stream_timeout)
         stream_context = client.stream("POST", upstream_url, headers=upstream_headers, json=normalized_payload)
         try:
             upstream = await stream_context.__aenter__()
@@ -869,15 +875,21 @@ def attach_openclaw_to_fastapi(
 
 
 def build_openclaw_responses_model(
-    model: str = DEFAULT_OPENCLAW_MODEL,
+    model: str | None = None,
     base_url: str | None = None,
     api_key: str | None = None,
 ) -> OpenAIResponsesModel:
     """Build an OpenAIResponsesModel that targets the mounted OpenClaw proxy."""
+    if isinstance(model, str) and model.strip():
+        resolved_model = model.strip()
+    else:
+        env_default_model = os.getenv("OPENCLAW_DEFAULT_MODEL", "").strip()
+        resolved_model = env_default_model or DEFAULT_OPENCLAW_MODEL
+
     resolved_base_url = (
         base_url or os.getenv("OPENCLAW_PROXY_BASE_URL") or "http://127.0.0.1:8000/openclaw/v1"
     ).rstrip("/")
     resolved_api_key = api_key or os.getenv("OPENCLAW_PROXY_API_KEY") or os.getenv("APP_TOKEN") or "sk-openclaw-proxy"
 
     client = AsyncOpenAI(base_url=resolved_base_url, api_key=resolved_api_key)
-    return OpenAIResponsesModel(model=model, openai_client=client)
+    return OpenAIResponsesModel(model=resolved_model, openai_client=client)

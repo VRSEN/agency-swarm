@@ -252,6 +252,57 @@ def test_openclaw_proxy_stream_passthrough(
     assert captured["context"].exited is True
 
 
+def test_openclaw_stream_connect_uses_bounded_connect_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    class _FakeStreamResponse:
+        status_code = 200
+        headers = {"content-type": "text/event-stream"}
+
+        async def aiter_raw(self):
+            yield b"event: end\ndata: [DONE]\n\n"
+
+    class _FakeStreamContext:
+        async def __aenter__(self) -> _FakeStreamResponse:
+            return _FakeStreamResponse()
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    class _FakeAsyncClient:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            captured["timeout"] = kwargs.get("timeout")
+
+        def stream(self, method: str, url: str, *, headers: dict[str, str], json: dict[str, Any]) -> _FakeStreamContext:
+            return _FakeStreamContext()
+
+        async def aclose(self) -> None:
+            captured["closed"] = True
+
+    monkeypatch.setattr("agency_swarm.integrations.openclaw.httpx.AsyncClient", _FakeAsyncClient)
+
+    config = replace(_build_openclaw_config(tmp_path), proxy_timeout_seconds=7.5)
+    app = FastAPI()
+    attach_openclaw_to_fastapi(app, config)
+    client = TestClient(app)
+
+    response = client.post(
+        "/openclaw/v1/responses",
+        json={"model": "openclaw:main", "input": "hello", "stream": True},
+    )
+
+    assert response.status_code == 200
+    assert isinstance(captured["timeout"], httpx.Timeout)
+    assert captured["timeout"].connect == pytest.approx(7.5)
+    assert captured["timeout"].read is None
+    assert captured["timeout"].write == pytest.approx(7.5)
+    assert captured["timeout"].pool == pytest.approx(7.5)
+    assert captured["closed"] is True
+
+
 def test_openclaw_stream_error_path_preserves_upstream_payload_when_stream_context_exit_fails(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -495,6 +546,16 @@ def test_build_openclaw_responses_model_prefers_openclaw_proxy_key_over_app_toke
     model = build_openclaw_responses_model()
 
     assert model._client.api_key == "proxy-token"
+
+
+def test_build_openclaw_responses_model_uses_openclaw_default_model_env_when_model_unspecified(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENCLAW_DEFAULT_MODEL", "openclaw:beta")
+
+    model = build_openclaw_responses_model()
+
+    assert model.model == "openclaw:beta"
 
 
 def test_openclaw_start_closes_log_handle_when_popen_fails(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
