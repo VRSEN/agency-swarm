@@ -150,8 +150,9 @@ After each meaningful tool call or code edit, validate the result in 1-2 lines a
 - Adding silent fallbacks, legacy shims, or workarounds. Prefer explicit, strict APIs that fail fast and loudly when contracts aren’t met.
 
 ## 🔴 API KEYS
-- Fact: API credentials normally live in the workspace `.env` file or environment variables are set. Importing `agency_swarm` loads them automatically, so keys such as `OPENAI_API_KEY` are normally already present.
-- Workflow: Before asking the user for any key, inspect the environment and `.env` to confirm whether it is actually missing or invalid.
+- Pre-flight gate (real-LLM only): if planned validation includes integration tests/examples that call a real LLM, verify `OPENAI_API_KEY` from environment or workspace `.env` before editing or running tests; if missing/invalid, stop and report the blocker.
+- Scope limit: this gate does not apply to docs-only changes, pure unit tests, or integrations fully mocked/patched to avoid real LLM calls.
+- Before asking the user for any key, inspect environment and `.env` to confirm it is actually missing or invalid.
 
 ## Common Commands
 `make format`  # Auto-format and apply safe lint fixes
@@ -292,6 +293,8 @@ Strictness
 ### PR Comment Review Loop (Mandatory for Local Coding Work)
 - If you are doing coding work locally (outside GitHub UI) for an open PR and you can post GitHub comments, you must run this loop:
   - Open the PR and review every active comment thread; resolve every correct finding before finalizing work.
+  - Run local Codex CLI review against `origin/main` (`codex review --base origin/main`).
+  - Reruns are mandatory: if the local review reports findings, fix them and rerun until the verdict is clean (`no issues found` or equivalent).
   - Post exactly `@codex review` on the PR.
   - Wait about 10 minutes.
   - Check PR comments no more than once per minute.
@@ -322,6 +325,7 @@ Strictness
 - Sensible, non-brittle tests; avoid duplicate or root-level tests
 - Changes covered by tests (integration/unit or explicit user manual confirmation)
 - All tests pass
+- Local Codex CLI review reruns completed with a clean verdict against `origin/main`
 - Example scripts execute and output as expected
 
 ## Iterative Polishing (consider this after any set of changes is made)

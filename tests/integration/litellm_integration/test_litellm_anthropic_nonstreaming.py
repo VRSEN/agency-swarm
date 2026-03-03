@@ -9,6 +9,7 @@ import os
 
 import pytest
 from agents import ModelSettings
+from agents.models.fake_id import FAKE_RESPONSES_ID
 
 from agency_swarm import Agency, Agent, function_tool
 from agency_swarm.tools.send_message import Handoff
@@ -26,6 +27,22 @@ pytestmark = pytest.mark.skipif(
 def get_user_id(args: str) -> str:
     """Returns user ID for testing."""
     return "User id is 1245725189"
+
+
+def _assert_valid_tool_call_pairs(messages: list[dict[str, object]]) -> None:
+    function_calls = [msg for msg in messages if msg.get("type") == "function_call"]
+    function_outputs = [msg for msg in messages if msg.get("type") == "function_call_output"]
+
+    call_ids = [msg.get("call_id") for msg in function_calls]
+    assert all(isinstance(call_id, str) and call_id for call_id in call_ids)
+    assert len(call_ids) == len(set(call_ids))
+
+    output_call_ids = [msg.get("call_id") for msg in function_outputs]
+    assert all(isinstance(call_id, str) and call_id for call_id in output_call_ids)
+    assert set(call_ids) <= set(output_call_ids)
+
+    placeholder_items = [msg for msg in messages if msg.get("id") == FAKE_RESPONSES_ID]
+    assert not placeholder_items, "Placeholder IDs should not persist in Anthropic/LiteLLM history"
 
 
 @pytest.fixture(scope="function")
@@ -66,6 +83,7 @@ class TestLitellmAnthropicNonStreamingMessageOrdering:
 
         # Verify message structure
         messages = litellm_anthropic_agency.thread_manager.get_all_messages()
+        _assert_valid_tool_call_pairs(messages)
 
         # Find all function_call and function_call_output pairs
         for i, msg in enumerate(messages):
@@ -103,6 +121,7 @@ class TestLitellmAnthropicNonStreamingMessageOrdering:
 
         # Verify no intermediate assistant messages between tool calls and outputs
         messages = litellm_anthropic_agency.thread_manager.get_all_messages()
+        _assert_valid_tool_call_pairs(messages)
 
         for i, msg in enumerate(messages):
             if msg.get("type") == "function_call":

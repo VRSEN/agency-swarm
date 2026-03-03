@@ -18,6 +18,16 @@ from agency_swarm import Agency, Agent
 logger = logging.getLogger(__name__)
 
 
+def _assert_non_empty_agent_run_ids(messages: list[dict[str, Any]]) -> None:
+    agent_messages = [msg for msg in messages if msg.get("agent")]
+    assert agent_messages, "Expected persisted messages with agent metadata"
+
+    missing_or_invalid = [
+        msg for msg in agent_messages if not isinstance(msg.get("agent_run_id"), str) or not msg.get("agent_run_id")
+    ]
+    assert not missing_or_invalid, f"Found messages with missing or invalid agent_run_id: {missing_or_invalid}"
+
+
 @pytest.fixture(scope="function")
 def three_level_agency():
     """Create a shared 3-level agency for testing parent_run_id tracking."""
@@ -100,6 +110,7 @@ async def test_parent_run_id_three_level_orchestration(three_level_agency) -> No
 
     # Update delegation chain from captured messages
     update_delegation_chain()
+    _assert_non_empty_agent_run_ids(captured_messages)
 
     # Verify response contains evidence of delegation
     response_text = result.final_output if hasattr(result, "final_output") else str(result)
@@ -244,6 +255,7 @@ async def test_parent_run_id_in_streaming(three_level_agency):
 
     # Verify we captured run IDs
     assert ceo_run_id is not None, "Should have captured CEO's run_id from stream"
+    _assert_non_empty_agent_run_ids(captured_messages)
 
     # Log streaming results
     logger.info(

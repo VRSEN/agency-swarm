@@ -82,6 +82,22 @@ def persistence_agent():
     )
 
 
+def test_persistence_callbacks_must_be_callable(persistence_agent: Agent) -> None:
+    with pytest.raises(TypeError, match="must be callable"):
+        Agency(
+            persistence_agent,
+            load_threads_callback="invalid-load-callback",
+            save_threads_callback=lambda _messages: None,
+        )
+
+    with pytest.raises(TypeError, match="must be callable"):
+        Agency(
+            persistence_agent,
+            load_threads_callback=lambda: [],
+            save_threads_callback="invalid-save-callback",
+        )
+
+
 @pytest.fixture
 def file_persistence_callbacks(temp_persistence_dir):
     """Fixture to provide configured file callbacks that follow the correct interface."""
