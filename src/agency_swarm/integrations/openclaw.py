@@ -900,14 +900,17 @@ def attach_openclaw_to_fastapi(
     @asynccontextmanager
     async def _openclaw_lifespan(inner_app: FastAPI) -> AsyncIterator[Any]:
         async with existing_lifespan(inner_app) as lifespan_state:
+            should_stop_runtime = False
             if resolved_config.autostart:
                 await asyncio.to_thread(runtime.start)
+                should_stop_runtime = True
             else:
                 logger.info("OpenClaw runtime autostart disabled")
             try:
                 yield lifespan_state
             finally:
-                await asyncio.to_thread(runtime.stop)
+                if should_stop_runtime:
+                    await asyncio.to_thread(runtime.stop)
 
     app.router.lifespan_context = _openclaw_lifespan
 

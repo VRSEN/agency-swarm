@@ -520,6 +520,31 @@ def test_openclaw_lifespan_preserves_existing_state(tmp_path: Path) -> None:
     assert response.json() == {"existing_marker": "kept"}
 
 
+def test_openclaw_runtime_does_not_stop_when_autostart_disabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app = FastAPI()
+    runtime = attach_openclaw_to_fastapi(app, replace(_build_openclaw_config(tmp_path), autostart=False))
+    calls = {"stop": 0}
+    to_thread_calls: list[str] = []
+
+    def _stop() -> None:
+        calls["stop"] += 1
+
+    async def _to_thread(func: Any, *args: Any, **kwargs: Any) -> Any:
+        to_thread_calls.append(func.__name__)
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(runtime, "stop", _stop)
+    monkeypatch.setattr(openclaw_mod.asyncio, "to_thread", _to_thread)
+
+    with TestClient(app):
+        pass
+
+    assert calls == {"stop": 0}
+    assert to_thread_calls == []
+
+
 def test_openclaw_port_probe_supports_ipv6(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     config = replace(_build_openclaw_config(tmp_path), host="::1")
 
