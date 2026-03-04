@@ -174,6 +174,7 @@ After each meaningful tool call or code edit, validate the result in 1-2 lines a
   - Test behavior, not implementation details; avoid testing private APIs or patching private attributes or methods unless necessary
   - Use real framework objects when practical, leaning on the concrete OpenAI/Agents SDK models so mypy can verify attribute access instead of tolerating generic mocks
   - When functionality changes (especially new features or user-visible behavior), update coverage, usually by extending existing tests.
+  - Do not require a brand-new test for every change; prefer extending existing tests where behavior is already covered nearby.
   - For non-functional changes, do not add new tests by default; adjust existing tests only when needed for correctness, stability, or clarity.
   - Add a new test only when existing tests cannot cleanly cover the changed behavior without hurting test organization.
   - Use focused runs during debugging to minimize noise
