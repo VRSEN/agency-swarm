@@ -11,7 +11,7 @@ import pytest
 
 import agency_swarm.tools.mcp_manager as mcp_manager
 from agency_swarm.mcp import MCPServerOAuth, MCPServerOAuthClient
-from agency_swarm.mcp.oauth import FileTokenStorage, set_oauth_user_id
+from agency_swarm.mcp.oauth import FileTokenStorage, OAuthRuntimeContext, set_oauth_runtime_context, set_oauth_user_id
 from agency_swarm.tools.mcp_manager import (
     LoopAffineAsyncProxy,
     PersistentMCPServerManager,
@@ -510,6 +510,39 @@ def test_update_oauth_cache_dir_updates_clients(tmp_path: Path) -> None:
     assert server.cache_dir == tmp_path
     assert client.oauth_config.cache_dir == tmp_path
     assert client._oauth_provider.storage.base_cache_dir == tmp_path
+
+
+def test_resolve_method_timeout_keeps_short_list_tools_for_non_oauth_servers() -> None:
+    manager = PersistentMCPServerManager()
+    timeout = manager._resolve_method_timeout(_DummyServer(), "list_tools")
+    assert timeout == 10.0
+
+
+def test_resolve_method_timeout_extends_list_tools_for_oauth_servers() -> None:
+    manager = PersistentMCPServerManager()
+    oauth_server = MCPServerOAuth(url="http://localhost:8001/mcp", name="github")
+    oauth_client = MCPServerOAuthClient(oauth_server)
+    timeout = manager._resolve_method_timeout(oauth_client, "list_tools")
+    assert timeout == 620.0
+
+
+def test_resolve_method_timeout_prefers_runtime_timeout_for_oauth_servers() -> None:
+    manager = PersistentMCPServerManager()
+    oauth_server = MCPServerOAuth(url="http://localhost:8001/mcp", name="github")
+    oauth_client = MCPServerOAuthClient(oauth_server)
+    set_oauth_runtime_context(
+        OAuthRuntimeContext(
+            mode="saas_stream",
+            user_id="user-1",
+            timeout=123.0,
+        )
+    )
+    try:
+        timeout = manager._resolve_method_timeout(oauth_client, "list_tools")
+    finally:
+        set_oauth_runtime_context(None)
+        set_oauth_user_id(None)
+    assert timeout == 123.0
 
 
 def test_sync_oauth_client_handlers_keeps_authenticated_session() -> None:

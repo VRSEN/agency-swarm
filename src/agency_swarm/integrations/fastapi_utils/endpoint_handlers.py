@@ -378,6 +378,12 @@ def _prepare_oauth_runtime(
     if user_id is not None:
         agency_instance.user_context["user_id"] = user_id
 
+    if oauth_runtime is not None:
+        agents_map = getattr(agency_instance, "agents", None)
+        if isinstance(agents_map, dict):
+            for agent in agents_map.values():
+                oauth_runtime.install_handler_factory(agent)
+
     return oauth_runtime
 
 

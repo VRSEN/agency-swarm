@@ -139,7 +139,8 @@ async def test_runtime_handler_factory_updates_on_new_requests() -> None:
 
     When agents are reused across FastAPI requests (common pattern), each request
     creates a new FastAPIOAuthRuntime with a fresh event queue. The handler factory
-    must be updated so OAuth events go to the current request's queue, not a stale one.
+    must be updated so OAuth events go to the current request's queue, not a stale one,
+    even if `mcp_servers` was cleared after an earlier conversion.
     """
     server = MCPServerOAuth(url="http://localhost:8999/mcp", name="demo", client_id="id", client_secret="secret")
 
@@ -154,6 +155,7 @@ async def test_runtime_handler_factory_updates_on_new_requests() -> None:
     # Request 1: Install handler factory
     runtime1 = FastAPIOAuthRuntime(registry, user_id="user-1")
     runtime1.install_handler_factory(agent)
+    agent.mcp_servers = []
 
     # Request 2: Should update handler factory to use new runtime's queue
     runtime2 = FastAPIOAuthRuntime(registry, user_id="user-2")

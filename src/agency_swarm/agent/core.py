@@ -229,7 +229,8 @@ class Agent(BaseAgent[MasterContext]):
         self._conversation_starters_warmup_started = False
         self._mcp_tools_initialized = False
         self._mcp_tools_deferred = False
-        self._deferred_mcp_servers: list[Any] = []
+        self._deferred_mcp_servers: dict[str, Any] = {}
+        self._oauth_mcp_servers: dict[str, Any] = {}
 
         # Initialize execution handler
         self._execution = Execution(self)
@@ -368,12 +369,18 @@ class Agent(BaseAgent[MasterContext]):
         if self._mcp_tools_initialized:
             return
         if self._should_defer_mcp_tool_initialization():
-            self._deferred_mcp_servers = list(self.mcp_servers)
-            self.mcp_servers.clear()
-            self._install_mcp_activation_tool()
-            self._mcp_tools_initialized = True
-            self._mcp_tools_deferred = True
-            return
+            deferred_servers, eager_servers = self._split_deferred_oauth_mcp_servers()
+            if deferred_servers:
+                self._oauth_mcp_servers = deferred_servers
+                self._deferred_mcp_servers = dict(deferred_servers)
+                self.mcp_servers = eager_servers
+                if eager_servers:
+                    convert_mcp_servers_to_tools(self)
+                    self._ensure_web_search_sources_include()
+                self._install_mcp_authentication_tool(sorted(self._oauth_mcp_servers))
+                self._mcp_tools_initialized = True
+                self._mcp_tools_deferred = True
+                return
         convert_mcp_servers_to_tools(self)
         self._ensure_web_search_sources_include()
         self._mcp_tools_initialized = True
@@ -400,28 +407,77 @@ class Agent(BaseAgent[MasterContext]):
                 return True
         return False
 
-    def _install_mcp_activation_tool(self) -> None:
-        """Add a tool that activates MCP discovery only when the model explicitly requests it."""
+    def _split_deferred_oauth_mcp_servers(self) -> tuple[dict[str, Any], list[Any]]:
+        """Split MCP servers into deferred OAuth servers and eager non-OAuth servers."""
+        try:
+            from agency_swarm.mcp.oauth import MCPServerOAuth
+            from agency_swarm.mcp.oauth_client import MCPServerOAuthClient
+        except ImportError:
+            return {}, list(self.mcp_servers)
+
+        deferred: dict[str, Any] = {}
+        eager: list[Any] = []
+        for server in list(self.mcp_servers):
+            actual = getattr(server, "_server", server)
+            name = getattr(server, "name", None)
+            if (
+                isinstance(name, str)
+                and name != ""
+                and (isinstance(actual, MCPServerOAuth) or isinstance(actual, MCPServerOAuthClient))
+            ):
+                deferred[name] = server
+            else:
+                eager.append(server)
+        return deferred, eager
+
+    def _install_mcp_authentication_tool(self, server_names: list[str]) -> None:
+        """Add a tool that authenticates and enables one deferred OAuth MCP server."""
         existing_names = {getattr(tool, "name", "") for tool in self.tools}
-        tool_name = "activate_mcp_tools"
+        tool_name = "authenticate_mcp_server"
         if tool_name in existing_names:
             return
 
         @function_tool(name_override=tool_name)
-        def _activate_mcp_tools() -> str:
-            if self._deferred_mcp_servers and len(self.mcp_servers) == 0:
-                self.mcp_servers.extend(self._deferred_mcp_servers)
+        def _authenticate_mcp_server(server_name: str) -> str:
+            """Authenticate one MCP server and enable its tools.
+
+            Call this again for the same server if MCP tool calls later return authentication or authorization errors.
+            """
+            selected = self._oauth_mcp_servers.get(server_name)
+            if selected is None:
+                available = ", ".join(server_names)
+                return f"Unknown MCP server '{server_name}'. Available servers: {available}"
+
+            original_servers = list(self.mcp_servers)
             try:
+                self.mcp_servers = [selected]
                 convert_mcp_servers_to_tools(self)
             except Exception as exc:
-                return f"Failed to activate MCP tools: {exc}"
+                self.mcp_servers = original_servers
+                return f"Failed to authenticate MCP server '{server_name}': {exc}"
+            finally:
+                self.mcp_servers = original_servers
 
-            self._mcp_tools_deferred = False
-            self._deferred_mcp_servers = []
+            was_deferred = server_name in self._deferred_mcp_servers
+            self._deferred_mcp_servers.pop(server_name, None)
+            self._mcp_tools_deferred = len(self._deferred_mcp_servers) > 0
             self._ensure_web_search_sources_include()
-            return "MCP tools are activated. Continue with MCP-dependent actions in your next response."
+            if was_deferred:
+                if self._deferred_mcp_servers:
+                    remaining = ", ".join(sorted(self._deferred_mcp_servers))
+                    return (
+                        f"MCP server '{server_name}' is authenticated and its tools are enabled. "
+                        f"Remaining deferred servers: {remaining}"
+                    )
+                return f"MCP server '{server_name}' is authenticated and its tools are enabled."
+            return f"MCP server '{server_name}' re-authentication attempt completed. Retry the MCP tool call."
 
-        self.add_tool(_activate_mcp_tools)
+        schema = _authenticate_mcp_server.params_json_schema
+        server_name_schema = schema.get("properties", {}).get("server_name")
+        if isinstance(server_name_schema, dict):
+            server_name_schema["enum"] = server_names
+
+        self.add_tool(_authenticate_mcp_server)
 
     def _ensure_web_search_sources_include(self) -> None:
         """Ensure web search sources are included when a WebSearchTool is present."""
