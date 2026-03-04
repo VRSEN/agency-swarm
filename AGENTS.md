@@ -18,7 +18,7 @@ Begin each task after reviewing this readiness checklist:
 - Restate the user's intent and the active task in your responses to the user when it helps clarity; when asked about anything, answer concisely and explicitly before elaborating.
 - Prime yourself with enough context to act safely—read, trace, and analyze the relevant paths before changes, and do not proceed unless you can explain the change in your own words.
 - Use fresh tool outputs before acting; do not rely on memory.
-- Mandatory start state: if VRSEN `origin/main` is reachable, run `git fetch origin` and rebase your working branch onto `origin/main` (or create a fresh branch from `origin/main`) before starting analysis, edits, or tests; if the remote is unavailable, proceed and state that you are assuming the branch is already synced.
+- Mandatory start state: if VRSEN `origin/main` is reachable, run `git fetch origin` and rebase your working branch onto `origin/main` (or create a fresh branch from `origin/main`) before starting analysis, edits, or tests; for long-lived PR branches, complete the mandatory pre-rebase mainline-delta review in Git Practices first. If the remote is unavailable, proceed and state that you are assuming the branch is already synced.
 - Complete one change at a time; do not stash unrelated work unless the user explicitly asks.
 - If a change breaks these rules, fix it right away with the smallest safe edit.
 - Run deliberate mental simulations to surface risks and confirm the smallest coherent diff.
@@ -299,9 +299,14 @@ Strictness
 - Mandatory rebase workflow for open PR branches (critical):
   - Run `git fetch origin`.
   - Run `gh pr view --json number,url,baseRefName,headRefName,mergeable,mergeStateStatus` and verify PR merge/conflict status before rebasing.
+  - Identify a time anchor from PR timeline (latest force-push/rebase event) and store it as UTC timestamp.
+  - Before rebasing, review what changed on `origin/main` since that time anchor, then filter to files in scope (`git log origin/main --first-parent --since=<timestamp> --name-only`).
   - Rebase with `GIT_EDITOR=true git rebase origin/main`.
+  - Keep an explicit conflict-file ledger from the rebase output; do not resolve from memory.
   - For every conflicted file, read both versions fully (`git show REBASE_HEAD:<path>` and `git show origin/main:<path>`) before resolving.
+  - For every conflicted file, read mainline commits since the time anchor (`git log origin/main --first-parent --since=<timestamp> -- <path>`) before resolving.
   - After conflict resolution, verify each conflicted file with focused tests before continuing.
+  - After rebase, run a time-anchor audit: confirm mainline commits since the anchor for conflicted files are preserved and not contradicted by the resolved result.
 - After any push to a PR branch, monitor GitHub runs with `gh run list --branch <branch> --limit 10` and inspect failures with `gh run view <run-id> --log`.
 
 ### PR Comment Review Loop (Mandatory for Local Coding Work)
