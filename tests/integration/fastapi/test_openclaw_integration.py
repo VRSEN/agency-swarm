@@ -136,7 +136,6 @@ def test_openclaw_proxy_filters_request_keys_and_normalizes_payload(
                     "parameters": {"type": "object", "properties": {"text": {"type": "string"}}},
                     "strict": True,
                 },
-                {"type": "web_search"},
             ],
             "tool_choice": {"type": "function", "name": "calc"},
             "metadata": {"attempt": 1, "scope": {"a": 1}, "label": "ok"},
@@ -190,6 +189,43 @@ def test_openclaw_proxy_filters_request_keys_and_normalizes_payload(
     assert forwarded["metadata"] == {"attempt": "1", "scope": '{"a": 1}', "label": "ok"}
     assert captured["headers"]["Authorization"] == "Bearer gateway-token"
     assert captured["url"] == "http://127.0.0.1:18789/v1/responses"
+
+
+def test_openclaw_proxy_rejects_unsupported_tool_types(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    called = {"upstream": False}
+
+    class _FakeAsyncClient:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            return None
+
+        async def __aenter__(self) -> _FakeAsyncClient:
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def post(self, url: str, *, headers: dict[str, str], json: dict[str, Any]) -> httpx.Response:
+            called["upstream"] = True
+            return httpx.Response(status_code=200, json={"ok": True})
+
+    monkeypatch.setattr("agency_swarm.integrations.openclaw.httpx.AsyncClient", _FakeAsyncClient)
+
+    app = FastAPI()
+    attach_openclaw_to_fastapi(app, _build_openclaw_config(tmp_path))
+    client = TestClient(app)
+
+    response = client.post(
+        "/openclaw/v1/responses",
+        json={
+            "model": "openclaw:main",
+            "input": "hello",
+            "tools": [{"type": "web_search"}],
+        },
+    )
+
+    assert response.status_code == 400
+    assert "not supported by OpenClaw" in response.json()["detail"]
+    assert called["upstream"] is False
 
 
 def test_openclaw_proxy_stream_passthrough(

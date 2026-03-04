@@ -569,9 +569,16 @@ def _normalize_tools(tools: Any) -> list[dict[str, Any]]:
         return []
 
     normalized_tools: list[dict[str, Any]] = []
-    for tool in tools:
-        if not isinstance(tool, dict) or tool.get("type") != "function":
-            continue
+    for index, tool in enumerate(tools):
+        if not isinstance(tool, dict):
+            raise ValueError(f"tools[{index}] must be an object")
+
+        raw_tool_type = tool.get("type")
+        if raw_tool_type != "function":
+            raise ValueError(
+                f"tools[{index}].type '{raw_tool_type}' is not supported by OpenClaw; "
+                "only 'function' tools are supported"
+            )
 
         function_payload = tool.get("function")
         function_name: str | None = None
@@ -617,7 +624,7 @@ def _normalize_tools(tools: Any) -> list[dict[str, Any]]:
                 function_strict = raw_strict
 
         if function_name is None:
-            continue
+            raise ValueError(f"tools[{index}] function name is required")
 
         normalized_function: dict[str, Any] = {"name": function_name}
         if function_description is not None:
