@@ -112,10 +112,22 @@ def run_fastapi(
     if cors_origins is None:
         cors_origins = ["*"]
 
+    # When using wildcard origins, we must disable credentials to follow CORS standards
+    # and avoid security risks (CSRF). Most browsers and FastAPI's CORSMiddleware
+    # do not support allow_origins=["*"] when allow_credentials=True.
+    should_allow_credentials = True
+    if "*" in cors_origins:
+        if app_token:
+            logger.warning(
+                "CORS wildcard '*' with credentials enabled is insecure and often blocked by browsers. "
+                "Disabling credentials for wildcard origins. Specify origins in `cors_origins` to enable credentials."
+            )
+        should_allow_credentials = False
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins,
-        allow_credentials=True,
+        allow_credentials=should_allow_credentials,
         allow_methods=["*"],
         allow_headers=["*"],
     )
