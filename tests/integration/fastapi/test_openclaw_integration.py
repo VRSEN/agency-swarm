@@ -228,6 +228,43 @@ def test_openclaw_proxy_rejects_unsupported_tool_types(monkeypatch: pytest.Monke
     assert called["upstream"] is False
 
 
+def test_openclaw_proxy_rejects_non_list_tools(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    called = {"upstream": False}
+
+    class _FakeAsyncClient:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            return None
+
+        async def __aenter__(self) -> _FakeAsyncClient:
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def post(self, url: str, *, headers: dict[str, str], json: dict[str, Any]) -> httpx.Response:
+            called["upstream"] = True
+            return httpx.Response(status_code=200, json={"ok": True})
+
+    monkeypatch.setattr("agency_swarm.integrations.openclaw.httpx.AsyncClient", _FakeAsyncClient)
+
+    app = FastAPI()
+    attach_openclaw_to_fastapi(app, _build_openclaw_config(tmp_path))
+    client = TestClient(app)
+
+    response = client.post(
+        "/openclaw/v1/responses",
+        json={
+            "model": "openclaw:main",
+            "input": "hello",
+            "tools": {"type": "function", "name": "calc"},
+        },
+    )
+
+    assert response.status_code == 400
+    assert "tools must be a list" in response.json()["detail"]
+    assert called["upstream"] is False
+
+
 def test_openclaw_proxy_stream_passthrough(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

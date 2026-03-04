@@ -565,8 +565,10 @@ def _normalize_input_items(input_items: list[Any]) -> list[Any]:
 
 
 def _normalize_tools(tools: Any) -> list[dict[str, Any]]:
-    if not isinstance(tools, list):
+    if tools is None:
         return []
+    if not isinstance(tools, list):
+        raise ValueError("tools must be a list")
 
     normalized_tools: list[dict[str, Any]] = []
     for index, tool in enumerate(tools):
