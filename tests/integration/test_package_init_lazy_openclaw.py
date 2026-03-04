@@ -1,15 +1,22 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
+from pathlib import Path
 
 
 def _run_inline(code: str) -> str:
+    repo_src = Path(__file__).resolve().parents[2] / "src"
+    env = os.environ.copy()
+    existing_pythonpath = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = f"{repo_src}{os.pathsep}{existing_pythonpath}" if existing_pythonpath else str(repo_src)
     result = subprocess.run(
         [sys.executable, "-c", code],
         check=True,
         capture_output=True,
         text=True,
+        env=env,
     )
     return result.stdout.strip()
 
