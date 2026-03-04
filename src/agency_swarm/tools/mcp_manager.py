@@ -83,6 +83,9 @@ def _build_persistence_key(server: Any, oauth_user_id: str | None) -> str:
     return f"{name}::{_sanitize_oauth_registry_user_id(oauth_user_id)}"
 
 
+_OAUTH_LIST_TOOLS_TIMEOUT_SECONDS = 620.0
+
+
 class PersistentMCPServerManager:
     """Process-level registry for MCP servers with persistent connections.
     Servers are keyed by their readable `name` attribute. New agencies/agents
@@ -101,7 +104,7 @@ class PersistentMCPServerManager:
         # Default timeouts for known methods; unknown methods use a safe default
         self._timeouts: dict[str, float] = {
             "connect": 20.0,
-            "list_tools": 620.0,  # OAuth discovery can wait for user callback.
+            "list_tools": 10.0,
             "call_tool": 120.0,
             "cleanup": 10.0,
             "list_prompts": 10.0,
@@ -111,6 +114,25 @@ class PersistentMCPServerManager:
         }
         # Server -> driver mapping (driver runs on background loop in a single task)
         self._drivers: dict[Any, dict[str, Any]] = {}
+
+    def _resolve_method_timeout(self, server: Any, method_name: str) -> float:
+        """Resolve timeout for a method call, extending OAuth discovery waits only when needed."""
+        timeout = self._timeouts.get(method_name, 30.0)
+        if method_name != "list_tools":
+            return timeout
+
+        actual = getattr(server, "_server", server)
+        if _MCPServerOAuthClient is None or not isinstance(actual, _MCPServerOAuthClient):
+            return timeout
+
+        if _get_oauth_runtime_context is None:
+            return _OAUTH_LIST_TOOLS_TIMEOUT_SECONDS
+
+        runtime_context = _get_oauth_runtime_context()
+        runtime_timeout = getattr(runtime_context, "timeout", None) if runtime_context is not None else None
+        if isinstance(runtime_timeout, (int, float)) and runtime_timeout > 0:
+            return float(runtime_timeout)
+        return _OAUTH_LIST_TOOLS_TIMEOUT_SECONDS
 
     def _ensure_driver(self, server: Any) -> None:
         # Create a per-server driver task with a command queue if missing
@@ -484,9 +506,9 @@ class LoopAffineAsyncProxy:
         target = getattr(self._server, name)
 
         if inspect.iscoroutinefunction(target):
-            timeout = self._manager._timeouts.get(name, 30.0)
 
             async def _proxy(*args, **kwargs):  # noqa: ANN001
+                timeout = self._manager._resolve_method_timeout(self._server, name)
                 fut = self._manager._submit_driver_call(self._server, name, args, kwargs)
                 server_name = getattr(self._server, "name", "<unnamed>")
                 try:

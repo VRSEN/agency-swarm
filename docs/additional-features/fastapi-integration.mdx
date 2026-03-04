@@ -378,7 +378,7 @@ response = requests.post(cancel_url, json=payload)
 
 If any agent uses `MCPServerOAuth` (or you have a `HostedMCPTool` without `tool_config.authorization`), `run_fastapi` automatically:
 - Adds `/auth/callback` and `/auth/status/{state}` routes
-- Defers OAuth MCP discovery in SaaS mode until the model explicitly invokes `activate_mcp_tools` (so first user messages can complete without forcing auth)
+- Defers OAuth MCP discovery in SaaS mode until the model explicitly invokes `authenticate_mcp_server(server_name)` (so first user messages can complete without forcing auth)
 - Emits deterministic OAuth stream events on `/get_response_stream`:
   - `event: oauth_redirect` with `{state, server, auth_url}`
   - `event: oauth_status` with `{state, server, status}` where `status` is `pending`, `authorized`, `error:<reason>`, or `timeout`
@@ -391,7 +391,7 @@ If any agent uses `MCPServerOAuth` (or you have a `HostedMCPTool` without `tool_
 You do not need custom handlers. FastAPI wiring is request-scoped and carries the OAuth prompts automatically.
 
 <Note>
-For OAuth-protected FastMCP servers, schema discovery (`list_tools`) is auth-protected. That means OAuth may start before model streaming begins.
+For OAuth-protected FastMCP servers, schema discovery (`list_tools`) is auth-protected. In SaaS mode, this discovery step is deferred until the model invokes `authenticate_mcp_server(server_name)`, so first-message streaming can start without forcing OAuth.
 </Note>
 
 <Note>
