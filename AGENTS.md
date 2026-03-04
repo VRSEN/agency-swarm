@@ -19,9 +19,7 @@ Begin each task after reviewing this readiness checklist:
 - Prime yourself with enough context to act safely—read, trace, and analyze the relevant paths before changes, and do not proceed unless you can explain the change in your own words.
 - Use fresh tool outputs before acting; do not rely on memory.
 - Mandatory start state: if VRSEN `origin/main` is reachable, run `git fetch origin` and rebase your working branch onto `origin/main` (or create a fresh branch from `origin/main`) before starting analysis, edits, or tests; if the remote is unavailable, proceed and state that you are assuming the branch is already synced.
-- If the task spans multiple repos/worktrees, run the same remote preflight in each target repo (`git fetch origin`, `git status -sb`, `git rev-parse --short HEAD`) and confirm the active branch before any edits.
-- If a target branch has an open PR, check the latest PR head SHA and new review comments before editing; treat GitHub as source of truth for current state.
-- Complete one change at a time; stash unrelated work before starting another.
+- Complete one change at a time; do not stash unrelated work unless the user explicitly asks.
 - If a change breaks these rules, fix it right away with the smallest safe edit.
 - Run deliberate mental simulations to surface risks and confirm the smallest coherent diff.
 - Favor repository tooling (`make`, `uv run`, and the plan/todo tool) over ad-hoc paths; escalate tooling or permission limits when blocked.
@@ -48,7 +46,6 @@ Ask only when required; otherwise proceed autonomously and fast.
   - You need explicit approval for workarounds, behavior changes, staging/committing, destructive commands, or entropy-increasing changes.
   - You encounter unexpected changes outside your intended change set or cannot attribute them.
   - Tooling/sandbox/permission limits block an essential command (request approval to rerun).
-  - You discover you skipped repo/PR preflight or worked in the wrong repo/branch; stop and escalate with the correction plan before continuing.
 - Before any potentially destructive command (checkout, stash, commit, push, reset, rebase, force operations, file deletions, mass edits), explain the impact and obtain explicit approval.
 - Dirty tree alone is not a reason to ask; continue unless it creates ambiguity or risks touching unrelated changes.
 - Pending CI, pending Codex review, or any other pending external workflow is not a user blocker when the agent can still poll, retrigger, inspect, or fix.
@@ -96,7 +93,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 ## Self-Improvement (High Priority)
 - When you receive user feedback, make a mistake, or spot a recurring pattern, add a generalized, minimal rule to AGENTS.md and revise relevant lines before any other work.
 - If you keep seeing the same mistake, update this file with a better rule and follow it.
-- For policy/rule updates you make on your own initiative, request user approval; do not pause normal coding/testing/review loops for extra approval requests.
+- For any updates you make on your own initiative, request approval from the user after making the changes.
 
 ### Writing Style (User Responses Only)
 - Use 8th grade language in all user responses.
@@ -299,6 +296,13 @@ Strictness
 - If pre-commit hooks modify files (it means you forgot to run mandatory `make format`), stage the hook-modified files and re-run the commit with the same message.
 - When committing, base the message on the staged diff and use a title plus bullet body (e.g., `git commit -m "type: summary" -m "- bullet"`).
 - After committing, double-check what you committed with `git show --name-only -1`.
+- Mandatory rebase workflow for open PR branches (critical):
+  - Run `git fetch origin`.
+  - Run `gh pr view --json number,url,baseRefName,headRefName,mergeable,mergeStateStatus` and verify PR merge/conflict status before rebasing.
+  - Rebase with `GIT_EDITOR=true git rebase origin/main`.
+  - For every conflicted file, read both versions fully (`git show REBASE_HEAD:<path>` and `git show origin/main:<path>`) before resolving.
+  - After conflict resolution, verify each conflicted file with focused tests before continuing.
+- After any push to a PR branch, monitor GitHub runs with `gh run list --branch <branch> --limit 10` and inspect failures with `gh run view <run-id> --log`.
 
 ### PR Comment Review Loop (Mandatory for Local Coding Work)
 - If you are doing coding work locally (outside GitHub UI) for an open PR and you can post GitHub comments, you must run this loop:
