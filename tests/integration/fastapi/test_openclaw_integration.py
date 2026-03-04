@@ -547,6 +547,26 @@ def test_openclaw_ensure_layout_creates_config_parent_dir(tmp_path: Path) -> Non
         assert stat.S_IMODE(custom_config_path.stat().st_mode) == 0o600
 
 
+def test_openclaw_ensure_layout_writes_config_with_secure_create_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _build_openclaw_config(tmp_path)
+    runtime = OpenClawRuntime(config)
+    original_open = openclaw_mod.os.open
+    seen_modes: list[int] = []
+
+    def _open(path: os.PathLike[str] | str, flags: int, mode: int = 0o777) -> int:
+        seen_modes.append(mode)
+        return original_open(path, flags, mode)
+
+    monkeypatch.setattr(openclaw_mod.os, "open", _open)
+
+    runtime.ensure_layout()
+
+    assert seen_modes
+    assert seen_modes[-1] == 0o600
+
+
 def test_openclaw_runtime_uses_lifespan_hooks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     app = FastAPI()
     runtime = attach_openclaw_to_fastapi(app, replace(_build_openclaw_config(tmp_path), autostart=True))

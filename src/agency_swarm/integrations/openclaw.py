@@ -330,7 +330,10 @@ class OpenClawRuntime:
         if "model" not in defaults:
             defaults["model"] = self._normalize_model_config(self.config.provider_model)
 
-        self.config.config_path.write_text(json.dumps(current, indent=2), encoding="utf-8")
+        config_payload = json.dumps(current, indent=2)
+        fd = os.open(self.config.config_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as config_file:
+            config_file.write(config_payload)
         try:
             self.config.config_path.chmod(0o600)
         except OSError:
