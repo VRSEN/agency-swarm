@@ -19,7 +19,7 @@ Begin each task after reviewing this readiness checklist:
 - Prime yourself with enough context to act safely—read, trace, and analyze the relevant paths before changes, and do not proceed unless you can explain the change in your own words.
 - Use fresh tool outputs before acting; do not rely on memory.
 - Mandatory start state: if VRSEN `origin/main` is reachable, run `git fetch origin` and rebase your working branch onto `origin/main` (or create a fresh branch from `origin/main`) before starting analysis, edits, or tests; if the remote is unavailable, proceed and state that you are assuming the branch is already synced.
-- Complete one change at a time; stash unrelated work before starting another.
+- Complete one change at a time; do not stash unrelated work unless the user explicitly asks.
 - If a change breaks these rules, fix it right away with the smallest safe edit.
 - Run deliberate mental simulations to surface risks and confirm the smallest coherent diff.
 - Favor repository tooling (`make`, `uv run`, and the plan/todo tool) over ad-hoc paths; escalate tooling or permission limits when blocked.
@@ -290,6 +290,13 @@ Strictness
 - If pre-commit hooks modify files (it means you forgot to run mandatory `make format`), stage the hook-modified files and re-run the commit with the same message.
 - When committing, base the message on the staged diff and use a title plus bullet body (e.g., `git commit -m "type: summary" -m "- bullet"`).
 - After committing, double-check what you committed with `git show --name-only -1`.
+- Mandatory rebase workflow for open PR branches (critical):
+  - Run `git fetch origin`.
+  - Run `gh pr view --json number,url,baseRefName,headRefName,mergeable,mergeStateStatus` and verify PR merge/conflict status before rebasing.
+  - Rebase with `GIT_EDITOR=true git rebase origin/main`.
+  - For every conflicted file, read both versions fully (`git show REBASE_HEAD:<path>` and `git show origin/main:<path>`) before resolving.
+  - After conflict resolution, verify each conflicted file with focused tests before continuing.
+- After any push to a PR branch, monitor GitHub runs with `gh run list --branch <branch> --limit 10` and inspect failures with `gh run view <run-id> --log`.
 
 ### PR Comment Review Loop (Mandatory for Local Coding Work)
 - If you are doing coding work locally (outside GitHub UI) for an open PR and you can post GitHub comments, you must run this loop:
