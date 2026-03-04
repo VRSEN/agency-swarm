@@ -229,6 +229,8 @@ def run_fastapi(
 
     # Prefer the non-deprecated websocket stack; gracefully fall back when
     # running against older uvicorn versions that do not support this option.
+    importer_module = getattr(uvicorn, "importer", None)
+    import_from_string_error = getattr(importer_module, "ImportFromStringError", None)
     try:
         uvicorn.run(app, host=host, port=port, ws="websockets-sansio")
     except TypeError as exc:
@@ -241,4 +243,9 @@ def run_fastapi(
         if "websocket" not in message and "websockets-sansio" not in message:
             raise
         logger.warning("Uvicorn rejected ws='websockets-sansio'; falling back to default websocket stack")
+        uvicorn.run(app, host=host, port=port)
+    except Exception as exc:
+        if import_from_string_error is None or not isinstance(exc, import_from_string_error):
+            raise
+        logger.warning("Uvicorn import rejected ws='websockets-sansio'; falling back to default websocket stack")
         uvicorn.run(app, host=host, port=port)
