@@ -5,7 +5,7 @@ icon: "lobster"
 ---
 
 OpenClaw gives you a private AI assistant that can run continuously and automate real tasks.
-On Agencii, you can deploy your own OpenClaw instance with the official template in a few simple steps.
+On Agencii, you can deploy your own OpenClaw instance with the official template in a few clicks.
 
 <CardGroup cols={3}>
   <Card title="Launch Fast" icon="bolt">
@@ -76,6 +76,9 @@ Before you start, make sure you have:
 
 ## Run OpenClaw Locally (Agency + FastAPI)
 
+Use this only if you want to test on your own machine before deploying.
+
+<Accordion title="Show local setup steps">
 If you want to test locally before deploying, use the same starter template:
 
 1. Clone: [agency-ai-solutions/openclaw-starter-template](https://github.com/agency-ai-solutions/openclaw-starter-template)
@@ -125,6 +128,7 @@ curl -N -H "Authorization: Bearer local-openclaw-token" \
 ```
 
 Expected stream events include: `meta`, `data`, `messages`, `end`.
+</Accordion>
 
 ## Architecture (Local Or Agencii)
 
