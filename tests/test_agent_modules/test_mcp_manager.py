@@ -381,7 +381,7 @@ async def test_attach_persistent_mcp_servers_registers_and_connects(monkeypatch:
         def get(self, name: str) -> Any | None:
             return store.get(name)
 
-        def register(self, server: Any) -> Any:
+        def register(self, server: Any, *, key: str | None = None) -> Any:
             store[server.name] = server
             return server
 
@@ -408,7 +408,7 @@ def test_register_and_connect_agent_servers_validates_inputs(monkeypatch: pytest
         def get(self, _name: str) -> None:
             return None
 
-        def register(self, server: Any) -> Any:
+        def register(self, server: Any, *, key: str | None = None) -> Any:
             return server
 
         def _ensure_driver(self, server: Any) -> None:
@@ -439,7 +439,7 @@ def test_register_and_connect_agent_servers_reuses_persistent_instances(monkeypa
                 return existing
             return None
 
-        def register(self, server: Any) -> Any:
+        def register(self, server: Any, *, key: str | None = None) -> Any:
             registered.append(server)
             return server
 

@@ -1132,7 +1132,13 @@ def _normalize_new_messages_for_client(messages: list[TResponseInputItem]) -> li
     return normalizer.normalize_message_dicts(messages)
 
 
-def make_metadata_endpoint(agency_metadata: dict, verify_token):
+def make_metadata_endpoint(
+    agency_metadata: dict,
+    verify_token,
+    allowed_local_dirs: Sequence[str | Path] | None = None,
+):
+    _ = allowed_local_dirs
+
     async def handler(token: str = Depends(verify_token)):
         metadata_with_version = dict(agency_metadata)
         agency_swarm_version = _get_agency_swarm_version()
