@@ -19,6 +19,8 @@ Begin each task after reviewing this readiness checklist:
 - Prime yourself with enough context to act safely—read, trace, and analyze the relevant paths before changes, and do not proceed unless you can explain the change in your own words.
 - Use fresh tool outputs before acting; do not rely on memory.
 - Mandatory start state: if VRSEN `origin/main` is reachable, run `git fetch origin` and rebase your working branch onto `origin/main` (or create a fresh branch from `origin/main`) before starting analysis, edits, or tests; if the remote is unavailable, proceed and state that you are assuming the branch is already synced.
+- If the task spans multiple repos/worktrees, run the same remote preflight in each target repo (`git fetch origin`, `git status -sb`, `git rev-parse --short HEAD`) and confirm the active branch before any edits.
+- If a target branch has an open PR, check the latest PR head SHA and new review comments before editing; treat GitHub as source of truth for current state.
 - Complete one change at a time; stash unrelated work before starting another.
 - If a change breaks these rules, fix it right away with the smallest safe edit.
 - Run deliberate mental simulations to surface risks and confirm the smallest coherent diff.
@@ -44,6 +46,7 @@ Ask only when required; otherwise proceed autonomously and fast.
   - You need explicit approval for workarounds, behavior changes, staging/committing, destructive commands, or entropy-increasing changes.
   - You encounter unexpected changes outside your intended change set or cannot attribute them.
   - Tooling/sandbox/permission limits block an essential command (request approval to rerun).
+  - You discover you skipped repo/PR preflight or worked in the wrong repo/branch; stop and escalate with the correction plan before continuing.
 - Before any potentially destructive command (checkout, stash, commit, push, reset, rebase, force operations, file deletions, mass edits), explain the impact and obtain explicit approval.
 - Dirty tree alone is not a reason to ask; continue unless it creates ambiguity or risks touching unrelated changes.
 - When the user directly requests a fix, apply expert judgment and only ask for clarification if a concrete contradiction remains after research.
