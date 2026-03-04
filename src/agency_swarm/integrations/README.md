@@ -25,7 +25,7 @@ Agency Swarm still needs a stable model string for the Responses model client, s
 Runtime mapping:
 
 - External alias used by Agency Swarm agent config: `openclaw:main`
-- Upstream provider model used by OpenClaw gateway: `OPENCLAW_PROVIDER_MODEL` (default `openai/gpt-5-mini`)
+- Upstream provider model used by OpenClaw gateway: `OPENCLAW_PROVIDER_MODEL` (default `openai/gpt-5.2`)
 
 When the proxy receives `model=openclaw:main`, it rewrites that value to the configured provider model before forwarding upstream.
 
@@ -67,3 +67,19 @@ The starter template currently ships with one OpenClaw-backed agent by default.
 It does not ship a pre-built multi-agent delegation topology.
 
 If you want collaboration/delegation, you can add more Agency Swarm agents and handoff rules on top of this integration.
+
+### Setup-time Codex OAuth bootstrap (template default)
+
+The starter template's onboarding defaults set:
+
+- `OPENCLAW_PROVIDER_MODEL=openai-codex/gpt-5.2`
+
+That model requires one interactive bootstrap in the same runtime environment where `main.py` runs:
+
+```bash
+openclaw models auth login --provider openai-codex
+```
+
+Auth profile state is persisted under:
+
+- `/mnt/openclaw/state/agents/main/agent/auth-profiles.json` (canonical in deployed runtime)
