@@ -339,16 +339,108 @@ class TestOAuthHandlers:
         async def fake_listen(_: str, timeout: float = 300.0) -> tuple[str, str | None]:
             return "server_code", "server_state"
 
-        async def fail_prompt() -> tuple[str, str | None]:
-            raise AssertionError("manual prompt should not run when local callback capture succeeds")
-
         mock_listen.side_effect = fake_listen
-        monkeypatch.setattr("agency_swarm.mcp.oauth._prompt_for_callback_url", fail_prompt)
+        monkeypatch.setattr("agency_swarm.mcp.oauth._can_poll_stdin_for_callback", lambda: False)
 
         code, state = await default_callback_handler("http://localhost:8000/auth/callback")
 
         assert (code, state) == ("server_code", "server_state")
         assert mock_listen.await_count == 1
+
+    @patch("agency_swarm.mcp.oauth._listen_for_callback_once")
+    async def test_callback_handler_allows_manual_entry_while_listener_pending(
+        self,
+        mock_listen: Any,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """default_callback_handler should accept manual input without waiting full listener timeout."""
+
+        async def slow_listen(_: str, timeout: float = 300.0) -> tuple[str, str | None]:
+            await asyncio.sleep(1.0)
+            return "server_code", "server_state"
+
+        async def fake_poll() -> tuple[str, str | None]:
+            return "manual_code", "manual_state"
+
+        mock_listen.side_effect = slow_listen
+        monkeypatch.setattr("agency_swarm.mcp.oauth._can_poll_stdin_for_callback", lambda: True)
+        monkeypatch.setattr("agency_swarm.mcp.oauth._prompt_for_callback_url_polling", fake_poll)
+
+        code, state = await default_callback_handler("http://localhost:8000/auth/callback")
+
+        assert (code, state) == ("manual_code", "manual_state")
+        assert mock_listen.await_count == 1
+
+    @patch("agency_swarm.mcp.oauth._listen_for_callback_once")
+    async def test_callback_handler_reprompts_after_invalid_manual_input(
+        self,
+        mock_listen: Any,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        """default_callback_handler should not abort if the first manual URL is invalid."""
+
+        async def slow_listen(_: str, timeout: float = 300.0) -> tuple[str, str | None]:
+            await asyncio.sleep(1.0)
+            return "server_code", "server_state"
+
+        attempts = {"count": 0}
+
+        async def flaky_poll() -> tuple[str, str | None]:
+            attempts["count"] += 1
+            if attempts["count"] == 1:
+                raise ValueError("No authorization code found in callback URL")
+            return "manual_code", "manual_state"
+
+        mock_listen.side_effect = slow_listen
+        monkeypatch.setattr("agency_swarm.mcp.oauth._can_poll_stdin_for_callback", lambda: True)
+        monkeypatch.setattr("agency_swarm.mcp.oauth._prompt_for_callback_url_polling", flaky_poll)
+
+        code, state = await default_callback_handler("http://localhost:8000/auth/callback")
+
+        assert (code, state) == ("manual_code", "manual_state")
+        assert attempts["count"] == 2
+        assert "Invalid callback URL" in capsys.readouterr().out
+
+    @patch("agency_swarm.mcp.oauth._listen_for_callback_once")
+    async def test_callback_handler_uses_listener_when_polling_unavailable(
+        self,
+        mock_listen: Any,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """default_callback_handler should continue with listener-only flow when polling is unavailable."""
+
+        async def fake_listen(_: str, timeout: float = 300.0) -> tuple[str, str | None]:
+            return "server_code", "server_state"
+
+        mock_listen.side_effect = fake_listen
+        monkeypatch.setattr("agency_swarm.mcp.oauth._can_poll_stdin_for_callback", lambda: False)
+
+        code, state = await default_callback_handler("http://localhost:8000/auth/callback")
+
+        assert (code, state) == ("server_code", "server_state")
+        assert mock_listen.await_count == 1
+
+    async def test_prompt_for_callback_url_polling_raises_eof_when_stdin_closes(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """_prompt_for_callback_url_polling should raise EOFError instead of looping forever."""
+        from agency_swarm.mcp import oauth as oauth_module
+
+        class _DummyStdin:
+            def isatty(self) -> bool:
+                return True
+
+            def readline(self) -> str:
+                return ""
+
+        dummy_stdin = _DummyStdin()
+        monkeypatch.setattr(oauth_module.sys, "stdin", dummy_stdin)
+        monkeypatch.setattr(oauth_module.select, "select", lambda _r, _w, _x, _t: ([dummy_stdin], [], []))
+
+        with pytest.raises(EOFError, match="stdin reached EOF"):
+            await oauth_module._prompt_for_callback_url_polling(poll_interval=0.0)
 
     @patch("agency_swarm.mcp.oauth._listen_for_callback_once")
     async def test_callback_handler_falls_back_when_listener_unavailable(
