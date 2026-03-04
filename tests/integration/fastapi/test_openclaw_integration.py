@@ -561,7 +561,7 @@ def test_openclaw_upstream_base_url_brackets_ipv6_host(tmp_path: Path) -> None:
 
 def test_openclaw_gateway_command_port_detection_supports_equals_syntax(tmp_path: Path) -> None:
     config = _build_openclaw_config(tmp_path)
-    runtime = OpenClawRuntime(replace(config, gateway_command="openclaw gateway --port=19000"))
+    runtime = OpenClawRuntime(replace(config, port=19000, gateway_command="openclaw gateway --port=19000"))
 
     command = runtime._resolve_gateway_command()
     port_args = [arg for arg in command if arg == "--port" or arg.startswith("--port=")]
@@ -573,6 +573,14 @@ def test_openclaw_gateway_command_rejects_invalid_port_value(tmp_path: Path) -> 
     runtime = OpenClawRuntime(replace(config, gateway_command="openclaw gateway --port=abc"))
 
     with pytest.raises(RuntimeError, match="Invalid OPENCLAW_GATEWAY_COMMAND --port value"):
+        runtime._resolve_gateway_command()
+
+
+def test_openclaw_gateway_command_rejects_port_mismatch(tmp_path: Path) -> None:
+    config = _build_openclaw_config(tmp_path)
+    runtime = OpenClawRuntime(replace(config, port=18789, gateway_command="openclaw gateway --port=19000"))
+
+    with pytest.raises(RuntimeError, match="does not match configured OPENCLAW_PORT"):
         runtime._resolve_gateway_command()
 
 

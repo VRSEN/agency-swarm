@@ -358,6 +358,11 @@ class OpenClawRuntime:
             raise RuntimeError(
                 "Invalid OPENCLAW_GATEWAY_COMMAND --port value. Use --port <int> or --port=<int> with 1-65535."
             )
+        if has_port_flag and detected_port is not None and detected_port != self.config.port:
+            raise RuntimeError(
+                "OPENCLAW_GATEWAY_COMMAND port does not match configured OPENCLAW_PORT. "
+                "Use matching values or omit --port from OPENCLAW_GATEWAY_COMMAND."
+            )
         if not has_port_flag:
             command.extend(["--port", str(self.config.port)])
         return command
