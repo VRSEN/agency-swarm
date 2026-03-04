@@ -107,8 +107,8 @@ def test_request_api_key_allows_client_build_without_env(monkeypatch) -> None:
     assert str(client.base_url).startswith("http://example.invalid")
 
 
-def test_default_headers_only_without_baseline_client_does_not_raise(monkeypatch) -> None:
-    """Headers-only config should not fail when there is no existing OpenAI client to copy."""
+def test_default_headers_only_without_baseline_client_falls_back_to_model_settings(monkeypatch) -> None:
+    """When there is no baseline client, default_headers must still reach model_settings.extra_headers."""
     pytest.importorskip("agents")
 
     from agency_swarm.integrations.fastapi_utils import endpoint_handlers
@@ -131,7 +131,10 @@ def test_default_headers_only_without_baseline_client_does_not_raise(monkeypatch
 
     apply_openai_client_config(agency, ClientConfig(default_headers={"x-request-id": "req-1"}))
 
+    # Model stays a string — no client was built — but headers must reach model_settings.
     assert agency.agents["A"].model == "gpt-4o-mini"
+    assert agency.agents["A"].model_settings is not None
+    assert agency.agents["A"].model_settings.extra_headers == {"x-request-id": "req-1"}
 
 
 def test_default_headers_only_does_not_override_litellm_model_settings() -> None:

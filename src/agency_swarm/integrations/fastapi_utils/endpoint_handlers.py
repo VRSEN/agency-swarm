@@ -178,6 +178,10 @@ def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
             continue
 
         client = _build_openai_client_for_agent(agent, config)
+        if client is None:
+            if config.default_headers is not None:
+                _apply_default_headers_to_agent_model_settings(agent, config.default_headers)
+            continue
         _apply_client_to_agent(agent, client, config)
 
 
