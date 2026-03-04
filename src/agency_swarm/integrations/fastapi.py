@@ -227,5 +227,18 @@ def run_fastapi(
 
     logger.info(f"Starting FastAPI {'AG-UI ' if enable_agui else ''}server at http://{host}:{port}")
 
-    # Use the non-deprecated websocket stack to avoid legacy websockets warnings.
-    uvicorn.run(app, host=host, port=port, ws="websockets-sansio")
+    # Prefer the non-deprecated websocket stack; gracefully fall back when
+    # running against older uvicorn versions that do not support this option.
+    try:
+        uvicorn.run(app, host=host, port=port, ws="websockets-sansio")
+    except TypeError as exc:
+        if "ws" not in str(exc):
+            raise
+        logger.warning("Uvicorn does not support ws='websockets-sansio'; falling back to default websocket stack")
+        uvicorn.run(app, host=host, port=port)
+    except ValueError as exc:
+        message = str(exc).lower()
+        if "websocket" not in message and "websockets-sansio" not in message:
+            raise
+        logger.warning("Uvicorn rejected ws='websockets-sansio'; falling back to default websocket stack")
+        uvicorn.run(app, host=host, port=port)

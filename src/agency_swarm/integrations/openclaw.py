@@ -348,7 +348,13 @@ class OpenClawRuntime:
                 "or set OPENCLAW_GATEWAY_COMMAND to a deterministic command."
             )
 
-        if not any(arg == "--port" or arg.startswith("--port=") for arg in command):
+        has_port_flag = any(arg == "--port" or arg.startswith("--port=") for arg in command)
+        detected_port = _extract_port_from_gateway_command(command)
+        if has_port_flag and detected_port is None:
+            raise RuntimeError(
+                "Invalid OPENCLAW_GATEWAY_COMMAND --port value. Use --port <int> or --port=<int> with 1-65535."
+            )
+        if not has_port_flag:
             command.extend(["--port", str(self.config.port)])
         return command
 

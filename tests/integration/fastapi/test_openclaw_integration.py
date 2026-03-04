@@ -557,6 +557,14 @@ def test_openclaw_gateway_command_port_detection_supports_equals_syntax(tmp_path
     assert port_args == ["--port=19000"]
 
 
+def test_openclaw_gateway_command_rejects_invalid_port_value(tmp_path: Path) -> None:
+    config = _build_openclaw_config(tmp_path)
+    runtime = OpenClawRuntime(replace(config, gateway_command="openclaw gateway --port=abc"))
+
+    with pytest.raises(RuntimeError, match="Invalid OPENCLAW_GATEWAY_COMMAND --port value"):
+        runtime._resolve_gateway_command()
+
+
 def test_openclaw_config_from_env_prefers_gateway_command_port(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("OPENCLAW_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("OPENCLAW_PORT", "18789")
