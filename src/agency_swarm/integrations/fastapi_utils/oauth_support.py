@@ -286,13 +286,21 @@ class FastAPIOAuthRuntime:
         """
         servers = getattr(agent, "mcp_servers", None)
         has_oauth_servers = isinstance(servers, list) and any(is_oauth_server(srv) for srv in servers)
+        deferred_oauth_servers = getattr(agent, "_oauth_mcp_servers", None)
+        has_deferred_oauth_servers = isinstance(deferred_oauth_servers, dict) and len(deferred_oauth_servers) > 0
+        has_existing_factory = callable(getattr(agent, "mcp_oauth_handler_factory", None))
         tools = getattr(agent, "tools", None)
         has_hosted_mcp_tools = (
             HostedMCPToolRuntime is not None
             and isinstance(tools, list)
             and any(isinstance(tool, HostedMCPToolRuntime) for tool in tools)
         )
-        if not has_oauth_servers and not has_hosted_mcp_tools:
+        if (
+            not has_oauth_servers
+            and not has_deferred_oauth_servers
+            and not has_hosted_mcp_tools
+            and not has_existing_factory
+        ):
             return
 
         redirect_factory = self.redirect_handler_factory()
