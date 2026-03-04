@@ -160,7 +160,10 @@ class OpenClawIntegrationConfig:
 
     @property
     def upstream_base_url(self) -> str:
-        return f"http://{self.host}:{self.port}"
+        host = self.host
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        return f"http://{host}:{self.port}"
 
     @classmethod
     def from_env(cls) -> OpenClawIntegrationConfig:
@@ -721,13 +724,20 @@ def _forward_response_passthrough(upstream: httpx.Response) -> Response:
 
 
 def _is_upstream_port_open(config: OpenClawIntegrationConfig, timeout: float = 0.5) -> bool:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.settimeout(timeout)
-        try:
-            sock.connect((config.host, config.port))
-        except OSError:
-            return False
-    return True
+    try:
+        addresses = socket.getaddrinfo(config.host, config.port, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        return False
+
+    for family, socktype, proto, _canonname, sockaddr in addresses:
+        with socket.socket(family, socktype, proto) as sock:
+            sock.settimeout(timeout)
+            try:
+                sock.connect(sockaddr)
+                return True
+            except OSError:
+                continue
+    return False
 
 
 async def _close_stream_resources(stream_context: Any, client: httpx.AsyncClient) -> None:
@@ -867,14 +877,14 @@ def attach_openclaw_to_fastapi(
     existing_lifespan = app.router.lifespan_context
 
     @asynccontextmanager
-    async def _openclaw_lifespan(inner_app: FastAPI) -> AsyncIterator[None]:
-        async with existing_lifespan(inner_app):
+    async def _openclaw_lifespan(inner_app: FastAPI) -> AsyncIterator[Any]:
+        async with existing_lifespan(inner_app) as lifespan_state:
             if resolved_config.autostart:
                 runtime.start()
             else:
                 logger.info("OpenClaw runtime autostart disabled")
             try:
-                yield
+                yield lifespan_state
             finally:
                 runtime.stop()
 

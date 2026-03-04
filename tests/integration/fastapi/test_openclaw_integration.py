@@ -3,6 +3,7 @@ from __future__ import annotations
 import gzip
 import json
 import subprocess
+from contextlib import asynccontextmanager
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -11,7 +12,7 @@ import httpx
 import pytest
 
 pytest.importorskip("fastapi.testclient")
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from agency_swarm import run_fastapi
@@ -487,6 +488,64 @@ def test_openclaw_runtime_uses_lifespan_hooks(tmp_path: Path, monkeypatch: pytes
         assert calls == {"start": 1, "stop": 0}
 
     assert calls == {"start": 1, "stop": 1}
+
+
+def test_openclaw_lifespan_preserves_existing_state(tmp_path: Path) -> None:
+    @asynccontextmanager
+    async def _existing_lifespan(_app: FastAPI):
+        yield {"existing_marker": "kept"}
+
+    app = FastAPI(lifespan=_existing_lifespan)
+    attach_openclaw_to_fastapi(app, replace(_build_openclaw_config(tmp_path), autostart=False))
+
+    @app.get("/state-marker")
+    async def state_marker(request: Request) -> dict[str, str]:
+        return {"existing_marker": request.state.existing_marker}
+
+    with TestClient(app) as client:
+        response = client.get("/state-marker")
+
+    assert response.status_code == 200
+    assert response.json() == {"existing_marker": "kept"}
+
+
+def test_openclaw_port_probe_supports_ipv6(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    config = replace(_build_openclaw_config(tmp_path), host="::1")
+
+    class _FakeSocket:
+        def __init__(self, family: int, _socktype: int, _proto: int) -> None:
+            self.family = family
+
+        def __enter__(self) -> "_FakeSocket":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def settimeout(self, _timeout: float) -> None:
+            return None
+
+        def connect(self, _sockaddr: Any) -> None:
+            if self.family == openclaw_mod.socket.AF_INET6:
+                return None
+            raise OSError("unreachable")
+
+    monkeypatch.setattr(
+        openclaw_mod.socket,
+        "getaddrinfo",
+        lambda _host, _port, type: [
+            (openclaw_mod.socket.AF_INET, openclaw_mod.socket.SOCK_STREAM, 0, "", ("127.0.0.1", config.port)),
+            (openclaw_mod.socket.AF_INET6, openclaw_mod.socket.SOCK_STREAM, 0, "", ("::1", config.port, 0, 0)),
+        ],
+    )
+    monkeypatch.setattr(openclaw_mod.socket, "socket", _FakeSocket)
+
+    assert openclaw_mod._is_upstream_port_open(config) is True
+
+
+def test_openclaw_upstream_base_url_brackets_ipv6_host(tmp_path: Path) -> None:
+    config = replace(_build_openclaw_config(tmp_path), host="::1")
+    assert config.upstream_base_url == "http://[::1]:18789"
 
 
 def test_openclaw_gateway_command_port_detection_supports_equals_syntax(tmp_path: Path) -> None:
