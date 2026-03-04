@@ -10,8 +10,10 @@ import json
 import logging
 import os
 import re
+import select
+import sys
 import webbrowser
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -457,6 +459,85 @@ async def _prompt_for_callback_url() -> tuple[str, str | None]:
     return _parse_callback_response(callback_url)
 
 
+def _can_poll_stdin_for_callback() -> bool:
+    """Return True when stdin supports polling-based callback input."""
+    stdin = sys.stdin
+    if stdin is None or not hasattr(stdin, "isatty") or not stdin.isatty():
+        return False
+    if os.name == "nt":
+        try:
+            import msvcrt  # type: ignore[attr-defined]
+
+            return callable(getattr(msvcrt, "kbhit", None)) and callable(getattr(msvcrt, "getwche", None))
+        except ImportError:
+            return False
+    try:
+        select.select([stdin], [], [], 0)
+    except (OSError, ValueError, TypeError):
+        return False
+    return True
+
+
+async def _prompt_for_callback_url_polling(poll_interval: float = 0.5) -> tuple[str, str | None]:
+    """Prompt for callback URL using poll-based stdin reads that cancel cleanly."""
+    print("\nAfter authorizing, you will be redirected to a callback URL.")
+    print("Paste the full URL here if automatic capture does not complete.\n")
+
+    stdin = sys.stdin
+    if stdin is None:
+        raise EOFError("stdin is unavailable")
+
+    loop = asyncio.get_event_loop()
+    if os.name == "nt":
+        try:
+            import msvcrt  # type: ignore[attr-defined]
+        except ImportError as exc:  # pragma: no cover - platform-specific fallback
+            raise EOFError("stdin polling backend unavailable") from exc
+        kbhit = getattr(msvcrt, "kbhit", None)
+        getwche = getattr(msvcrt, "getwche", None)
+        if not callable(kbhit) or not callable(getwche):
+            raise EOFError("stdin polling backend unavailable")
+
+        line_buffer = ""
+        while True:
+            while kbhit():
+                ch = getwche()
+                if ch in {"\r", "\n"}:
+                    print("")
+                    callback_url = line_buffer.strip()
+                    line_buffer = ""
+                    if callback_url == "":
+                        break
+                    return _parse_callback_response(callback_url)
+                if ch == "\x08":
+                    line_buffer = line_buffer[:-1]
+                    continue
+                line_buffer += ch
+            await asyncio.sleep(poll_interval)
+
+    while True:
+
+        def _wait_for_input() -> bool:
+            ready, _, _ = select.select([stdin], [], [], poll_interval)
+            return bool(ready)
+
+        try:
+            has_input = await loop.run_in_executor(None, _wait_for_input)
+        except (OSError, ValueError) as exc:
+            raise EOFError("stdin does not support polling") from exc
+
+        if not has_input:
+            continue
+
+        callback_url = stdin.readline()
+        if callback_url == "":
+            raise EOFError("stdin reached EOF")
+        callback_url = callback_url.strip()
+        if callback_url == "":
+            continue
+        return _parse_callback_response(callback_url)
+
+
 def _can_use_local_callback_server(redirect_uri: str) -> bool:
     """Return True if we can bind a local HTTP server for the redirect URI."""
     parsed = urlparse(redirect_uri)
@@ -573,12 +654,50 @@ async def default_callback_handler(redirect_uri: str | None = None, timeout: flo
     redirect_target = redirect_uri or "http://localhost:8000/auth/callback"
 
     if _can_use_local_callback_server(redirect_target):
+        listener_task = asyncio.create_task(_listen_for_callback_once(redirect_target, timeout=timeout))
+        prompt_factory: Callable[[], Coroutine[object, object, tuple[str, str | None]]] | None = None
+        if _can_poll_stdin_for_callback():
+            prompt_factory = _prompt_for_callback_url_polling
+        prompt_task: asyncio.Task[tuple[str, str | None]] | None = None
+        if prompt_factory is not None:
+            prompt_task = asyncio.create_task(prompt_factory())
+        tasks: list[asyncio.Task[tuple[str, str | None]]] = [listener_task]
+        if prompt_task is not None:
+            tasks.append(prompt_task)
         try:
-            return await _listen_for_callback_once(redirect_target, timeout=timeout)
+            if prompt_task is None:
+                return await listener_task
+
+            while True:
+                done, _ = await asyncio.wait(set(tasks), return_when=asyncio.FIRST_COMPLETED)
+                if prompt_task in done:
+                    try:
+                        return prompt_task.result()
+                    except EOFError:
+                        if listener_task in done:
+                            return listener_task.result()
+                        return await listener_task
+                    except ValueError as exc:
+                        print(f"Invalid callback URL: {exc}. Please try again.")
+                        if listener_task in done:
+                            return listener_task.result()
+                        if prompt_factory is None:
+                            return await listener_task
+                        prompt_task = asyncio.create_task(prompt_factory())
+                        tasks = [listener_task, prompt_task]
+                        continue
+                if listener_task in done:
+                    return listener_task.result()
         except OSError as exc:
             logger.warning("Local callback server unavailable (%s); falling back to manual entry.", exc)
         except TimeoutError:
             logger.warning("Timed out waiting for local OAuth callback; falling back to manual entry.")
+        finally:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await task
 
     try:
         return await _prompt_for_callback_url()
