@@ -197,7 +197,7 @@ class OpenClawIntegrationConfig:
             startup_timeout_seconds=float(os.getenv("OPENCLAW_STARTUP_TIMEOUT_SECONDS", "60")),
             proxy_timeout_seconds=float(os.getenv("OPENCLAW_PROXY_TIMEOUT_SECONDS", "120")),
             default_model=os.getenv("OPENCLAW_DEFAULT_MODEL", DEFAULT_OPENCLAW_MODEL),
-            provider_model=os.getenv("OPENCLAW_PROVIDER_MODEL", "openai/gpt-5-mini"),
+            provider_model=os.getenv("OPENCLAW_PROVIDER_MODEL", "openai/gpt-5.2"),
             gateway_command=gateway_command,
         )
 
@@ -331,6 +331,10 @@ class OpenClawRuntime:
             defaults["model"] = self._normalize_model_config(self.config.provider_model)
 
         self.config.config_path.write_text(json.dumps(current, indent=2), encoding="utf-8")
+        try:
+            self.config.config_path.chmod(0o600)
+        except OSError:
+            logger.debug("Unable to set restrictive permissions on OpenClaw config path", exc_info=True)
 
     def _resolve_gateway_command(self) -> list[str]:
         if self.config.gateway_command:
@@ -494,10 +498,16 @@ class OpenClawRuntime:
                 process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 logger.warning("OpenClaw process did not stop after SIGKILL")
+        except Exception:
+            logger.warning("Unexpected error while stopping OpenClaw runtime", exc_info=True)
         finally:
             if self._log_handle is not None:
-                self._log_handle.close()
-                self._log_handle = None
+                try:
+                    self._log_handle.close()
+                except Exception:
+                    logger.warning("OpenClaw log handle close failed during stop", exc_info=True)
+                finally:
+                    self._log_handle = None
 
     def health(self) -> dict[str, Any]:
         return {
@@ -886,13 +896,13 @@ def attach_openclaw_to_fastapi(
     async def _openclaw_lifespan(inner_app: FastAPI) -> AsyncIterator[Any]:
         async with existing_lifespan(inner_app) as lifespan_state:
             if resolved_config.autostart:
-                runtime.start()
+                await asyncio.to_thread(runtime.start)
             else:
                 logger.info("OpenClaw runtime autostart disabled")
             try:
                 yield lifespan_state
             finally:
-                runtime.stop()
+                await asyncio.to_thread(runtime.stop)
 
     app.router.lifespan_context = _openclaw_lifespan
 

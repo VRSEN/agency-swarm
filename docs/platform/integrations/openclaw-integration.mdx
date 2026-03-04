@@ -36,7 +36,7 @@ Before you start, make sure you have:
 
 - An Agencii account
 - A GitHub account
-- Model credentials (provider API key, or OpenClaw OAuth login access)
+- At least one provider API key (for example OpenAI or Anthropic)
 
 ## Deploy OpenClaw On Agencii
 
@@ -53,9 +53,9 @@ Before you start, make sure you have:
     In Agencii, connect your GitHub account, then select the repository you created from the template.
   </Step>
 
-  <Step title="Add model credentials">
-    If you use API-key based models, add provider API keys in the Agencii key modal.
-    If you use the default Codex OAuth model, you will run one shell command in the next step.
+  <Step title="Add provider keys in Agencii">
+    Add provider API keys in the Agencii key modal.
+    If keys are missing, OpenClaw cannot call model providers.
 
     Common keys:
     - `OPENAI_API_KEY`
@@ -67,38 +67,12 @@ Before you start, make sure you have:
     Agencii builds and runs the repository automatically.
   </Step>
 
-  <Step title="Run one-time OpenClaw OAuth bootstrap">
-    The starter template defaults to `openai-codex/gpt-5.3-codex`, which needs one setup command in your deployment shell:
-
-    ```bash
-    openclaw models auth login --provider openai-codex
-    ```
-
-    Complete sign-in in your browser, then paste the redirect URL/code back into the shell prompt.
-  </Step>
-
   <Step title="Run your first chat">
     Open your deployed agency chat and send a simple test prompt.
 
     Example: `What can you automate for me today?`
   </Step>
 </Steps>
-
-## One-Time OAuth Bootstrap (Operator Step)
-
-This command uses the OpenClaw CLI in your deployment shell. Your end users do not run CLI commands.
-
-```bash
-openclaw models auth login --provider openai-codex
-```
-
-After login, OpenClaw writes the auth profile into persistent state under `/mnt/openclaw/state`.
-You can verify with:
-
-```bash
-cat /mnt/openclaw/state/agents/main/agent/auth-profiles.json
-openclaw models status
-```
 
 ## Run OpenClaw Locally (Agency + FastAPI)
 
@@ -109,8 +83,8 @@ If you want to test locally before deploying, use the same starter template:
 
 1. Clone: [agency-ai-solutions/openclaw-starter-template](https://github.com/agency-ai-solutions/openclaw-starter-template)
 2. Create `.env` from `.env.template`
-3. Add your model credentials and app token:
-   - `OPENAI_API_KEY=...` (or another provider key), or run Codex OAuth bootstrap after startup
+3. Add your provider key and app token:
+   - `OPENAI_API_KEY=...` (or another provider key)
    - `APP_TOKEN=local-openclaw-token`
    - Ensure Node `>=22.12.0` is available
    - If you have multiple Node installs, set `OPENCLAW_NODE_BIN` to a compatible binary (for example `/opt/homebrew/bin/node`)
@@ -206,7 +180,6 @@ Add provider API keys in the Agencii key modal. Do not collect raw API keys in o
 <Warning>
 Use one OpenClaw deployment per trusted team or workspace.
 Provider keys you add in Agencii are injected into the running sandbox so OpenClaw can call model providers.
-OAuth auth profiles are also stored in that same persistent runtime (`/mnt/openclaw/state`).
 Follow [OpenClaw Security](https://docs.openclaw.ai/gateway/security) before exposing access.
 </Warning>
 

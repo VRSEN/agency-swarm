@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import gzip
 import json
+import os
+import stat
 import subprocess
 from contextlib import asynccontextmanager
 from dataclasses import replace
@@ -40,7 +42,7 @@ def _build_openclaw_config(tmp_path: Path) -> OpenClawIntegrationConfig:
         startup_timeout_seconds=5.0,
         proxy_timeout_seconds=30.0,
         default_model="openclaw:main",
-        provider_model="openai/gpt-5-mini",
+        provider_model="openai/gpt-5.2",
         gateway_command="openclaw gateway",
     )
 
@@ -168,7 +170,7 @@ def test_openclaw_proxy_filters_request_keys_and_normalizes_payload(
     }
     assert "include" not in forwarded
     assert "parallel_tool_calls" not in forwarded
-    assert forwarded["model"] == "openai/gpt-5-mini"
+    assert forwarded["model"] == "openai/gpt-5.2"
     assert forwarded["input"] == [
         {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hello"}]}
     ]
@@ -468,12 +470,15 @@ def test_openclaw_ensure_layout_creates_config_parent_dir(tmp_path: Path) -> Non
 
     assert custom_config_path.exists()
     assert custom_config_path.parent.is_dir()
+    if os.name != "nt":
+        assert stat.S_IMODE(custom_config_path.stat().st_mode) == 0o600
 
 
 def test_openclaw_runtime_uses_lifespan_hooks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     app = FastAPI()
     runtime = attach_openclaw_to_fastapi(app, replace(_build_openclaw_config(tmp_path), autostart=True))
     calls = {"start": 0, "stop": 0}
+    to_thread_calls: list[str] = []
 
     def _start() -> None:
         calls["start"] += 1
@@ -481,13 +486,19 @@ def test_openclaw_runtime_uses_lifespan_hooks(tmp_path: Path, monkeypatch: pytes
     def _stop() -> None:
         calls["stop"] += 1
 
+    async def _to_thread(func: Any, *args: Any, **kwargs: Any) -> Any:
+        to_thread_calls.append(func.__name__)
+        return func(*args, **kwargs)
+
     monkeypatch.setattr(runtime, "start", _start)
     monkeypatch.setattr(runtime, "stop", _stop)
+    monkeypatch.setattr(openclaw_mod.asyncio, "to_thread", _to_thread)
 
     with TestClient(app):
         assert calls == {"start": 1, "stop": 0}
 
     assert calls == {"start": 1, "stop": 1}
+    assert to_thread_calls == ["_start", "_stop"]
 
 
 def test_openclaw_lifespan_preserves_existing_state(tmp_path: Path) -> None:
@@ -516,7 +527,7 @@ def test_openclaw_port_probe_supports_ipv6(monkeypatch: pytest.MonkeyPatch, tmp_
         def __init__(self, family: int, _socktype: int, _proto: int) -> None:
             self.family = family
 
-        def __enter__(self) -> "_FakeSocket":
+        def __enter__(self) -> _FakeSocket:
             return self
 
         def __exit__(self, exc_type, exc, tb) -> None:
@@ -904,7 +915,7 @@ def test_openclaw_ensure_layout_normalizes_existing_non_dict_config_sections(tmp
     saved = json.loads(config.config_path.read_text(encoding="utf-8"))
     assert saved["gateway"]["auth"]["mode"] == "token"
     assert saved["gateway"]["http"]["endpoints"]["responses"]["enabled"] is True
-    assert saved["agents"]["defaults"]["model"] == {"primary": "openai/gpt-5-mini"}
+    assert saved["agents"]["defaults"]["model"] == {"primary": "openai/gpt-5.2"}
 
 
 def test_openclaw_resolve_gateway_command_errors_when_binary_is_unavailable(
@@ -998,6 +1009,46 @@ def test_openclaw_stop_tolerates_second_wait_timeout_after_sigkill(
     log_handle = config.log_path.open("ab")
     runtime._log_handle = log_handle
     monkeypatch.setattr("agency_swarm.integrations.openclaw.os.killpg", lambda pid, sig: process.kill())
+
+    runtime.stop()
+
+    assert runtime._process is None
+    assert runtime._log_handle is None
+    assert log_handle.closed is True
+
+
+def test_openclaw_stop_swallows_unexpected_process_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config = _build_openclaw_config(tmp_path)
+    runtime = OpenClawRuntime(config)
+
+    class _RaceProcess:
+        pid = 7000
+
+        def poll(self) -> int | None:
+            return None
+
+        def terminate(self) -> None:
+            return None
+
+        def kill(self) -> None:
+            return None
+
+        def wait(self, timeout: float | None = None) -> int:
+            return 0
+
+    process = _RaceProcess()
+    runtime._process = process  # type: ignore[assignment]
+    config.log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_handle = config.log_path.open("ab")
+    runtime._log_handle = log_handle
+
+    def _killpg_raise(_pid: int, _sig: int) -> None:
+        raise ProcessLookupError("process already exited")
+
+    monkeypatch.setattr("agency_swarm.integrations.openclaw.os.killpg", _killpg_raise)
 
     runtime.stop()
 
