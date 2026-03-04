@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import gzip
-import inspect
 import json
 import subprocess
 from dataclasses import replace
@@ -470,19 +469,24 @@ def test_openclaw_ensure_layout_creates_config_parent_dir(tmp_path: Path) -> Non
     assert custom_config_path.parent.is_dir()
 
 
-def test_openclaw_startup_shutdown_handlers_are_sync_functions(tmp_path: Path) -> None:
+def test_openclaw_runtime_uses_lifespan_hooks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     app = FastAPI()
-    attach_openclaw_to_fastapi(app, _build_openclaw_config(tmp_path))
+    runtime = attach_openclaw_to_fastapi(app, replace(_build_openclaw_config(tmp_path), autostart=True))
+    calls = {"start": 0, "stop": 0}
 
-    startup_handlers = [handler for handler in app.router.on_startup if handler.__name__ == "_startup_openclaw_runtime"]
-    shutdown_handlers = [
-        handler for handler in app.router.on_shutdown if handler.__name__ == "_shutdown_openclaw_runtime"
-    ]
+    def _start() -> None:
+        calls["start"] += 1
 
-    assert startup_handlers
-    assert shutdown_handlers
-    assert not inspect.iscoroutinefunction(startup_handlers[0])
-    assert not inspect.iscoroutinefunction(shutdown_handlers[0])
+    def _stop() -> None:
+        calls["stop"] += 1
+
+    monkeypatch.setattr(runtime, "start", _start)
+    monkeypatch.setattr(runtime, "stop", _stop)
+
+    with TestClient(app):
+        assert calls == {"start": 1, "stop": 0}
+
+    assert calls == {"start": 1, "stop": 1}
 
 
 def test_openclaw_gateway_command_port_detection_supports_equals_syntax(tmp_path: Path) -> None:

@@ -227,4 +227,5 @@ def run_fastapi(
 
     logger.info(f"Starting FastAPI {'AG-UI ' if enable_agui else ''}server at http://{host}:{port}")
 
-    uvicorn.run(app, host=host, port=port)
+    # Use the non-deprecated websocket stack to avoid legacy websockets warnings.
+    uvicorn.run(app, host=host, port=port, ws="websockets-sansio")

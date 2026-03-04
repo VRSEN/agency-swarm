@@ -12,6 +12,7 @@ import socket
 import subprocess
 import time
 from collections.abc import AsyncIterator, Callable, Mapping
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -863,16 +864,21 @@ def attach_openclaw_to_fastapi(
     app.state.openclaw_runtime = runtime
     app.state.openclaw_config = resolved_config
 
-    @app.on_event("startup")
-    def _startup_openclaw_runtime() -> None:
-        if resolved_config.autostart:
-            runtime.start()
-        else:
-            logger.info("OpenClaw runtime autostart disabled")
+    existing_lifespan = app.router.lifespan_context
 
-    @app.on_event("shutdown")
-    def _shutdown_openclaw_runtime() -> None:
-        runtime.stop()
+    @asynccontextmanager
+    async def _openclaw_lifespan(inner_app: FastAPI) -> AsyncIterator[None]:
+        async with existing_lifespan(inner_app):
+            if resolved_config.autostart:
+                runtime.start()
+            else:
+                logger.info("OpenClaw runtime autostart disabled")
+            try:
+                yield
+            finally:
+                runtime.stop()
+
+    app.router.lifespan_context = _openclaw_lifespan
 
     return runtime
 
