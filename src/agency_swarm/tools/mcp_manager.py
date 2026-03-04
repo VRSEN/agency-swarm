@@ -694,6 +694,9 @@ async def attach_persistent_mcp_servers(agency: Any) -> None:
         cache_dir = Path(oauth_token_path).expanduser()
     oauth_user_id = _get_oauth_user_id() if _get_oauth_user_id is not None else None
     for agent in agents_map.values():
+        ensure_mcp_tools = getattr(agent, "ensure_mcp_tools", None)
+        if callable(ensure_mcp_tools):
+            ensure_mcp_tools()
         await _authorize_hosted_mcp_tools(agent, cache_dir=cache_dir)
         servers = getattr(agent, "mcp_servers", None)
         if not isinstance(servers, list):

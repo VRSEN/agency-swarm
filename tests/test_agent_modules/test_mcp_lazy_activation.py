@@ -1,7 +1,7 @@
 import pytest
 
 from agency_swarm import Agent
-from agency_swarm.mcp.oauth import MCPServerOAuth, OAuthRuntimeContext, set_oauth_runtime_context
+from agency_swarm.mcp.oauth import MCPServerOAuth
 
 
 class _FakeNonOAuthServer:
@@ -18,7 +18,7 @@ def _make_oauth_agent(*servers: object) -> Agent:
     )
 
 
-def test_ensure_mcp_tools_defers_only_oauth_servers_in_saas_stream(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ensure_mcp_tools_defers_oauth_servers(monkeypatch: pytest.MonkeyPatch) -> None:
     convert_calls: list[list[str]] = []
 
     def _fake_convert(agent: Agent) -> None:
@@ -27,15 +27,11 @@ def test_ensure_mcp_tools_defers_only_oauth_servers_in_saas_stream(monkeypatch: 
         agent.mcp_servers.clear()
 
     monkeypatch.setattr("agency_swarm.agent.core.convert_mcp_servers_to_tools", _fake_convert)
-    set_oauth_runtime_context(OAuthRuntimeContext(mode="saas_stream", user_id="user-1", timeout=600.0))
-    try:
-        agent = _make_oauth_agent(
-            MCPServerOAuth(url="https://example.com/mcp", name="github"),
-            _FakeNonOAuthServer("public-docs"),
-        )
-        agent.ensure_mcp_tools()
-    finally:
-        set_oauth_runtime_context(None)
+    agent = _make_oauth_agent(
+        MCPServerOAuth(url="https://example.com/mcp", name="github"),
+        _FakeNonOAuthServer("public-docs"),
+    )
+    agent.ensure_mcp_tools()
 
     assert convert_calls == [["public-docs"]]
     assert any(getattr(tool, "name", None) == "authenticate_mcp_server" for tool in agent.tools)
@@ -53,15 +49,11 @@ async def test_authenticate_mcp_server_triggers_selected_conversion(monkeypatch:
         agent.mcp_servers.clear()
 
     monkeypatch.setattr("agency_swarm.agent.core.convert_mcp_servers_to_tools", _fake_convert)
-    set_oauth_runtime_context(OAuthRuntimeContext(mode="saas_stream", user_id="user-1", timeout=600.0))
-    try:
-        agent = _make_oauth_agent(
-            MCPServerOAuth(url="https://example.com/github", name="github"),
-            MCPServerOAuth(url="https://example.com/notion", name="notion"),
-        )
-        agent.ensure_mcp_tools()
-    finally:
-        set_oauth_runtime_context(None)
+    agent = _make_oauth_agent(
+        MCPServerOAuth(url="https://example.com/github", name="github"),
+        MCPServerOAuth(url="https://example.com/notion", name="notion"),
+    )
+    agent.ensure_mcp_tools()
 
     assert convert_calls == []
     activation_tool = next(tool for tool in agent.tools if getattr(tool, "name", "") == "authenticate_mcp_server")
@@ -82,19 +74,15 @@ async def test_authenticate_mcp_server_triggers_selected_conversion(monkeypatch:
 @pytest.mark.asyncio
 async def test_authenticate_mcp_server_rejects_unknown_name(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("agency_swarm.agent.core.convert_mcp_servers_to_tools", lambda _agent: None)
-    set_oauth_runtime_context(OAuthRuntimeContext(mode="saas_stream", user_id="user-1", timeout=600.0))
-    try:
-        agent = _make_oauth_agent(MCPServerOAuth(url="https://example.com/mcp", name="github"))
-        agent.ensure_mcp_tools()
-    finally:
-        set_oauth_runtime_context(None)
+    agent = _make_oauth_agent(MCPServerOAuth(url="https://example.com/mcp", name="github"))
+    agent.ensure_mcp_tools()
 
     activation_tool = next(tool for tool in agent.tools if getattr(tool, "name", "") == "authenticate_mcp_server")
     result = await activation_tool.on_invoke_tool(None, '{"server_name":"notion"}')
     assert "Unknown MCP server 'notion'" in result
 
 
-def test_ensure_mcp_tools_eager_outside_saas_stream(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ensure_mcp_tools_keeps_non_oauth_servers_eager(monkeypatch: pytest.MonkeyPatch) -> None:
     convert_calls = 0
 
     def _fake_convert(_agent: Agent) -> None:
@@ -102,7 +90,7 @@ def test_ensure_mcp_tools_eager_outside_saas_stream(monkeypatch: pytest.MonkeyPa
         convert_calls += 1
 
     monkeypatch.setattr("agency_swarm.agent.core.convert_mcp_servers_to_tools", _fake_convert)
-    agent = _make_oauth_agent()
+    agent = _make_oauth_agent(_FakeNonOAuthServer("public-docs"))
     agent.ensure_mcp_tools()
 
     assert convert_calls == 1

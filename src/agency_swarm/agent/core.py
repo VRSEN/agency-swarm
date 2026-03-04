@@ -378,15 +378,11 @@ class Agent(BaseAgent[MasterContext]):
         self._mcp_tools_initialized = True
 
     def _should_defer_mcp_tool_initialization(self) -> bool:
-        """Return True when OAuth MCP discovery should be model-triggered in SaaS streaming mode."""
+        """Return True when OAuth MCP discovery should be model-triggered."""
         try:
-            from agency_swarm.mcp.oauth import MCPServerOAuth, get_oauth_runtime_context
+            from agency_swarm.mcp.oauth import MCPServerOAuth
             from agency_swarm.mcp.oauth_client import MCPServerOAuthClient
         except ImportError:
-            return False
-
-        runtime_context = get_oauth_runtime_context()
-        if runtime_context is None or runtime_context.mode != "saas_stream":
             return False
 
         servers = getattr(self, "mcp_servers", None)
