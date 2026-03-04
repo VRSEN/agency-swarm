@@ -19,9 +19,7 @@ Begin each task after reviewing this readiness checklist:
 - Prime yourself with enough context to act safely—read, trace, and analyze the relevant paths before changes, and do not proceed unless you can explain the change in your own words.
 - Use fresh tool outputs before acting; do not rely on memory.
 - Mandatory start state: if VRSEN `origin/main` is reachable, run `git fetch origin` and rebase your working branch onto `origin/main` (or create a fresh branch from `origin/main`) before starting analysis, edits, or tests; if the remote is unavailable, proceed and state that you are assuming the branch is already synced.
-- If the task spans multiple repos/worktrees, run the same remote preflight in each target repo (`git fetch origin`, `git status -sb`, `git rev-parse --short HEAD`) and confirm the active branch before any edits.
-- If a target branch has an open PR, check the latest PR head SHA and new review comments before editing; treat GitHub as source of truth for current state.
-- Complete one change at a time; stash unrelated work before starting another.
+- Complete one change at a time; do not stash unrelated work unless the user explicitly asks.
 - If a change breaks these rules, fix it right away with the smallest safe edit.
 - Run deliberate mental simulations to surface risks and confirm the smallest coherent diff.
 - Favor repository tooling (`make`, `uv run`, and the plan/todo tool) over ad-hoc paths; escalate tooling or permission limits when blocked.
@@ -33,8 +31,6 @@ Begin each task after reviewing this readiness checklist:
 
 ## Continuous Work Rule
 Before responding to the user and when you consider your task done, check whether the outstanding-task or todo list is empty. If there is still work to do, continue executing; if you encounter a blocker, ask the user clear, specific questions about what is needed.
-- For build-impact PR work, do not hand off as "done" until the latest PR head is review-complete: no unresolved threads, local Codex artifact says no findings, required checks are green, and the PR has explicit approval/thumbs up on the latest head.
-- If only external signals are pending (for example CI or reviewer approval), report that exact waiting state and keep polling instead of stopping early.
 
 ## Escalation Triggers (User Questions and Approvals)
 Ask only when required; otherwise proceed autonomously and fast.
@@ -47,7 +43,6 @@ Ask only when required; otherwise proceed autonomously and fast.
   - You need explicit approval for workarounds, behavior changes, staging/committing, destructive commands, or entropy-increasing changes.
   - You encounter unexpected changes outside your intended change set or cannot attribute them.
   - Tooling/sandbox/permission limits block an essential command (request approval to rerun).
-  - You discover you skipped repo/PR preflight or worked in the wrong repo/branch; stop and escalate with the correction plan before continuing.
 - Before any potentially destructive command (checkout, stash, commit, push, reset, rebase, force operations, file deletions, mass edits), explain the impact and obtain explicit approval.
 - Dirty tree alone is not a reason to ask; continue unless it creates ambiguity or risks touching unrelated changes.
 - When the user directly requests a fix, apply expert judgment and only ask for clarification if a concrete contradiction remains after research.
@@ -94,7 +89,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 ## Self-Improvement (High Priority)
 - When you receive user feedback, make a mistake, or spot a recurring pattern, add a generalized, minimal rule to AGENTS.md and revise relevant lines before any other work.
 - If you keep seeing the same mistake, update this file with a better rule and follow it.
-- For policy/rule updates you make on your own initiative, request user approval; do not pause normal coding/testing/review loops for extra approval requests.
+- For any updates you make on your own initiative, request approval from the user after making the changes.
 
 ### Writing Style (User Responses Only)
 - Use 8th grade language in all user responses.
@@ -295,17 +290,23 @@ Strictness
 - If pre-commit hooks modify files (it means you forgot to run mandatory `make format`), stage the hook-modified files and re-run the commit with the same message.
 - When committing, base the message on the staged diff and use a title plus bullet body (e.g., `git commit -m "type: summary" -m "- bullet"`).
 - After committing, double-check what you committed with `git show --name-only -1`.
+- Mandatory rebase workflow for open PR branches (critical):
+  - Run `git fetch origin`.
+  - Run `gh pr view --json number,url,baseRefName,headRefName,mergeable,mergeStateStatus` and verify PR merge/conflict status before rebasing.
+  - Rebase with `GIT_EDITOR=true git rebase origin/main`.
+  - For every conflicted file, read both versions fully (`git show REBASE_HEAD:<path>` and `git show origin/main:<path>`) before resolving.
+  - After conflict resolution, verify each conflicted file with focused tests before continuing.
+- After any push to a PR branch, monitor GitHub runs with `gh run list --branch <branch> --limit 10` and inspect failures with `gh run view <run-id> --log`.
 
 ### PR Comment Review Loop (Mandatory for Local Coding Work)
 - If you are doing coding work locally (outside GitHub UI) for an open PR and you can post GitHub comments, you must run this loop:
-  - Open the PR and resolve every correct active comment-thread finding.
-  - Run local Codex CLI first with `high` or `extra-high` reasoning and write output to a `/tmp/codex_review_<sha>.txt` artifact.
-  - Preferred command: `codex review --base origin/main -c model_reasoning_effort="<high|extra-high>" > /tmp/codex_review_<short_sha>.txt 2>&1`.
-  - Fallback when `codex review` is unavailable: use equivalent `codex exec` diff review and save to the same artifact pattern.
-  - Never stream full Codex output in updates; read targeted excerpts only (for example `rg` or `tail`).
-  - Trigger `@codex review` only when local Codex CLI is unavailable, explicitly requested, or merge-gate evidence needs PR-bound Codex.
-  - Repeat until the latest PR head has: zero unresolved threads, local Codex no findings, required checks green, and explicit PR approval/thumbs up.
-  - Only after that state is reached, hand off to the user.
+  - Open the PR and review every active comment thread; resolve every correct finding before finalizing work.
+  - Run local Codex CLI review against `origin/main` (`codex review --base origin/main`).
+  - Reruns are mandatory: if the local review reports findings, fix them and rerun until the verdict is clean (`no issues found` or equivalent).
+  - Post exactly `@codex review` on the PR.
+  - Wait about 10 minutes.
+  - Check PR comments no more than once per minute.
+  - Address review feedback and repeat until there are no unresolved Codex findings.
 - Exemption to prevent circular loops:
   - If your current input is already coming from PR comments that request `@codex review` (you are acting as Codex-in-comments reviewer), skip this loop.
 
