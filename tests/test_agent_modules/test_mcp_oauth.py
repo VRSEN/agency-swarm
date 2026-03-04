@@ -298,7 +298,7 @@ class TestOAuthHandlers:
         callback_url = "http://localhost:8000/auth/callback?code=test_code&state=test_state"
         monkeypatch.setattr("builtins.input", lambda _: callback_url)
 
-        code, state = await default_callback_handler()
+        code, state = await default_callback_handler("https://example.com/auth/callback")
 
         assert code == "test_code"
         assert state == "test_state"
@@ -309,7 +309,7 @@ class TestOAuthHandlers:
         monkeypatch.setattr("builtins.input", lambda _: callback_url)
 
         with pytest.raises(ValueError, match="OAuth error: access_denied"):
-            await default_callback_handler()
+            await default_callback_handler("https://example.com/auth/callback")
 
     async def test_callback_handler_handles_missing_code(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """default_callback_handler raises ValueError when code is missing."""
@@ -317,7 +317,7 @@ class TestOAuthHandlers:
         monkeypatch.setattr("builtins.input", lambda _: callback_url)
 
         with pytest.raises(ValueError, match="No authorization code found"):
-            await default_callback_handler()
+            await default_callback_handler("https://example.com/auth/callback")
 
     async def test_callback_handler_non_interactive_prompt_raises_runtime_error(
         self, monkeypatch: pytest.MonkeyPatch
@@ -334,18 +334,16 @@ class TestOAuthHandlers:
         mock_listen: Any,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """default_callback_handler returns immediately when local listener captures callback."""
-
-        async def fake_prompt() -> tuple[str, str | None]:
-            # Sleep so the server task finishes first; the task will be cancelled.
-            await asyncio.sleep(0.1)
-            return "manual_code", "manual_state"
+        """default_callback_handler should not prompt when local listener succeeds."""
 
         async def fake_listen(_: str, timeout: float = 300.0) -> tuple[str, str | None]:
             return "server_code", "server_state"
 
+        async def fail_prompt() -> tuple[str, str | None]:
+            raise AssertionError("manual prompt should not run when local callback capture succeeds")
+
         mock_listen.side_effect = fake_listen
-        monkeypatch.setattr("agency_swarm.mcp.oauth._prompt_for_callback_url", fake_prompt)
+        monkeypatch.setattr("agency_swarm.mcp.oauth._prompt_for_callback_url", fail_prompt)
 
         code, state = await default_callback_handler("http://localhost:8000/auth/callback")
 
@@ -370,6 +368,25 @@ class TestOAuthHandlers:
         monkeypatch.setattr("agency_swarm.mcp.oauth._prompt_for_callback_url", fake_prompt)
 
         code, state = await default_callback_handler("http://localhost:9999/callback")
+
+        assert (code, state) == ("manual_code", "manual_state")
+
+    @patch("agency_swarm.mcp.oauth._listen_for_callback_once")
+    async def test_callback_handler_falls_back_when_listener_times_out(
+        self,
+        mock_listen: Any,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """default_callback_handler falls back to manual entry on listener timeout."""
+
+        mock_listen.side_effect = TimeoutError()
+
+        async def fake_prompt() -> tuple[str, str | None]:
+            return "manual_code", "manual_state"
+
+        monkeypatch.setattr("agency_swarm.mcp.oauth._prompt_for_callback_url", fake_prompt)
+
+        code, state = await default_callback_handler("http://localhost:8000/auth/callback")
 
         assert (code, state) == ("manual_code", "manual_state")
 

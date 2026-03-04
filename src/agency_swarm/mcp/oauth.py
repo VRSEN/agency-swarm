@@ -571,53 +571,24 @@ async def default_callback_handler(redirect_uri: str | None = None, timeout: flo
         Tuple of (authorization_code, state)
     """
     redirect_target = redirect_uri or "http://localhost:8000/auth/callback"
-    tasks: list[asyncio.Task[tuple[str, str | None]]] = []
-    server_task: asyncio.Task[tuple[str, str | None]] | None = None
 
     if _can_use_local_callback_server(redirect_target):
         try:
-            server_task = asyncio.create_task(_listen_for_callback_once(redirect_target, timeout=timeout))
-            tasks.append(server_task)
-        except OSError:
-            logger.warning("Local callback server unavailable; falling back to manual entry.")
-
-    prompt_task = asyncio.create_task(_prompt_for_callback_url())
-    tasks.append(prompt_task)
-
-    pending: set[asyncio.Task[tuple[str, str | None]]] = set(tasks)
+            return await _listen_for_callback_once(redirect_target, timeout=timeout)
+        except OSError as exc:
+            logger.warning("Local callback server unavailable (%s); falling back to manual entry.", exc)
+        except TimeoutError:
+            logger.warning("Timed out waiting for local OAuth callback; falling back to manual entry.")
 
     try:
-        while pending:
-            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
-            for finished in done:
-                try:
-                    result = finished.result()
-                except EOFError as exc:
-                    # Non-interactive environments (e.g. background workers) cannot
-                    # satisfy the fallback stdin prompt.
-                    raise RuntimeError(
-                        "OAuth callback input is unavailable in non-interactive mode. "
-                        "Use FastAPI OAuth handlers or provide a callback URL."
-                    ) from exc
-                except OSError as exc:
-                    if server_task is not None and finished is server_task:
-                        logger.warning("Local callback server failed (%s); falling back to manual entry.", exc)
-                        continue
-                    logger.exception("OAuth callback handler error")
-                    raise
-                except Exception:
-                    logger.exception("OAuth callback handler error")
-                    raise
-                else:
-                    return result
-    finally:
-        for task in tasks:
-            if not task.done():
-                task.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await task
-
-    raise RuntimeError("OAuth callback failed: no tasks completed successfully")
+        return await _prompt_for_callback_url()
+    except EOFError as exc:
+        # Non-interactive environments (e.g. background workers) cannot
+        # satisfy the fallback stdin prompt.
+        raise RuntimeError(
+            "OAuth callback input is unavailable in non-interactive mode. "
+            "Use FastAPI OAuth handlers or provide a callback URL."
+        ) from exc
 
 
 async def create_oauth_provider(
