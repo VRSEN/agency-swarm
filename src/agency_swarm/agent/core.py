@@ -13,6 +13,7 @@ from agents import (
     Tool,
     TResponseInputItem,
     WebSearchTool,
+    function_tool,
 )
 from openai import AsyncOpenAI, OpenAI
 from pydantic import StringConstraints, TypeAdapter, ValidationError
@@ -218,6 +219,10 @@ class Agent(BaseAgent[MasterContext]):
         self._conversation_starters_cache = {}
         self._conversation_starters_fingerprint = None
         self._conversation_starters_warmup_started = False
+        self._mcp_tools_initialized = False
+        self._mcp_tools_deferred = False
+        self._deferred_mcp_servers: dict[str, Any] = {}
+        self._oauth_mcp_servers: dict[str, Any] = {}
 
         # Initialize execution handler
         self._execution = Execution(self)
@@ -254,12 +259,9 @@ class Agent(BaseAgent[MasterContext]):
         for tool in self.tools:
             _attach_one_call_guard(tool, self)
 
-        # Convert MCP servers to tools and add them to the agent
-        convert_mcp_servers_to_tools(self)
-        if self.include_web_search_sources and any(isinstance(tool, WebSearchTool) for tool in self.tools):
-            existing_includes = list(self.model_settings.response_include or [])
-            if _WEB_SEARCH_SOURCES_INCLUDE not in existing_includes:
-                self.model_settings.response_include = [*existing_includes, _WEB_SEARCH_SOURCES_INCLUDE]
+        self._ensure_web_search_sources_include()
+
+        # MCP servers are converted lazily on first use to avoid interactive auth at init.
 
         # Refresh after MCP conversion so fingerprint includes MCP-converted tools
         self.refresh_conversation_starters_cache()
@@ -340,10 +342,7 @@ class Agent(BaseAgent[MasterContext]):
             TypeError: If the provided `tool` is not an instance of `agents.Tool`.
         """
         add_tool(self, tool)
-        if self.include_web_search_sources and isinstance(tool, WebSearchTool):
-            existing_includes = list(self.model_settings.response_include or [])
-            if _WEB_SEARCH_SOURCES_INCLUDE not in existing_includes:
-                self.model_settings.response_include = [*existing_includes, _WEB_SEARCH_SOURCES_INCLUDE]
+        self._ensure_web_search_sources_include()
 
     def _load_tools_from_folder(self) -> None:
         """Load tools defined in ``tools_folder`` and add them to the agent.
@@ -356,6 +355,127 @@ class Agent(BaseAgent[MasterContext]):
     def _parse_schemas(self):
         """Parse OpenAPI schemas from the schemas folder and create tools."""
         parse_schemas(self)
+
+    def ensure_mcp_tools(self) -> None:
+        """Lazily convert MCP servers to tools on first use."""
+        if self._mcp_tools_initialized:
+            return
+        if self._should_defer_mcp_tool_initialization():
+            deferred_servers, eager_servers = self._split_deferred_oauth_mcp_servers()
+            if deferred_servers:
+                self._oauth_mcp_servers = deferred_servers
+                self._deferred_mcp_servers = dict(deferred_servers)
+                self.mcp_servers = eager_servers
+                if eager_servers:
+                    convert_mcp_servers_to_tools(self)
+                    self._ensure_web_search_sources_include()
+                self._install_mcp_authentication_tool(sorted(self._oauth_mcp_servers))
+                self._mcp_tools_initialized = True
+                self._mcp_tools_deferred = True
+                return
+        convert_mcp_servers_to_tools(self)
+        self._ensure_web_search_sources_include()
+        self._mcp_tools_initialized = True
+
+    def _should_defer_mcp_tool_initialization(self) -> bool:
+        """Return True when OAuth MCP discovery should be model-triggered."""
+        try:
+            from agency_swarm.mcp.oauth import MCPServerOAuth
+            from agency_swarm.mcp.oauth_client import MCPServerOAuthClient
+        except ImportError:
+            return False
+
+        servers = getattr(self, "mcp_servers", None)
+        if not isinstance(servers, list) or len(servers) == 0:
+            return False
+
+        for server in servers:
+            actual = getattr(server, "_server", server)
+            if isinstance(actual, MCPServerOAuth) or isinstance(actual, MCPServerOAuthClient):
+                return True
+        return False
+
+    def _split_deferred_oauth_mcp_servers(self) -> tuple[dict[str, Any], list[Any]]:
+        """Split MCP servers into deferred OAuth servers and eager non-OAuth servers."""
+        try:
+            from agency_swarm.mcp.oauth import MCPServerOAuth
+            from agency_swarm.mcp.oauth_client import MCPServerOAuthClient
+        except ImportError:
+            return {}, list(self.mcp_servers)
+
+        deferred: dict[str, Any] = {}
+        eager: list[Any] = []
+        for server in list(self.mcp_servers):
+            actual = getattr(server, "_server", server)
+            name = getattr(server, "name", None)
+            if (
+                isinstance(name, str)
+                and name != ""
+                and (isinstance(actual, MCPServerOAuth) or isinstance(actual, MCPServerOAuthClient))
+            ):
+                deferred[name] = server
+            else:
+                eager.append(server)
+        return deferred, eager
+
+    def _install_mcp_authentication_tool(self, server_names: list[str]) -> None:
+        """Add a tool that authenticates and enables one deferred OAuth MCP server."""
+        existing_names = {getattr(tool, "name", "") for tool in self.tools}
+        tool_name = "authenticate_mcp_server"
+        if tool_name in existing_names:
+            return
+
+        @function_tool(name_override=tool_name)
+        def _authenticate_mcp_server(server_name: str) -> str:
+            """Authenticate one MCP server and enable its tools.
+
+            Call this again for the same server if MCP tool calls later return authentication or authorization errors.
+            """
+            selected = self._oauth_mcp_servers.get(server_name)
+            if selected is None:
+                available = ", ".join(server_names)
+                return f"Unknown MCP server '{server_name}'. Available servers: {available}"
+
+            original_servers = list(self.mcp_servers)
+            try:
+                self.mcp_servers = [selected]
+                convert_mcp_servers_to_tools(self)
+            except Exception as exc:
+                self.mcp_servers = original_servers
+                return f"Failed to authenticate MCP server '{server_name}': {exc}"
+            finally:
+                self.mcp_servers = original_servers
+
+            was_deferred = server_name in self._deferred_mcp_servers
+            self._deferred_mcp_servers.pop(server_name, None)
+            self._mcp_tools_deferred = len(self._deferred_mcp_servers) > 0
+            self._ensure_web_search_sources_include()
+            if was_deferred:
+                if self._deferred_mcp_servers:
+                    remaining = ", ".join(sorted(self._deferred_mcp_servers))
+                    return (
+                        f"MCP server '{server_name}' is authenticated and its tools are enabled. "
+                        f"Remaining deferred servers: {remaining}"
+                    )
+                return f"MCP server '{server_name}' is authenticated and its tools are enabled."
+            return f"MCP server '{server_name}' re-authentication attempt completed. Retry the MCP tool call."
+
+        schema = _authenticate_mcp_server.params_json_schema
+        server_name_schema = schema.get("properties", {}).get("server_name")
+        if isinstance(server_name_schema, dict):
+            server_name_schema["enum"] = server_names
+
+        self.add_tool(_authenticate_mcp_server)
+
+    def _ensure_web_search_sources_include(self) -> None:
+        """Ensure web search sources are included when a WebSearchTool is present."""
+        if not self.include_web_search_sources:
+            return
+        if not any(isinstance(tool, WebSearchTool) for tool in self.tools):
+            return
+        existing_includes = list(self.model_settings.response_include or [])
+        if _WEB_SEARCH_SOURCES_INCLUDE not in existing_includes:
+            self.model_settings.response_include = [*existing_includes, _WEB_SEARCH_SOURCES_INCLUDE]
 
     # --- File Handling ---
     def upload_file(self, file_path: str, include_in_vector_store: bool = True) -> str:
@@ -404,6 +524,9 @@ class Agent(BaseAgent[MasterContext]):
         if agency_context is None:
             agency_context = self._create_minimal_context()
 
+        # Lazily attach MCP tools on demand
+        self.ensure_mcp_tools()
+
         return await self._execution.get_response(
             message=message,
             sender_name=sender_name,
@@ -449,6 +572,9 @@ class Agent(BaseAgent[MasterContext]):
         # If no agency context provided, create a minimal one for standalone usage
         if agency_context is None:
             agency_context = self._create_minimal_context()
+
+        # Lazily attach MCP tools on demand
+        self.ensure_mcp_tools()
 
         return self._execution.get_response_stream(
             message=message,
