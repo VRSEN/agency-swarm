@@ -103,6 +103,7 @@ def run_fastapi(
     normalized_allowed_dirs = allowed_local_file_dirs
 
     app = FastAPI(servers=[{"url": base_url}])
+    app.state.verify_token = verify_token
 
     # Setup logging if enabled
     if enable_logging:
@@ -226,4 +227,25 @@ def run_fastapi(
 
     logger.info(f"Starting FastAPI {'AG-UI ' if enable_agui else ''}server at http://{host}:{port}")
 
-    uvicorn.run(app, host=host, port=port)
+    # Prefer the non-deprecated websocket stack; gracefully fall back when
+    # running against older uvicorn versions that do not support this option.
+    importer_module = getattr(uvicorn, "importer", None)
+    import_from_string_error = getattr(importer_module, "ImportFromStringError", None)
+    try:
+        uvicorn.run(app, host=host, port=port, ws="websockets-sansio")
+    except TypeError as exc:
+        if "ws" not in str(exc):
+            raise
+        logger.warning("Uvicorn does not support ws='websockets-sansio'; falling back to default websocket stack")
+        uvicorn.run(app, host=host, port=port)
+    except ValueError as exc:
+        message = str(exc).lower()
+        if "websocket" not in message and "websockets-sansio" not in message:
+            raise
+        logger.warning("Uvicorn rejected ws='websockets-sansio'; falling back to default websocket stack")
+        uvicorn.run(app, host=host, port=port)
+    except Exception as exc:
+        if import_from_string_error is None or not isinstance(exc, import_from_string_error):
+            raise
+        logger.warning("Uvicorn import rejected ws='websockets-sansio'; falling back to default websocket stack")
+        uvicorn.run(app, host=host, port=port)

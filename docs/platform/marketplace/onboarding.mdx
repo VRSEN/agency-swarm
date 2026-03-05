@@ -149,16 +149,19 @@ All that the user who wants to deploy your agency needs to do is simply fill out
             """
             Saves the configuration as a Python file with a config object
             """
-            import json
+            import pprint
     
             tool_dir = os.path.dirname(os.path.abspath(__file__))
             config_path = os.path.join(tool_dir, "onboarding_config.py")
     
-            config = self.model_dump()
+            config = self.model_dump(mode="python")
     
             try:
-                # Generate Python code with the config as a dictionary
-                python_code = f"# Auto-generated onboarding configuration\n\nconfig = {json.dumps(config, indent=4)}\n"
+                # Generate Python code with Python-safe literals (None/True/False)
+                python_code = (
+                    "# Auto-generated onboarding configuration\n\n"
+                    f"config = {pprint.pformat(config, sort_dicts=True)}\n"
+                )
                 
                 with open(config_path, "w", encoding="utf-8") as f:
                     f.write(python_code)
@@ -170,7 +173,6 @@ All that the user who wants to deploy your agency needs to do is simply fill out
         tool = OnboardingTool(
             agent_name="Example Agent",
             business_overview="Example business description",
-            file_ids=[],
             additional_notes="Any special requirements go here"
         )
         print(tool.run())

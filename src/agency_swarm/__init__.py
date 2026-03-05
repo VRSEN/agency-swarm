@@ -1,3 +1,4 @@
+import importlib
 import importlib.util
 
 from dotenv import load_dotenv
@@ -42,6 +43,9 @@ except ImportError:
     _LITELLM_AVAILABLE = False
 
 _JUPYTER_AVAILABLE = importlib.util.find_spec("jupyter_client") is not None
+_OPENCLAW_DEPS_AVAILABLE = (
+    importlib.util.find_spec("fastapi") is not None and importlib.util.find_spec("httpx") is not None
+)
 
 from agents.model_settings import Headers, MCPToolChoice, ToolChoice  # noqa: E402
 from openai._types import Body, Query  # noqa: E402
@@ -169,6 +173,16 @@ __all__ = [
     "tool_output_file_from_file_id",
 ]
 
+_OPENCLAW_EXPORTS = {
+    "OpenClawIntegrationConfig",
+    "OpenClawRuntime",
+    "create_openclaw_proxy_router",
+    "attach_openclaw_to_fastapi",
+    "build_openclaw_responses_model",
+}
+if _OPENCLAW_DEPS_AVAILABLE:
+    __all__.extend(sorted(_OPENCLAW_EXPORTS))
+
 # Conditionally add LitellmModel if available
 if _LITELLM_AVAILABLE:
     __all__.append("LitellmModel")
@@ -191,4 +205,20 @@ def __getattr__(name: str):
 
         globals()[name] = IPythonInterpreter
         return IPythonInterpreter
+    if name in _OPENCLAW_EXPORTS:
+        if not _OPENCLAW_DEPS_AVAILABLE:
+            raise ImportError(
+                "OpenClaw FastAPI integration requires optional dependencies. "
+                "Install with `pip install 'agency-swarm[fastapi]'`."
+            )
+        try:
+            module = importlib.import_module(".integrations.openclaw", package=__name__)
+        except ModuleNotFoundError as exc:
+            raise ImportError(
+                "OpenClaw FastAPI integration requires optional dependencies. "
+                "Install with `pip install 'agency-swarm[fastapi]'`."
+            ) from exc
+        value = getattr(module, name)
+        globals()[name] = value
+        return value
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
