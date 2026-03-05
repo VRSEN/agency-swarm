@@ -11,8 +11,8 @@ On Agencii, you can deploy your own OpenClaw instance with the official template
   <Card title="Launch Fast" icon="bolt">
     Start from a ready template and deploy in minutes.
   </Card>
-  <Card title="Add Your API Keys" icon="key">
-    Add your provider API keys in Agencii and keep control of your stack.
+  <Card title="Add Model Keys" icon="key">
+    Add your model provider keys in Agencii Secrets Vault.
   </Card>
   <Card title="Persistent Runtime" icon="server">
     OpenClaw state is stored under `/mnt/openclaw` so it survives restarts.
@@ -36,7 +36,7 @@ Before you start, make sure you have:
 
 - An Agencii account
 - A GitHub account
-- Model credentials (provider API key, or OpenClaw OAuth login access)
+- Model provider keys in Agencii Secrets Vault
 
 ## Deploy OpenClaw On Agencii
 
@@ -54,8 +54,8 @@ Before you start, make sure you have:
   </Step>
 
   <Step title="Add model credentials">
-    If you use API-key based models, add provider API keys in the Agencii key modal.
-    If you use the default Codex OAuth model, you will run one shell command in the next step.
+    This step is for your Agencii deployment environment.
+    Add provider keys in Agencii Secrets Vault, then attach those secrets as environment variables in the deployment settings.
 
     Common keys:
     - `OPENAI_API_KEY`
@@ -67,113 +67,51 @@ Before you start, make sure you have:
     Agencii builds and runs the repository automatically.
   </Step>
 
-  <Step title="Run one-time OpenClaw OAuth bootstrap">
-    The starter template defaults to `openai-codex/gpt-5.2`, which needs one setup command in your deployment shell:
-
-    ```bash
-    openclaw models auth login --provider openai-codex
-    ```
-
-    Complete sign-in in your browser, then paste the redirect URL/code back into the shell prompt.
-  </Step>
-
   <Step title="Run your first chat">
-    Open your deployed agency chat and send a simple test prompt.
+    Open your deployed agency chat and send a simple prompt.
 
     Example: `What can you automate for me today?`
   </Step>
 </Steps>
 
-## One-Time OAuth Bootstrap (Operator Step)
+For local run and local OAuth instructions, see the template README:
+[agency-ai-solutions/openclaw-starter-template](https://github.com/agency-ai-solutions/openclaw-starter-template)
 
-This command uses the OpenClaw CLI in your deployment shell. Your end users do not run CLI commands.
-
-```bash
-openclaw models auth login --provider openai-codex
-```
-
-After login, OpenClaw writes the auth profile into persistent state under `/mnt/openclaw/state`.
-You can verify with:
-
-```bash
-cat /mnt/openclaw/state/agents/main/agent/auth-profiles.json
-openclaw models status
-```
-
-## Run OpenClaw Locally (Agency + FastAPI)
-
-Use this only if you want to test on your own machine before deploying.
-
-<Accordion title="Show local setup steps">
-If you want to test locally before deploying, use the same starter template:
-
-1. Clone: [agency-ai-solutions/openclaw-starter-template](https://github.com/agency-ai-solutions/openclaw-starter-template)
-2. Create `.env` from `.env.template`
-3. Add your model credentials and app token:
-   - `OPENAI_API_KEY=...` (or another provider key), or run Codex OAuth bootstrap after startup
-   - `APP_TOKEN=local-openclaw-token`
-   - Ensure Node `>=22.12.0` is available
-   - If you have multiple Node installs, set `OPENCLAW_NODE_BIN` to a compatible binary (for example `/opt/homebrew/bin/node`)
-4. Use writable local paths (if `/mnt` is not available on your machine):
-   - `OPENCLAW_HOME=/tmp/openclaw-local`
-   - `OPENCLAW_STATE_DIR=/tmp/openclaw-local/state`
-   - `OPENCLAW_CONFIG_PATH=/tmp/openclaw-local/openclaw.json`
-   - `OPENCLAW_LOG_PATH=/tmp/openclaw-local/logs/openclaw-gateway.log`
-5. Install and run:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python main.py
-```
-
-6. Verify health:
-
-```bash
-curl -H "Authorization: Bearer local-openclaw-token" \
-  http://127.0.0.1:8080/openclaw/health
-```
-
-7. Send a direct Open Responses request through the OpenClaw proxy:
-
-```bash
-curl -H "Authorization: Bearer local-openclaw-token" \
-  -H "Content-Type: application/json" \
-  -d '{"model":"openclaw:main","input":"Say hello in five words.","stream":false}' \
-  http://127.0.0.1:8080/openclaw/v1/responses
-```
-
-8. Test the Agency Swarm streaming endpoint (same endpoint your frontend uses):
-
-```bash
-curl -N -H "Authorization: Bearer local-openclaw-token" \
-  -H "Content-Type: application/json" \
-  -d '{"message":"Say hello in one short sentence."}' \
-  http://127.0.0.1:8080/openclaw/get_response_stream
-```
-
-Expected stream events include: `meta`, `data`, `messages`, `end`.
-</Accordion>
-
-## Architecture (Local Or Agencii)
+## Architecture On Agencii
 
 ```mermaid
 flowchart LR
-    A["User request (UI or curl)"] --> B["Agency Swarm FastAPI (:8080)"]
+    A["User request (Agencii chat UI)"] --> B["Agency Swarm FastAPI (:8080)"]
     B --> C["Agency route /openclaw/get_response_stream"]
     C --> D["OpenAI Responses client (model: openclaw:main)"]
     D --> E["Local proxy /openclaw/v1/responses"]
     E --> F["OpenClaw gateway (:18789)"]
     F --> G["Model provider API (OpenAI/Anthropic)"]
-    F --> H["Persistent state under /mnt/openclaw (or /tmp locally)"]
+    F --> H["Persistent state under /mnt/openclaw"]
 ```
 
 ## Customize Your Assistant (OpenClaw Basics)
 
 OpenClaw already has a built-in way to customize instructions. You do not need to invent a new format.
 
-On first start, OpenClaw creates starter files in its workspace (persisted under `/mnt/openclaw` on Agencii). The most important files are:
+On first start, OpenClaw creates starter files in its workspace.
+On Agencii, that workspace lives at `/mnt/openclaw/.openclaw/workspace`.
+
+This path is expected:
+- `/mnt/openclaw` is the runtime path inside the project.
+- In the full sandbox filesystem, this maps to `/app/mnt/openclaw`.
+- `.openclaw/workspace` is OpenClaw's standard workspace layout inside that root.
+
+Right now, the practical way to customize these files in Agencii is:
+
+1. Open your deployed agent
+2. Go to **Customization** -> **Persistent File Storage**
+3. Navigate to `/mnt/openclaw/.openclaw/workspace`
+4. Upload replacement versions of the files you want to change (for example `AGENTS.md` and `SOUL.md`)
+
+![Agencii persistent file storage view for OpenClaw workspace](/images/platform/openclaw-persistent-storage.png)
+
+The most important files are:
 
 - `AGENTS.md`: main operating rules and priorities
 - `SOUL.md`: personality, tone, and boundaries
@@ -184,7 +122,13 @@ On first start, OpenClaw creates starter files in its workspace (persisted under
 - `BOOTSTRAP.md`: one-time first-run ritual file for a brand-new workspace
 - `MEMORY.md` and `memory/*.md`: long-term and daily memory notes
 
-`SOUL.md` absolutely affects behavior. When you change it, OpenClaw uses that new persona guidance in future runs.
+`SOUL.md` absolutely affects behavior. When you replace it, OpenClaw uses the new persona guidance in future runs.
+
+How instructions combine:
+
+- Onboarding instructions and workspace files are both used.
+- They are combined, not auto-merged intelligently.
+- If they conflict, responses can feel inconsistent, so keep them aligned.
 
 Beginner best practice:
 
@@ -201,19 +145,18 @@ Beginner best practice:
 
 ## Keys And Security
 
-Add provider API keys in the Agencii key modal. Do not collect raw API keys in onboarding forms.
+Add provider API keys in Agencii deployment secrets. Do not collect raw API keys in onboarding forms.
 
 <Warning>
 Use one OpenClaw deployment per trusted team or workspace.
 Provider keys you add in Agencii are injected into the running sandbox so OpenClaw can call model providers.
-OAuth auth profiles are also stored in that same persistent runtime (`/mnt/openclaw/state`).
 Follow [OpenClaw Security](https://docs.openclaw.ai/gateway/security) before exposing access.
 </Warning>
 
 ## If Something Is Not Working
 
 - Agent does not respond:
-  - re-check provider keys in Agencii key modal, then try again
+  - re-check provider keys in Agencii deployment secrets, then try again
 - Deployment succeeds but responses fail:
   - open deployment logs in Agencii, then redeploy
 - Data does not persist between restarts:
