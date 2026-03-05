@@ -41,7 +41,7 @@ agency.run_fastapi()
 | `port` | integer | `8000` | Port to serve FastAPI on. |
 | `app_token_env` | string | `"APP_TOKEN"` | Env var name for the bearer token; if missing, auth is disabled. |
 | `return_app` | boolean | `false` | Return the FastAPI app instead of running the server. |
-| `cors_origins` | list | `["*"]` | Allowed CORS origins. |
+| `cors_origins` | list | `["*"]` | Allowed CORS origins. When set to `["*"]`, `allow_credentials` is automatically set to `False` for security. |
 | `enable_agui` | boolean | `false` | Enable AG-UI streaming (hides the cancel endpoint). |
 | `enable_logging` | boolean | `false` | Track requests and expose `/get_logs` at the server root. |
 | `logs_dir` | string | `"activity-logs"` | Folder for request logs when logging is enabled. |
