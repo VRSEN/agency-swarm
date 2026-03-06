@@ -2,7 +2,7 @@ import asyncio
 import logging
 import os
 from pathlib import Path
-from typing import Annotated, Any, TypeVar
+from typing import Annotated, Any, TypeVar, cast
 
 from agents import (
     Agent as BaseAgent,
@@ -33,6 +33,7 @@ from agency_swarm.agent import (
 )
 from agency_swarm.agent.agent_flow import AgentFlow
 from agency_swarm.agent.attachment_manager import AttachmentManager
+from agency_swarm.agent.constants import AGENT_REALTIME_VOICES, AgentVoice
 from agency_swarm.agent.conversation_starters_cache import (
     compute_starter_cache_fingerprint,
     load_cached_starter,
@@ -87,6 +88,7 @@ class Agent(BaseAgent[MasterContext]):
     include_web_search_sources: bool = True
     validation_attempts: int = 1
     raise_input_guardrail_error: bool = False
+    voice: AgentVoice | None
 
     # --- Internal State ---
     _associated_vector_store_id: str | None = None
@@ -132,6 +134,7 @@ class Agent(BaseAgent[MasterContext]):
             validation_attempts (int): Number of retries when an output guardrail trips. Defaults to 1.
             raise_input_guardrail_error (bool): Whether to raise input guardrail errors as exceptions.
                 Defaults to False.
+            voice (str | None): Preferred realtime voice token for this agent.
             handoff_reminder (str | None): Custom reminder for handoffs.
                 Defaults to `Transfer completed. You are {recipient_agent_name}. Please continue the task.`
 
@@ -209,6 +212,17 @@ class Agent(BaseAgent[MasterContext]):
         self.include_web_search_sources = bool(current_agent_params.get("include_web_search_sources", True))
         self.validation_attempts = int(current_agent_params.get("validation_attempts", 1))
         self.raise_input_guardrail_error = bool(current_agent_params.get("raise_input_guardrail_error", False))
+        voice_value = current_agent_params.get("voice")
+        if voice_value is None:
+            self.voice = None
+        else:
+            normalized_voice = str(voice_value).strip().lower()
+            if normalized_voice not in AGENT_REALTIME_VOICES:
+                raise ValueError(
+                    f"Invalid voice '{voice_value}' for agent '{self.name}'. "
+                    f"Valid options: {', '.join(AGENT_REALTIME_VOICES)}."
+                )
+            self.voice = cast(AgentVoice, normalized_voice)
         self.handoff_reminder = current_agent_params.get("handoff_reminder")
 
         # Internal state
