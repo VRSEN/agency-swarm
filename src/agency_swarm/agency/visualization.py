@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 from agents import FunctionTool
 
 from agency_swarm.ui.demos.copilot import CopilotDemoLauncher
-from agency_swarm.ui.demos.terminal import start_terminal
+from agency_swarm.ui.demos.opencode import start_terminal
 from agency_swarm.ui.generators.html_generator import HTMLVisualizationGenerator
 from agency_swarm.utils.model_utils import get_agent_capabilities
 
@@ -175,10 +175,9 @@ def terminal_demo(agency: "Agency", show_reasoning: bool | None = None, reload: 
 
     Args:
         agency: The Agency instance to run.
-        show_reasoning: Whether to show reasoning output. Auto-detected if None.
+        show_reasoning: Whether to show reasoning output. Falls back to the legacy demo when set to False.
         reload: If True, watch for file changes and automatically restart on changes.
     """
-    # Call terminal demo entry directly
     start_terminal(agency, show_reasoning=show_reasoning, reload=reload)
 
 
