@@ -1,5 +1,6 @@
 # --- Agency helper utility functions ---
 import logging
+from collections.abc import Callable
 from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -49,6 +50,18 @@ def run_fastapi(
     """
     from agency_swarm.integrations.fastapi import run_fastapi as run_fastapi_server
 
+    run_fastapi_server(
+        agencies=build_fastapi_agencies(agency),
+        host=host,
+        port=port,
+        app_token_env=app_token_env,
+        cors_origins=cors_origins,
+        enable_agui=enable_agui,
+    )
+
+
+def build_fastapi_agencies(agency: "Agency") -> dict[str, Callable[..., "Agency"]]:
+    """Build a FastAPI factory map for a live agency instance."""
     agency_cls = agency.__class__
     caller_dir = Path(get_external_caller_directory())
     shared_tools_folder = agency.shared_tools_folder
@@ -84,14 +97,7 @@ def run_fastapi(
             user_context=deepcopy(agency.user_context),
         )
 
-    run_fastapi_server(
-        agencies={agency.name or "agency": agency_factory},
-        host=host,
-        port=port,
-        app_token_env=app_token_env,
-        cors_origins=cors_origins,
-        enable_agui=enable_agui,
-    )
+    return {agency.name or "agency": agency_factory}
 
 
 def resolve_agent(agency: "Agency", agent_ref: "str | Agent") -> "Agent":
