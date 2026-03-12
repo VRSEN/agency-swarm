@@ -609,7 +609,6 @@ def test_compute_starter_cache_fingerprint_utilities(monkeypatch: pytest.MonkeyP
     def raising_getsource(_value: object) -> str:
         raise OSError("source unavailable")
 
-    monkeypatch.setattr(inspect, "getsource", raising_getsource)
     callable_instructions = _CallableWithoutQualname()
     agent = _make_fingerprint_agent(
         tools=[],
@@ -617,12 +616,14 @@ def test_compute_starter_cache_fingerprint_utilities(monkeypatch: pytest.MonkeyP
         output_type=AgentOutputSchema(_StructuredOutput),
     )
 
-    fingerprint = compute_starter_cache_fingerprint(
-        agent,
-        instructions_override=callable_instructions,
-        use_instructions_override=True,
-        shared_instructions=123,
-    )
+    with monkeypatch.context() as ctx:
+        ctx.setattr(inspect, "getsource", raising_getsource)
+        fingerprint = compute_starter_cache_fingerprint(
+            agent,
+            instructions_override=callable_instructions,
+            use_instructions_override=True,
+            shared_instructions=123,
+        )
     assert isinstance(fingerprint, str)
     assert len(fingerprint) == 64
 
