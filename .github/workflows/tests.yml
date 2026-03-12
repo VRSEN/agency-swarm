@@ -67,7 +67,12 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: make coverage
+        run: |
+          if [ -n "${OPENAI_API_KEY}" ]; then
+            make coverage
+          else
+            uv run pytest --ignore=tests/integration
+          fi
 
   tests_py312:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
