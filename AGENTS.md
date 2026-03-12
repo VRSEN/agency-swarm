@@ -301,6 +301,7 @@ Strictness
 - After committing, double-check what you committed with `git show --name-only -1`.
 
 ### PR Comment Review Loop (Mandatory for Local Coding Work)
+- When your local branch contains user-requested work and a PR does not already exist, open or update the GitHub PR yourself before handing off; do not stop at "branch pushed" unless PR creation is blocked and you report the blocker explicitly.
 - If you are doing coding work locally (outside GitHub UI) for an open PR and you can post GitHub comments, you must run this loop:
   - Open the PR and resolve every correct active comment-thread finding.
   - Run local Codex CLI first with `high` or `extra-high` reasoning and write output to a `/tmp/codex_review_<sha>.txt` artifact.
