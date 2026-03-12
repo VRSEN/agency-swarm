@@ -11,6 +11,7 @@ import threading
 import time
 from contextlib import suppress
 from dataclasses import dataclass
+from typing import Protocol
 
 from agency_swarm.agency.helpers import build_fastapi_agencies
 from agency_swarm.integrations.fastapi import run_fastapi
@@ -31,10 +32,17 @@ _HOST = "127.0.0.1"
 _MODEL = "agency-swarm/default"
 
 
+class _UvicornServer(Protocol):
+    should_exit: bool
+    started: bool
+
+    def run(self) -> None: ...
+
+
 @dataclass
 class _Server:
     port: int
-    server: object
+    server: _UvicornServer
     thread: threading.Thread
 
     def stop(self) -> None:
@@ -174,7 +182,12 @@ def _start_server(agency) -> _Server:
     return _Server(port=port, server=server, thread=thread)
 
 
-def _wait_for_server(port: int, server, thread: threading.Thread, error: list[BaseException]) -> None:
+def _wait_for_server(
+    port: int,
+    server: _UvicornServer,
+    thread: threading.Thread,
+    error: list[BaseException],
+) -> None:
     deadline = time.time() + 5
     while time.time() < deadline:
         if error:

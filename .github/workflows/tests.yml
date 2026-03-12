@@ -68,7 +68,12 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: make coverage
+        run: |
+          if [ -n "${OPENAI_API_KEY}" ]; then
+            make coverage
+          else
+            uv run pytest --ignore=tests/integration
+          fi
 
       - name: Run unit tests for fork PRs
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork
