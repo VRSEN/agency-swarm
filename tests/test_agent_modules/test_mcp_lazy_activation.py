@@ -1,6 +1,6 @@
 import pytest
 
-from agency_swarm import Agent
+from agency_swarm import Agency, Agent
 from agency_swarm.mcp.oauth import MCPServerOAuth
 
 
@@ -37,6 +37,27 @@ def test_ensure_mcp_tools_defers_oauth_servers(monkeypatch: pytest.MonkeyPatch) 
     assert any(getattr(tool, "name", None) == "authenticate_mcp_server" for tool in agent.tools)
     assert set(agent._deferred_mcp_servers) == {"github"}
     assert agent.mcp_servers == []
+
+
+def test_oauth_agents_prepare_authentication_tool_before_first_run() -> None:
+    agent = _make_oauth_agent(MCPServerOAuth(url="https://example.com/mcp", name="github"))
+
+    assert any(getattr(tool, "name", None) == "authenticate_mcp_server" for tool in agent.tools)
+    assert set(agent._deferred_mcp_servers) == {"github"}
+    assert set(agent._oauth_mcp_servers) == {"github"}
+    assert agent.mcp_servers == []
+
+
+def test_oauth_agents_expose_authentication_tool_in_metadata() -> None:
+    agent = _make_oauth_agent(MCPServerOAuth(url="https://example.com/mcp", name="github"))
+    agency = Agency(agent)
+
+    payload = agency.get_metadata()
+    agent_node = next(node for node in payload["nodes"] if node["id"] == "OAuthAgent")
+    tool_names = [tool["name"] for tool in agent_node["data"]["tools"]]
+
+    assert tool_names == ["authenticate_mcp_server"]
+    assert agent_node["data"]["toolCount"] == 1
 
 
 @pytest.mark.asyncio
