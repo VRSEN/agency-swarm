@@ -423,27 +423,30 @@ class Agent(BaseAgent[MasterContext]):
 
     def _prepare_deferred_oauth_mcp_servers(self) -> bool:
         """Stage deferred OAuth MCP servers without triggering tool discovery."""
-        if self._oauth_mcp_servers:
-            return True
         if not self._should_defer_mcp_tool_initialization():
-            return False
+            return bool(self._oauth_mcp_servers)
 
         deferred_servers, eager_servers = self._split_deferred_oauth_mcp_servers()
         if not deferred_servers:
-            return False
+            return bool(self._oauth_mcp_servers)
 
-        self._oauth_mcp_servers = deferred_servers
-        self._deferred_mcp_servers = dict(deferred_servers)
+        self._oauth_mcp_servers.update(deferred_servers)
+        for server_name, server in deferred_servers.items():
+            self._deferred_mcp_servers.setdefault(server_name, server)
         self.mcp_servers = eager_servers
         self._install_mcp_authentication_tool(sorted(self._oauth_mcp_servers))
-        self._mcp_tools_deferred = True
+        self._mcp_tools_deferred = len(self._deferred_mcp_servers) > 0
         return True
 
     def _install_mcp_authentication_tool(self, server_names: list[str]) -> None:
         """Add a tool that authenticates and enables one deferred OAuth MCP server."""
-        existing_names = {getattr(tool, "name", "") for tool in self.tools}
         tool_name = "authenticate_mcp_server"
-        if tool_name in existing_names:
+        existing_tool = next((tool for tool in self.tools if getattr(tool, "name", "") == tool_name), None)
+        if existing_tool is not None:
+            schema = getattr(existing_tool, "params_json_schema", {})
+            server_name_schema = schema.get("properties", {}).get("server_name")
+            if isinstance(server_name_schema, dict):
+                server_name_schema["enum"] = server_names
             return
 
         @function_tool(name_override=tool_name)

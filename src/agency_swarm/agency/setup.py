@@ -502,7 +502,7 @@ def _apply_shared_mcp_servers(agency: "Agency") -> None:
             # Keep initialization lazy so OAuth discovery/auth is never forced at startup.
             if hasattr(agent_instance, "_mcp_tools_initialized"):
                 agent_instance._mcp_tools_initialized = False
-            if hasattr(agent_instance, "_mcp_tools_deferred"):
-                agent_instance._mcp_tools_deferred = False
+            if hasattr(agent_instance, "_prepare_deferred_oauth_mcp_servers"):
+                agent_instance._prepare_deferred_oauth_mcp_servers()
 
     logger.info(f"Applied {len(agency.shared_mcp_servers)} shared MCP servers to {len(agency.agents)} agents")
