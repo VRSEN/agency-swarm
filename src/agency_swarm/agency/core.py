@@ -478,10 +478,15 @@ class Agency:
             cache_dir = Path(self.oauth_token_path).expanduser()
 
         for agent in self.agents.values():
+            candidates: list[Any] = []
             servers = getattr(agent, "mcp_servers", None)
-            if not isinstance(servers, list):
-                continue
-            for server in servers:
+            if isinstance(servers, list):
+                candidates.extend(servers)
+            deferred_servers = getattr(agent, "_oauth_mcp_servers", None)
+            if isinstance(deferred_servers, dict):
+                candidates.extend(deferred_servers.values())
+
+            for server in candidates:
                 config: Any | None = None
                 if MCPServerOAuthRuntime is not None and isinstance(server, MCPServerOAuthRuntime):
                     config = server
