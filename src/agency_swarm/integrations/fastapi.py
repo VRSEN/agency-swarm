@@ -162,7 +162,14 @@ def run_fastapi(
             if isinstance(agents_map, dict):
                 for agent in agents_map.values():
                     servers = getattr(agent, "mcp_servers", None)
-                    if isinstance(servers, list) and any(is_oauth_server(srv) for srv in servers):
+                    deferred_oauth_servers = getattr(agent, "_oauth_mcp_servers", None)
+                    has_attached_oauth_servers = isinstance(servers, list) and any(
+                        is_oauth_server(srv) for srv in servers
+                    )
+                    has_deferred_oauth_servers = isinstance(deferred_oauth_servers, dict) and any(
+                        is_oauth_server(srv) for srv in deferred_oauth_servers.values()
+                    )
+                    if has_attached_oauth_servers or has_deferred_oauth_servers:
                         has_oauth_servers = True
                         break
             if not has_oauth_servers and has_hosted_mcp_tools_missing_authorization(preview_instance):

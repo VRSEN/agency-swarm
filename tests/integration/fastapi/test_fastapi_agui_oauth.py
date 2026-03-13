@@ -50,6 +50,35 @@ def test_oauth_callback_handles_provider_error_response():
     assert "access_denied" in data.get("detail", "").lower() or "error" in data.get("detail", "").lower()
 
 
+def test_run_fastapi_enables_oauth_routes_for_deferred_oauth_server() -> None:
+    """Deferred OAuth MCP servers should enable the shared FastAPI OAuth routes."""
+    oauth_server = MCPServerOAuth(
+        url="http://localhost:9999/mcp",
+        name="oauth-demo",
+        client_id="client-id",
+        client_secret="client-secret",
+    )
+
+    def agency_factory(load_threads_callback=None, save_threads_callback=None):
+        agent = Agent(name="TestAgent", instructions="Base instructions", mcp_servers=[oauth_server])
+        return Agency(
+            agent,
+            load_threads_callback=load_threads_callback,
+            save_threads_callback=save_threads_callback,
+        )
+
+    app = run_fastapi(
+        agencies={"test_agency": agency_factory},
+        return_app=True,
+        app_token_env="",
+    )
+    client = TestClient(app)
+
+    response = client.get("/auth/status/test-state")
+    assert response.status_code == 200
+    assert response.json()["status"] == "unknown"
+
+
 def test_run_fastapi_enables_oauth_routes_for_hosted_mcp_tool() -> None:
     """HostedMCPTool without an access token should enable FastAPI OAuth routes."""
 

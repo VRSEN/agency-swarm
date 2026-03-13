@@ -41,3 +41,21 @@ def test_agency_oauth_support_does_not_register_run_hooks(tmp_path: Path) -> Non
     agency = Agency(agent, oauth_token_path=str(tmp_path), user_context={"user_id": "user-123"})
 
     assert agency.default_run_hooks is None
+
+
+def test_shared_oauth_servers_extend_activation_tool() -> None:
+    """Shared OAuth MCP servers are exposed through the activation tool before first run."""
+    agent_server = MCPServerOAuth(url="http://localhost:8001/mcp", name="github")
+    shared_server = MCPServerOAuth(url="http://localhost:8002/mcp", name="notion")
+    agent = _build_agent_with_oauth_server(agent_server)
+
+    agency = Agency(agent, shared_mcp_servers=[shared_server])
+    tool = next(
+        tool for tool in agency.agents["OAuthAgent"].tools if getattr(tool, "name", "") == "authenticate_mcp_server"
+    )
+    server_name_schema = tool.params_json_schema.get("properties", {}).get("server_name")
+
+    assert isinstance(server_name_schema, dict)
+    assert server_name_schema.get("enum") == ["github", "notion"]
+    assert set(agency.agents["OAuthAgent"]._oauth_mcp_servers) == {"github", "notion"}
+    assert set(agency.agents["OAuthAgent"]._deferred_mcp_servers) == {"github", "notion"}
