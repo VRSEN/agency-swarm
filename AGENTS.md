@@ -33,7 +33,9 @@ Begin each task after reviewing this readiness checklist:
 ## Continuous Work Rule
 Before responding to the user and when you consider your task done, check whether the outstanding-task or todo list is empty. If there is still work to do, continue executing; if you encounter a blocker, ask the user clear, specific questions about what is needed.
 - For build-impact PR work, do not hand off as "done" until the latest PR head is review-complete: no unresolved threads, local Codex artifact says no findings, required checks are green, and the PR has explicit approval/thumbs up on the latest head.
+- Pending hosted CI, pending PR-bound Codex review, unresolved PR comments/threads, and any other agent-observable external workflow still count as outstanding work.
 - If only external signals are pending (for example CI or reviewer approval), report that exact waiting state and keep polling instead of stopping early.
+- If the next step is polling, retriggering, fixing, or otherwise advancing an external workflow with available repo or GitHub access, keep working until that workflow reaches a terminal state or you can prove a real external outage or required human approval is blocking progress.
 
 ## Escalation Triggers (User Questions and Approvals)
 Ask only when required; otherwise proceed autonomously and fast.
@@ -49,6 +51,7 @@ Ask only when required; otherwise proceed autonomously and fast.
   - You discover you skipped repo/PR preflight or worked in the wrong repo/branch; stop and escalate with the correction plan before continuing.
 - Before any potentially destructive command (checkout, stash, commit, push, reset, rebase, force operations, file deletions, mass edits), explain the impact and obtain explicit approval.
 - Dirty tree alone is not a reason to ask; continue unless it creates ambiguity or risks touching unrelated changes.
+- Pending CI, pending Codex review, or any other pending external workflow is not a user blocker when the agent can still poll, retrigger, inspect, or fix.
 - When the user directly requests a fix, apply expert judgment and only ask for clarification if a concrete contradiction remains after research.
 - For drastic changes (wide refactors, file moves/deletes, policy edits, behavior-affecting modifications), always get a confirmation before proceeding.
 - When asking, include a clear description, one precise question, and minimal options; after negative feedback or a protocol breach, tighten approvals (present minimal options and wait for explicit approval; re-run Step 1 before and after edits).
@@ -151,6 +154,7 @@ After each meaningful tool call or code edit, validate the result in 1-2 lines a
 - Ending your work without minimal validation when applicable (running relevant tests and examples selectively)
 - Misstating test outcomes
 - Skipping key workflow safety steps without a reason
+- Stopping in a non-terminal external wait state that you can still observe or advance yourself
 - Introducing functional changes during refactoring without explicit request
 - Adding silent fallbacks, legacy shims, or workarounds. Prefer explicit, strict APIs that fail fast and loudly when contracts aren’t met.
 
@@ -304,6 +308,9 @@ Strictness
   - Fallback when `codex review` is unavailable: use equivalent `codex exec` diff review and save to the same artifact pattern.
   - Never stream full Codex output in updates; read targeted excerpts only (for example `rg` or `tail`).
   - Trigger `@codex review` only when local Codex CLI is unavailable, explicitly requested, or merge-gate evidence needs PR-bound Codex.
+  - While hosted checks or PR-bound Codex are pending, poll at least once per minute and keep the loop running.
+  - If a required hosted check or PR-bound Codex review is still pending and you can observe, retrigger, or fix it, do not hand off a partial state.
+  - If a PR-bound Codex trigger stays non-terminal for 10 minutes, inspect the latest comments, reviews, and reactions, retrigger once if the service appears stuck, and continue; escalate only after you can point to a real service failure, outage, or missing human approval.
   - Repeat until the latest PR head has: zero unresolved threads, local Codex no findings, required checks green, and explicit PR approval/thumbs up.
   - Only after that state is reached, hand off to the user.
 - Exemption to prevent circular loops:
