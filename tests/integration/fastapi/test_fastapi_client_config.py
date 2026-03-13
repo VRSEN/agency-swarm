@@ -236,3 +236,146 @@ def test_client_config_is_scoped_to_single_request(openai_stub_base_url: str) ->
     assert len(seen) == 2
     assert seen[0]["authorization"] == "Bearer sk-test"
     assert seen[1]["authorization"] == "Bearer sk-original"
+
+
+def test_client_config_passes_request_scoped_upload_client(
+    openai_stub_base_url: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """file_urls uploads should receive request-level OpenAI client overrides."""
+    captured: dict[str, object] = {}
+
+    async def _fake_upload_from_urls(_file_urls, allowed_local_dirs=None, openai_client=None):
+        del allowed_local_dirs
+        assert openai_client is not None
+        captured["api_key"] = openai_client.api_key
+        captured["base_url"] = str(openai_client.base_url)
+        captured["headers"] = dict(openai_client.default_headers or {})
+        return {"doc.txt": "file-123"}
+
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.upload_from_urls",
+        _fake_upload_from_urls,
+    )
+
+    async def _noop_prepare_and_attach_files(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(
+        "agency_swarm.agent.attachment_manager.AttachmentManager.prepare_and_attach_files",
+        _noop_prepare_and_attach_files,
+    )
+
+    def create_agency(load_threads_callback=None, save_threads_callback=None):
+        original_client = AsyncOpenAI(api_key="sk-original", base_url=f"{openai_stub_base_url}/v1")
+        agent = Agent(
+            name="TestAgent",
+            instructions="You are a test agent.",
+            model=OpenAIChatCompletionsModel(model="gpt-4o-mini", openai_client=original_client),
+        )
+        return Agency(
+            agent,
+            load_threads_callback=load_threads_callback,
+            save_threads_callback=save_threads_callback,
+        )
+
+    app = run_fastapi(
+        agencies={"test_agency": create_agency},
+        return_app=True,
+        app_token_env="",
+        enable_agui=False,
+    )
+    client = TestClient(app)
+
+    res = client.post(
+        "/test_agency/get_response",
+        json={
+            "message": "hi",
+            "file_urls": {"doc.txt": "https://example.com/doc.txt"},
+            "client_config": {
+                "base_url": f"{openai_stub_base_url}/v1",
+                "api_key": "sk-request",
+                "default_headers": {"x-request-id": "req-1"},
+            },
+        },
+    )
+
+    assert res.status_code == 200
+    assert res.json()["response"] == "hello from stub"
+    assert res.json()["file_ids_map"] == {"doc.txt": "file-123"}
+    assert captured["api_key"] == "sk-request"
+    assert str(captured["base_url"]).startswith(f"{openai_stub_base_url}/v1")
+    assert isinstance(captured["headers"], dict)
+    assert captured["headers"]["x-request-id"] == "req-1"
+
+
+def test_default_headers_only_uses_existing_upload_auth(
+    openai_stub_base_url: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """default_headers-only client_config should preserve baseline upload auth."""
+    captured: dict[str, object] = {}
+
+    async def _fake_upload_from_urls(_file_urls, allowed_local_dirs=None, openai_client=None):
+        del allowed_local_dirs
+        assert openai_client is not None
+        captured["api_key"] = openai_client.api_key
+        captured["base_url"] = str(openai_client.base_url)
+        captured["headers"] = dict(openai_client.default_headers or {})
+        return {"doc.txt": "file-123"}
+
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.upload_from_urls",
+        _fake_upload_from_urls,
+    )
+
+    async def _noop_prepare_and_attach_files(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(
+        "agency_swarm.agent.attachment_manager.AttachmentManager.prepare_and_attach_files",
+        _noop_prepare_and_attach_files,
+    )
+
+    def create_agency(load_threads_callback=None, save_threads_callback=None):
+        original_client = AsyncOpenAI(
+            api_key="sk-agent",
+            base_url=f"{openai_stub_base_url}/v1",
+            default_headers={"x-agency-id": "agency-orig"},
+        )
+        agent = Agent(
+            name="TestAgent",
+            instructions="You are a test agent.",
+            model=OpenAIChatCompletionsModel(model="gpt-4o-mini", openai_client=original_client),
+        )
+        return Agency(
+            agent,
+            load_threads_callback=load_threads_callback,
+            save_threads_callback=save_threads_callback,
+        )
+
+    app = run_fastapi(
+        agencies={"test_agency": create_agency},
+        return_app=True,
+        app_token_env="",
+        enable_agui=False,
+    )
+    client = TestClient(app)
+
+    res = client.post(
+        "/test_agency/get_response",
+        json={
+            "message": "hi",
+            "file_urls": {"doc.txt": "https://example.com/doc.txt"},
+            "client_config": {"default_headers": {"x-request-id": "req-1"}},
+        },
+    )
+
+    assert res.status_code == 200
+    assert res.json()["response"] == "hello from stub"
+    assert res.json()["file_ids_map"] == {"doc.txt": "file-123"}
+    assert captured["api_key"] == "sk-agent"
+    assert str(captured["base_url"]).startswith(f"{openai_stub_base_url}/v1")
+    assert isinstance(captured["headers"], dict)
+    assert captured["headers"]["x-agency-id"] == "agency-orig"
+    assert captured["headers"]["x-request-id"] == "req-1"

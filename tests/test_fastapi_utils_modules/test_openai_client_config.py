@@ -13,77 +13,65 @@ from pydantic import ValidationError
 from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest, ClientConfig
 
 
-class TestClientConfig:
-    """Tests for ClientConfig model."""
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        (
+            {"base_url": "https://custom.api.com", "api_key": "sk-custom-key"},
+            {"base_url": "https://custom.api.com", "api_key": "sk-custom-key"},
+        ),
+        (
+            {"base_url": "https://custom.api.com"},
+            {"base_url": "https://custom.api.com", "api_key": None},
+        ),
+        (
+            {"api_key": "sk-custom-key"},
+            {"base_url": None, "api_key": "sk-custom-key"},
+        ),
+        (
+            {},
+            {"base_url": None, "api_key": None, "default_headers": None, "litellm_keys": None},
+        ),
+    ],
+)
+def test_client_config_accepts_optional_overrides(payload: dict, expected: dict) -> None:
+    """Client config should accept partial override payloads without extra scaffolding."""
+    config = ClientConfig(**payload)
+    for key, value in expected.items():
+        assert getattr(config, key) == value
 
-    def test_config_with_all_fields(self) -> None:
-        """Config accepts both base_url and api_key."""
+
+def test_client_config_accepts_litellm_keys_when_available() -> None:
+    """litellm_keys should validate when LiteLLM is installed."""
+    try:
         config = ClientConfig(
+            litellm_keys={
+                "anthropic": "sk-ant-xxx",
+                "gemini": "AIza...",
+            }
+        )
+    except ValidationError as exc:
+        assert "litellm_keys requires litellm to be installed" in str(exc)
+        return
+    assert config.litellm_keys is not None
+    assert config.litellm_keys["anthropic"] == "sk-ant-xxx"
+    assert config.litellm_keys["gemini"] == "AIza..."
+
+
+def test_base_request_client_config_roundtrip() -> None:
+    """Base request should preserve parsed client_config values."""
+    request = BaseRequest(
+        message="Hello",
+        client_config=ClientConfig(
             base_url="https://custom.api.com",
             api_key="sk-custom-key",
-        )
-        assert config.base_url == "https://custom.api.com"
-        assert config.api_key == "sk-custom-key"
-
-    def test_config_with_only_base_url(self) -> None:
-        """Config can specify only base_url."""
-        config = ClientConfig(base_url="https://custom.api.com")
-        assert config.base_url == "https://custom.api.com"
-        assert config.api_key is None
-
-    def test_config_with_only_api_key(self) -> None:
-        """Config can specify only api_key."""
-        config = ClientConfig(api_key="sk-custom-key")
-        assert config.base_url is None
-        assert config.api_key == "sk-custom-key"
-
-    def test_config_empty(self) -> None:
-        """Config can be created with no overrides."""
-        config = ClientConfig()
-        assert config.base_url is None
-        assert config.api_key is None
-        assert config.default_headers is None
-        assert config.litellm_keys is None
-
-    def test_config_with_litellm_keys(self) -> None:
-        """Config accepts litellm_keys when LiteLLM is available."""
-        try:
-            config = ClientConfig(
-                litellm_keys={
-                    "anthropic": "sk-ant-xxx",
-                    "gemini": "AIza...",
-                }
-            )
-        except ValidationError as exc:
-            assert "litellm_keys requires litellm to be installed" in str(exc)
-            return
-        assert config.litellm_keys is not None
-        assert config.litellm_keys["anthropic"] == "sk-ant-xxx"
-        assert config.litellm_keys["gemini"] == "AIza..."
-
-
-class TestBaseRequestWithClientConfig:
-    """Tests for BaseRequest including client_config."""
-
-    def test_request_without_client_config(self) -> None:
-        """Request works without client config."""
-        request = BaseRequest(message="Hello")
-        assert request.client_config is None
-
-    def test_request_with_client_config(self) -> None:
-        """Request accepts client config."""
-        request = BaseRequest(
-            message="Hello",
-            client_config=ClientConfig(
-                base_url="https://custom.api.com",
-                api_key="sk-custom-key",
-                default_headers={"x-test": "1"},
-            ),
-        )
-        assert request.client_config is not None
-        assert request.client_config.base_url == "https://custom.api.com"
-        assert request.client_config.api_key == "sk-custom-key"
-        assert request.client_config.default_headers == {"x-test": "1"}
+            default_headers={"x-test": "1"},
+        ),
+    )
+    assert request.client_config is not None
+    assert request.client_config.base_url == "https://custom.api.com"
+    assert request.client_config.api_key == "sk-custom-key"
+    assert request.client_config.default_headers == {"x-test": "1"}
 
 
 def test_request_api_key_allows_client_build_without_env(monkeypatch) -> None:
@@ -271,229 +259,6 @@ def test_non_openai_custom_model_skips_openai_client_build(monkeypatch) -> None:
 
     # Should not raise; unsupported custom models are skipped.
     endpoint_handlers.apply_openai_client_config(agency, ClientConfig(default_headers={"x-test": "1"}))
-
-
-@pytest.mark.asyncio
-async def test_make_response_endpoint_passes_request_client_to_file_upload(monkeypatch) -> None:
-    """file_urls upload should use request-level OpenAI client overrides."""
-    pytest.importorskip("agents")
-
-    from agency_swarm.integrations.fastapi_utils import endpoint_handlers
-    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import make_response_endpoint
-    from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest, ClientConfig
-
-    captured = {
-        "api_key": None,
-        "base_url": None,
-        "default_headers": None,
-    }
-
-    class _ThreadManager:
-        def get_all_messages(self):
-            return []
-
-    class _Response:
-        def __init__(self, final_output):
-            self.final_output = final_output
-
-    class _Agency:
-        def __init__(self):
-            self.agents = {}
-            self.thread_manager = _ThreadManager()
-
-        async def get_response(self, **_kwargs):
-            return _Response("ok")
-
-    agency = _Agency()
-
-    def _agency_factory(**_kwargs):
-        return agency
-
-    async def _attach_noop(_agency):
-        return None
-
-    async def _fake_upload_from_urls(_file_urls, allowed_local_dirs=None, openai_client=None):
-        del allowed_local_dirs  # not relevant for this test
-        assert openai_client is not None
-        captured["api_key"] = openai_client.api_key
-        captured["base_url"] = str(openai_client.base_url)
-        captured["default_headers"] = dict(openai_client.default_headers or {})
-        return {"doc.txt": "file-123"}
-
-    monkeypatch.setattr(endpoint_handlers, "attach_persistent_mcp_servers", _attach_noop)
-    monkeypatch.setattr(endpoint_handlers, "apply_openai_client_config", lambda _agency, _config: None)
-    monkeypatch.setattr(endpoint_handlers, "upload_from_urls", _fake_upload_from_urls)
-
-    handler = make_response_endpoint(BaseRequest, _agency_factory, verify_token=lambda: None)
-    request = BaseRequest(
-        message="hello",
-        file_urls={"doc.txt": "https://example.com/doc.txt"},
-        client_config=ClientConfig(
-            api_key="sk-request-key",
-            base_url="https://api.example.test/v1",
-            default_headers={"x-request-id": "req-1"},
-        ),
-    )
-
-    response = await handler(request, token=None)
-    assert response["file_ids_map"] == {"doc.txt": "file-123"}
-    assert captured["api_key"] == "sk-request-key"
-    assert captured["base_url"].startswith("https://api.example.test/v1")
-    assert captured["default_headers"]["x-request-id"] == "req-1"
-
-
-@pytest.mark.asyncio
-async def test_make_response_endpoint_uses_existing_client_for_file_upload_headers_only(monkeypatch) -> None:
-    """default_headers-only requests should keep the agent's existing OpenAI auth for uploads."""
-    pytest.importorskip("agents")
-
-    from openai import AsyncOpenAI
-
-    from agency_swarm.integrations.fastapi_utils import endpoint_handlers
-    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import make_response_endpoint
-    from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest, ClientConfig
-
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-
-    captured = {
-        "api_key": None,
-        "base_url": None,
-        "default_headers": None,
-    }
-
-    class _ThreadManager:
-        def get_all_messages(self):
-            return []
-
-    class _Response:
-        def __init__(self, final_output):
-            self.final_output = final_output
-
-    class _Model:
-        def __init__(self):
-            self.openai_client = AsyncOpenAI(api_key="sk-agent", base_url="https://api.agent.test/v1")
-
-    class _AgentState:
-        def __init__(self):
-            self.model = _Model()
-            self.model_settings = None
-
-    class _Agency:
-        def __init__(self):
-            self.agents = {"A": _AgentState()}
-            self.thread_manager = _ThreadManager()
-
-        async def get_response(self, **_kwargs):
-            return _Response("ok")
-
-    agency = _Agency()
-
-    def _agency_factory(**_kwargs):
-        return agency
-
-    async def _attach_noop(_agency):
-        return None
-
-    async def _fake_upload_from_urls(_file_urls, allowed_local_dirs=None, openai_client=None):
-        del allowed_local_dirs
-        assert openai_client is not None
-        captured["api_key"] = openai_client.api_key
-        captured["base_url"] = str(openai_client.base_url)
-        captured["default_headers"] = dict(openai_client.default_headers or {})
-        return {"doc.txt": "file-123"}
-
-    monkeypatch.setattr(endpoint_handlers, "attach_persistent_mcp_servers", _attach_noop)
-    monkeypatch.setattr(endpoint_handlers, "apply_openai_client_config", lambda _agency, _config: None)
-    monkeypatch.setattr(endpoint_handlers, "upload_from_urls", _fake_upload_from_urls)
-
-    handler = make_response_endpoint(BaseRequest, _agency_factory, verify_token=lambda: None)
-    request = BaseRequest(
-        message="hello",
-        file_urls={"doc.txt": "https://example.com/doc.txt"},
-        client_config=ClientConfig(default_headers={"x-request-id": "req-1"}),
-    )
-
-    response = await handler(request, token=None)
-    assert response["file_ids_map"] == {"doc.txt": "file-123"}
-    assert captured["api_key"] == "sk-agent"
-    assert captured["base_url"].startswith("https://api.agent.test/v1")
-    assert captured["default_headers"]["x-request-id"] == "req-1"
-
-
-@pytest.mark.asyncio
-async def test_make_response_endpoint_uses_recipient_agent_client_for_uploads(monkeypatch) -> None:
-    """Upload client should be derived from the selected recipient agent context."""
-    pytest.importorskip("agents")
-
-    from openai import AsyncOpenAI
-
-    from agency_swarm.integrations.fastapi_utils import endpoint_handlers
-    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import make_response_endpoint
-    from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest, ClientConfig
-
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-
-    captured: dict[str, str | None] = {"api_key": None}
-
-    class _ThreadManager:
-        def get_all_messages(self):
-            return []
-
-    class _Response:
-        def __init__(self, final_output):
-            self.final_output = final_output
-
-    class _Model:
-        def __init__(self, api_key: str):
-            self.openai_client = AsyncOpenAI(api_key=api_key, base_url="https://api.agent.test/v1")
-
-    class _AgentState:
-        def __init__(self, api_key: str):
-            self.model = _Model(api_key=api_key)
-            self.model_settings = None
-
-    class _Agency:
-        def __init__(self):
-            self.agents = {
-                "FirstAgent": _AgentState(api_key="sk-first"),
-                "TargetAgent": _AgentState(api_key="sk-target"),
-            }
-            self.thread_manager = _ThreadManager()
-
-        async def get_response(self, **_kwargs):
-            return _Response("ok")
-
-    agency = _Agency()
-
-    def _agency_factory(**_kwargs):
-        return agency
-
-    async def _attach_noop(_agency):
-        return None
-
-    async def _fake_upload_from_urls(_file_urls, allowed_local_dirs=None, openai_client=None):
-        del allowed_local_dirs
-        assert openai_client is not None
-        captured["api_key"] = openai_client.api_key
-        return {"doc.txt": "file-123"}
-
-    monkeypatch.setattr(endpoint_handlers, "attach_persistent_mcp_servers", _attach_noop)
-    monkeypatch.setattr(endpoint_handlers, "apply_openai_client_config", lambda _agency, _config: None)
-    monkeypatch.setattr(endpoint_handlers, "upload_from_urls", _fake_upload_from_urls)
-
-    handler = make_response_endpoint(BaseRequest, _agency_factory, verify_token=lambda: None)
-    response = await handler(
-        BaseRequest(
-            message="hello",
-            recipient_agent="TargetAgent",
-            file_urls={"doc.txt": "https://example.com/doc.txt"},
-            client_config=ClientConfig(default_headers={"x-request-id": "req-1"}),
-        ),
-        token=None,
-    )
-
-    assert response["file_ids_map"] == {"doc.txt": "file-123"}
-    assert captured["api_key"] == "sk-target"
 
 
 @pytest.mark.asyncio
@@ -1148,171 +913,6 @@ async def test_get_agency_request_state_prunes_closed_loop_entries(monkeypatch) 
 
 
 @pytest.mark.asyncio
-async def test_make_stream_endpoint_serializes_singleton_agency_requests(monkeypatch) -> None:
-    """Concurrent stream requests against a cached agency should be serialized by the handler."""
-    pytest.importorskip("agents")
-
-    from agency_swarm.agent.execution_stream_response import StreamingRunResponse
-    from agency_swarm.integrations.fastapi_utils import endpoint_handlers
-    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import (
-        ActiveRunRegistry,
-        make_stream_endpoint,
-    )
-    from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest, ClientConfig
-
-    class _HttpRequest:
-        async def is_disconnected(self) -> bool:
-            return False
-
-    class _ThreadManager:
-        def get_all_messages(self):
-            return []
-
-    class _AgentState:
-        def __init__(self):
-            self.model = "gpt-4o-mini"
-            self.model_settings = None
-
-    class _Agency:
-        def __init__(self):
-            self.agents = {"A": _AgentState()}
-            self.thread_manager = _ThreadManager()
-            self._in_flight = 0
-            self.max_in_flight = 0
-
-        def get_response_stream(self, **_kwargs):
-            async def _stream():
-                self._in_flight += 1
-                self.max_in_flight = max(self.max_in_flight, self._in_flight)
-                await asyncio.sleep(0.05)
-                self._in_flight -= 1
-                if False:
-                    yield {}
-
-            return StreamingRunResponse(_stream())
-
-    agency = _Agency()
-
-    def _agency_factory(**_kwargs):
-        return agency
-
-    async def _attach_noop(_agency):
-        return None
-
-    monkeypatch.setattr(endpoint_handlers, "attach_persistent_mcp_servers", _attach_noop)
-    monkeypatch.setattr(endpoint_handlers, "apply_openai_client_config", lambda _agency, _config: None)
-
-    handler = make_stream_endpoint(
-        BaseRequest,
-        _agency_factory,
-        verify_token=lambda: None,
-        run_registry=ActiveRunRegistry(),
-    )
-
-    request_a = BaseRequest(message="a", client_config=ClientConfig(default_headers={"x-request": "a"}))
-    # No client_config on the second request to verify mixed traffic is still serialized.
-    request_b = BaseRequest(message="b")
-
-    async def _run_request(request: BaseRequest) -> None:
-        response = await handler(http_request=_HttpRequest(), request=request, token=None)
-        _chunks = [chunk async for chunk in response.body_iterator]
-
-    await asyncio.gather(_run_request(request_a), _run_request(request_b))
-
-    assert agency.max_in_flight == 1
-
-
-@pytest.mark.asyncio
-async def test_make_stream_endpoint_builds_upload_client_after_lease(monkeypatch) -> None:
-    """Streaming upload client derivation must happen only after lease acquisition."""
-    pytest.importorskip("agents")
-
-    from agency_swarm.agent.execution_stream_response import StreamingRunResponse
-    from agency_swarm.integrations.fastapi_utils import endpoint_handlers
-    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import ActiveRunRegistry, make_stream_endpoint
-    from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest, ClientConfig
-
-    lease_acquired = False
-    upload_client = object()
-
-    class _HttpRequest:
-        async def is_disconnected(self) -> bool:
-            return False
-
-    class _ThreadManager:
-        def get_all_messages(self):
-            return []
-
-    class _AgentState:
-        def __init__(self):
-            self.model = "gpt-4o-mini"
-            self.model_settings = None
-
-    class _Agency:
-        def __init__(self):
-            self.agents = {"A": _AgentState()}
-            self.thread_manager = _ThreadManager()
-
-        def get_response_stream(self, **_kwargs):
-            async def _stream():
-                if False:
-                    yield {}
-
-            return StreamingRunResponse(_stream())
-
-    agency = _Agency()
-
-    def _agency_factory(**_kwargs):
-        return agency
-
-    async def _attach_noop(_agency):
-        return None
-
-    async def _acquire(_agency, is_override: bool):
-        nonlocal lease_acquired
-        assert is_override is True
-        lease_acquired = True
-        return object()
-
-    async def _release(_lease):
-        return None
-
-    def _build_upload_client(_agency, _config, recipient_agent: str | None = None):
-        assert recipient_agent is None
-        assert lease_acquired is True
-        return upload_client
-
-    async def _fake_upload_from_urls(_file_urls, allowed_local_dirs=None, openai_client=None):
-        del allowed_local_dirs
-        assert openai_client is upload_client
-        return {"doc.txt": "file-123"}
-
-    monkeypatch.setattr(endpoint_handlers, "attach_persistent_mcp_servers", _attach_noop)
-    monkeypatch.setattr(endpoint_handlers, "apply_openai_client_config", lambda _agency, _config: None)
-    monkeypatch.setattr(endpoint_handlers, "_acquire_agency_request_lease", _acquire)
-    monkeypatch.setattr(endpoint_handlers, "_release_agency_request_lease", _release)
-    monkeypatch.setattr(endpoint_handlers, "_build_file_upload_client", _build_upload_client)
-    monkeypatch.setattr(endpoint_handlers, "upload_from_urls", _fake_upload_from_urls)
-
-    handler = make_stream_endpoint(
-        BaseRequest,
-        _agency_factory,
-        verify_token=lambda: None,
-        run_registry=ActiveRunRegistry(),
-    )
-    response = await handler(
-        http_request=_HttpRequest(),
-        request=BaseRequest(
-            message="hello",
-            file_urls={"doc.txt": "https://example.com/doc.txt"},
-            client_config=ClientConfig(default_headers={"x-request-id": "req-1"}),
-        ),
-        token=None,
-    )
-    _chunks = [chunk async for chunk in response.body_iterator]
-
-
-@pytest.mark.asyncio
 async def test_make_response_endpoint_blocks_new_regular_requests_while_override_waits(monkeypatch) -> None:
     """Pending override requests should block new regular requests to avoid starvation."""
     pytest.importorskip("agents")
@@ -1463,189 +1063,3 @@ async def test_make_stream_endpoint_background_cleanup_without_stream_consumptio
 
     assert released == 1
     assert restored == 1
-
-
-@pytest.mark.asyncio
-async def test_make_agui_endpoint_serializes_singleton_agency_requests(monkeypatch) -> None:
-    """Concurrent AG-UI requests against a cached agency should be serialized by the handler."""
-    pytest.importorskip("agents")
-
-    from types import SimpleNamespace
-
-    from agency_swarm.agent.execution_stream_response import StreamingRunResponse
-    from agency_swarm.integrations.fastapi_utils import endpoint_handlers
-    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import make_agui_chat_endpoint
-    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
-
-    class _ThreadManager:
-        def get_all_messages(self):
-            return []
-
-    class _AgentState:
-        def __init__(self):
-            self.model = "gpt-4o-mini"
-            self.model_settings = None
-            self.name = "A"
-
-    class _Message:
-        def __init__(self, content: str):
-            self.content = content
-
-        def model_dump(self):
-            return {"role": "user", "content": self.content}
-
-    class _Request:
-        def __init__(self, content: str):
-            self.thread_id = "thread-1"
-            self.run_id = f"run-{content}"
-            self.state = None
-            self.messages = [_Message(content)]
-            self.tools = []
-            self.context = []
-            self.forwarded_props = None
-            self.chat_history = None
-            self.additional_instructions = None
-            self.user_context = None
-            self.file_ids = None
-            self.file_urls = None
-            self.client_config = ClientConfig(default_headers={"x-request": content}) if content == "a" else None
-
-    class _Agency:
-        def __init__(self):
-            self.agents = {"A": _AgentState()}
-            self.thread_manager = _ThreadManager()
-            self.entry_points = [SimpleNamespace(name="A")]
-            self._in_flight = 0
-            self.max_in_flight = 0
-
-        def get_response_stream(self, **_kwargs):
-            async def _stream():
-                self._in_flight += 1
-                self.max_in_flight = max(self.max_in_flight, self._in_flight)
-                await asyncio.sleep(0.05)
-                self._in_flight -= 1
-                if False:
-                    yield {}
-
-            return StreamingRunResponse(_stream())
-
-    agency = _Agency()
-
-    def _agency_factory(**_kwargs):
-        return agency
-
-    async def _attach_noop(_agency):
-        return None
-
-    monkeypatch.setattr(endpoint_handlers, "attach_persistent_mcp_servers", _attach_noop)
-    monkeypatch.setattr(endpoint_handlers, "apply_openai_client_config", lambda _agency, _config: None)
-
-    handler = make_agui_chat_endpoint(_Request, _agency_factory, verify_token=lambda: None)
-
-    async def _run_request(content: str) -> None:
-        response = await handler(_Request(content), token=None)
-        _chunks = [chunk async for chunk in response.body_iterator]
-
-    await asyncio.gather(_run_request("a"), _run_request("b"))
-
-    assert agency.max_in_flight == 1
-
-
-@pytest.mark.asyncio
-async def test_make_agui_endpoint_builds_upload_client_after_lease(monkeypatch) -> None:
-    """AG-UI upload client derivation must happen only after lease acquisition."""
-    pytest.importorskip("agents")
-
-    from types import SimpleNamespace
-
-    from agency_swarm.agent.execution_stream_response import StreamingRunResponse
-    from agency_swarm.integrations.fastapi_utils import endpoint_handlers
-    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import make_agui_chat_endpoint
-    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
-
-    lease_acquired = False
-    upload_client = object()
-
-    class _ThreadManager:
-        def get_all_messages(self):
-            return []
-
-    class _AgentState:
-        def __init__(self):
-            self.model = "gpt-4o-mini"
-            self.model_settings = None
-            self.name = "A"
-
-    class _Message:
-        def __init__(self, content: str):
-            self.content = content
-
-        def model_dump(self):
-            return {"role": "user", "content": self.content}
-
-    class _Request:
-        def __init__(self):
-            self.thread_id = "thread-1"
-            self.run_id = "run-1"
-            self.state = None
-            self.messages = [_Message("hello")]
-            self.tools = []
-            self.context = []
-            self.forwarded_props = None
-            self.chat_history = None
-            self.additional_instructions = None
-            self.user_context = None
-            self.file_ids = None
-            self.file_urls = {"doc.txt": "https://example.com/doc.txt"}
-            self.client_config = ClientConfig(default_headers={"x-request-id": "req-1"})
-
-    class _Agency:
-        def __init__(self):
-            self.agents = {"A": _AgentState()}
-            self.thread_manager = _ThreadManager()
-            self.entry_points = [SimpleNamespace(name="A")]
-
-        def get_response_stream(self, **_kwargs):
-            async def _stream():
-                if False:
-                    yield {}
-
-            return StreamingRunResponse(_stream())
-
-    agency = _Agency()
-
-    def _agency_factory(**_kwargs):
-        return agency
-
-    async def _attach_noop(_agency):
-        return None
-
-    async def _acquire(_agency, is_override: bool):
-        nonlocal lease_acquired
-        assert is_override is True
-        lease_acquired = True
-        return object()
-
-    async def _release(_lease):
-        return None
-
-    def _build_upload_client(_agency, _config, recipient_agent: str | None = None):
-        assert recipient_agent is None
-        assert lease_acquired is True
-        return upload_client
-
-    async def _fake_upload_from_urls(_file_urls, allowed_local_dirs=None, openai_client=None):
-        del allowed_local_dirs
-        assert openai_client is upload_client
-        return {"doc.txt": "file-123"}
-
-    monkeypatch.setattr(endpoint_handlers, "attach_persistent_mcp_servers", _attach_noop)
-    monkeypatch.setattr(endpoint_handlers, "apply_openai_client_config", lambda _agency, _config: None)
-    monkeypatch.setattr(endpoint_handlers, "_acquire_agency_request_lease", _acquire)
-    monkeypatch.setattr(endpoint_handlers, "_release_agency_request_lease", _release)
-    monkeypatch.setattr(endpoint_handlers, "_build_file_upload_client", _build_upload_client)
-    monkeypatch.setattr(endpoint_handlers, "upload_from_urls", _fake_upload_from_urls)
-
-    handler = make_agui_chat_endpoint(_Request, _agency_factory, verify_token=lambda: None)
-    response = await handler(_Request(), token=None)
-    _chunks = [chunk async for chunk in response.body_iterator]

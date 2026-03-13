@@ -386,21 +386,37 @@ class TestFastAPIFileProcessing:
             "file_urls": {"stream_test.txt": f"{file_server_base_url}/test-txt.txt"},
         }
         headers = {}
+        expected_phrase = "first txt secret phrase"
+        max_attempts = 3
+        retry_delay_seconds = 2
+        last_response = ""
 
-        collected_data = []
         async with self.get_http_client(timeout_seconds=120) as client:
-            async with client.stream("POST", url, json=payload, headers=headers) as response:
-                assert response.status_code == 200
-                async for line in response.aiter_lines():
-                    if line.strip():
-                        collected_data.append(line)
+            for attempt in range(max_attempts):
+                collected_data = []
+                async with client.stream("POST", url, json=payload, headers=headers) as response:
+                    assert response.status_code == 200
+                    async for line in response.aiter_lines():
+                        if line.strip():
+                            collected_data.append(line)
 
-        # Verify we received streaming data
-        assert len(collected_data) > 0
+                # Verify we received streaming data
+                assert len(collected_data) > 0
 
-        # Join all collected data to check for content
-        full_response = " ".join(collected_data).lower()
-        assert "first txt secret phrase" in full_response
+                # Join all collected data to check for content
+                full_response = " ".join(collected_data).lower()
+                last_response = full_response
+                if expected_phrase in full_response:
+                    break
+
+                # OpenAI streaming can transiently fail with provider-side 5xx errors.
+                # Retry bounded times to avoid flaking on transient backend errors.
+                if attempt < max_attempts - 1 and "an error occurred while processing your request" in full_response:
+                    await asyncio.sleep(retry_delay_seconds)
+                    continue
+                break
+
+        assert expected_phrase in last_response, f"Expected '{expected_phrase}' in streamed output: {last_response}"
 
     @pytest.mark.asyncio
     async def test_invalid_file_url(self, file_server_base_url: str, fastapi_base_url: str):
