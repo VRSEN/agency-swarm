@@ -269,9 +269,11 @@ class Agent(BaseAgent[MasterContext]):
 
         self._ensure_web_search_sources_include()
 
-        # MCP servers are converted lazily on first use to avoid interactive auth at init.
+        # Prepare deferred OAuth MCP servers without connecting, so metadata and caches
+        # include the activation tool before the first run.
+        self._prepare_deferred_oauth_mcp_servers()
 
-        # Refresh after MCP conversion so fingerprint includes MCP-converted tools
+        # Refresh after MCP preparation so fingerprint includes deferred auth tools.
         self.refresh_conversation_starters_cache()
 
     # --- Properties ---
@@ -368,19 +370,12 @@ class Agent(BaseAgent[MasterContext]):
         """Lazily convert MCP servers to tools on first use."""
         if self._mcp_tools_initialized:
             return
-        if self._should_defer_mcp_tool_initialization():
-            deferred_servers, eager_servers = self._split_deferred_oauth_mcp_servers()
-            if deferred_servers:
-                self._oauth_mcp_servers = deferred_servers
-                self._deferred_mcp_servers = dict(deferred_servers)
-                self.mcp_servers = eager_servers
-                if eager_servers:
-                    convert_mcp_servers_to_tools(self)
-                    self._ensure_web_search_sources_include()
-                self._install_mcp_authentication_tool(sorted(self._oauth_mcp_servers))
-                self._mcp_tools_initialized = True
-                self._mcp_tools_deferred = True
-                return
+        if self._prepare_deferred_oauth_mcp_servers():
+            if self.mcp_servers:
+                convert_mcp_servers_to_tools(self)
+                self._ensure_web_search_sources_include()
+            self._mcp_tools_initialized = True
+            return
         convert_mcp_servers_to_tools(self)
         self._ensure_web_search_sources_include()
         self._mcp_tools_initialized = True
@@ -425,6 +420,24 @@ class Agent(BaseAgent[MasterContext]):
             else:
                 eager.append(server)
         return deferred, eager
+
+    def _prepare_deferred_oauth_mcp_servers(self) -> bool:
+        """Stage deferred OAuth MCP servers without triggering tool discovery."""
+        if self._oauth_mcp_servers:
+            return True
+        if not self._should_defer_mcp_tool_initialization():
+            return False
+
+        deferred_servers, eager_servers = self._split_deferred_oauth_mcp_servers()
+        if not deferred_servers:
+            return False
+
+        self._oauth_mcp_servers = deferred_servers
+        self._deferred_mcp_servers = dict(deferred_servers)
+        self.mcp_servers = eager_servers
+        self._install_mcp_authentication_tool(sorted(self._oauth_mcp_servers))
+        self._mcp_tools_deferred = True
+        return True
 
     def _install_mcp_authentication_tool(self, server_names: list[str]) -> None:
         """Add a tool that authenticates and enables one deferred OAuth MCP server."""
