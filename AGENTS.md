@@ -159,9 +159,9 @@ After each meaningful tool call or code edit, validate the result in 1-2 lines a
 - Adding silent fallbacks, legacy shims, or workarounds. Prefer explicit, strict APIs that fail fast and loudly when contracts aren’t met.
 
 ## 🔴 API KEYS
-- Pre-flight gate (real-LLM only): if planned validation includes integration tests/examples that call a real LLM, verify `OPENAI_API_KEY` from environment or workspace `.env` before editing or running tests; if missing/invalid, stop and report the blocker.
+- Pre-flight gate (real-LLM only): if planned validation includes integration tests/examples that call a real LLM, verify `OPENAI_API_KEY` from environment or the repo-root `.env` before editing or running tests; if missing/invalid, stop and report the blocker.
 - Scope limit: this gate does not apply to docs-only changes, pure unit tests, or integrations fully mocked/patched to avoid real LLM calls.
-- Before asking the user for any key, inspect environment and `.env` to confirm it is actually missing or invalid.
+- Before asking the user for any key, inspect environment and the repo-root `.env` to confirm it is actually missing or invalid.
 
 ## Common Commands
 `make format`  # Auto-format and apply safe lint fixes
@@ -301,6 +301,7 @@ Strictness
 - After committing, double-check what you committed with `git show --name-only -1`.
 
 ### PR Comment Review Loop (Mandatory for Local Coding Work)
+- When your local branch contains user-requested work and a PR does not already exist, open or update the GitHub PR yourself before handing off; do not stop at "branch pushed" unless PR creation is blocked and you report the blocker explicitly.
 - If you are doing coding work locally (outside GitHub UI) for an open PR and you can post GitHub comments, you must run this loop:
   - Open the PR and resolve every correct active comment-thread finding.
   - Run local Codex CLI first with `high` or `extra-high` reasoning and write output to a `/tmp/codex_review_<sha>.txt` artifact.
