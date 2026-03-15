@@ -39,7 +39,36 @@ def test_openclaw_agent_supports_custom_host_port_and_path() -> None:
         )
 
     assert str(agent.model._client.base_url) == "http://127.0.0.1:18080/worker/v1/"
-    assert agent.model.model == "openai/gpt-5.2"
+    assert agent.model.model == "openclaw:main"
+
+
+def test_openclaw_agent_defaults_external_v1_urls_to_public_alias() -> None:
+    agent = OpenClawAgent(
+        name="OpenClawWorker",
+        description="Worker",
+        instructions="Handle OpenClaw work.",
+        base_url="http://127.0.0.1:18789/v1",
+        api_key="external-token",
+    )
+
+    assert str(agent.model._client.base_url) == "http://127.0.0.1:18789/v1/"
+    assert agent.model.model == "openclaw:main"
+
+
+def test_openclaw_agent_uses_gateway_token_when_proxy_key_and_app_token_are_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENCLAW_PROXY_API_KEY", raising=False)
+    monkeypatch.delenv("APP_TOKEN", raising=False)
+    monkeypatch.setenv("OPENCLAW_GATEWAY_TOKEN", "gateway-token")
+
+    agent = OpenClawAgent(
+        name="OpenClawWorker",
+        description="Worker",
+        instructions="Handle OpenClaw work.",
+    )
+
+    assert agent.model._client.api_key == "gateway-token"
 
 
 def test_openclaw_agent_rejects_manual_handoffs() -> None:

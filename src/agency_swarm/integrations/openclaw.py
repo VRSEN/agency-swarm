@@ -855,10 +855,12 @@ def _restore_full_tool_mode_config(current: dict[str, Any], backup_path: Path) -
     current_agent_to_agent = tools.get("agentToAgent")
     restored_agent_to_agent = backup.get("agent_to_agent")
     if isinstance(restored_agent_to_agent, dict):
-        merged_agent_to_agent: dict[str, Any] = {}
+        merged_agent_to_agent = restored_agent_to_agent.copy()
         if isinstance(current_agent_to_agent, dict):
-            merged_agent_to_agent.update(current_agent_to_agent)
-        merged_agent_to_agent.update(restored_agent_to_agent)
+            for key, value in current_agent_to_agent.items():
+                if key == "enabled" and value is False and restored_agent_to_agent.get("enabled") is not False:
+                    continue
+                merged_agent_to_agent[key] = value
         tools["agentToAgent"] = merged_agent_to_agent
     else:
         if isinstance(current_agent_to_agent, dict):
@@ -1091,7 +1093,13 @@ def build_openclaw_responses_model(
     resolved_base_url = (
         base_url or os.getenv("OPENCLAW_PROXY_BASE_URL") or "http://127.0.0.1:8000/openclaw/v1"
     ).rstrip("/")
-    resolved_api_key = api_key or os.getenv("OPENCLAW_PROXY_API_KEY") or os.getenv("APP_TOKEN") or "sk-openclaw-proxy"
+    resolved_api_key = (
+        api_key
+        or os.getenv("OPENCLAW_PROXY_API_KEY")
+        or os.getenv("APP_TOKEN")
+        or os.getenv("OPENCLAW_GATEWAY_TOKEN")
+        or "sk-openclaw-proxy"
+    )
 
     client = AsyncOpenAI(base_url=resolved_base_url, api_key=resolved_api_key)
     return OpenAIResponsesModel(model=resolved_model, openai_client=client)

@@ -91,7 +91,7 @@ openclaw_worker = OpenClawAgent(
 ```
 
 Use this when OpenClaw is managed outside the Agency Swarm app.
-If that server is meant to be a delegated worker, configure that OpenClaw runtime with worker-safe tool settings too.
+If that server is meant to be a delegated worker, start it with `OPENCLAW_TOOL_MODE=worker`.
   </Tab>
 </Tabs>
 
@@ -128,17 +128,27 @@ Use OpenClaw plugins or MCP when you need to extend OpenClaw itself.
 
   ```python
   from agency_swarm import Agency
-  from agency_swarm.agents import OpenClawAgent
+  from agency_swarm.agents import Agent, OpenClawAgent
   from agency_swarm.integrations.fastapi import run_fastapi
   from agency_swarm.integrations.openclaw import attach_openclaw_to_fastapi
 
   def create_agency(load_threads_callback=None):
+      coordinator = Agent(
+          name="Coordinator",
+          description="Routes work to the OpenClaw worker.",
+          instructions="Delegate OpenClaw-specific work to OpenClawWorker.",
+          model="gpt-5.2",
+      )
       openclaw_worker = OpenClawAgent(
           name="OpenClawWorker",
           description="OpenClaw specialist",
           instructions="Handle the delegated OpenClaw work and return the result.",
       )
-      return Agency(openclaw_worker, load_threads_callback=load_threads_callback)
+      return Agency(
+          coordinator,
+          communication_flows=[(coordinator, openclaw_worker)],
+          load_threads_callback=load_threads_callback,
+      )
 
   app = run_fastapi(
       agencies={"support": create_agency},
