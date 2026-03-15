@@ -2,6 +2,7 @@
 
 import sys
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -313,3 +314,128 @@ async def test_upload_from_urls_rejects_nonexistent_local_file(tmp_path: Path) -
 
     with pytest.raises(FileNotFoundError, match="Local file not found"):
         await upload_from_urls({"doc.txt": str(file_path)}, allowed_local_dirs=[str(tmp_path)])
+
+
+@pytest.mark.asyncio
+async def test_download_file_cleans_up_tmp_on_http_error(tmp_path: Path) -> None:
+    """Temp file must be deleted and no fd must be leaked when the HTTP request fails."""
+    import gc
+
+    import agency_swarm.integrations.fastapi_utils.file_handler as fh
+
+    response_obj = MagicMock()
+    response_obj.raise_for_status = MagicMock(side_effect=Exception("HTTP 500"))
+    response_obj.aiter_bytes = MagicMock()
+
+    stream_cm = MagicMock()
+    stream_cm.__aenter__ = AsyncMock(return_value=response_obj)
+    stream_cm.__aexit__ = AsyncMock(return_value=False)
+
+    client_obj = MagicMock()
+    client_obj.stream = MagicMock(return_value=stream_cm)
+
+    client_cm = MagicMock()
+    client_cm.__aenter__ = AsyncMock(return_value=client_obj)
+    client_cm.__aexit__ = AsyncMock(return_value=False)
+
+    original_client = fh.httpx.AsyncClient
+    fh.httpx.AsyncClient = MagicMock(return_value=client_cm)
+    try:
+        with pytest.raises(Exception, match="HTTP 500"):
+            await fh.download_file("https://example.com/file.pdf", "file.pdf", str(tmp_path))
+    finally:
+        fh.httpx.AsyncClient = original_client
+
+    gc.collect()
+
+    leftover = list(tmp_path.glob("*.tmp"))
+    assert leftover == [], f"Temp file was not cleaned up: {leftover}"
+
+    # Verify no fd was leaked by ensuring all fds in the dir are closeable
+    open_fds_in_dir = [
+        fd for fd in range(3, 1024)
+        if _fd_points_to_dir(fd, str(tmp_path))
+    ]
+    assert open_fds_in_dir == [], f"Leaked file descriptors pointing to tmp_path: {open_fds_in_dir}"
+
+
+def _fd_points_to_dir(fd: int, directory: str) -> bool:
+    try:
+        import os
+        stat = os.fstat(fd)
+        path = Path(directory)
+        # Check if any file in the dir matches this inode (Unix only)
+        for f in path.iterdir():
+            try:
+                if f.stat().st_ino == stat.st_ino and f.stat().st_dev == stat.st_dev:
+                    return True
+            except OSError:
+                pass
+    except OSError:
+        pass
+    return False
+
+
+@pytest.mark.asyncio
+async def test_download_file_concurrent_same_base_name(tmp_path: Path) -> None:
+    """Two concurrent downloads with the same base name must not collide on the temp file.
+
+    Before the fix, both 'DASDA' and 'DASDA.pdf' resolved to DASDA.tmp, causing
+    a WinError 32 (file in use) on Windows or FileNotFoundError on Linux when the
+    second download tried to rename a .tmp that was already moved by the first.
+    """
+    fake_content_1 = b"%PDF-1.4 content one"
+    fake_content_2 = b"%PDF-1.4 content two"
+
+    def make_http_mock(content: bytes) -> MagicMock:
+        async def mock_aiter_bytes():
+            yield content
+
+        response_obj = MagicMock()
+        response_obj.raise_for_status = MagicMock()
+        response_obj.aiter_bytes = MagicMock(return_value=mock_aiter_bytes())
+
+        stream_cm = MagicMock()
+        stream_cm.__aenter__ = AsyncMock(return_value=response_obj)
+        stream_cm.__aexit__ = AsyncMock(return_value=False)
+
+        client_obj = MagicMock()
+        client_obj.stream = MagicMock(return_value=stream_cm)
+
+        client_cm = MagicMock()
+        client_cm.__aenter__ = AsyncMock(return_value=client_obj)
+        client_cm.__aexit__ = AsyncMock(return_value=False)
+
+        return client_cm
+
+    import asyncio
+
+    import agency_swarm.integrations.fastapi_utils.file_handler as fh
+
+    call_count = 0
+    contents = [fake_content_1, fake_content_2]
+
+    original_client = fh.httpx.AsyncClient
+
+    def patched_client(**kwargs):
+        nonlocal call_count
+        mock = make_http_mock(contents[call_count % 2])
+        call_count += 1
+        return mock
+
+    fh.httpx.AsyncClient = patched_client
+    try:
+        result1, result2 = await asyncio.gather(
+            fh.download_file("https://example.com/f1", "DASDA", str(tmp_path)),
+            fh.download_file("https://example.com/f2", "DASDA.pdf", str(tmp_path)),
+        )
+    finally:
+        fh.httpx.AsyncClient = original_client
+
+    # Both coroutines must complete without OSError/WinError 32 (file in use).
+    # result1 and result2 both resolve to DASDA.pdf — the last writer wins,
+    # which is acceptable. The key guarantee is no crash during concurrent rename.
+    assert Path(result1).exists(), "First download result must exist"
+    assert Path(result2).exists(), "Second download result must exist"
+    assert Path(result1).read_bytes() in (fake_content_1, fake_content_2)
+    assert Path(result2).read_bytes() in (fake_content_1, fake_content_2)

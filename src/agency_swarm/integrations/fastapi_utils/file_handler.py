@@ -197,7 +197,10 @@ def get_extension_from_filetype(file_path: Path) -> str | None:
 async def download_file(url: str, name: str, save_dir: str) -> str:
     ext = get_extension_from_name(name) or get_extension_from_url(url)
     base = os.path.splitext(name)[0]
-    tmp_path = Path(save_dir) / f"{base}.tmp"
+
+    tmp_fd, tmp_str = tempfile.mkstemp(dir=save_dir, prefix=f"{base}_", suffix=".tmp")
+    os.close(tmp_fd)
+    tmp_path = Path(tmp_str)
 
     headers = {
         "User-Agent": (
@@ -205,16 +208,21 @@ async def download_file(url: str, name: str, save_dir: str) -> str:
             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         ),
     }
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        async with client.stream("GET", url, headers=headers) as r:
-            r.raise_for_status()
-            async with aiofiles.open(tmp_path, "wb") as f:
-                async for chunk in r.aiter_bytes():
-                    await f.write(chunk)
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            async with client.stream("GET", url, headers=headers) as r:
+                r.raise_for_status()
+                async with aiofiles.open(tmp_path, "wb") as f:
+                    async for chunk in r.aiter_bytes():
+                        await f.write(chunk)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
 
     if not ext:
         ext = get_extension_from_filetype(tmp_path)
     if not ext:
+        tmp_path.unlink(missing_ok=True)
         raise ValueError(f"No extension detected for {url}")
 
     final_path = Path(save_dir) / f"{base}{ext}"
