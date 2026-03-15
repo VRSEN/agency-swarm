@@ -198,6 +198,12 @@ def configure_agents(agency: "Agency", defined_communication_flows: list[tuple[A
         # Register subagents based on the explicit communication map
         allowed_recipients = communication_map.get(agent_name, [])
         if allowed_recipients:
+            if not agent_instance.supports_outbound_communication:
+                joined = ", ".join(allowed_recipients)
+                raise ValueError(
+                    f"Agent '{agent_name}' cannot be the sender in communication_flows. "
+                    f"It can receive delegated work, but it cannot delegate to: {joined}."
+                )
             logger.debug(f"Agent '{agent_name}' can send messages to: {allowed_recipients}")
             for recipient_name in allowed_recipients:
                 recipient_agent = agency.agents[recipient_name]
@@ -325,6 +331,9 @@ def _apply_shared_tools(agency: "Agency") -> None:
         return
 
     for agent_name, agent_instance in agency.agents.items():
+        if not agent_instance.supports_framework_tool_wiring:
+            logger.debug(f"Skipping shared tool wiring for agent '{agent_name}'")
+            continue
         for tool in tools_to_add:
             try:
                 # FunctionTool instances must be copied so each agent gets its own guard
@@ -357,8 +366,13 @@ def _apply_shared_files(agency: "Agency") -> None:
     if not folder_path.is_absolute():
         folder_path = caller_dir / folder_path
 
-    # Get the first agent's FileManager to access utility functions
-    first_agent = next(iter(agency.agents.values()))
+    supported_agents = [agent for agent in agency.agents.values() if agent.supports_framework_tool_wiring]
+    if not supported_agents:
+        logger.debug("Skipping shared file preprocessing because no agent supports framework tool wiring")
+        return
+
+    # Get the first supported agent's FileManager to access utility functions
+    first_agent = supported_agents[0]
     file_manager = first_agent.file_manager
     assert file_manager is not None  # Always initialized in Agent.__init__
 
@@ -441,8 +455,11 @@ def _apply_shared_files(agency: "Agency") -> None:
     if not vs_id:
         return
 
-    # Attach shared vector store and code interpreter to all agents
+    # Attach shared vector store and code interpreter to supported agents
     for agent_name, agent_instance in agency.agents.items():
+        if not agent_instance.supports_framework_tool_wiring:
+            logger.debug(f"Skipping shared file wiring for agent '{agent_name}'")
+            continue
         assert agent_instance.file_manager is not None  # Always initialized in Agent.__init__
         try:
             agent_instance.file_manager.add_file_search_tool(vs_id)
@@ -459,6 +476,9 @@ def _apply_shared_mcp_servers(agency: "Agency") -> None:
         return
 
     for agent_name, agent_instance in agency.agents.items():
+        if not agent_instance.supports_framework_tool_wiring:
+            logger.debug(f"Skipping shared MCP wiring for agent '{agent_name}'")
+            continue
         # Ensure agent has mcp_servers list
         if not hasattr(agent_instance, "mcp_servers") or agent_instance.mcp_servers is None:
             agent_instance.mcp_servers = []

@@ -87,6 +87,8 @@ class Agent(BaseAgent[MasterContext]):
     include_web_search_sources: bool = True
     validation_attempts: int = 1
     raise_input_guardrail_error: bool = False
+    supports_outbound_communication: bool = True
+    supports_framework_tool_wiring: bool = True
 
     # --- Internal State ---
     _associated_vector_store_id: str | None = None
@@ -571,6 +573,9 @@ class Agent(BaseAgent[MasterContext]):
             send_message_tool_class: Optional custom SendMessage tool for this specific communication.
             runtime_state: Optional runtime state container injected by the owning Agency
         """
+        if not self.supports_outbound_communication:
+            raise ValueError(f"Agent '{self.name}' cannot register subagents because it is configured as receive-only.")
+
         # Import to avoid circular dependency
         from .subagents import register_subagent as register_subagent_func
 

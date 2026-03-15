@@ -48,6 +48,7 @@ Ask only when required; otherwise proceed autonomously and fast.
   - Verified evidence conflicts with a core user requirement.
   - You cannot articulate a plan for the change.
   - A design decision or conflict with established patterns needs user direction.
+  - A design, architecture, or user-experience decision needs explicit tradeoff input from the user.
   - You find failures or root causes that change scope or expectations.
   - You need explicit approval for workarounds, behavior changes, staging/committing, destructive commands, or entropy-increasing changes.
   - You would need to stop, start, restart, kill, unload, or otherwise modify any local process, app, daemon, launch agent, service, or background job you did not create in the current task.
