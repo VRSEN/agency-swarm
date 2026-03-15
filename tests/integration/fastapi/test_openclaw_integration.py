@@ -757,6 +757,18 @@ def test_build_openclaw_responses_model_prefers_openclaw_proxy_key_over_app_toke
     assert model._client.api_key == "proxy-token"
 
 
+def test_build_openclaw_responses_model_uses_gateway_token_when_proxy_and_app_tokens_are_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENCLAW_PROXY_API_KEY", raising=False)
+    monkeypatch.delenv("APP_TOKEN", raising=False)
+    monkeypatch.setenv("OPENCLAW_GATEWAY_TOKEN", "gateway-token")
+
+    model = build_openclaw_responses_model()
+
+    assert model._client.api_key == "gateway-token"
+
+
 def test_build_openclaw_responses_model_uses_openclaw_default_model_env_when_model_unspecified(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -765,6 +777,12 @@ def test_build_openclaw_responses_model_uses_openclaw_default_model_env_when_mod
     model = build_openclaw_responses_model()
 
     assert model.model == "openclaw:beta"
+
+
+def test_build_openclaw_responses_model_defaults_external_v1_to_public_alias() -> None:
+    model = build_openclaw_responses_model(base_url="http://127.0.0.1:18789/v1", api_key="external-token")
+
+    assert model.model == "openclaw:main"
 
 
 def test_openclaw_start_closes_log_handle_when_popen_fails(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -1327,3 +1345,30 @@ def test_openclaw_full_tool_mode_preserves_user_changes_made_while_worker_mode_i
         "notes": "keep-me",
     }
     assert restored["tools"]["deny"] == ["browser", "shell"]
+
+
+def test_openclaw_full_tool_mode_preserves_user_edits_to_existing_agent_to_agent_keys(tmp_path: Path) -> None:
+    config = replace(_build_openclaw_config(tmp_path), tool_mode="worker")
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps(
+            {
+                "tools": {
+                    "agentToAgent": {"enabled": True, "mode": "custom"},
+                    "deny": ["browser"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+    payload["tools"]["agentToAgent"]["mode"] = "strict"
+    config.config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    OpenClawRuntime(replace(config, tool_mode="full")).ensure_layout()
+
+    restored = json.loads(config.config_path.read_text(encoding="utf-8"))
+    assert restored["tools"]["agentToAgent"] == {"enabled": True, "mode": "strict"}
