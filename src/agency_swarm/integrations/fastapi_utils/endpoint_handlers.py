@@ -1006,6 +1006,7 @@ def make_agui_chat_endpoint(
             )
             keepalive_task: asyncio.Task | None = None
             connect_task: asyncio.Task | None = None
+            stream_task: asyncio.Task | None = None
             oauth_pending = False
 
             async def _emit_oauth(payload: dict[str, Any]) -> AsyncGenerator[str]:
@@ -1165,6 +1166,10 @@ def make_agui_chat_endpoint(
                     connect_task.cancel()
                     with contextlib.suppress(asyncio.CancelledError):
                         await connect_task
+                if stream_task and not stream_task.done():
+                    stream_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await stream_task
                 await cleanup_stream_context()
 
         return StreamingResponse(
