@@ -37,6 +37,7 @@ Before responding to the user and when you consider your task done, check whethe
 - If only external signals are pending (for example CI or reviewer approval), report that exact waiting state and keep polling instead of stopping early.
 - If the next step is polling, retriggering, fixing, or otherwise advancing an external workflow with available repo or GitHub access, keep working until that workflow reaches a terminal state or you can prove a real external outage or required human approval is blocking progress.
 - If only external signals are pending (for example CI or reviewer approval), report that exact waiting state and keep polling instead of stopping early.
+- For agent-observable external waits, poll every 60 seconds for up to 15 minutes before reporting that the workflow is still pending; never switch to a blind sleep longer than the polling interval, and inspect each poll result for new work.
 
 ## Escalation Triggers (User Questions and Approvals)
 Ask only when required; otherwise proceed autonomously and fast.

@@ -195,3 +195,65 @@ async def test_stream_endpoint_cancels_oauth_attach_task_on_stream_close(
         await consumer
 
     await asyncio.wait_for(cancelled.wait(), timeout=0.2)
+
+
+@pytest.mark.asyncio
+async def test_agui_endpoint_cancels_stream_task_on_teardown(monkeypatch: pytest.MonkeyPatch) -> None:
+    """AG-UI teardown must cancel the detached stream task."""
+
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def _noop_attach(_agency: Any) -> None:
+        return None
+
+    async def _pending_stream() -> AsyncGenerator[dict[str, Any]]:
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+        if False:
+            yield {}
+
+    class _StubAgency:
+        def __init__(self) -> None:
+            self.agents = {}
+            self.entry_points = []
+            self.thread_manager = type("_ThreadManager", (), {"get_all_messages": lambda self: []})()
+
+        def get_response_stream(self, **_kwargs: Any) -> StreamingRunResponse:
+            return StreamingRunResponse(_pending_stream())
+
+    monkeypatch.setattr(endpoint_handlers_module, "attach_persistent_mcp_servers", _noop_attach)
+
+    handler = make_agui_chat_endpoint(
+        RunAgentInputCustom,
+        agency_factory=lambda **_: _StubAgency(),
+        verify_token=lambda: None,
+    )
+
+    request = RunAgentInputCustom(
+        thread_id="thread-1",
+        run_id="run-1",
+        state=None,
+        messages=[],
+        tools=[],
+        context=[],
+        forwarded_props=None,
+        chat_history=[{"role": "user", "content": "hi"}],
+    )
+    response = await handler(request, token=None)
+
+    async def _consume_stream() -> None:
+        async for _chunk in response.body_iterator:
+            await asyncio.sleep(0)
+
+    consumer = asyncio.create_task(_consume_stream())
+    await asyncio.wait_for(started.wait(), timeout=0.2)
+    consumer.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await consumer
+
+    await asyncio.wait_for(cancelled.wait(), timeout=0.2)
