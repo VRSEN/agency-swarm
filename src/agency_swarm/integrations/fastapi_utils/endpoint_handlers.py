@@ -337,6 +337,11 @@ def _has_oauth_servers(agency_instance: Agency) -> bool:
         servers = getattr(agent, "mcp_servers", None)
         if isinstance(servers, list) and any(is_oauth_server(srv) for srv in servers):
             return True
+        deferred_oauth_servers = getattr(agent, "_oauth_mcp_servers", None)
+        if isinstance(deferred_oauth_servers, dict) and any(
+            is_oauth_server(srv) for srv in deferred_oauth_servers.values()
+        ):
+            return True
     return False
 
 
@@ -577,6 +582,7 @@ def make_stream_endpoint(
 
             stream = None
             stream_task: asyncio.Task | None = None
+            connect_task: asyncio.Task | None = None
             active_run: ActiveRun | None = None
             oauth_pending = False
             queue_task: asyncio.Task | None = (
@@ -787,6 +793,10 @@ def make_stream_endpoint(
                         stream_task.cancel()
                         with contextlib.suppress(asyncio.CancelledError):
                             await stream_task
+                    if connect_task and not connect_task.done():
+                        connect_task.cancel()
+                        with contextlib.suppress(asyncio.CancelledError):
+                            await connect_task
                     await run_registry.finish(run_id)
                     await cleanup_stream_context()
 
@@ -995,6 +1005,7 @@ def make_agui_chat_endpoint(
                 asyncio.create_task(oauth_runtime.next_event()) if oauth_runtime is not None else None
             )
             keepalive_task: asyncio.Task | None = None
+            connect_task: asyncio.Task | None = None
             oauth_pending = False
 
             async def _emit_oauth(payload: dict[str, Any]) -> AsyncGenerator[str]:
@@ -1150,6 +1161,10 @@ def make_agui_chat_endpoint(
                     queue_task.cancel()
                     with contextlib.suppress(asyncio.CancelledError):
                         await queue_task
+                if connect_task and not connect_task.done():
+                    connect_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await connect_task
                 await cleanup_stream_context()
 
         return StreamingResponse(

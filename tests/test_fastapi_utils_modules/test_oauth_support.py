@@ -66,6 +66,27 @@ async def test_wait_for_code_surfaces_user_mismatch_error() -> None:
 
 
 @pytest.mark.asyncio
+async def test_wait_for_code_recovers_after_user_mismatch_followed_by_valid_callback() -> None:
+    registry = OAuthStateRegistry()
+    await registry.record_redirect(
+        state="recover-state",
+        auth_url="https://idp.example.com/authorize?state=recover-state",
+        server_name="github",
+        user_id="owner-1",
+    )
+
+    await registry.set_code(state="recover-state", code="bad-code", user_id="owner-2")
+    with pytest.raises(OAuthFlowError, match="user_mismatch"):
+        await registry.wait_for_code(state="recover-state", timeout=0.05)
+
+    await registry.set_code(state="recover-state", code="good-code", user_id="owner-1")
+    code, state = await registry.wait_for_code(state="recover-state", timeout=0.05)
+
+    assert code == "good-code"
+    assert state == "recover-state"
+
+
+@pytest.mark.asyncio
 async def test_wait_for_code_times_out_cleanly() -> None:
     registry = OAuthStateRegistry()
     await registry.record_redirect(
@@ -374,6 +395,62 @@ async def test_get_response_rejects_hosted_mcp_tool_without_streaming() -> None:
         def __init__(self) -> None:
             self.mcp_servers = []
             self.tools = [hosted_mcp]
+
+    class DummyAgency:
+        def __init__(self) -> None:
+            self.agents = {"demo": DummyAgent()}
+            self.user_context = {}
+            self.thread_manager = DummyThreadManager()
+
+        async def get_response(self, *args, **kwargs):
+            class DummyResponse:
+                final_output = "ok"
+
+            return DummyResponse()
+
+    def agency_factory(load_threads_callback=None):
+        return DummyAgency()
+
+    endpoint = make_response_endpoint(
+        DummyRequest,
+        agency_factory,
+        lambda *args, **kwargs: None,
+        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry()),
+    )
+
+    req = DummyRequest()
+    with pytest.raises(HTTPException) as excinfo:
+        await endpoint(req, token=None, user_id="user-1")
+    assert excinfo.value.status_code == 400
+    assert "get_response_stream" in excinfo.value.detail
+
+
+@pytest.mark.asyncio
+async def test_get_response_rejects_deferred_oauth_servers_without_streaming() -> None:
+    """Deferred OAuth servers still require streaming redirect events."""
+
+    class DummyRequest:
+        def __init__(self) -> None:
+            self.message = "hello"
+            self.recipient_agent = None
+            self.additional_instructions = None
+            self.file_ids = None
+            self.file_urls = None
+            self.chat_history = None
+            self.user_context = None
+            self.generate_chat_name = False
+            self.client_config = None
+
+    class DummyThreadManager:
+        def get_all_messages(self) -> list:
+            return []
+
+    server = MCPServerOAuth(url="http://localhost:8999/mcp", name="demo", client_id="id", client_secret="secret")
+
+    class DummyAgent:
+        def __init__(self) -> None:
+            self.mcp_servers = []
+            self._oauth_mcp_servers = {"demo": server}
 
     class DummyAgency:
         def __init__(self) -> None:

@@ -15,6 +15,7 @@ from agency_swarm.mcp.oauth import FileTokenStorage, OAuthRuntimeContext, set_oa
 from agency_swarm.tools.mcp_manager import (
     LoopAffineAsyncProxy,
     PersistentMCPServerManager,
+    _build_persistence_key,
     _sync_oauth_client_handlers,
     attach_persistent_mcp_servers,
     default_mcp_manager,
@@ -642,8 +643,10 @@ async def test_attach_persistent_isolates_oauth_clients_by_user_id() -> None:
         set_oauth_user_id("user-b")
         await attach_persistent_mcp_servers(user_b_agency)
 
-        client_a = default_mcp_manager.get("github::user-a")
-        client_b = default_mcp_manager.get("github::user-b")
+        key_a = _build_persistence_key(user_a_agent.mcp_servers[0], "user-a")
+        key_b = _build_persistence_key(user_b_agent.mcp_servers[0], "user-b")
+        client_a = default_mcp_manager.get(key_a)
+        client_b = default_mcp_manager.get(key_b)
 
         assert client_a is not None
         assert client_b is not None
@@ -651,3 +654,15 @@ async def test_attach_persistent_isolates_oauth_clients_by_user_id() -> None:
     finally:
         set_oauth_user_id(None)
         await default_mcp_manager.shutdown()
+
+
+def test_build_persistence_key_keeps_distinct_user_ids_separate() -> None:
+    oauth_server = MCPServerOAuth(url="http://localhost:8001/mcp", name="github")
+    oauth_client = MCPServerOAuthClient(oauth_server)
+
+    key_plus = _build_persistence_key(oauth_client, "alice+bob")
+    key_underscore = _build_persistence_key(oauth_client, "alice_bob")
+
+    assert key_plus != key_underscore
+    assert key_plus.startswith("github::")
+    assert key_underscore.startswith("github::")

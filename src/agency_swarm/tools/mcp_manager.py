@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import inspect
 import logging
 import re
@@ -61,8 +62,9 @@ except ImportError:
 def _sanitize_oauth_registry_user_id(user_id: str) -> str:
     sanitized = re.sub(r"[^A-Za-z0-9._-]", "_", user_id).strip("._")
     if sanitized == "":
-        return "default"
-    return sanitized[:120]
+        sanitized = "default"
+    digest = hashlib.sha256(user_id.encode("utf-8")).hexdigest()[:16]
+    return f"{sanitized[:96]}-{digest}"
 
 
 def _build_persistence_key(server: Any, oauth_user_id: str | None) -> str:

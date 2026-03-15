@@ -94,6 +94,7 @@ class OAuthStateRegistry:
                     flow.error = "user_mismatch"
                     flow.status = "error:user_mismatch"
                 else:
+                    flow.error = None
                     flow.status = "authorized"
                 flow.code = code
             flow.event.set()
