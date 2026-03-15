@@ -44,6 +44,7 @@ Ask only when required; otherwise proceed autonomously and fast.
   - Requirements or behavior remain ambiguous after deep research.
   - You cannot articulate a plan for the change.
   - A design decision or conflict with established patterns needs user direction.
+  - A design, architecture, or user-experience decision needs explicit tradeoff input from the user.
   - You find failures or root causes that change scope or expectations.
   - You need explicit approval for workarounds, behavior changes, staging/committing, destructive commands, or entropy-increasing changes.
   - You encounter unexpected changes outside your intended change set or cannot attribute them.
