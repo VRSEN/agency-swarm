@@ -324,6 +324,7 @@ Strictness
 
 ## Memory & Expectations
 - User expects explicit status reporting, a test-first mindset, and directness. Ask at most one question at a time. After negative feedback or a protocol breach, tighten approvals: present minimal options and wait for explicit approval before changes; re-run Step 1 before and after edits.
+- Memory files are for durable lessons learned and task SOPs only; never use them as run logs, journals, or chronological transcripts.
 - Operate with maximum diligence and ownership; carry every task to completion with urgency and reliability.
 - When new insights improve clarity, distill them into existing sections (prefer refining current lines over adding new ones). After addressing the feedback, continue working if needed.
 
