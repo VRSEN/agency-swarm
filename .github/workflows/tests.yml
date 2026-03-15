@@ -64,10 +64,15 @@ jobs:
         run: make sync
 
       - name: Run tests with coverage
+        if: github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: make coverage
+
+      - name: Run unit tests for fork PRs
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork
+        run: uv run pytest tests/test_*_modules
 
   tests_py312:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
