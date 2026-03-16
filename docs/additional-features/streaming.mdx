@@ -45,3 +45,160 @@ async def stream_response(message: str):
 # Usage
 await stream_response("I want you to build me a website")
 ```
+
+## Streaming from Tools
+
+Tools can inject events into the parent SSE stream while they execute. This is especially useful when a tool runs a sub-agent or a long-running operation and you want the client to receive live progress updates alongside the normal agent output.
+
+### Accessing the Streaming Context
+
+Inside any `BaseTool.run()` method two objects give you access to the live stream:
+
+| Accessor | Type | What it is |
+|---|---|---|
+| `self.context._streaming_context` | `StreamingContext \| None` | The queue that feeds the parent stream. `None` when the request is not streaming. |
+| `self._context.tool_call_id` | `str \| None` | The unique ID of this specific tool invocation. Use it to let clients correlate events with the tool call. |
+
+```python
+streaming_ctx = getattr(self.context, "_streaming_context", None)
+tool_call_id  = getattr(self._context, "tool_call_id", None) or ""
+```
+
+Any object passed to `streaming_ctx.put_event(event)` is forwarded into the same stream your client is already consuming. There are three ways to use this, depending on how informative you want the events to be.
+
+### Method 1: Raw values
+
+The simplest option — emit any plain value directly. Useful for quick progress strings during development.
+
+```python
+class MyTool(BaseTool):
+    """Does something and reports progress."""
+
+    async def run(self):
+        streaming_ctx = getattr(self.context, "_streaming_context", None)
+
+        if streaming_ctx:
+            await streaming_ctx.put_event("step 1/3: fetching data…")
+
+        data = await _fetch()
+
+        if streaming_ctx:
+            await streaming_ctx.put_event("step 2/3: processing…")
+
+        result = await _process(data)
+
+        if streaming_ctx:
+            await streaming_ctx.put_event("step 3/3: done.")
+
+        return result
+```
+
+On the consumer side:
+
+```python
+async for event in agency.get_response_stream(message):
+    if isinstance(event, str):
+        print(f"[tool] {event}")
+```
+
+### Method 2: Existing SDK event types
+
+While neither the OpenAI API nor the `agents` SDK contains event types specifically designed for streaming output from tool execution, you can construct a [`RawResponsesStreamEvent`](https://openai.github.io/openai-agents-python/ref/stream_events/#agents.stream_events.RawResponsesStreamEvent) wrapping a `ResponseTextDeltaEvent` directly inside the tool. The internal tracking fields (`item_id`, `content_index`, etc.) just need placeholder values — the consumer's existing delta-handling code treats it identically to a normal LLM text delta.
+
+```python
+from agents import RawResponsesStreamEvent
+from openai.types.responses import ResponseTextDeltaEvent
+from agency_swarm.tools import BaseTool
+from pydantic import Field
+
+
+class MyTool(BaseTool):
+    """Does something and streams progress as text deltas."""
+
+    task: str = Field(..., description="The task to perform")
+
+    async def run(self):
+        streaming_ctx = getattr(self.context, "_streaming_context", None)
+
+        async def emit_delta(text: str) -> None:
+            if streaming_ctx:
+                await streaming_ctx.put_event(
+                    RawResponsesStreamEvent(
+                        data=ResponseTextDeltaEvent(
+                            content_index=0,
+                            output_index=0,
+                            sequence_number=0,
+                            item_id="tool_progress",
+                            logprobs=[],
+                            delta=text,
+                            type="response.output_text.delta",
+                        )
+                    )
+                )
+
+        await emit_delta("Starting…")
+        result = await _perform_task(self.task)
+        await emit_delta(" Done.")
+        return result
+```
+
+If you ignore the unique `item_id`, these events will be indistinguishable from regular LLM text deltas on the consumer side (i.e. presented as a part of agent's response). Or you can filter them out to explicitly distinguish tool deltas from agent deltas.
+
+### Method 3: Custom event model
+
+For the most informative output you can construct your own class that includes structured metadata — status, tool call ID for correlation, error details, etc. No built-in SDK type covers tool execution progress, so this is the recommended approach for production use, but it will require explicit checks on the consumer side to separate these events from standard SDK events.
+
+```python
+from typing import Literal, Optional
+from pydantic import BaseModel, Field
+from agency_swarm.tools import BaseTool
+
+
+class ToolProgressEvent(BaseModel):
+    """Streaming progress event emitted by a tool invocation."""
+
+    call_id: str
+    status: Literal["in_progress", "completed", "failed"] = "in_progress"
+    delta: Optional[str] = None
+    error: Optional[str] = None
+
+
+class LongRunningTool(BaseTool):
+    """A tool that reports live progress through the parent stream."""
+
+    task: str = Field(..., description="The task to perform")
+
+    async def run(self):
+        streaming_ctx = getattr(self.context, "_streaming_context", None)
+        tool_call_id = getattr(self._context, "tool_call_id", None) or ""
+
+        async def emit(status: str, delta: str | None = None, error: str | None = None) -> None:
+            if streaming_ctx:
+                await streaming_ctx.put_event(
+                    ToolProgressEvent(call_id=tool_call_id, status=status, delta=delta, error=error)
+                )
+
+        await emit("in_progress", delta="Starting…")
+
+        try:
+            result = await _perform_task(self.task)
+            await emit("completed")
+            return result
+        except Exception as exc:
+            await emit("failed", error=str(exc))
+            raise
+```
+
+On the consumer side, filter by type:
+
+```python
+async for event in agency.get_response_stream(message):
+    if isinstance(event, ToolProgressEvent):
+        print(f"[{event.status}] {event.delta or ''}")
+    elif hasattr(event, "data") and getattr(event.data, "type", None) == "response.output_text.delta":
+        print(event.data.delta, end="", flush=True)
+```
+
+<Warning>
+Regardless of the chosen method, events emitted via `put_event()` are only visible to the **client consuming the stream** — the calling agent never sees them. From the agent's perspective, the tool returns only its final `return` value, which is what gets added to the conversation history and passed back to the model.
+</Warning>
