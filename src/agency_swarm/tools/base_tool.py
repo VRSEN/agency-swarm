@@ -74,7 +74,7 @@ class BaseTool(BaseModel, ABC, metaclass=BaseToolMeta):
 
     _caller_agent: Any = None
     _event_handler: Any = None
-    _context: Any = None  # Will hold RunContextWrapper when available
+    _context: RunContextWrapper[MasterContext] | None = None
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
