@@ -27,11 +27,11 @@ async def get_response(
     message: str | list[TResponseInputItem],
     recipient_agent: str | Agent | None = None,
     context_override: dict[str, Any] | None = None,
-    agency_context_override: "AgencyContext | None" = None,
     hooks_override: RunHooks | None = None,
     run_config: RunConfig | None = None,
     file_ids: list[str] | None = None,
     additional_instructions: str | None = None,
+    agency_context_override: "AgencyContext | None" = None,
     **kwargs: Any,
 ) -> RunResult:
     """
@@ -105,11 +105,11 @@ def get_response_sync(
     message: str | list[TResponseInputItem],
     recipient_agent: str | Agent | None = None,
     context_override: dict[str, Any] | None = None,
-    agency_context_override: "AgencyContext | None" = None,
     hooks_override: RunHooks | None = None,
     run_config: RunConfig | None = None,
     file_ids: list[str] | None = None,
     additional_instructions: str | None = None,
+    agency_context_override: "AgencyContext | None" = None,
     **kwargs: Any,
 ) -> RunResult:
     """Synchronous wrapper around :meth:`get_response`."""
@@ -158,11 +158,11 @@ def get_response_stream(
     message: str | list[TResponseInputItem],
     recipient_agent: str | Agent | None = None,
     context_override: dict[str, Any] | None = None,
-    agency_context_override: "AgencyContext | None" = None,
     hooks_override: RunHooks | None = None,
     run_config_override: RunConfig | None = None,
     file_ids: list[str] | None = None,
     additional_instructions: str | None = None,
+    agency_context_override: "AgencyContext | None" = None,
     **kwargs: Any,
 ) -> StreamingRunResponse:
     """
