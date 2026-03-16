@@ -790,6 +790,18 @@ def test_build_openclaw_responses_model_uses_gateway_token_when_proxy_and_app_to
     assert model._client.api_key == "gateway-token"
 
 
+def test_build_openclaw_responses_model_uses_gateway_token_before_app_token_for_direct_gateway_urls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENCLAW_PROXY_API_KEY", raising=False)
+    monkeypatch.setenv("APP_TOKEN", "app-token")
+    monkeypatch.setenv("OPENCLAW_GATEWAY_TOKEN", "gateway-token")
+
+    model = build_openclaw_responses_model(base_url="http://127.0.0.1:18789/v1")
+
+    assert model._client.api_key == "gateway-token"
+
+
 def test_build_openclaw_responses_model_uses_openclaw_default_model_env_when_model_unspecified(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -151,6 +151,16 @@ def test_openclaw_agent_rejects_files_folder_tool_wiring() -> None:
         )
 
 
+def test_openclaw_agent_rejects_manual_communication_capability_overrides() -> None:
+    with pytest.raises(TypeError, match="always receive-only"):
+        OpenClawAgent(
+            name="OpenClawWorker",
+            description="Worker",
+            instructions="Handle OpenClaw work.",
+            supports_outbound_communication=True,
+        )
+
+
 def test_openclaw_agent_skips_shared_tool_wiring() -> None:
     openclaw_worker = OpenClawAgent(
         name="OpenClawWorker",
