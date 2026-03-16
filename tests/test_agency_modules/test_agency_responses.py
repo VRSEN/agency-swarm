@@ -74,6 +74,7 @@ class CapturingAgent(Agent):
         **kwargs: Any,
     ):
         self.last_context_override = context_override
+        self.last_hooks_override = hooks_override
         self.last_agency_context = agency_context
         return super().get_response_stream(
             message=message,
@@ -149,6 +150,32 @@ async def test_agency_get_response_with_hooks(mock_agent):
 
 
 @pytest.mark.asyncio
+async def test_agency_get_response_preserves_positional_hooks_override(mock_agent):
+    """Adding agency_context_override must not break legacy positional hooks calls."""
+    agency = Agency(mock_agent)
+    hooks_override = RunHooks()
+
+    result = await agency.get_response("Test message", "MockAgent", None, hooks_override)
+
+    assert result.final_output == "Test response"
+    assert mock_agent.last_hooks_override is hooks_override
+
+
+@pytest.mark.asyncio
+async def test_agency_get_response_sync_preserves_positional_hooks_override(mock_agent):
+    """The sync entrypoint should keep the old positional argument order."""
+    agency = Agency(mock_agent)
+    hooks_override = RunHooks()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        result = agency.get_response_sync("Test message", "MockAgent", None, hooks_override)
+
+    assert result.final_output == "Test response"
+    assert mock_agent.last_hooks_override is hooks_override
+
+
+@pytest.mark.asyncio
 async def test_agency_get_response_invalid_recipient_warning(mock_agent):
     """Test Agency.get_response with invalid recipient agent name."""
     agency = Agency(mock_agent)
@@ -195,6 +222,21 @@ async def test_agency_get_response_stream_with_hooks(mock_agent):
     assert stream.final_result is not None
     assert stream.final_result.final_output == "Test response"
     assert saved_messages
+
+
+@pytest.mark.asyncio
+async def test_agency_get_response_stream_preserves_positional_hooks_override(mock_agent):
+    """The streaming entrypoint should keep the old positional argument order."""
+    agency = Agency(mock_agent)
+    hooks_override = RunHooks()
+
+    stream = agency.get_response_stream("Test message", "MockAgent", None, hooks_override)
+    async for _event in stream:
+        pass
+
+    assert stream.final_result is not None
+    assert stream.final_result.final_output == "Test response"
+    assert mock_agent.last_hooks_override is hooks_override
 
 
 @pytest.mark.asyncio

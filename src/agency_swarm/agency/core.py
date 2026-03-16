@@ -231,11 +231,11 @@ class Agency:
         message: str | list[TResponseInputItem],
         recipient_agent: str | Agent | None = None,
         context_override: dict[str, Any] | None = None,
-        agency_context_override: AgencyContext | None = None,
         hooks_override: RunHooks | None = None,
         run_config: RunConfig | None = None,
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
+        agency_context_override: AgencyContext | None = None,
         **kwargs: Any,
     ) -> RunResult:
         """
@@ -272,11 +272,11 @@ class Agency:
             message,
             recipient_agent,
             context_override,
-            agency_context_override,
             hooks_override,
             run_config,
             file_ids,
             additional_instructions,
+            agency_context_override=agency_context_override,
             **kwargs,
         )
 
@@ -285,11 +285,11 @@ class Agency:
         message: str | list[TResponseInputItem],
         recipient_agent: str | Agent | None = None,
         context_override: dict[str, Any] | None = None,
-        agency_context_override: AgencyContext | None = None,
         hooks_override: RunHooks | None = None,
         run_config: RunConfig | None = None,
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
+        agency_context_override: AgencyContext | None = None,
         **kwargs: Any,
     ) -> RunResult:
         """Synchronous wrapper around :meth:`get_response`."""
@@ -300,11 +300,11 @@ class Agency:
             message,
             recipient_agent,
             context_override,
-            agency_context_override,
             hooks_override,
             run_config,
             file_ids,
             additional_instructions,
+            agency_context_override=agency_context_override,
             **kwargs,
         )
 
@@ -313,11 +313,11 @@ class Agency:
         message: str | list[TResponseInputItem],
         recipient_agent: str | Agent | None = None,
         context_override: dict[str, Any] | None = None,
-        agency_context_override: AgencyContext | None = None,
         hooks_override: RunHooks | None = None,
         run_config_override: RunConfig | None = None,
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
+        agency_context_override: AgencyContext | None = None,
         **kwargs: Any,
     ) -> StreamingRunResponse:
         """
@@ -352,11 +352,11 @@ class Agency:
             message,
             recipient_agent,
             context_override,
-            agency_context_override,
             hooks_override,
             run_config_override,
             file_ids,
             additional_instructions,
+            agency_context_override=agency_context_override,
             **kwargs,
         )
 
