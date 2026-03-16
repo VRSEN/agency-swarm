@@ -208,7 +208,7 @@ class SendMessage(FunctionTool):
         shared_instructions_from_context = wrapper.context.shared_instructions
 
         # Create a minimal agency context for multi-agent communication
-        agency_runtime_map = wrapper.context.agent_runtime_state or {}
+        agency_runtime_map = wrapper.context.agent_runtime_state
 
         class MinimalAgency:
             def __init__(self, agents_dict, user_context, runtime_state_map):
