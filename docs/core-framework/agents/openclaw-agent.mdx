@@ -38,6 +38,9 @@ agency = Agency(
 )
 ```
 
+This example assumes `OpenClawAgent` can already reach a running OpenClaw endpoint.
+By default it calls the local `/openclaw/v1` proxy, so either mount that proxy in the same FastAPI app or point the agent at a custom `base_url`.
+
 ## Choose How To Reach OpenClaw
 
 <Tabs>
@@ -54,8 +57,9 @@ openclaw_worker = OpenClawAgent(
 ```
 
 This uses the local `/openclaw/v1` proxy in the same app.
-Mount that proxy first with `attach_openclaw_to_fastapi(app)`.
+Before you use this path, mount that proxy in the same app with `attach_openclaw_to_fastapi(app)`.
 Install the FastAPI extras for that path: `pip install "agency-swarm[fastapi]"`.
+That mounted runtime also needs a working `openclaw` gateway command and a compatible Node installation.
 If `OPENCLAW_PROXY_PORT` is set, `OpenClawAgent` uses that port.
 Otherwise it falls back to `PORT`, then `8000`.
   </Tab>
@@ -91,7 +95,8 @@ openclaw_worker = OpenClawAgent(
 ```
 
 Use this when OpenClaw is managed outside the Agency Swarm app.
-If that server is meant to be a delegated worker, start it with `OPENCLAW_TOOL_MODE=worker`.
+If that server is another Agency Swarm app using this integration, start it with `OPENCLAW_TOOL_MODE=worker`.
+If it is plain OpenClaw outside Agency Swarm, disable its competing delegation paths in that runtime instead of copying this env var blindly.
   </Tab>
 </Tabs>
 
