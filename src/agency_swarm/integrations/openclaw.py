@@ -870,6 +870,9 @@ def _restore_full_tool_mode_config(current: dict[str, Any], backup_path: Path, c
             else:
                 merged_agent_to_agent = restored_agent_to_agent.copy()
                 merged_agent_to_agent.update(current_agent_to_agent)
+                removed_agent_to_agent_keys = set(worker_agent_to_agent) - set(current_agent_to_agent)
+                for removed_key in removed_agent_to_agent_keys:
+                    merged_agent_to_agent.pop(removed_key, None)
                 if (
                     current_agent_to_agent.get("enabled") == worker_agent_to_agent.get("enabled")
                     and "enabled" in restored_agent_to_agent

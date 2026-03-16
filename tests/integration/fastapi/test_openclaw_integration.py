@@ -1432,6 +1432,33 @@ def test_openclaw_full_tool_mode_preserves_user_edits_to_existing_agent_to_agent
     assert restored["tools"]["agentToAgent"] == {"enabled": True, "mode": "strict"}
 
 
+def test_openclaw_full_tool_mode_preserves_deleted_agent_to_agent_keys(tmp_path: Path) -> None:
+    config = replace(_build_openclaw_config(tmp_path), tool_mode="worker")
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps(
+            {
+                "tools": {
+                    "agentToAgent": {"enabled": True, "mode": "custom", "scope": "full"},
+                    "deny": ["browser"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+    payload["tools"]["agentToAgent"].pop("mode")
+    config.config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    OpenClawRuntime(replace(config, tool_mode="full")).ensure_layout()
+
+    restored = json.loads(config.config_path.read_text(encoding="utf-8"))
+    assert restored["tools"]["agentToAgent"] == {"enabled": True, "scope": "full"}
+
+
 def test_openclaw_full_tool_mode_preserves_deleted_deny_entries(tmp_path: Path) -> None:
     config = replace(_build_openclaw_config(tmp_path), tool_mode="worker")
     config.config_path.parent.mkdir(parents=True, exist_ok=True)
