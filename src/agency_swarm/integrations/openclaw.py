@@ -810,8 +810,8 @@ def _apply_tool_mode_config(current: dict[str, Any], tool_mode: str, config_path
         return None
 
     backup_path = _tool_mode_backup_path(config_path)
-    _restore_full_tool_mode_config(current, backup_path, config_path)
-    return backup_path
+    restored = _restore_full_tool_mode_config(current, backup_path, config_path)
+    return backup_path if restored else None
 
 
 def _apply_worker_tool_mode_config(current: dict[str, Any], backup_path: Path) -> None:
@@ -850,10 +850,10 @@ def _apply_worker_tool_mode_config(current: dict[str, Any], backup_path: Path) -
     tools["deny"] = deny
 
 
-def _restore_full_tool_mode_config(current: dict[str, Any], backup_path: Path, config_path: Path) -> None:
+def _restore_full_tool_mode_config(current: dict[str, Any], backup_path: Path, config_path: Path) -> bool:
     backup = _read_tool_mode_backup(backup_path)
     if backup is None:
-        return
+        return False
 
     tools = current.get("tools")
     if not isinstance(tools, dict):
@@ -921,6 +921,7 @@ def _restore_full_tool_mode_config(current: dict[str, Any], backup_path: Path, c
 
     if not backup.get("had_tools") and not tools:
         current.pop("tools", None)
+    return True
 
 
 def _record_worker_tool_mode_state(config_path: Path, backup_path: Path, current: dict[str, Any]) -> None:
