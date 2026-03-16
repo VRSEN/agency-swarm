@@ -35,7 +35,6 @@ class MasterContext:
     agent_runtime_state: dict[str, "AgentRuntimeState"] = field(default_factory=dict)
     current_agent_name: str | None = None  # Name of the agent currently executing
     shared_instructions: str | None = None  # Shared instructions from the agency
-    _tool_call_id: str | None = None  # Tool call ID for the current invocation
     _current_agent_run_id: str | None = None  # Current agent run ID for tracking
     _parent_run_id: str | None = None  # Parent run ID for nested agent calls
     _is_streaming: bool = False  # Flag to indicate if we're in streaming mode
