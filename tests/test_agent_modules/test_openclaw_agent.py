@@ -42,6 +42,18 @@ def test_openclaw_agent_supports_custom_host_port_and_path() -> None:
     assert agent.model.model == "openclaw:main"
 
 
+def test_openclaw_agent_brackets_ipv6_hosts() -> None:
+    agent = OpenClawAgent(
+        name="OpenClawWorker",
+        description="Worker",
+        instructions="Handle OpenClaw work.",
+        host="::1",
+        port=18080,
+    )
+
+    assert str(agent.model._client.base_url) == "http://[::1]:18080/openclaw/v1/"
+
+
 def test_openclaw_agent_defaults_external_v1_urls_to_public_alias() -> None:
     agent = OpenClawAgent(
         name="OpenClawWorker",

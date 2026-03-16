@@ -322,7 +322,7 @@ class OpenClawRuntime:
             endpoints["responses"] = responses
         responses["enabled"] = True
 
-        _apply_tool_mode_config(current, self.config.tool_mode, self.config.config_path)
+        backup_to_remove = _apply_tool_mode_config(current, self.config.tool_mode, self.config.config_path)
 
         agents = current.setdefault("agents", {})
         if not isinstance(agents, dict):
@@ -343,6 +343,8 @@ class OpenClawRuntime:
             self.config.config_path.chmod(0o600)
         except OSError:
             logger.debug("Unable to set restrictive permissions on OpenClaw config path", exc_info=True)
+        if backup_to_remove is not None:
+            _remove_tool_mode_backup(backup_to_remove)
         if self.config.tool_mode == "worker":
             _record_worker_tool_mode_state(
                 self.config.config_path, _tool_mode_backup_path(self.config.config_path), current
@@ -803,12 +805,14 @@ def _read_tool_mode_backup(path: Path) -> dict[str, Any] | None:
     return raw if isinstance(raw, dict) else None
 
 
-def _apply_tool_mode_config(current: dict[str, Any], tool_mode: str, config_path: Path) -> None:
+def _apply_tool_mode_config(current: dict[str, Any], tool_mode: str, config_path: Path) -> Path | None:
     if tool_mode == "worker":
         _apply_worker_tool_mode_config(current, _tool_mode_backup_path(config_path))
-        return
+        return None
 
-    _restore_full_tool_mode_config(current, _tool_mode_backup_path(config_path), config_path)
+    backup_path = _tool_mode_backup_path(config_path)
+    _restore_full_tool_mode_config(current, backup_path, config_path)
+    return backup_path
 
 
 def _apply_worker_tool_mode_config(current: dict[str, Any], backup_path: Path) -> None:
@@ -922,13 +926,6 @@ def _restore_full_tool_mode_config(current: dict[str, Any], backup_path: Path, c
     if not backup.get("had_tools") and not tools:
         current.pop("tools", None)
 
-    try:
-        backup_path.unlink()
-    except FileNotFoundError:
-        pass
-    except OSError:
-        logger.warning("Could not remove OpenClaw tool-mode backup at %s", backup_path, exc_info=True)
-
 
 def _record_worker_tool_mode_state(config_path: Path, backup_path: Path, current: dict[str, Any]) -> None:
     backup = _read_tool_mode_backup(backup_path)
@@ -995,6 +992,15 @@ def _json_sha256(payload: Any) -> str | None:
 
 def _config_without_tools(current: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in current.items() if key != "tools"}
+
+
+def _remove_tool_mode_backup(backup_path: Path) -> None:
+    try:
+        backup_path.unlink()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        logger.warning("Could not remove OpenClaw tool-mode backup at %s", backup_path, exc_info=True)
 
 
 def _worker_only_denies(restored_deny: list[Any], worker_deny: Any) -> set[str]:
