@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -157,7 +158,7 @@ class OpenClawIntegrationConfig:
     default_model: str
     provider_model: str
     gateway_command: str | None
-    tool_mode: str
+    tool_mode: str = "full"
 
     @property
     def upstream_base_url(self) -> str:
@@ -860,11 +861,14 @@ def _restore_full_tool_mode_config(current: dict[str, Any], backup_path: Path, c
     restored_agent_to_agent = backup.get("agent_to_agent")
     worker_agent_to_agent = backup.get("worker_agent_to_agent")
     config_modified = _tool_mode_config_changed_since_worker_apply(config_path, backup)
+    non_tools_modified = _non_tool_config_changed_since_worker_apply(current, backup)
     if isinstance(restored_agent_to_agent, dict):
         if isinstance(current_agent_to_agent, dict) and isinstance(worker_agent_to_agent, dict):
             if current_agent_to_agent == worker_agent_to_agent:
                 tools["agentToAgent"] = (
-                    current_agent_to_agent.copy() if config_modified else restored_agent_to_agent.copy()
+                    current_agent_to_agent.copy()
+                    if config_modified and not non_tools_modified
+                    else restored_agent_to_agent.copy()
                 )
             else:
                 merged_agent_to_agent = restored_agent_to_agent.copy()
@@ -895,12 +899,7 @@ def _restore_full_tool_mode_config(current: dict[str, Any], backup_path: Path, c
     worker_deny = backup.get("worker_deny")
     if isinstance(restored_deny, list):
         worker_only_denies = _worker_only_denies(restored_deny, worker_deny)
-        if (
-            isinstance(current_deny, list)
-            and isinstance(worker_deny, list)
-            and current_deny == worker_deny
-            and not config_modified
-        ):
+        if isinstance(current_deny, list) and isinstance(worker_deny, list) and current_deny == worker_deny:
             tools["deny"] = restored_deny.copy()
         elif isinstance(current_deny, list):
             filtered_deny = [item for item in current_deny if item not in worker_only_denies]
@@ -935,27 +934,67 @@ def _record_worker_tool_mode_state(config_path: Path, backup_path: Path, current
     backup = _read_tool_mode_backup(backup_path)
     if backup is None:
         return
+    updates: dict[str, Any] = {}
 
     tools = current.get("tools")
     agent_to_agent = tools.get("agentToAgent") if isinstance(tools, dict) else None
     deny = tools.get("deny") if isinstance(tools, dict) else None
-    backup["worker_agent_to_agent"] = agent_to_agent if isinstance(agent_to_agent, dict) else None
-    backup["worker_deny"] = list(deny) if isinstance(deny, list) else None
-    try:
-        backup["worker_config_mtime_ns"] = config_path.stat().st_mtime_ns
-    except OSError:
-        backup.pop("worker_config_mtime_ns", None)
+    if "worker_agent_to_agent" not in backup:
+        updates["worker_agent_to_agent"] = agent_to_agent if isinstance(agent_to_agent, dict) else None
+    if "worker_deny" not in backup:
+        updates["worker_deny"] = list(deny) if isinstance(deny, list) else None
+    if "worker_config_sha256" not in backup:
+        digest = _config_sha256(config_path)
+        if digest is not None:
+            updates["worker_config_sha256"] = digest
+    if "worker_non_tools_sha256" not in backup:
+        digest = _json_sha256(_config_without_tools(current))
+        if digest is not None:
+            updates["worker_non_tools_sha256"] = digest
+
+    if not updates:
+        return
+    backup.update(updates)
     _write_json_file(backup_path, backup)
 
 
 def _tool_mode_config_changed_since_worker_apply(config_path: Path, backup: dict[str, Any]) -> bool:
-    recorded_mtime = backup.get("worker_config_mtime_ns")
-    if not isinstance(recorded_mtime, int):
+    recorded_digest = backup.get("worker_config_sha256")
+    if not isinstance(recorded_digest, str) or not recorded_digest:
         return False
+    current_digest = _config_sha256(config_path)
+    if current_digest is None:
+        return False
+    return current_digest != recorded_digest
+
+
+def _non_tool_config_changed_since_worker_apply(current: dict[str, Any], backup: dict[str, Any]) -> bool:
+    recorded_digest = backup.get("worker_non_tools_sha256")
+    if not isinstance(recorded_digest, str) or not recorded_digest:
+        return False
+    current_digest = _json_sha256(_config_without_tools(current))
+    if current_digest is None:
+        return False
+    return current_digest != recorded_digest
+
+
+def _config_sha256(path: Path) -> str | None:
     try:
-        return config_path.stat().st_mtime_ns != recorded_mtime
+        return hashlib.sha256(path.read_bytes()).hexdigest()
     except OSError:
-        return False
+        return None
+
+
+def _json_sha256(payload: Any) -> str | None:
+    try:
+        normalized = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    except (TypeError, ValueError):
+        return None
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def _config_without_tools(current: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in current.items() if key != "tools"}
 
 
 def _worker_only_denies(restored_deny: list[Any], worker_deny: Any) -> set[str]:
