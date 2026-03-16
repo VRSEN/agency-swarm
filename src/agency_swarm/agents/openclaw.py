@@ -42,7 +42,7 @@ class OpenClawAgent(Agent):
 
 
 def _build_openclaw_responses_model(*, base_url: str, api_key: str | None) -> OpenAIResponsesModel:
-    client = AsyncOpenAI(base_url=base_url, api_key=_resolve_openclaw_api_key(api_key))
+    client = AsyncOpenAI(base_url=base_url, api_key=_resolve_openclaw_api_key(base_url, api_key))
     return OpenAIResponsesModel(
         model=_resolve_openclaw_model(base_url),
         openai_client=client,
@@ -55,14 +55,18 @@ def _resolve_openclaw_model(base_url: str) -> str:
     return os.getenv("OPENCLAW_DEFAULT_MODEL", "").strip() or DEFAULT_OPENCLAW_MODEL
 
 
-def _resolve_openclaw_api_key(api_key: str | None) -> str:
-    return (
-        api_key
-        or os.getenv("OPENCLAW_PROXY_API_KEY")
-        or os.getenv("APP_TOKEN")
-        or os.getenv("OPENCLAW_GATEWAY_TOKEN")
-        or "sk-openclaw-proxy"
-    )
+def _resolve_openclaw_api_key(base_url: str, api_key: str | None) -> str:
+    if api_key:
+        return api_key
+
+    proxy_api_key = os.getenv("OPENCLAW_PROXY_API_KEY")
+    if proxy_api_key:
+        return proxy_api_key
+
+    if _uses_local_proxy_alias(base_url):
+        return os.getenv("APP_TOKEN") or os.getenv("OPENCLAW_GATEWAY_TOKEN") or "sk-openclaw-proxy"
+
+    return os.getenv("OPENCLAW_GATEWAY_TOKEN") or os.getenv("APP_TOKEN") or "sk-openclaw-proxy"
 
 
 def _uses_local_proxy_alias(base_url: str) -> bool:

@@ -83,6 +83,37 @@ def test_openclaw_agent_uses_gateway_token_when_proxy_key_and_app_token_are_miss
     assert agent.model._client.api_key == "gateway-token"
 
 
+def test_openclaw_agent_uses_gateway_token_before_app_token_for_direct_gateway_urls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENCLAW_PROXY_API_KEY", raising=False)
+    monkeypatch.setenv("APP_TOKEN", "app-token")
+    monkeypatch.setenv("OPENCLAW_GATEWAY_TOKEN", "gateway-token")
+
+    agent = OpenClawAgent(
+        name="OpenClawWorker",
+        description="Worker",
+        instructions="Handle OpenClaw work.",
+        base_url="http://127.0.0.1:18789/v1",
+    )
+
+    assert agent.model._client.api_key == "gateway-token"
+
+
+def test_openclaw_agent_keeps_app_token_first_for_local_proxy_urls(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OPENCLAW_PROXY_API_KEY", raising=False)
+    monkeypatch.setenv("APP_TOKEN", "app-token")
+    monkeypatch.setenv("OPENCLAW_GATEWAY_TOKEN", "gateway-token")
+
+    agent = OpenClawAgent(
+        name="OpenClawWorker",
+        description="Worker",
+        instructions="Handle OpenClaw work.",
+    )
+
+    assert agent.model._client.api_key == "app-token"
+
+
 def test_openclaw_agent_rejects_manual_handoffs() -> None:
     recipient = Agent(
         name="Recipient",
