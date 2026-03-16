@@ -10,6 +10,7 @@ from agents import FunctionTool
 from agents.exceptions import ModelBehaviorError
 from agents.strict_schema import ensure_strict_json_schema
 from agents.tool import default_tool_error_function
+from agents.tool_context import ToolContext
 from pydantic import ValidationError
 from pydantic_core import InitErrorDetails
 
@@ -44,6 +45,8 @@ def adapt_base_tool(base_tool: type[BaseTool]) -> FunctionTool:
             tool_instance = base_tool(**args)
             if ctx is not None:
                 tool_instance._context = ctx
+                if isinstance(ctx, ToolContext) and ctx.context is not None:
+                    ctx.context._tool_call_id = ctx.tool_call_id
             if inspect.iscoroutinefunction(tool_instance.run):
                 return await tool_instance.run()
             return await asyncio.to_thread(tool_instance.run)
