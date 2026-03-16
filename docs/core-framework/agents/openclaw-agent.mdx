@@ -94,8 +94,9 @@ openclaw_worker = OpenClawAgent(
 )
 ```
 
-Use this when OpenClaw is managed outside the Agency Swarm app.
-If that server is another Agency Swarm app using this integration, start it with `OPENCLAW_TOOL_MODE=worker`.
+Use this when you are talking to a raw OpenClaw gateway that serves `/v1` directly.
+If the remote server is another Agency Swarm app using this integration, use its `/openclaw/v1` path instead of `/v1`.
+When that remote server is a delegated worker, start it with `OPENCLAW_TOOL_MODE=worker`.
 If it is plain OpenClaw outside Agency Swarm, disable its competing delegation paths in that runtime instead of copying this env var blindly.
   </Tab>
 </Tabs>
