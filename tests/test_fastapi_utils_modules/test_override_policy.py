@@ -38,25 +38,24 @@ def test_request_override_policy_flags() -> None:
     assert empty.has_openai_overrides is False
 
 
-def test_get_allowed_dirs_for_metadata_preserves_strings_and_skips_invalid(tmp_path) -> None:
+def test_get_allowed_dirs_for_metadata_returns_all_entries(tmp_path) -> None:
     allowed = tmp_path / "uploads"
     allowed.mkdir(parents=True, exist_ok=True)
     file_entry = tmp_path / "not-a-dir.txt"
     file_entry.write_text("x", encoding="utf-8")
     missing_entry = tmp_path / "missing"
+    tilde_entry = Path("~") / "custom"
 
     visible = get_allowed_dirs_for_metadata(
         [
             str(allowed),
             str(file_entry),
             str(missing_entry),
-            Path("~") / "custom",
+            tilde_entry,
         ]
     )
 
-    assert visible[0] == str(allowed)
-    assert str(file_entry) not in visible
-    assert str(missing_entry) not in visible
+    assert visible == [str(allowed), str(file_entry), str(missing_entry), str(tilde_entry)]
 
 
 def test_build_file_upload_client_uses_selected_agent_client() -> None:

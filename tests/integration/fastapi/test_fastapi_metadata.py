@@ -249,8 +249,8 @@ def test_metadata_includes_tool_input_schema():
     assert "text" in input_schema.get("properties", {})
 
 
-def test_metadata_skips_missing_allowed_dirs(tmp_path, agency_factory):
-    """Missing allowed local file directories should be omitted from metadata."""
+def test_metadata_includes_missing_allowed_dirs(tmp_path, agency_factory):
+    """Missing allowed local file directories should still appear in metadata."""
     missing_dir = tmp_path / "missing-uploads"
 
     app = run_fastapi(
@@ -265,11 +265,11 @@ def test_metadata_skips_missing_allowed_dirs(tmp_path, agency_factory):
     assert response.status_code == 200
     payload = response.json()
 
-    assert payload["allowed_local_file_dirs"] == []
+    assert payload["allowed_local_file_dirs"] == [str(missing_dir)]
 
 
-def test_metadata_skips_non_directory_allowed_dirs(tmp_path, agency_factory):
-    """Non-directory allowlist entries should be ignored instead of breaking metadata."""
+def test_metadata_includes_non_directory_allowed_dirs(tmp_path, agency_factory):
+    """Non-directory allowlist entries should appear in metadata as configured."""
     file_entry = tmp_path / "not-a-directory.txt"
     file_entry.write_text("x", encoding="utf-8")
 
@@ -285,7 +285,7 @@ def test_metadata_skips_non_directory_allowed_dirs(tmp_path, agency_factory):
     assert response.status_code == 200
     payload = response.json()
 
-    assert payload["allowed_local_file_dirs"] == []
+    assert payload["allowed_local_file_dirs"] == [str(file_entry)]
 
 
 def test_metadata_preserves_configured_allowlist_strings(tmp_path, monkeypatch, agency_factory):
