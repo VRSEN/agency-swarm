@@ -157,6 +157,15 @@ class BaseTool(BaseModel, ABC, metaclass=BaseToolMeta):
             return self._context.context
         return None
 
+    @property
+    def tool_call_id(self) -> str | None:
+        """Get the tool_call_id for this invocation, if available."""
+        from agents.tool_context import ToolContext
+
+        if isinstance(self._context, ToolContext):
+            return self._context.tool_call_id
+        return None
+
     @abstractmethod
     def run(self):
         pass
