@@ -2,15 +2,11 @@ from __future__ import annotations
 
 import os
 from typing import Any
-from urllib.parse import urlparse
-
-from agents.models.openai_responses import OpenAIResponsesModel
-from openai import AsyncOpenAI
 
 from agency_swarm.agent.core import Agent
+from agency_swarm.integrations.openclaw_model import build_openclaw_responses_model
 
 DEFAULT_OPENCLAW_API_PATH = "/openclaw/v1"
-DEFAULT_OPENCLAW_MODEL = "openclaw:main"
 
 
 class OpenClawAgent(Agent):
@@ -37,42 +33,8 @@ class OpenClawAgent(Agent):
             api_path=api_path,
         )
 
-        kwargs["model"] = _build_openclaw_responses_model(base_url=resolved_base_url, api_key=api_key)
+        kwargs["model"] = build_openclaw_responses_model(base_url=resolved_base_url, api_key=api_key)
         super().__init__(**kwargs)
-
-
-def _build_openclaw_responses_model(*, base_url: str, api_key: str | None) -> OpenAIResponsesModel:
-    client = AsyncOpenAI(base_url=base_url, api_key=_resolve_openclaw_api_key(base_url, api_key))
-    return OpenAIResponsesModel(
-        model=_resolve_openclaw_model(base_url),
-        openai_client=client,
-    )
-
-
-def _resolve_openclaw_model(base_url: str) -> str:
-    if _uses_local_proxy_alias(base_url):
-        return os.getenv("OPENCLAW_DEFAULT_MODEL", "").strip() or DEFAULT_OPENCLAW_MODEL
-    return os.getenv("OPENCLAW_DEFAULT_MODEL", "").strip() or DEFAULT_OPENCLAW_MODEL
-
-
-def _resolve_openclaw_api_key(base_url: str, api_key: str | None) -> str:
-    if api_key:
-        return api_key
-
-    proxy_api_key = os.getenv("OPENCLAW_PROXY_API_KEY")
-    if proxy_api_key:
-        return proxy_api_key
-
-    if _uses_local_proxy_alias(base_url):
-        return os.getenv("APP_TOKEN") or os.getenv("OPENCLAW_GATEWAY_TOKEN") or "sk-openclaw-proxy"
-
-    return os.getenv("OPENCLAW_GATEWAY_TOKEN") or os.getenv("APP_TOKEN") or "sk-openclaw-proxy"
-
-
-def _uses_local_proxy_alias(base_url: str) -> bool:
-    parsed = urlparse(base_url)
-    normalized_path = parsed.path.rstrip("/")
-    return normalized_path.endswith(DEFAULT_OPENCLAW_API_PATH) or "/openclaw/" in normalized_path
 
 
 def _resolve_openclaw_base_url(
@@ -114,6 +76,12 @@ def _validate_openclaw_agent_kwargs(kwargs: dict[str, Any]) -> None:
     if kwargs.get("handoffs"):
         raise TypeError(
             "OpenClawAgent does not accept manual handoffs. Use a normal Agency Swarm agent as the delegator."
+        )
+
+    if "supports_outbound_communication" in kwargs or "supports_framework_tool_wiring" in kwargs:
+        raise TypeError(
+            "OpenClawAgent is always receive-only and manages its worker wiring automatically. "
+            "Remove communication capability overrides."
         )
 
     unsupported_fields = [

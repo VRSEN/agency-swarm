@@ -22,11 +22,11 @@ from agents import OpenAIResponsesModel
 from dotenv import dotenv_values
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
-from openai import AsyncOpenAI
+
+from . import openclaw_model
+from .openclaw_model import DEFAULT_OPENCLAW_MODEL
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_OPENCLAW_MODEL = "openclaw:main"
 
 _OPENRESPONSES_ALLOWED_KEYS: tuple[str, ...] = (
     "model",
@@ -1140,22 +1140,4 @@ def build_openclaw_responses_model(
     api_key: str | None = None,
 ) -> OpenAIResponsesModel:
     """Build an OpenAIResponsesModel that targets the mounted OpenClaw proxy."""
-    if isinstance(model, str) and model.strip():
-        resolved_model = model.strip()
-    else:
-        env_default_model = os.getenv("OPENCLAW_DEFAULT_MODEL", "").strip()
-        resolved_model = env_default_model or DEFAULT_OPENCLAW_MODEL
-
-    resolved_base_url = (
-        base_url or os.getenv("OPENCLAW_PROXY_BASE_URL") or "http://127.0.0.1:8000/openclaw/v1"
-    ).rstrip("/")
-    resolved_api_key = (
-        api_key
-        or os.getenv("OPENCLAW_PROXY_API_KEY")
-        or os.getenv("APP_TOKEN")
-        or os.getenv("OPENCLAW_GATEWAY_TOKEN")
-        or "sk-openclaw-proxy"
-    )
-
-    client = AsyncOpenAI(base_url=resolved_base_url, api_key=resolved_api_key)
-    return OpenAIResponsesModel(model=resolved_model, openai_client=client)
+    return openclaw_model.build_openclaw_responses_model(model=model, base_url=base_url, api_key=api_key)
