@@ -1372,6 +1372,30 @@ def test_openclaw_full_tool_mode_keeps_backup_when_config_write_fails(
     assert backup_path.exists()
 
 
+def test_openclaw_full_tool_mode_keeps_backup_when_tool_mode_backup_is_unreadable(tmp_path: Path) -> None:
+    config = replace(_build_openclaw_config(tmp_path), tool_mode="worker")
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps(
+            {
+                "tools": {
+                    "agentToAgent": {"enabled": True, "mode": "custom"},
+                    "deny": ["browser"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    OpenClawRuntime(config).ensure_layout()
+    backup_path = openclaw_mod._tool_mode_backup_path(config.config_path)
+    backup_path.write_text("{invalid", encoding="utf-8")
+
+    OpenClawRuntime(replace(config, tool_mode="full")).ensure_layout()
+
+    assert backup_path.exists()
+
+
 def test_openclaw_full_tool_mode_preserves_user_changes_made_while_worker_mode_is_active(tmp_path: Path) -> None:
     config = replace(_build_openclaw_config(tmp_path), tool_mode="worker")
     config.config_path.parent.mkdir(parents=True, exist_ok=True)
