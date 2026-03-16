@@ -342,6 +342,10 @@ class OpenClawRuntime:
             self.config.config_path.chmod(0o600)
         except OSError:
             logger.debug("Unable to set restrictive permissions on OpenClaw config path", exc_info=True)
+        if self.config.tool_mode == "worker":
+            _record_worker_tool_mode_state(
+                self.config.config_path, _tool_mode_backup_path(self.config.config_path), current
+            )
 
     def _resolve_gateway_command(self) -> list[str]:
         if self.config.gateway_command:
@@ -803,7 +807,7 @@ def _apply_tool_mode_config(current: dict[str, Any], tool_mode: str, config_path
         _apply_worker_tool_mode_config(current, _tool_mode_backup_path(config_path))
         return
 
-    _restore_full_tool_mode_config(current, _tool_mode_backup_path(config_path))
+    _restore_full_tool_mode_config(current, _tool_mode_backup_path(config_path), config_path)
 
 
 def _apply_worker_tool_mode_config(current: dict[str, Any], backup_path: Path) -> None:
@@ -842,7 +846,7 @@ def _apply_worker_tool_mode_config(current: dict[str, Any], backup_path: Path) -
     tools["deny"] = deny
 
 
-def _restore_full_tool_mode_config(current: dict[str, Any], backup_path: Path) -> None:
+def _restore_full_tool_mode_config(current: dict[str, Any], backup_path: Path, config_path: Path) -> None:
     backup = _read_tool_mode_backup(backup_path)
     if backup is None:
         return
@@ -854,14 +858,28 @@ def _restore_full_tool_mode_config(current: dict[str, Any], backup_path: Path) -
 
     current_agent_to_agent = tools.get("agentToAgent")
     restored_agent_to_agent = backup.get("agent_to_agent")
+    worker_agent_to_agent = backup.get("worker_agent_to_agent")
+    config_modified = _tool_mode_config_changed_since_worker_apply(config_path, backup)
     if isinstance(restored_agent_to_agent, dict):
-        merged_agent_to_agent = restored_agent_to_agent.copy()
-        if isinstance(current_agent_to_agent, dict):
-            for key, value in current_agent_to_agent.items():
-                if key == "enabled" and value is False and restored_agent_to_agent.get("enabled") is not False:
-                    continue
-                merged_agent_to_agent[key] = value
-        tools["agentToAgent"] = merged_agent_to_agent
+        if isinstance(current_agent_to_agent, dict) and isinstance(worker_agent_to_agent, dict):
+            if current_agent_to_agent == worker_agent_to_agent:
+                tools["agentToAgent"] = (
+                    current_agent_to_agent.copy() if config_modified else restored_agent_to_agent.copy()
+                )
+            else:
+                merged_agent_to_agent = restored_agent_to_agent.copy()
+                merged_agent_to_agent.update(current_agent_to_agent)
+                if (
+                    current_agent_to_agent.get("enabled") == worker_agent_to_agent.get("enabled")
+                    and "enabled" in restored_agent_to_agent
+                ):
+                    merged_agent_to_agent["enabled"] = restored_agent_to_agent["enabled"]
+                tools["agentToAgent"] = merged_agent_to_agent
+        else:
+            merged_agent_to_agent = restored_agent_to_agent.copy()
+            if isinstance(current_agent_to_agent, dict):
+                merged_agent_to_agent.update(current_agent_to_agent)
+            tools["agentToAgent"] = merged_agent_to_agent
     else:
         if isinstance(current_agent_to_agent, dict):
             current_agent_to_agent.pop("enabled", None)
@@ -874,19 +892,27 @@ def _restore_full_tool_mode_config(current: dict[str, Any], backup_path: Path) -
 
     current_deny = tools.get("deny")
     restored_deny = backup.get("deny")
+    worker_deny = backup.get("worker_deny")
     if isinstance(restored_deny, list):
-        worker_only_denies = {"message", "sessions_send", "sessions_spawn"} - set(restored_deny)
-        merged_deny = restored_deny.copy()
-        if isinstance(current_deny, list):
-            merged_deny.extend(
-                item for item in current_deny if item not in worker_only_denies and item not in merged_deny
-            )
-        tools["deny"] = merged_deny
+        worker_only_denies = _worker_only_denies(restored_deny, worker_deny)
+        if (
+            isinstance(current_deny, list)
+            and isinstance(worker_deny, list)
+            and current_deny == worker_deny
+            and not config_modified
+        ):
+            tools["deny"] = restored_deny.copy()
+        elif isinstance(current_deny, list):
+            filtered_deny = [item for item in current_deny if item not in worker_only_denies]
+            if filtered_deny:
+                tools["deny"] = filtered_deny
+            else:
+                tools.pop("deny", None)
+        else:
+            tools["deny"] = restored_deny.copy()
     else:
         if isinstance(current_deny, list):
-            filtered_deny = [
-                item for item in current_deny if item not in {"message", "sessions_send", "sessions_spawn"}
-            ]
+            filtered_deny = [item for item in current_deny if item not in _worker_only_denies([], worker_deny)]
             if filtered_deny:
                 tools["deny"] = filtered_deny
             else:
@@ -903,6 +929,41 @@ def _restore_full_tool_mode_config(current: dict[str, Any], backup_path: Path) -
         pass
     except OSError:
         logger.warning("Could not remove OpenClaw tool-mode backup at %s", backup_path, exc_info=True)
+
+
+def _record_worker_tool_mode_state(config_path: Path, backup_path: Path, current: dict[str, Any]) -> None:
+    backup = _read_tool_mode_backup(backup_path)
+    if backup is None:
+        return
+
+    tools = current.get("tools")
+    agent_to_agent = tools.get("agentToAgent") if isinstance(tools, dict) else None
+    deny = tools.get("deny") if isinstance(tools, dict) else None
+    backup["worker_agent_to_agent"] = agent_to_agent if isinstance(agent_to_agent, dict) else None
+    backup["worker_deny"] = list(deny) if isinstance(deny, list) else None
+    try:
+        backup["worker_config_mtime_ns"] = config_path.stat().st_mtime_ns
+    except OSError:
+        backup.pop("worker_config_mtime_ns", None)
+    _write_json_file(backup_path, backup)
+
+
+def _tool_mode_config_changed_since_worker_apply(config_path: Path, backup: dict[str, Any]) -> bool:
+    recorded_mtime = backup.get("worker_config_mtime_ns")
+    if not isinstance(recorded_mtime, int):
+        return False
+    try:
+        return config_path.stat().st_mtime_ns != recorded_mtime
+    except OSError:
+        return False
+
+
+def _worker_only_denies(restored_deny: list[Any], worker_deny: Any) -> set[str]:
+    restored = {item for item in restored_deny if isinstance(item, str)}
+    worker = {item for item in worker_deny if isinstance(item, str)} if isinstance(worker_deny, list) else set()
+    if worker:
+        return worker - restored
+    return {"message", "sessions_send", "sessions_spawn"} - restored
 
 
 def _is_upstream_port_open(config: OpenClawIntegrationConfig, timeout: float = 0.5) -> bool:
