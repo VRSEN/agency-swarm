@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import logging
 import os
@@ -864,17 +863,10 @@ def _restore_full_tool_mode_config(current: dict[str, Any], backup_path: Path, c
     current_agent_to_agent = tools.get("agentToAgent")
     restored_agent_to_agent = backup.get("agent_to_agent")
     worker_agent_to_agent = backup.get("worker_agent_to_agent")
-    config_modified = _tool_mode_config_changed_since_worker_apply(config_path, backup)
-    non_tools_modified = _non_tool_config_changed_since_worker_apply(current, backup)
-    other_tools_modified = _non_agent_to_agent_tool_config_changed_since_worker_apply(tools, backup)
     if isinstance(restored_agent_to_agent, dict):
         if isinstance(current_agent_to_agent, dict) and isinstance(worker_agent_to_agent, dict):
             if current_agent_to_agent == worker_agent_to_agent:
-                tools["agentToAgent"] = (
-                    current_agent_to_agent.copy()
-                    if config_modified and not non_tools_modified and not other_tools_modified
-                    else restored_agent_to_agent.copy()
-                )
+                tools["agentToAgent"] = restored_agent_to_agent.copy()
             else:
                 merged_agent_to_agent = restored_agent_to_agent.copy()
                 merged_agent_to_agent.update(current_agent_to_agent)
@@ -941,80 +933,11 @@ def _record_worker_tool_mode_state(config_path: Path, backup_path: Path, current
         updates["worker_agent_to_agent"] = agent_to_agent if isinstance(agent_to_agent, dict) else None
     if "worker_deny" not in backup:
         updates["worker_deny"] = list(deny) if isinstance(deny, list) else None
-    if "worker_config_sha256" not in backup:
-        digest = _config_sha256(config_path)
-        if digest is not None:
-            updates["worker_config_sha256"] = digest
-    if "worker_non_tools_sha256" not in backup:
-        digest = _json_sha256(_config_without_tools(current))
-        if digest is not None:
-            updates["worker_non_tools_sha256"] = digest
-    if "worker_non_agent_to_agent_tools_sha256" not in backup:
-        digest = _json_sha256(_tools_without_agent_to_agent(tools))
-        if digest is not None:
-            updates["worker_non_agent_to_agent_tools_sha256"] = digest
 
     if not updates:
         return
     backup.update(updates)
     _write_json_file(backup_path, backup)
-
-
-def _tool_mode_config_changed_since_worker_apply(config_path: Path, backup: dict[str, Any]) -> bool:
-    recorded_digest = backup.get("worker_config_sha256")
-    if not isinstance(recorded_digest, str) or not recorded_digest:
-        return False
-    current_digest = _config_sha256(config_path)
-    if current_digest is None:
-        return False
-    return current_digest != recorded_digest
-
-
-def _non_tool_config_changed_since_worker_apply(current: dict[str, Any], backup: dict[str, Any]) -> bool:
-    recorded_digest = backup.get("worker_non_tools_sha256")
-    if not isinstance(recorded_digest, str) or not recorded_digest:
-        return False
-    current_digest = _json_sha256(_config_without_tools(current))
-    if current_digest is None:
-        return False
-    return current_digest != recorded_digest
-
-
-def _config_sha256(path: Path) -> str | None:
-    try:
-        return hashlib.sha256(path.read_bytes()).hexdigest()
-    except OSError:
-        return None
-
-
-def _json_sha256(payload: Any) -> str | None:
-    try:
-        normalized = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    except (TypeError, ValueError):
-        return None
-    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-
-
-def _config_without_tools(current: dict[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in current.items() if key != "tools"}
-
-
-def _non_agent_to_agent_tool_config_changed_since_worker_apply(
-    tools: dict[str, Any] | None, backup: dict[str, Any]
-) -> bool:
-    recorded_digest = backup.get("worker_non_agent_to_agent_tools_sha256")
-    if not isinstance(recorded_digest, str) or not recorded_digest:
-        return False
-    current_digest = _json_sha256(_tools_without_agent_to_agent(tools))
-    if current_digest is None:
-        return False
-    return current_digest != recorded_digest
-
-
-def _tools_without_agent_to_agent(tools: dict[str, Any] | None) -> dict[str, Any]:
-    if not isinstance(tools, dict):
-        return {}
-    return {key: value for key, value in tools.items() if key != "agentToAgent"}
 
 
 def _remove_tool_mode_backup(backup_path: Path) -> None:
