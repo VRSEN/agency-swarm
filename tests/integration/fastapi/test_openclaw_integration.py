@@ -48,6 +48,27 @@ def _build_openclaw_config(tmp_path: Path) -> OpenClawIntegrationConfig:
     )
 
 
+def test_openclaw_config_manual_construction_defaults_to_full_tool_mode(tmp_path: Path) -> None:
+    home_dir = tmp_path / "openclaw"
+    config = OpenClawIntegrationConfig(
+        autostart=False,
+        host="127.0.0.1",
+        port=18789,
+        gateway_token="gateway-token",
+        home_dir=home_dir,
+        state_dir=home_dir / "state",
+        config_path=home_dir / "openclaw.json",
+        log_path=home_dir / "logs" / "openclaw-gateway.log",
+        startup_timeout_seconds=5.0,
+        proxy_timeout_seconds=30.0,
+        default_model="openclaw:main",
+        provider_model="openai/gpt-5.2",
+        gateway_command="openclaw gateway",
+    )
+
+    assert config.tool_mode == "full"
+
+
 def test_openclaw_proxy_mount_paths_exist(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr("agency_swarm.integrations.openclaw._is_upstream_port_open", lambda _config: True)
 
@@ -1430,3 +1451,69 @@ def test_openclaw_full_tool_mode_preserves_deleted_deny_entries(tmp_path: Path) 
 
     restored = json.loads(config.config_path.read_text(encoding="utf-8"))
     assert restored["tools"]["deny"] == ["shell"]
+
+
+def test_openclaw_full_tool_mode_preserves_user_changes_across_worker_restart(tmp_path: Path) -> None:
+    config = replace(_build_openclaw_config(tmp_path), tool_mode="worker")
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps(
+            {
+                "tools": {
+                    "agentToAgent": {"enabled": True, "mode": "custom"},
+                    "deny": ["browser"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    worker_runtime = OpenClawRuntime(config)
+    worker_runtime.ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+    payload["tools"]["agentToAgent"]["notes"] = "keep-me"
+    payload["tools"]["deny"].append("shell")
+    config.config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    worker_runtime.ensure_layout()
+    OpenClawRuntime(replace(config, tool_mode="full")).ensure_layout()
+
+    restored = json.loads(config.config_path.read_text(encoding="utf-8"))
+    assert restored["tools"]["agentToAgent"] == {
+        "enabled": True,
+        "mode": "custom",
+        "notes": "keep-me",
+    }
+    assert restored["tools"]["deny"] == ["browser", "shell"]
+
+
+def test_openclaw_full_tool_mode_restores_original_tools_after_unrelated_worker_edits(tmp_path: Path) -> None:
+    config = replace(_build_openclaw_config(tmp_path), tool_mode="worker")
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps(
+            {
+                "tools": {
+                    "agentToAgent": {"enabled": True, "mode": "custom"},
+                    "deny": ["browser"],
+                },
+                "agents": {"main": {"description": "before"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    worker_runtime = OpenClawRuntime(config)
+    worker_runtime.ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+    payload["agents"]["main"]["description"] = "after"
+    config.config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    OpenClawRuntime(replace(config, tool_mode="full")).ensure_layout()
+
+    restored = json.loads(config.config_path.read_text(encoding="utf-8"))
+    assert restored["tools"]["agentToAgent"] == {"enabled": True, "mode": "custom"}
+    assert restored["tools"]["deny"] == ["browser"]
+    assert restored["agents"]["main"]["description"] == "after"
