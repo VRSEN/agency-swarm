@@ -338,7 +338,7 @@ class SendMessage(FunctionTool):
                     f"Calling target agent '{recipient_name_for_call}'.get_response_stream (streaming mode)..."
                 )
 
-                streaming_context = wrapper.context._streaming_context if wrapper.context else None
+                streaming_context = wrapper.context.streaming_context if wrapper.context else None
 
                 # Use streaming and collect the final output
                 final_output_text = ""

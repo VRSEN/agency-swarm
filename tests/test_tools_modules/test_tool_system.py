@@ -106,7 +106,7 @@ def mock_context(mock_sender_agent, mock_recipient_agent):
     context.shared_instructions = None
     context._current_agent_run_id = None
     context._is_streaming = True
-    context._streaming_context = None
+    context.streaming_context = None
     context._sub_agent_raw_responses = []
     return context
 
