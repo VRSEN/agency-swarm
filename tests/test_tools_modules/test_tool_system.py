@@ -102,7 +102,9 @@ def mock_context(mock_sender_agent, mock_recipient_agent):
     context.thread_manager.get_thread = MagicMock(return_value=MagicMock())
     context.thread_manager.add_items_and_save = AsyncMock()
     context.user_context = {"user_key": "user_val"}
+    context.agent_runtime_state = {}
     context.shared_instructions = None
+    context._current_agent_run_id = None
     context._is_streaming = True
     context._streaming_context = None
     context._sub_agent_raw_responses = []

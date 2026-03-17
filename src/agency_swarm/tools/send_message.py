@@ -20,6 +20,7 @@ from agents import (
     handoff,
     strict_schema,
 )
+from agents.tool_context import ToolContext
 from pydantic import BaseModel, ValidationError
 
 from ..context import MasterContext
@@ -207,9 +208,7 @@ class SendMessage(FunctionTool):
         shared_instructions_from_context = wrapper.context.shared_instructions
 
         # Create a minimal agency context for multi-agent communication
-        agency_runtime_map = {}
-        if hasattr(wrapper.context, "agent_runtime_state") and wrapper.context.agent_runtime_state is not None:
-            agency_runtime_map = wrapper.context.agent_runtime_state
+        agency_runtime_map = wrapper.context.agent_runtime_state
 
         class MinimalAgency:
             def __init__(self, agents_dict, user_context, runtime_state_map):
@@ -223,8 +222,8 @@ class SendMessage(FunctionTool):
 
         # Retrieve the runtime state for the recipient, falling back to a local runtime state if needed
         runtime_state = None
-        target_agent_name = getattr(self.recipient_agent, "name", None)
-        if hasattr(wrapper.context, "agent_runtime_state") and target_agent_name:
+        target_agent_name = self.recipient_agent.name
+        if target_agent_name:
             runtime_state = wrapper.context.agent_runtime_state.get(target_agent_name)
 
         if runtime_state is None:
@@ -253,15 +252,12 @@ class SendMessage(FunctionTool):
         When the original request was made with get_response_stream, this will use
         get_response_stream for the sub-agent call to maintain streaming consistency.
         """
-        # Get the tool_call_id from the wrapper (it's a ToolContext)
-        # This is the call_id that OpenAI assigned to this send_message invocation
-        tool_call_id = getattr(wrapper, "tool_call_id", None)
-        if not tool_call_id:
-            logger.warning(f"No tool_call_id found in wrapper. Type: {type(wrapper).__name__}")
-            # Fallback to using agent's run_id if no tool_call_id available
-            tool_call_id = (
-                getattr(wrapper.context, "_current_agent_run_id", None) if wrapper and wrapper.context else None
-            )
+        # Extract tool_call_id via type narrowing: the agents SDK passes a ToolContext
+        if isinstance(wrapper, ToolContext):
+            tool_call_id: str | None = wrapper.tool_call_id
+        else:
+            logger.warning(f"Expected ToolContext, got {type(wrapper).__name__}; falling back to _current_agent_run_id")
+            tool_call_id = wrapper.context._current_agent_run_id if wrapper.context else None
 
         try:
             kwargs = json.loads(arguments_json_string)
@@ -303,10 +299,8 @@ class SendMessage(FunctionTool):
                 f"Available agents: {', '.join(available_names)}"
             )
 
-        thread_manager = None
+        thread_manager = wrapper.context.thread_manager if wrapper.context else None
         thread_key: int | None = None
-        if wrapper and hasattr(wrapper, "context") and wrapper.context:
-            thread_manager = getattr(wrapper.context, "thread_manager", None)
         if thread_manager is not None:
             thread_key = id(thread_manager)
 
@@ -337,22 +331,14 @@ class SendMessage(FunctionTool):
         )
 
         try:
-            # Check if we should use streaming based on context
-            # This is a simple heuristic: check if the wrapper has a streaming indicator
-            use_streaming = False
-            if wrapper and hasattr(wrapper, "context") and wrapper.context:
-                # Check for streaming indicator in context
-                use_streaming = getattr(wrapper.context, "_is_streaming", False)
+            use_streaming = wrapper.context._is_streaming if wrapper.context else False
 
             if use_streaming:
                 logger.debug(
                     f"Calling target agent '{recipient_name_for_call}'.get_response_stream (streaming mode)..."
                 )
 
-                # Check if we have a streaming context to forward events
-                streaming_context = None
-                if wrapper and hasattr(wrapper, "context") and wrapper.context:
-                    streaming_context = getattr(wrapper.context, "_streaming_context", None)
+                streaming_context = wrapper.context._streaming_context if wrapper.context else None
 
                 # Use streaming and collect the final output
                 final_output_text = ""

@@ -74,7 +74,7 @@ class BaseTool(BaseModel, ABC, metaclass=BaseToolMeta):
 
     _caller_agent: Any = None
     _event_handler: Any = None
-    _context: Any = None  # Will hold RunContextWrapper when available
+    _context: RunContextWrapper[MasterContext] | None = None
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -155,6 +155,15 @@ class BaseTool(BaseModel, ABC, metaclass=BaseToolMeta):
         """Get the MasterContext if available, providing clean access to shared state."""
         if self._context is not None:
             return self._context.context
+        return None
+
+    @property
+    def tool_call_id(self) -> str | None:
+        """Get the tool_call_id for this invocation, if available."""
+        from agents.tool_context import ToolContext
+
+        if isinstance(self._context, ToolContext):
+            return self._context.tool_call_id
         return None
 
     @abstractmethod
