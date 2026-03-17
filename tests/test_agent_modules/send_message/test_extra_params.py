@@ -58,7 +58,7 @@ def _wrapper_with_recipient(recipient: StubAgent) -> Any:
             agent_runtime_state: dict[str, Any] = {}
             _current_agent_run_id = None
             _is_streaming = False
-            _streaming_context = None
+            streaming_context = None
 
         context = Context()
 

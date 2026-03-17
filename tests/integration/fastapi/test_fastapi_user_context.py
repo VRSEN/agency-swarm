@@ -206,8 +206,8 @@ def test_streaming_user_context(recording_agency_factory: RecordingAgencyFactory
 
     stream_context = recording_agency_factory.tracker.last_stream_context
     assert stream_context is not None
-    assert {k: v for k, v in stream_context.items() if k != "_streaming_context"} == {"plan": "pro"}
-    assert "_streaming_context" in stream_context
+    assert {k: v for k, v in stream_context.items() if k != "streaming_context"} == {"plan": "pro"}
+    assert "streaming_context" in stream_context
 
     messages_payload = _extract_last_messages_payload(lines)
     usage = messages_payload["usage"]
@@ -245,11 +245,11 @@ def test_agui_user_context(recording_agency_factory: RecordingAgencyFactory):
 
     stream_context = recording_agency_factory.tracker.last_stream_context
     assert stream_context is not None
-    assert {k: v for k, v in stream_context.items() if k != "_streaming_context"} == {
+    assert {k: v for k, v in stream_context.items() if k != "streaming_context"} == {
         "plan": "pro",
         "customer_tier": "gold",
     }
-    assert "_streaming_context" in stream_context
+    assert "streaming_context" in stream_context
 
 
 def test_user_context_defaults_to_none(recording_agency_factory: RecordingAgencyFactory):
