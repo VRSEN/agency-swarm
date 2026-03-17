@@ -254,10 +254,10 @@ async def test_agency_get_response_stream_does_not_mutate_context_override(mock_
     # Streaming still works while the user's dict stays clean
     assert stream.final_result is not None
     assert context_override == {"test_key": "test_value"}
-    assert "_streaming_context" not in context_override
+    assert "streaming_context" not in context_override
     assert capturing_agent.last_context_override is not None
     assert capturing_agent.last_context_override is not context_override
-    assert "_streaming_context" in capturing_agent.last_context_override
+    assert "streaming_context" in capturing_agent.last_context_override
     assert isinstance(events, list)
 
 

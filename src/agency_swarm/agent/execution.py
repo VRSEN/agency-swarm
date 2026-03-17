@@ -168,7 +168,7 @@ class Execution:
                 self.agent.quick_replies,
             )
             has_user_context_override = bool(
-                context_override and any(key != "_streaming_context" for key in context_override)
+                context_override and any(key != "streaming_context" for key in context_override)
             )
             if (
                 sender_name is None
@@ -505,7 +505,7 @@ class Execution:
                     self.agent.quick_replies,
                 )
                 has_user_context_override = bool(
-                    context_override and any(key != "_streaming_context" for key in context_override)
+                    context_override and any(key != "streaming_context" for key in context_override)
                 )
                 if (
                     sender_name is None

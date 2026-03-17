@@ -186,7 +186,7 @@ def run_stream_with_guardrails(
             from agency_swarm.streaming import StreamingContext
 
             streaming_context = StreamingContext()
-            master_context_for_run._streaming_context = streaming_context
+            master_context_for_run.streaming_context = streaming_context
 
             event_queue: asyncio.Queue[StreamEvent | dict[str, Any]] = asyncio.Queue(maxsize=10)
             guardrail_exception: BaseException | None = None
