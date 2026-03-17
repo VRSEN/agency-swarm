@@ -10,8 +10,8 @@ from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
 
 
 def get_allowed_dirs_for_metadata(allowed_local_dirs: Sequence[str | Path]) -> list[str]:
-    """Return configured allowlist entries without resolving them."""
-    return [str(entry) for entry in allowed_local_dirs]
+    """Return all configured allowlist entries as resolved absolute paths."""
+    return [str(Path(entry).expanduser().resolve()) for entry in allowed_local_dirs]
 
 
 @dataclass(frozen=True)

@@ -288,18 +288,18 @@ def test_metadata_includes_non_directory_allowed_dirs(tmp_path, agency_factory):
     assert payload["allowed_local_file_dirs"] == [str(file_entry)]
 
 
-def test_metadata_preserves_configured_allowlist_strings(tmp_path, monkeypatch, agency_factory):
-    """Metadata should return configured allowlist strings without resolving home paths."""
-    fake_home = tmp_path / "fake-home"
-    allowed_dir = fake_home / "uploads"
+def test_metadata_returns_absolute_allowlist_paths(tmp_path, monkeypatch, agency_factory):
+    """Metadata should return allowlist entries as absolute paths."""
+    from pathlib import Path
+
+    allowed_dir = tmp_path / "uploads"
     allowed_dir.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setenv("HOME", str(fake_home))
 
     app = run_fastapi(
         agencies={"test_agency": agency_factory},
         return_app=True,
         app_token_env="",
-        allowed_local_file_dirs=["~/uploads"],
+        allowed_local_file_dirs=[str(allowed_dir)],
     )
     client = TestClient(app)
 
@@ -307,7 +307,9 @@ def test_metadata_preserves_configured_allowlist_strings(tmp_path, monkeypatch, 
     assert response.status_code == 200
     payload = response.json()
 
-    assert payload["allowed_local_file_dirs"] == ["~/uploads"]
+    expected = str(Path(allowed_dir).expanduser().resolve())
+    assert payload["allowed_local_file_dirs"] == [expected]
+    assert Path(payload["allowed_local_file_dirs"][0]).is_absolute()
 
 
 def test_tool_endpoint_handles_nested_schema():
