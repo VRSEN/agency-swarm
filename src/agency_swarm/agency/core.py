@@ -203,13 +203,17 @@ class Agency:
         if default_mcp_manager.mark_atexit_registered():
             atexit.register(default_mcp_manager.shutdown_sync)
 
-    def get_agent_context(self, agent_name: str) -> AgencyContext:
-        """Public accessor for the agency context associated with an agent."""
+    def get_agent_context(
+        self,
+        agent_name: str,
+        thread_manager_override: ThreadManager | None = None,
+    ) -> AgencyContext:
+        """Return the agency context for an agent, optionally with a run-scoped thread manager."""
         if agent_name not in self._agent_runtime_state:
             raise ValueError(f"No context found for agent: {agent_name}")
         return AgencyContext(
             agency_instance=self,
-            thread_manager=self.thread_manager,
+            thread_manager=thread_manager_override or self.thread_manager,
             runtime_state=self._agent_runtime_state[agent_name],
             load_threads_callback=self._load_threads_callback,
             save_threads_callback=self._save_threads_callback,
@@ -231,6 +235,7 @@ class Agency:
         run_config: RunConfig | None = None,
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
+        agency_context_override: AgencyContext | None = None,
         **kwargs: Any,
     ) -> RunResult:
         """
@@ -246,6 +251,8 @@ class Agency:
             recipient_agent (str | Agent | None, optional): The target agent instance or its name.
                                                            If None, defaults to the first entry point agent.
             context_override (dict[str, Any] | None, optional): Additional context to pass to the agent run.
+            agency_context_override (AgencyContext | None, optional): Run-scoped agency context to use instead of
+                the default context derived from the agency instance.
             hooks_override (RunHooks | None, optional): Specific hooks to use for this run, overriding
                                                        agency-level persistence hooks.
             run_config (RunConfig | None, optional): Configuration for the agent run.
@@ -269,6 +276,7 @@ class Agency:
             run_config,
             file_ids,
             additional_instructions,
+            agency_context_override=agency_context_override,
             **kwargs,
         )
 
@@ -281,6 +289,7 @@ class Agency:
         run_config: RunConfig | None = None,
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
+        agency_context_override: AgencyContext | None = None,
         **kwargs: Any,
     ) -> RunResult:
         """Synchronous wrapper around :meth:`get_response`."""
@@ -295,6 +304,7 @@ class Agency:
             run_config,
             file_ids,
             additional_instructions,
+            agency_context_override=agency_context_override,
             **kwargs,
         )
 
@@ -307,6 +317,7 @@ class Agency:
         run_config_override: RunConfig | None = None,
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
+        agency_context_override: AgencyContext | None = None,
         **kwargs: Any,
     ) -> StreamingRunResponse:
         """
@@ -321,6 +332,8 @@ class Agency:
             recipient_agent (str | Agent | None, optional): The target agent instance or its name.
                                                            If None, defaults to the first entry point agent.
             context_override (dict[str, Any] | None, optional): Additional context for the run.
+            agency_context_override (AgencyContext | None, optional): Run-scoped agency context to use instead of
+                the default context derived from the agency instance.
             hooks_override (RunHooks | None, optional): Specific hooks for this run.
             run_config_override (RunConfig | None, optional): Specific run configuration for this run.
             file_ids (list[str] | None, optional): Additional file IDs for the agent run.
@@ -343,6 +356,7 @@ class Agency:
             run_config_override,
             file_ids,
             additional_instructions,
+            agency_context_override=agency_context_override,
             **kwargs,
         )
 

@@ -7,6 +7,8 @@ from concurrent.futures import Future
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
+    from agency_swarm.agent.context_types import AgencyContext
+
     from .core import Agency
 
 from agents import RunConfig, RunHooks, RunResult, TResponseInputItem
@@ -29,6 +31,7 @@ async def get_response(
     run_config: RunConfig | None = None,
     file_ids: list[str] | None = None,
     additional_instructions: str | None = None,
+    agency_context_override: "AgencyContext | None" = None,
     **kwargs: Any,
 ) -> RunResult:
     """
@@ -79,7 +82,7 @@ async def get_response(
     effective_hooks = hooks_override or agency.persistence_hooks
 
     # Get agency context for the target agent (stateless context passing)
-    agency_context = get_agent_context(agency, target_agent.name)
+    agency_context = agency_context_override or get_agent_context(agency, target_agent.name)
 
     # On handoffs all servers need to be initialized to be used
     await attach_persistent_mcp_servers(agency)
@@ -106,6 +109,7 @@ def get_response_sync(
     run_config: RunConfig | None = None,
     file_ids: list[str] | None = None,
     additional_instructions: str | None = None,
+    agency_context_override: "AgencyContext | None" = None,
     **kwargs: Any,
 ) -> RunResult:
     """Synchronous wrapper around :meth:`get_response`."""
@@ -116,6 +120,7 @@ def get_response_sync(
             message=message,
             recipient_agent=recipient_agent,
             context_override=context_override,
+            agency_context_override=agency_context_override,
             hooks_override=hooks_override,
             run_config=run_config,
             file_ids=file_ids,
@@ -157,6 +162,7 @@ def get_response_stream(
     run_config_override: RunConfig | None = None,
     file_ids: list[str] | None = None,
     additional_instructions: str | None = None,
+    agency_context_override: "AgencyContext | None" = None,
     **kwargs: Any,
 ) -> StreamingRunResponse:
     """
@@ -212,7 +218,7 @@ def get_response_stream(
                 enhanced_context = context_override.copy() if context_override else {}
                 enhanced_context["_streaming_context"] = streaming_context
 
-                agency_context = get_agent_context(agency, target_agent.name)
+                agency_context = agency_context_override or get_agent_context(agency, target_agent.name)
 
                 await attach_persistent_mcp_servers(agency)
 

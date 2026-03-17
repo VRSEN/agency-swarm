@@ -82,6 +82,7 @@ async def get_response(
     run_config: RunConfig | None = None,
     file_ids: list[str] | None = None,
     additional_instructions: str | None = None,
+    agency_context_override: AgencyContext | None = None,
     **kwargs: Any,
 ) -> RunResult:
     """
@@ -95,6 +96,7 @@ async def get_response(
         run_config: Configuration for the agent run
         file_ids: Additional file IDs for the agent run
         additional_instructions: Additional instructions for this run only
+        agency_context_override: Run-scoped agency context override (for example, isolated thread history)
         **kwargs: Additional arguments passed to the target agent's get_response
 
     Returns:
@@ -112,6 +114,7 @@ def get_response_sync(
     run_config: RunConfig | None = None,
     file_ids: list[str] | None = None,
     additional_instructions: str | None = None,
+    agency_context_override: AgencyContext | None = None,
     **kwargs: Any,
 ) -> RunResult:
     """
@@ -125,6 +128,7 @@ def get_response_sync(
         run_config: Configuration for the agent run
         file_ids: Additional file IDs for the agent run
         additional_instructions: Additional instructions for this run only
+        agency_context_override: Run-scoped agency context override (for example, isolated thread history)
         **kwargs: Additional arguments passed to the target agent's get_response
 
     Returns:
@@ -142,6 +146,7 @@ def get_response_stream(
     run_config_override: RunConfig | None = None,
     file_ids: list[str] | None = None,
     additional_instructions: str | None = None,
+    agency_context_override: AgencyContext | None = None,
     **kwargs: Any,
 ) -> StreamingRunResponse:
     """
@@ -155,6 +160,7 @@ def get_response_stream(
         run_config_override: Specific run configuration for this run
         file_ids: Additional file IDs for the agent run
         additional_instructions: Additional instructions for this run only
+        agency_context_override: Run-scoped agency context override (for example, isolated thread history)
         **kwargs: Additional arguments passed to get_response_stream
 
     Returns:
