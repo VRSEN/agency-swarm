@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from agency_swarm.context import MasterContext
 from agency_swarm.tools.send_message import SendMessage
+from agency_swarm.utils.thread import ThreadManager
 
 
 class StubAgent:
@@ -52,8 +53,8 @@ class SendMessageBad(SendMessage):
 
 def _wrapper_with_recipient(recipient: StubAgent) -> RunContextWrapper[MasterContext]:
     ctx = MasterContext(
-        thread_manager=None,  # type: ignore[arg-type]
-        agents={"B": recipient},  # type: ignore[dict-item]
+        thread_manager=ThreadManager(),
+        agents={"B": cast(Any, recipient)},
         user_context={},
         agent_runtime_state={},
         shared_instructions=None,

@@ -83,7 +83,7 @@ def mock_recipient_agent():
 @pytest.fixture
 def mock_master_context():
     return MasterContext(
-        thread_manager=None,  # type: ignore[arg-type]
+        thread_manager=ThreadManager(),
         agents={},
         user_context={"user_key": "user_value"},
     )
