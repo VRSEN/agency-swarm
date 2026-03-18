@@ -2,8 +2,10 @@ import json
 from typing import Any, cast
 
 import pytest
+from agents import RunContextWrapper
 from pydantic import BaseModel, Field
 
+from agency_swarm.context import MasterContext
 from agency_swarm.tools.send_message import SendMessage
 
 
@@ -18,7 +20,7 @@ class StubAgent:
         message: str,
         sender_name: str,
         additional_instructions: str | None,
-        agency_context,
+        agency_context: Any,
         parent_run_id: str | None,
     ):
         class Resp:
@@ -48,21 +50,15 @@ class SendMessageBad(SendMessage):
     ExtraParams = BadExtra
 
 
-def _wrapper_with_recipient(recipient: StubAgent) -> Any:
-    class Wrapper:
-        class Context:
-            agents = {"B": recipient}
-            user_context = None
-            thread_manager = None
-            shared_instructions = None
-            agent_runtime_state: dict[str, Any] = {}
-            _current_agent_run_id = None
-            _is_streaming = False
-            streaming_context = None
-
-        context = Context()
-
-    return cast(Any, Wrapper())
+def _wrapper_with_recipient(recipient: StubAgent) -> RunContextWrapper[MasterContext]:
+    ctx = MasterContext(
+        thread_manager=None,  # type: ignore[arg-type]
+        agents={"B": recipient},  # type: ignore[dict-item]
+        user_context={},
+        agent_runtime_state={},
+        shared_instructions=None,
+    )
+    return RunContextWrapper(context=ctx)
 
 
 @pytest.mark.asyncio
