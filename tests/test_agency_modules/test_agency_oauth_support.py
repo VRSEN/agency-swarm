@@ -3,9 +3,11 @@
 from pathlib import Path
 
 import pytest
+from agents.lifecycle import RunHooksBase
+from agents.run_internal.turn_preparation import validate_run_hooks
 
 from agency_swarm import Agency, Agent
-from agency_swarm.mcp import MCPServerOAuth, OAuthStorageHooks
+from agency_swarm.mcp import MCPServerOAuth
 
 
 @pytest.fixture(autouse=True)
@@ -43,11 +45,28 @@ def test_agency_enables_oauth_storage_hooks_by_default(tmp_path: Path) -> None:
     hooks = agency.default_run_hooks
     if hooks is None:
         pytest.fail("Expected OAuthStorageHooks to be registered by default")
-    if isinstance(hooks, list):
-        hook_iterable = hooks
-    else:
-        hook_iterable = [hooks]
-    assert any(isinstance(hook, OAuthStorageHooks) for hook in hook_iterable)
+    assert isinstance(hooks, RunHooksBase)
+
+
+def test_agency_composes_persistence_and_oauth_hooks(tmp_path: Path) -> None:
+    """Agency should expose one SDK-compatible hook object when both hooks are enabled."""
+    server = MCPServerOAuth(url="http://localhost:8001/mcp", name="github")
+    agent = _build_agent_with_oauth_server(server)
+
+    agency = Agency(
+        agent,
+        oauth_token_path=str(tmp_path),
+        user_context={"user_id": "user-123"},
+        load_threads_callback=lambda: [],
+        save_threads_callback=lambda _messages: None,
+    )
+
+    hooks = agency.default_run_hooks
+    if hooks is None:
+        pytest.fail("Expected composed run hooks to be registered")
+    assert isinstance(hooks, RunHooksBase)
+    assert not isinstance(hooks, list)
+    assert validate_run_hooks(hooks) is hooks
 
 
 def test_shared_oauth_servers_extend_activation_tool() -> None:

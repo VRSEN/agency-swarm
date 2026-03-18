@@ -1,11 +1,72 @@
 import logging
+from typing import Any
 
-from agents import RunHooks, RunResult
+from agents import Agent, RunHooks, RunResult
+from agents.lifecycle import AgentHookContext
+from agents.run_context import RunContextWrapper
+from agents.tool import Tool
 
 from .context import MasterContext
 from .utils.thread import ThreadLoadCallback, ThreadSaveCallback
 
 logger = logging.getLogger(__name__)
+
+
+class CompositeRunHooks(RunHooks):
+    """Compose multiple run hooks into one SDK-compatible RunHooks object."""
+
+    def __init__(self, hooks: list[RunHooks]) -> None:
+        self._hooks = hooks
+
+    async def on_agent_start(self, context: AgentHookContext[MasterContext], agent: Agent) -> None:
+        for hook in self._hooks:
+            await hook.on_agent_start(context, agent)
+
+    async def on_agent_end(self, context: AgentHookContext[MasterContext], agent: Agent, output: Any) -> None:
+        for hook in self._hooks:
+            await hook.on_agent_end(context, agent, output)
+
+    async def on_handoff(
+        self,
+        context: RunContextWrapper[MasterContext],
+        from_agent: Agent,
+        to_agent: Agent,
+    ) -> None:
+        for hook in self._hooks:
+            await hook.on_handoff(context, from_agent, to_agent)
+
+    async def on_tool_start(self, context: RunContextWrapper[MasterContext], agent: Agent, tool: Tool) -> None:
+        for hook in self._hooks:
+            await hook.on_tool_start(context, agent, tool)
+
+    async def on_tool_end(
+        self,
+        context: RunContextWrapper[MasterContext],
+        agent: Agent,
+        tool: Tool,
+        result: str,
+    ) -> None:
+        for hook in self._hooks:
+            await hook.on_tool_end(context, agent, tool, result)
+
+    async def on_llm_start(
+        self,
+        context: RunContextWrapper[MasterContext],
+        agent: Agent,
+        system_prompt: str | None,
+        input_items: list[Any],
+    ) -> None:
+        for hook in self._hooks:
+            await hook.on_llm_start(context, agent, system_prompt, input_items)
+
+    async def on_llm_end(
+        self,
+        context: RunContextWrapper[MasterContext],
+        agent: Agent,
+        response: Any,
+    ) -> None:
+        for hook in self._hooks:
+            await hook.on_llm_end(context, agent, response)
 
 
 class PersistenceHooks(RunHooks):
@@ -92,3 +153,11 @@ class PersistenceHooks(RunHooks):
         except Exception as e:
             logger.error(f"Error during save_threads_callback execution: {e}", exc_info=True)
             # Log error but don't prevent run completion.
+
+    async def on_agent_start(self, context: AgentHookContext[MasterContext], agent: Agent) -> None:
+        """Bridge the current Agents SDK hook to the legacy run-start behavior."""
+        self.on_run_start(context=context.context)
+
+    async def on_agent_end(self, context: AgentHookContext[MasterContext], agent: Agent, output: Any) -> None:
+        """Bridge the current Agents SDK hook to the legacy run-end behavior."""
+        self.on_run_end(context=context.context, result=output)

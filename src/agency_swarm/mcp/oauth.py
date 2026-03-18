@@ -364,6 +364,14 @@ class OAuthStorageHooks(RunHooks):  # type: ignore[type-arg]
         _user_id_context.set(None)
         logger.debug("OAuth user_id context cleared")
 
+    async def on_agent_start(self, context: Any, agent: Any) -> None:
+        """Bridge the current Agents SDK hook to the legacy run-start behavior."""
+        self.on_run_start(context=context.context)
+
+    async def on_agent_end(self, context: Any, agent: Any, output: Any) -> None:
+        """Bridge the current Agents SDK hook to the legacy run-end behavior."""
+        self.on_run_end(context=context.context, result=output)
+
 
 @dataclass(eq=False)
 class MCPServerOAuth:
