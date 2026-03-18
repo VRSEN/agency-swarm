@@ -9,7 +9,6 @@ import contextlib
 import json
 import logging
 import os
-import re
 import select
 import sys
 import webbrowser
@@ -29,6 +28,8 @@ from mcp.shared.auth import (
     OAuthToken,
 )
 from pydantic import AnyUrl
+
+from .oauth_user import build_oauth_user_segment
 
 # Contextvar for per-user token isolation
 _user_id_context: ContextVar[str | None] = ContextVar("oauth_user_id", default=None)
@@ -92,7 +93,11 @@ def get_oauth_runtime_context() -> OAuthRuntimeContext | None:
 
 @dataclass
 class TokenCallbackRegistry:
-    """Holds optional load/save callbacks for token persistence."""
+    """Holds optional load/save callbacks for token persistence.
+
+    The callback key is the raw server URL for the shared default bucket and
+    `<user-segment>::<server_url>` for user-scoped requests.
+    """
 
     load_callback: Callable[[str], TokenPayload | None] | None = None
     save_callback: Callable[[str, TokenPayload], None] | None = None
@@ -140,16 +145,8 @@ class FileTokenStorage:
 
     def _get_user_cache_dir(self) -> Path:
         """Get cache directory for current user from contextvar."""
-        user_id = _user_id_context.get()
-        user_segment = "default"
-        if user_id:
-            # Prevent path traversal from user-provided IDs (e.g. HTTP headers).
-            sanitized = re.sub(r"[^A-Za-z0-9._-]", "_", user_id).strip("._")
-            if sanitized:
-                user_segment = sanitized[:120]
-
         base_dir = self.base_cache_dir.expanduser().resolve()
-        user_dir = (base_dir / user_segment).resolve()
+        user_dir = (base_dir / self._get_user_cache_segment()).resolve()
         try:
             user_dir.relative_to(base_dir)
         except ValueError:
@@ -165,19 +162,77 @@ class FileTokenStorage:
         server_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         return server_dir
 
-    def _legacy_token_file(self) -> Path:
+    def _legacy_token_file(self) -> Path | None:
         """Return legacy flat token file path for migration."""
-        return self._get_user_cache_dir() / f"{self.server_name}_tokens.json"
+        legacy_dir = self._get_legacy_user_cache_dir()
+        if legacy_dir is None:
+            return None
+        return legacy_dir / f"{self.server_name}_tokens.json"
 
-    def _legacy_client_file(self) -> Path:
+    def _legacy_client_file(self) -> Path | None:
         """Return legacy flat client file path for migration."""
-        return self._get_user_cache_dir() / f"{self.server_name}_client.json"
+        legacy_dir = self._get_legacy_user_cache_dir()
+        if legacy_dir is None:
+            return None
+        return legacy_dir / f"{self.server_name}_client.json"
+
+    def _get_user_cache_segment(self) -> str:
+        """Return the current cache bucket name for the active user."""
+        user_id = _user_id_context.get()
+        if not user_id:
+            return "default"
+        return build_oauth_user_segment(user_id, max_prefix_length=120)
+
+    def _get_legacy_user_cache_dir(self) -> Path | None:
+        """Return the pre-hash user bucket when it is safe to migrate.
+
+        Older releases sanitized the user ID directly into a filesystem bucket.
+        That old scheme can collapse distinct IDs such as `john@example.com`
+        and `john/example.com` into the same path, and it also stripped leading
+        or trailing dots/underscores and truncated names at 120 characters.
+        Only migrate buckets whose segment is already unambiguous so we never
+        silently copy another user's cached credentials into the current hashed
+        bucket.
+        """
+        user_id = _user_id_context.get()
+        if not user_id:
+            legacy_segment = "default"
+        elif any(ch not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-" for ch in user_id):
+            return None
+        else:
+            stripped_user_id = user_id.strip("._")
+            if (
+                stripped_user_id == ""
+                or stripped_user_id == "default"
+                or stripped_user_id != user_id
+                or len(stripped_user_id) > 120
+            ):
+                return None
+            legacy_segment = stripped_user_id
+
+        base_dir = self.base_cache_dir.expanduser().resolve()
+        legacy_dir = (base_dir / legacy_segment).resolve()
+        try:
+            legacy_dir.relative_to(base_dir)
+        except ValueError:
+            logger.warning("Legacy OAuth user bucket resolved outside cache dir; skipping migration.")
+            return None
+        return legacy_dir
+
+    def _get_token_callback_key(self) -> str:
+        """Return the callback persistence key for the active user context."""
+        user_id = _user_id_context.get()
+        if not user_id:
+            return self.server_url
+        scoped_user = build_oauth_user_segment(user_id, max_prefix_length=120)
+        return f"{scoped_user}::{self.server_url}"
 
     async def get_tokens(self) -> OAuthToken | None:
         """Get stored tokens for current user."""
         if self._token_callbacks and self._token_callbacks.load_callback:
             try:
-                data = self._token_callbacks.load_callback(self.server_url)
+                callback_key = self._get_token_callback_key()
+                data = self._token_callbacks.load_callback(callback_key)
                 if data:
                     return OAuthToken(**data)
             except Exception:
@@ -188,7 +243,7 @@ class FileTokenStorage:
 
         if not token_file.exists():
             legacy_file = self._legacy_token_file()
-            if not legacy_file.exists():
+            if legacy_file is None or not legacy_file.exists():
                 return None
             try:
                 data = cast("TokenPayload", json.loads(legacy_file.read_text()))
@@ -221,14 +276,16 @@ class FileTokenStorage:
             logger.info(f"Tokens saved to {token_file}")
             # Clean up legacy flat file if it exists
             legacy_file = self._legacy_token_file()
-            with contextlib.suppress(FileNotFoundError):
-                legacy_file.unlink()
+            if legacy_file is not None:
+                with contextlib.suppress(FileNotFoundError):
+                    legacy_file.unlink()
         except Exception:
             logger.exception(f"Failed to save tokens to {token_file}")
         if self._token_callbacks and self._token_callbacks.save_callback:
             try:
                 payload = cast("TokenPayload", tokens.model_dump())
-                self._token_callbacks.save_callback(self.server_url, payload)
+                callback_key = self._get_token_callback_key()
+                self._token_callbacks.save_callback(callback_key, payload)
             except Exception:
                 logger.exception("OAuth save_tokens_callback failed")
 
@@ -239,7 +296,7 @@ class FileTokenStorage:
 
         if not client_file.exists():
             legacy_file = self._legacy_client_file()
-            if not legacy_file.exists():
+            if legacy_file is None or not legacy_file.exists():
                 return None
             try:
                 data = json.loads(legacy_file.read_text())
@@ -271,8 +328,9 @@ class FileTokenStorage:
             client_file.chmod(0o600)  # Secure permissions
             logger.info(f"Client info saved to {client_file}")
             legacy_file = self._legacy_client_file()
-            with contextlib.suppress(FileNotFoundError):
-                legacy_file.unlink()
+            if legacy_file is not None:
+                with contextlib.suppress(FileNotFoundError):
+                    legacy_file.unlink()
         except Exception:
             logger.exception(f"Failed to save client info to {client_file}")
 

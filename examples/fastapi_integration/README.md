@@ -56,7 +56,7 @@ response = requests.post(url, json=payload, headers=headers)
 
 ### OAuth Streaming Contract (FastAPI)
 
-When OAuth is required (`MCPServerOAuth` or `HostedMCPTool` without `authorization`), use only:
+When OAuth is required (`MCPServerOAuth`, or `enable_hosted_mcp_tool_oauth(HostedMCPTool(...))` with no `authorization`), use only:
 - `POST /<agency>/get_response_stream`
 
 OAuth MCP discovery is deferred. The model first gets an `authenticate_mcp_server(server_name)` tool; OAuth starts when that tool is invoked.

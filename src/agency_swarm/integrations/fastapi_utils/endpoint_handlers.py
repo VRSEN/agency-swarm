@@ -319,8 +319,14 @@ def _prepare_oauth_runtime(
     if user_id is not None:
         agency_instance.user_context["user_id"] = user_id
 
+    agents_map = getattr(agency_instance, "agents", None)
+    if oauth_runtime is None:
+        if isinstance(agents_map, dict):
+            for agent in agents_map.values():
+                agent._hosted_mcp_oauth_enabled = False
+        return None
+
     if oauth_runtime is not None:
-        agents_map = getattr(agency_instance, "agents", None)
         if isinstance(agents_map, dict):
             for agent in agents_map.values():
                 oauth_runtime.install_handler_factory(agent)
@@ -389,7 +395,12 @@ def make_response_endpoint(
 
         oauth_runtime = None
         if oauth_config:
-            oauth_runtime = FastAPIOAuthRuntime(oauth_config.registry, user_id, timeout=oauth_config.timeout)
+            oauth_runtime = FastAPIOAuthRuntime(
+                oauth_config.registry,
+                user_id,
+                timeout=oauth_config.timeout,
+                enable_hosted_mcp_oauth=oauth_config.enable_hosted_mcp_oauth,
+            )
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
         oauth_runtime = _prepare_oauth_runtime(agency_instance, oauth_runtime, user_id)
@@ -403,9 +414,12 @@ def make_response_endpoint(
         try:
             await override_session.acquire()
 
-            if oauth_runtime and (
-                _has_oauth_servers(agency_instance) or has_hosted_mcp_tools_missing_authorization(agency_instance)
-            ):
+            has_hosted_mcp_oauth = (
+                oauth_config is not None
+                and oauth_config.enable_hosted_mcp_oauth
+                and has_hosted_mcp_tools_missing_authorization(agency_instance)
+            )
+            if oauth_runtime and (_has_oauth_servers(agency_instance) or has_hosted_mcp_oauth):
                 raise HTTPException(
                     status_code=400,
                     detail=(
@@ -505,7 +519,12 @@ def make_stream_endpoint(
 
         oauth_runtime = None
         if oauth_config:
-            oauth_runtime = FastAPIOAuthRuntime(oauth_config.registry, user_id, timeout=oauth_config.timeout)
+            oauth_runtime = FastAPIOAuthRuntime(
+                oauth_config.registry,
+                user_id,
+                timeout=oauth_config.timeout,
+                enable_hosted_mcp_oauth=oauth_config.enable_hosted_mcp_oauth,
+            )
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
         oauth_runtime = _prepare_oauth_runtime(agency_instance, oauth_runtime, user_id)
@@ -932,7 +951,12 @@ def make_agui_chat_endpoint(
 
         oauth_runtime = None
         if oauth_config:
-            oauth_runtime = FastAPIOAuthRuntime(oauth_config.registry, user_id, timeout=oauth_config.timeout)
+            oauth_runtime = FastAPIOAuthRuntime(
+                oauth_config.registry,
+                user_id,
+                timeout=oauth_config.timeout,
+                enable_hosted_mcp_oauth=oauth_config.enable_hosted_mcp_oauth,
+            )
 
         # Choose / build an agent – here we just create a demo agent each time.
         agency = agency_factory(load_threads_callback=load_callback)

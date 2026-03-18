@@ -1,13 +1,23 @@
 import asyncio
-import hashlib
 import inspect
 import logging
-import re
 import threading
 from collections.abc import Awaitable, Callable, Coroutine
 from concurrent.futures import Future
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypedDict, cast
+
+from agency_swarm.mcp.oauth_user import build_oauth_user_segment
+from agency_swarm.tools.hosted_mcp_oauth import (
+    enable_hosted_mcp_tool_oauth,
+    is_hosted_mcp_tool_oauth_enabled,
+)
+
+_HostedMCPTool: type[Any] | None
+try:
+    from agents.tool import HostedMCPTool as _HostedMCPTool
+except ImportError:  # pragma: no cover - compatibility with older Agents SDKs
+    _HostedMCPTool = None
 
 if TYPE_CHECKING:
     from mcp.client.auth import OAuthClientProvider
@@ -60,11 +70,7 @@ except ImportError:
 
 
 def _sanitize_oauth_registry_user_id(user_id: str) -> str:
-    sanitized = re.sub(r"[^A-Za-z0-9._-]", "_", user_id).strip("._")
-    if sanitized == "":
-        sanitized = "default"
-    digest = hashlib.sha256(user_id.encode("utf-8")).hexdigest()[:16]
-    return f"{sanitized[:96]}-{digest}"
+    return build_oauth_user_segment(user_id, max_prefix_length=96)
 
 
 def _build_persistence_key(server: Any, oauth_user_id: str | None) -> str:
@@ -82,6 +88,24 @@ def _build_persistence_key(server: Any, oauth_user_id: str | None) -> str:
     if not isinstance(oauth_user_id, str) or oauth_user_id == "":
         return name
     return f"{name}::{_sanitize_oauth_registry_user_id(oauth_user_id)}"
+
+
+def _clone_oauth_candidate(server: Any) -> Any:
+    """Return a fresh OAuth client when the current object is already user-bound."""
+    if not _OAUTH_AVAILABLE or _MCPServerOAuthClient is None:
+        return server
+
+    actual = getattr(server, "_server", server)
+    if not isinstance(actual, _MCPServerOAuthClient):
+        return server
+    client = cast("MCPServerOAuthClient", actual)
+
+    handlers: OAuthHandlerMap = {}
+    if client._redirect_handler is not None:
+        handlers["redirect"] = client._redirect_handler
+    if client._callback_handler is not None:
+        handlers["callback"] = client._callback_handler
+    return _MCPServerOAuthClient(client.oauth_config, handlers or None)
 
 
 _OAUTH_LIST_TOOLS_TIMEOUT_SECONDS = 620.0
@@ -603,6 +627,9 @@ async def _authorize_hosted_mcp_tools(agent: Any, *, cache_dir: Path | None) -> 
     tools = getattr(agent, "tools", None)
     if not isinstance(tools, list) or len(tools) == 0:
         return
+    hosted_oauth_mode = getattr(agent, "_hosted_mcp_oauth_enabled", None)
+    if hosted_oauth_mode is False:
+        return
 
     handler_factory = getattr(agent, "mcp_oauth_handler_factory", None)
     factory: Callable[[str], OAuthHandlerMap] | None = None
@@ -612,8 +639,12 @@ async def _authorize_hosted_mcp_tools(agent: Any, *, cache_dir: Path | None) -> 
     oauth_config_type = cast("type[MCPServerOAuth]", _MCPServerOAuth)
     oauth_client_type = cast("type[MCPServerOAuthClient]", _MCPServerOAuthClient)
 
-    for tool in tools:
+    hosted_mcp_tool_type = _HostedMCPTool
+
+    for index, tool in enumerate(list(tools)):
         if getattr(tool, "name", None) != "hosted_mcp":
+            continue
+        if hosted_oauth_mode is True and not is_hosted_mcp_tool_oauth_enabled(tool):
             continue
         tool_config = getattr(tool, "tool_config", None)
         if not isinstance(tool_config, dict):
@@ -630,6 +661,18 @@ async def _authorize_hosted_mcp_tools(agent: Any, *, cache_dir: Path | None) -> 
         if not isinstance(server_url, str) or server_url == "":
             # Connector-based MCP tools have no server_url; token injection is not supported here.
             continue
+
+        active_tool = tool
+        active_tool_config = tool_config
+        if hosted_mcp_tool_type is not None:
+            active_tool = enable_hosted_mcp_tool_oauth(
+                hosted_mcp_tool_type(
+                    tool_config=cast(dict[str, Any], dict(tool_config)),
+                    on_approval_request=getattr(tool, "on_approval_request", None),
+                )
+            )
+            tools[index] = active_tool
+            active_tool_config = cast(dict[str, Any], active_tool.tool_config)
 
         oauth_srv = oauth_config_type(url=server_url, name=server_label)
         if cache_dir is not None and getattr(oauth_srv, "cache_dir", None) is None:
@@ -649,7 +692,7 @@ async def _authorize_hosted_mcp_tools(agent: Any, *, cache_dir: Path | None) -> 
             tokens = await provider.context.storage.get_tokens()
             if tokens is None or not getattr(tokens, "access_token", None):
                 continue
-            tool_config["authorization"] = tokens.access_token
+            active_tool_config["authorization"] = tokens.access_token
         finally:
             await oauth_client.cleanup()
 
@@ -674,6 +717,13 @@ def _sync_oauth_client_handlers(persistent: object, candidate: object) -> bool:
         client._redirect_handler = new_instance._redirect_handler
     if new_instance._callback_handler is not None:
         client._callback_handler = new_instance._callback_handler
+    provider = getattr(client, "_oauth_provider", None)
+    provider_context = getattr(provider, "context", None) if provider is not None else None
+    if provider_context is not None:
+        if new_instance._redirect_handler is not None:
+            provider_context.redirect_handler = new_instance._redirect_handler
+        if new_instance._callback_handler is not None:
+            provider_context.callback_handler = new_instance._callback_handler
     return False
 
 
@@ -707,15 +757,16 @@ async def attach_persistent_mcp_servers(agency: Any) -> None:
             if not isinstance(name, str) or name == "":
                 raise ValueError(f"Server {srv} has no name provided")
 
-            key = _build_persistence_key(srv, oauth_user_id)
+            candidate = _clone_oauth_candidate(srv)
+            key = _build_persistence_key(candidate, oauth_user_id)
             if key == "":
                 raise ValueError(f"Server {srv} has no valid persistence key")
 
             persistent = default_mcp_manager.get(key)
             if persistent is None:
-                persistent = default_mcp_manager.register(srv, key=key)
+                persistent = default_mcp_manager.register(candidate, key=key)
             else:
-                _sync_oauth_client_handlers(persistent, srv)
+                _sync_oauth_client_handlers(persistent, candidate)
             # Replace the reference so future runs reuse the same object and ensure loop‑affine proxy
             replacement = (
                 persistent

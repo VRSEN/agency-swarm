@@ -60,7 +60,8 @@ def run_fastapi(
         skipped so the server can start even if some paths do not exist yet.
     oauth_registry :
         Optional OAuth state registry shared across workers (e.g., Redis-backed).
-        Defaults to in-memory when not provided.
+        Defaults to in-memory when not provided. For hosted MCP OAuth, pair this
+        with `enable_hosted_mcp_tool_oauth(...)` on the specific protected tools.
     """
     if (agencies is None or len(agencies) == 0) and (tools is None or len(tools) == 0):
         logger.warning("No endpoints to deploy. Please provide at least one agency or tool.")
@@ -90,7 +91,6 @@ def run_fastapi(
             FastAPIOAuthConfig,
             OAuthStateRegistry,
             has_hosted_mcp_tools_missing_authorization,
-            is_oauth_server,
         )
         from .fastapi_utils.request_models import (
             BaseRequest,
@@ -151,11 +151,14 @@ def run_fastapi(
 
     oauth_user_header = "X-User-Id"
     shared_oauth_registry: OAuthStateRegistry | None = oauth_registry
-    oauth_config: FastAPIOAuthConfig | None = None
     endpoints = []
     agency_names = []
 
     if agencies:
+        agency_entries: list[tuple[str, Callable[..., Agency], Agency, bool, bool]] = []
+        app_has_oauth_servers = False
+        app_has_hosted_oauth_tools = False
+
         for agency_name, agency_factory in agencies.items():
             if agency_name is None or agency_name == "":
                 agency_name = "agency"
@@ -169,27 +172,29 @@ def run_fastapi(
 
             # Store agent instances for easy lookup
             preview_instance = agency_factory(load_threads_callback=lambda: [])
-            has_oauth_servers = False
-            agents_map = getattr(preview_instance, "agents", {})
-            if isinstance(agents_map, dict):
-                for agent in agents_map.values():
-                    servers = getattr(agent, "mcp_servers", None)
-                    deferred_oauth_servers = getattr(agent, "_oauth_mcp_servers", None)
-                    has_attached_oauth_servers = isinstance(servers, list) and any(
-                        is_oauth_server(srv) for srv in servers
-                    )
-                    has_deferred_oauth_servers = isinstance(deferred_oauth_servers, dict) and any(
-                        is_oauth_server(srv) for srv in deferred_oauth_servers.values()
-                    )
-                    if has_attached_oauth_servers or has_deferred_oauth_servers:
-                        has_oauth_servers = True
-                        break
-            if not has_oauth_servers and has_hosted_mcp_tools_missing_authorization(preview_instance):
-                has_oauth_servers = True
-            if has_oauth_servers and shared_oauth_registry is None:
+            has_oauth_servers = _agency_has_oauth_servers(preview_instance)
+            has_hosted_oauth_tools = has_hosted_mcp_tools_missing_authorization(preview_instance)
+            agency_entries.append(
+                (agency_name, agency_factory, preview_instance, has_oauth_servers, has_hosted_oauth_tools)
+            )
+            app_has_oauth_servers = app_has_oauth_servers or has_oauth_servers
+            app_has_hosted_oauth_tools = app_has_hosted_oauth_tools or has_hosted_oauth_tools
+
+        app_supports_hosted_mcp_oauth = (
+            oauth_registry is not None or app_has_oauth_servers or app_has_hosted_oauth_tools
+        )
+
+        for agency_name, agency_factory, preview_instance, has_oauth_servers, has_hosted_oauth_tools in agency_entries:
+            agency_oauth_config: FastAPIOAuthConfig | None = None
+            has_hosted_mcp_oauth = app_supports_hosted_mcp_oauth and has_hosted_oauth_tools
+            if (has_oauth_servers or has_hosted_mcp_oauth) and shared_oauth_registry is None:
                 shared_oauth_registry = OAuthStateRegistry()
-            if has_oauth_servers and oauth_config is None and shared_oauth_registry is not None:
-                oauth_config = FastAPIOAuthConfig(shared_oauth_registry, user_header=oauth_user_header)
+            if (has_oauth_servers or has_hosted_mcp_oauth) and shared_oauth_registry is not None:
+                agency_oauth_config = FastAPIOAuthConfig(
+                    shared_oauth_registry,
+                    user_header=oauth_user_header,
+                    enable_hosted_mcp_oauth=has_hosted_mcp_oauth,
+                )
 
             AGENT_INSTANCES: dict[str, Agent] = dict(preview_instance.agents.items())
             AgencyRequest = add_agent_validator(BaseRequest, AGENT_INSTANCES)
@@ -203,7 +208,7 @@ def run_fastapi(
                         agency_factory,
                         verify_token,
                         allowed_local_dirs=normalized_allowed_dirs,
-                        oauth_config=oauth_config,
+                        oauth_config=agency_oauth_config,
                     ),
                     methods=["POST"],
                 )
@@ -217,7 +222,7 @@ def run_fastapi(
                         agency_factory,
                         verify_token,
                         allowed_local_dirs=normalized_allowed_dirs,
-                        oauth_config=oauth_config,
+                        oauth_config=agency_oauth_config,
                     ),
                     methods=["POST"],
                 )
@@ -229,7 +234,7 @@ def run_fastapi(
                         verify_token,
                         run_registry,
                         allowed_local_dirs=normalized_allowed_dirs,
-                        oauth_config=oauth_config,
+                        oauth_config=agency_oauth_config,
                     ),
                     methods=["POST"],
                 )
@@ -335,3 +340,22 @@ def run_fastapi(
             raise
         logger.warning("Uvicorn import rejected ws='websockets-sansio'; falling back to default websocket stack")
         uvicorn.run(app, host=host, port=port)
+
+
+def _agency_has_oauth_servers(preview_instance: Agency) -> bool:
+    """Return True when any agent in the preview uses OAuth-enabled MCP servers."""
+    from .fastapi_utils.oauth_support import is_oauth_server
+
+    agents_map = getattr(preview_instance, "agents", {})
+    if not isinstance(agents_map, dict):
+        return False
+    for agent in agents_map.values():
+        servers = getattr(agent, "mcp_servers", None)
+        deferred_oauth_servers = getattr(agent, "_oauth_mcp_servers", None)
+        has_attached_oauth_servers = isinstance(servers, list) and any(is_oauth_server(srv) for srv in servers)
+        has_deferred_oauth_servers = isinstance(deferred_oauth_servers, dict) and any(
+            is_oauth_server(srv) for srv in deferred_oauth_servers.values()
+        )
+        if has_attached_oauth_servers or has_deferred_oauth_servers:
+            return True
+    return False

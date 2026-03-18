@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from agency_swarm.tools.hosted_mcp_oauth import is_hosted_mcp_tool_oauth_enabled
+
 MCPServerOAuthRuntime: type[Any] | None
 MCPServerOAuthClientRuntime: type[Any] | None
 HostedMCPToolRuntime: type[Any] | None
@@ -187,7 +189,7 @@ def is_oauth_server(server: Any) -> bool:
 
 
 def has_hosted_mcp_tools_missing_authorization(agency_instance: Any) -> bool:
-    """Return True when HostedMCPTool is present without an access token.
+    """Return True when an opted-in HostedMCPTool is missing an access token.
 
     Hosted MCP tools require the caller to supply an OAuth access token via
     `tool_config.authorization` when the remote server is OAuth-protected.
@@ -204,6 +206,8 @@ def has_hosted_mcp_tools_missing_authorization(agency_instance: Any) -> bool:
         for tool in tools:
             if not isinstance(tool, HostedMCPToolRuntime):
                 continue
+            if not is_hosted_mcp_tool_oauth_enabled(tool):
+                continue
             tool_config = getattr(tool, "tool_config", None)
             if not isinstance(tool_config, dict):
                 continue
@@ -217,10 +221,18 @@ def has_hosted_mcp_tools_missing_authorization(agency_instance: Any) -> bool:
 class FastAPIOAuthRuntime:
     """Per-request OAuth coordinator for FastAPI streaming."""
 
-    def __init__(self, registry: OAuthStateRegistry, user_id: str | None, *, timeout: float | None = 300.0) -> None:
+    def __init__(
+        self,
+        registry: OAuthStateRegistry,
+        user_id: str | None,
+        *,
+        timeout: float | None = 300.0,
+        enable_hosted_mcp_oauth: bool = False,
+    ) -> None:
         self.registry = registry
         self.user_id = user_id
         self.timeout = timeout
+        self.enable_hosted_mcp_oauth = enable_hosted_mcp_oauth
         self._queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         self._state_by_server: dict[str, str] = {}
 
@@ -294,12 +306,14 @@ class FastAPIOAuthRuntime:
         has_hosted_mcp_tools = (
             HostedMCPToolRuntime is not None
             and isinstance(tools, list)
-            and any(isinstance(tool, HostedMCPToolRuntime) for tool in tools)
+            and any(isinstance(tool, HostedMCPToolRuntime) and is_hosted_mcp_tool_oauth_enabled(tool) for tool in tools)
         )
+        has_enabled_hosted_mcp_tools = has_hosted_mcp_tools and self.enable_hosted_mcp_oauth
+        agent._hosted_mcp_oauth_enabled = has_enabled_hosted_mcp_tools
         if (
             not has_oauth_servers
             and not has_deferred_oauth_servers
-            and not has_hosted_mcp_tools
+            and not has_enabled_hosted_mcp_tools
             and not has_existing_factory
         ):
             return
@@ -323,3 +337,4 @@ class FastAPIOAuthConfig:
     registry: OAuthStateRegistry
     user_header: str = "X-User-Id"
     timeout: float | None = 600.0
+    enable_hosted_mcp_oauth: bool = False
