@@ -58,7 +58,9 @@ async def test_mcp_config_convert_schemas_to_strict_is_propagated(
     if mcp_config is not None:
         agent_kwargs["mcp_config"] = mcp_config
 
-    Agent(**agent_kwargs)
+    agent = Agent(**agent_kwargs)
+    # MCP conversion is lazy; trigger conversion explicitly.
+    agent.ensure_mcp_tools()
 
     assert len(observed_convert_values) == 1
     observed_value = observed_convert_values[0]

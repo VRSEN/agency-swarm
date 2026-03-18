@@ -82,6 +82,7 @@ def run_fastapi(
             load_threads_callback=load_threads_callback,
             save_threads_callback=save_threads_callback,
             user_context=deepcopy(agency.user_context),
+            oauth_token_path=agency.oauth_token_path,
         )
 
     run_fastapi_server(

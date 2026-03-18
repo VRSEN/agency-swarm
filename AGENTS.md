@@ -19,6 +19,8 @@ Begin each task after reviewing this readiness checklist:
 - Prime yourself with enough context to act safely—read, trace, and analyze the relevant paths before changes, and do not proceed unless you can explain the change in your own words.
 - Use fresh tool outputs before acting; do not rely on memory.
 - Mandatory start state: if VRSEN `origin/main` is reachable, run `git fetch origin` and rebase your working branch onto `origin/main` (or create a fresh branch from `origin/main`) before starting analysis, edits, or tests; if the remote is unavailable, proceed and state that you are assuming the branch is already synced.
+- If the mandatory rebase is blocked by a dirty worktree or another safety gate, stop immediately and escalate that blocker before any further edits or validation. Do not keep working on top of a stale branch.
+- After any successful rebase of a PR branch, the next non-negotiable step is `git push --force-with-lease` as soon as the required post-rebase checks pass. Do not resume coding, status reporting, or extra local edits before that push.
 - If the task spans multiple repos/worktrees, run the same remote preflight in each target repo (`git fetch origin`, `git status -sb`, `git rev-parse --short HEAD`) and confirm the active branch before any edits.
 - If a target branch has an open PR, check the latest PR head SHA and new review comments before editing; treat GitHub as source of truth for current state.
 - Complete one change at a time; stash unrelated work before starting another.
@@ -32,10 +34,15 @@ Begin each task after reviewing this readiness checklist:
 
 ## Continuous Work Rule
 Before responding to the user and when you consider your task done, check whether the outstanding-task or todo list is empty. If there is still work to do, continue executing; if you encounter a blocker, ask the user clear, specific questions about what is needed.
+- Never tell the user "I'm still working" or any equivalent partial-status filler. Either keep executing silently, report concrete changed state, or escalate a blocker from the approved trigger list.
+- Do not carry agent-authored work in an uncommitted dirty branch as normal working state. After a coherent validated work block, either commit/push approved changes or escalate the exact blocker that prevents it. A dirty branch is a workflow failure, not a resting state.
 - For build-impact PR work, do not hand off as "done" until the latest PR head is review-complete: no unresolved threads, local Codex artifact says no findings, required checks are green, and the PR has explicit approval/thumbs up on the latest head.
 - Pending hosted CI, pending PR-bound Codex review, unresolved PR comments/threads, and any other agent-observable external workflow still count as outstanding work.
 - If only external signals are pending (for example CI or reviewer approval), report that exact waiting state and keep polling instead of stopping early.
 - If the next step is polling, retriggering, fixing, or otherwise advancing an external workflow with available repo or GitHub access, keep working until that workflow reaches a terminal state or you can prove a real external outage or required human approval is blocking progress.
+- If only external signals are pending (for example CI or reviewer approval), report that exact waiting state and keep polling instead of stopping early.
+- For agent-observable external waits, poll every 60 seconds for up to 15 minutes before reporting that the workflow is still pending; never switch to a blind sleep longer than the polling interval, and inspect each poll result for new work.
+- Assume branch state, PR state, review threads, and referenced files can change at any time. Refresh git/PR/test state before each new work block and before any status claim.
 
 ## Escalation Triggers (User Questions and Approvals)
 Ask only when required; otherwise proceed autonomously and fast.
@@ -96,6 +103,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 ## Self-Improvement (High Priority)
 - When you receive user feedback, make a mistake, or spot a recurring pattern, add a generalized, minimal rule to AGENTS.md and revise relevant lines before any other work.
 - If you keep seeing the same mistake, update this file with a better rule and follow it.
+- After negative user feedback or a protocol breach, run a root-cause pass over the related rules before resuming normal work. Improve the policy in this order: remove wrong rules, tighten weak rules, add new rules only if the gap still remains.
 - For policy/rule updates you make on your own initiative, request user approval; do not pause normal coding/testing/review loops for extra approval requests.
 
 ### Writing Style (User Responses Only)
