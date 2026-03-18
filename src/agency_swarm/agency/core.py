@@ -251,10 +251,15 @@ class Agency:
 
         has_oauth_servers = False
         for agent in self.agents.values():
+            candidates: list[Any] = []
             servers = getattr(agent, "mcp_servers", None)
-            if not isinstance(servers, list):
-                continue
-            for server in servers:
+            if isinstance(servers, list):
+                candidates.extend(servers)
+            deferred_servers = getattr(agent, "_oauth_mcp_servers", None)
+            if isinstance(deferred_servers, dict):
+                candidates.extend(deferred_servers.values())
+
+            for server in candidates:
                 config: Any | None = None
                 if MCPServerOAuthRuntime is not None and isinstance(server, MCPServerOAuthRuntime):
                     config = server
@@ -272,6 +277,7 @@ class Agency:
 
         if cache_dir:
             default_mcp_manager.update_oauth_cache_dir(cache_dir)
+
     @property
     def default_run_hooks(self) -> RunHooks | None:
         """Return the agency-level hooks applied to each run.
@@ -530,38 +536,6 @@ class Agency:
         from .visualization import copilot_demo
 
         return copilot_demo(self, host, port, frontend_port, cors_origins)
-
-    def _configure_oauth_support(self) -> None:
-        """Apply oauth_token_path for OAuth-enabled servers."""
-        if MCPServerOAuthRuntime is None:
-            return
-
-        cache_dir: Path | None = None
-        if self.oauth_token_path:
-            cache_dir = Path(self.oauth_token_path).expanduser()
-
-        for agent in self.agents.values():
-            candidates: list[Any] = []
-            servers = getattr(agent, "mcp_servers", None)
-            if isinstance(servers, list):
-                candidates.extend(servers)
-            deferred_servers = getattr(agent, "_oauth_mcp_servers", None)
-            if isinstance(deferred_servers, dict):
-                candidates.extend(deferred_servers.values())
-
-            for server in candidates:
-                config: Any | None = None
-                if MCPServerOAuthRuntime is not None and isinstance(server, MCPServerOAuthRuntime):
-                    config = server
-                elif MCPServerOAuthClientRuntime is not None and isinstance(server, MCPServerOAuthClientRuntime):
-                    config = server.oauth_config
-                if config is None:
-                    continue
-                if cache_dir and getattr(config, "cache_dir", None) is None:
-                    config.cache_dir = cache_dir
-
-        if cache_dir:
-            default_mcp_manager.update_oauth_cache_dir(cache_dir)
 
     def _schedule_starter_cache_warmup(self) -> None:
         if self._starter_cache_warmup_started:
