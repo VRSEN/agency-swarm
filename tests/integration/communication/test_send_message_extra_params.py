@@ -1,10 +1,13 @@
 import json
 
 import pytest
+from agents import RunContextWrapper
 from pydantic import BaseModel, Field
 
 from agency_swarm import Agency, Agent, ModelSettings
+from agency_swarm.context import MasterContext
 from agency_swarm.tools.send_message import SendMessage
+from agency_swarm.utils.thread import ThreadManager
 
 
 class ExtraParams(BaseModel):
@@ -61,9 +64,6 @@ async def test_validation_of_extra_params_errors():
         "additional_instructions": "",
     }
 
-    # wrapper isn't used in validation path; pass a minimal stub
-    class W:  # noqa: N801
-        context = None
-
-    out = await send_tool.on_invoke_tool(W(), json.dumps(args))
+    wrapper = RunContextWrapper(context=MasterContext(thread_manager=ThreadManager(), agents={}))
+    out = await send_tool.on_invoke_tool(wrapper, json.dumps(args))
     assert isinstance(out, str) and out.startswith("Error: Invalid extra parameters")
