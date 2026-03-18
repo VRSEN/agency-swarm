@@ -25,7 +25,7 @@ from dotenv import load_dotenv
 from fastapi.responses import HTMLResponse
 from openai.types.responses.tool_param import Mcp
 
-from agency_swarm import Agency, Agent, HostedMCPTool, run_fastapi
+from agency_swarm import Agency, Agent, HostedMCPTool, enable_hosted_mcp_tool_oauth, run_fastapi
 from agency_swarm.integrations.fastapi_utils.oauth_support import OAuthStateRegistry
 
 load_dotenv()
@@ -205,12 +205,14 @@ DEMO_PAGE = """
 
 
 def create_agency(load_threads_callback=None, save_threads_callback=None) -> Agency:
-    notion = HostedMCPTool(
-        tool_config=Mcp(
-            type="mcp",
-            server_label="notion",
-            server_url="https://mcp.notion.com/mcp",
-            require_approval="never",
+    notion = enable_hosted_mcp_tool_oauth(
+        HostedMCPTool(
+            tool_config=Mcp(
+                type="mcp",
+                server_label="notion",
+                server_url="https://mcp.notion.com/mcp",
+                require_approval="never",
+            )
         )
     )
 

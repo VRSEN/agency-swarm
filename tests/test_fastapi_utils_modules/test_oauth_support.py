@@ -5,7 +5,11 @@ from agents import HostedMCPTool
 from fastapi import HTTPException
 from openai.types.responses.tool_param import Mcp
 
-from agency_swarm.integrations.fastapi_utils.endpoint_handlers import make_response_endpoint
+from agency_swarm import enable_hosted_mcp_tool_oauth
+from agency_swarm.integrations.fastapi_utils.endpoint_handlers import (
+    make_agui_chat_endpoint,
+    make_response_endpoint,
+)
 from agency_swarm.integrations.fastapi_utils.oauth_support import (
     FastAPIOAuthConfig,
     FastAPIOAuthRuntime,
@@ -207,6 +211,25 @@ def test_extract_state_from_url_and_detection() -> None:
 
 def test_runtime_sets_handler_factory_for_hosted_mcp_tool() -> None:
     """FastAPIOAuthRuntime should attach handler factory for hosted MCP tools."""
+    hosted_mcp = enable_hosted_mcp_tool_oauth(
+        HostedMCPTool(tool_config=Mcp(type="mcp", server_label="demo", server_url="https://example.com/mcp"))
+    )
+
+    class DummyAgent:
+        def __init__(self) -> None:
+            self.mcp_servers = []
+            self.tools = [hosted_mcp]
+
+    agent = DummyAgent()
+    runtime = FastAPIOAuthRuntime(OAuthStateRegistry(), user_id="user-1", enable_hosted_mcp_oauth=True)
+    runtime.install_handler_factory(agent)
+
+    factory = getattr(agent, "mcp_oauth_handler_factory", None)
+    assert callable(factory)
+
+
+def test_runtime_skips_hosted_mcp_handler_factory_without_explicit_opt_in() -> None:
+    """Hosted MCP tools should stay inactive unless FastAPI explicitly opts them in."""
     hosted_mcp = HostedMCPTool(tool_config=Mcp(type="mcp", server_label="demo", server_url="https://example.com/mcp"))
 
     class DummyAgent:
@@ -215,18 +238,20 @@ def test_runtime_sets_handler_factory_for_hosted_mcp_tool() -> None:
             self.tools = [hosted_mcp]
 
     agent = DummyAgent()
-    runtime = FastAPIOAuthRuntime(OAuthStateRegistry(), user_id="user-1")
+    runtime = FastAPIOAuthRuntime(OAuthStateRegistry(), user_id="user-1", enable_hosted_mcp_oauth=False)
     runtime.install_handler_factory(agent)
 
-    factory = getattr(agent, "mcp_oauth_handler_factory", None)
-    assert callable(factory)
+    assert getattr(agent, "_hosted_mcp_oauth_enabled", False) is False
+    assert getattr(agent, "mcp_oauth_handler_factory", None) is None
 
 
 @pytest.mark.asyncio
 async def test_attach_persistent_mcp_servers_injects_hosted_mcp_oauth_token(tmp_path) -> None:
     """HostedMCPTool without authorization should emit oauth_redirect and receive injected token."""
 
-    hosted_mcp = HostedMCPTool(tool_config=Mcp(type="mcp", server_label="demo", server_url="https://example.com/mcp"))
+    hosted_mcp = enable_hosted_mcp_tool_oauth(
+        HostedMCPTool(tool_config=Mcp(type="mcp", server_label="demo", server_url="https://example.com/mcp"))
+    )
 
     class DummyAgent:
         def __init__(self) -> None:
@@ -239,7 +264,7 @@ async def test_attach_persistent_mcp_servers_injects_hosted_mcp_oauth_token(tmp_
             self.oauth_token_path = str(tmp_path)
 
     registry = OAuthStateRegistry()
-    runtime = FastAPIOAuthRuntime(registry, user_id="user-1", timeout=0.25)
+    runtime = FastAPIOAuthRuntime(registry, user_id="user-1", timeout=0.25, enable_hosted_mcp_oauth=True)
     agent = next(iter(DummyAgency().agents.values()))
     runtime.install_handler_factory(agent)
 
@@ -301,13 +326,207 @@ async def test_attach_persistent_mcp_servers_injects_hosted_mcp_oauth_token(tmp_
     finally:
         mcp_manager_module._MCPServerOAuthClient = original_client
 
-    # Should inject token into HostedMCPTool config.
-    assert hosted_mcp.tool_config.get("authorization") == "token-123"
+    injected_tool = agent.tools[0]
+
+    # Should inject token into the request-local HostedMCPTool clone only.
+    assert injected_tool is not hosted_mcp
+    assert injected_tool.tool_config.get("authorization") == "token-123"
+    assert hosted_mcp.tool_config.get("authorization") is None
 
     # And should have emitted an oauth_redirect event through runtime queue.
     event = await asyncio.wait_for(runtime.next_event(), timeout=0.1)
     assert event["type"] == "oauth_redirect"
     assert event["state"] == "test-state"
+
+
+@pytest.mark.asyncio
+async def test_attach_persistent_mcp_servers_keeps_hosted_mcp_tokens_request_local(tmp_path) -> None:
+    """Shared HostedMCPTool definitions must not leak injected tokens across requests."""
+
+    shared_hosted_mcp = enable_hosted_mcp_tool_oauth(
+        HostedMCPTool(tool_config=Mcp(type="mcp", server_label="demo", server_url="https://example.com/mcp"))
+    )
+
+    class DummyAgent:
+        def __init__(self, tool: HostedMCPTool) -> None:
+            self.mcp_servers = []
+            self.tools = [tool]
+
+    class DummyAgency:
+        def __init__(self, agent: DummyAgent) -> None:
+            self.agents = {"demo": agent}
+            self.oauth_token_path = str(tmp_path)
+
+    from mcp.shared.auth import OAuthToken
+
+    issued_tokens = iter(["token-user-a", "token-user-b"])
+
+    class _FakeStorage:
+        def __init__(self, access_token: str) -> None:
+            self._access_token = access_token
+
+        async def get_tokens(self):
+            return OAuthToken(access_token=self._access_token, token_type="Bearer", expires_in=3600)
+
+        async def set_tokens(self, tokens):
+            return None
+
+        async def get_client_info(self):
+            return None
+
+        async def set_client_info(self, client_info):
+            return None
+
+    class _FakeProvider:
+        def __init__(self, access_token: str) -> None:
+            self.context = type("Ctx", (), {"storage": _FakeStorage(access_token)})()
+
+    class _FakeOAuthClient:
+        def __init__(self, oauth_config, custom_handlers=None):
+            self.oauth_config = oauth_config
+            self.name = oauth_config.name
+            self._oauth_provider = _FakeProvider(next(issued_tokens))
+
+        async def connect(self) -> None:
+            return None
+
+        async def cleanup(self) -> None:
+            return None
+
+    from agency_swarm.tools import mcp_manager as mcp_manager_module
+
+    original_client = mcp_manager_module._MCPServerOAuthClient
+    try:
+        mcp_manager_module._MCPServerOAuthClient = _FakeOAuthClient  # type: ignore[assignment]
+
+        agent_a = DummyAgent(shared_hosted_mcp)
+        FastAPIOAuthRuntime(
+            OAuthStateRegistry(), user_id="user-a", enable_hosted_mcp_oauth=True
+        ).install_handler_factory(agent_a)
+        await attach_persistent_mcp_servers(DummyAgency(agent_a))
+
+        agent_b = DummyAgent(shared_hosted_mcp)
+        FastAPIOAuthRuntime(
+            OAuthStateRegistry(), user_id="user-b", enable_hosted_mcp_oauth=True
+        ).install_handler_factory(agent_b)
+        await attach_persistent_mcp_servers(DummyAgency(agent_b))
+    finally:
+        mcp_manager_module._MCPServerOAuthClient = original_client
+
+    assert shared_hosted_mcp.tool_config.get("authorization") is None
+    assert agent_a.tools[0] is not shared_hosted_mcp
+    assert agent_b.tools[0] is not shared_hosted_mcp
+    assert agent_a.tools[0].tool_config.get("authorization") == "token-user-a"
+    assert agent_b.tools[0].tool_config.get("authorization") == "token-user-b"
+
+
+@pytest.mark.asyncio
+async def test_attach_persistent_mcp_servers_skips_hosted_mcp_oauth_without_explicit_opt_in(tmp_path) -> None:
+    """Public HostedMCPTool definitions should not trigger OAuth implicitly."""
+
+    hosted_mcp = HostedMCPTool(
+        tool_config=Mcp(type="mcp", server_label="public-docs", server_url="https://example.com/mcp")
+    )
+
+    class DummyAgent:
+        def __init__(self) -> None:
+            self.mcp_servers = []
+            self.tools = [hosted_mcp]
+
+    class DummyAgency:
+        def __init__(self) -> None:
+            self.agents = {"demo": DummyAgent()}
+            self.oauth_token_path = str(tmp_path)
+
+    connect_calls: list[str] = []
+
+    class _FakeOAuthClient:
+        def __init__(self, oauth_config, custom_handlers=None):
+            self.oauth_config = oauth_config
+            connect_calls.append(oauth_config.url)
+
+        async def connect(self) -> None:
+            return None
+
+        async def cleanup(self) -> None:
+            return None
+
+    from agency_swarm.tools import mcp_manager as mcp_manager_module
+
+    original_client = mcp_manager_module._MCPServerOAuthClient
+    try:
+        mcp_manager_module._MCPServerOAuthClient = _FakeOAuthClient  # type: ignore[assignment]
+        agency = DummyAgency()
+        FastAPIOAuthRuntime(
+            OAuthStateRegistry(), user_id="user-1", enable_hosted_mcp_oauth=False
+        ).install_handler_factory(next(iter(agency.agents.values())))
+        await attach_persistent_mcp_servers(agency)
+    finally:
+        mcp_manager_module._MCPServerOAuthClient = original_client
+
+    assert connect_calls == []
+    assert hosted_mcp.tool_config.get("authorization") is None
+
+
+@pytest.mark.asyncio
+async def test_attach_persistent_mcp_servers_keeps_non_fastapi_hosted_mcp_oauth_behavior(tmp_path) -> None:
+    """Non-FastAPI hosted MCP authorization should keep working without the opt-in flag."""
+
+    hosted_mcp = HostedMCPTool(tool_config=Mcp(type="mcp", server_label="demo", server_url="https://example.com/mcp"))
+
+    class DummyAgent:
+        def __init__(self) -> None:
+            self.mcp_servers = []
+            self.tools = [hosted_mcp]
+
+    class DummyAgency:
+        def __init__(self) -> None:
+            self.agents = {"demo": DummyAgent()}
+            self.oauth_token_path = str(tmp_path)
+
+    from mcp.shared.auth import OAuthToken
+
+    class _FakeStorage:
+        async def get_tokens(self):
+            return OAuthToken(access_token="token-legacy", token_type="Bearer", expires_in=3600)
+
+        async def set_tokens(self, tokens):
+            return None
+
+        async def get_client_info(self):
+            return None
+
+        async def set_client_info(self, client_info):
+            return None
+
+    class _FakeProvider:
+        def __init__(self) -> None:
+            self.context = type("Ctx", (), {"storage": _FakeStorage()})()
+
+    class _FakeOAuthClient:
+        def __init__(self, oauth_config, custom_handlers=None):
+            self.oauth_config = oauth_config
+            self.name = oauth_config.name
+            self._oauth_provider = _FakeProvider()
+
+        async def connect(self) -> None:
+            return None
+
+        async def cleanup(self) -> None:
+            return None
+
+    from agency_swarm.tools import mcp_manager as mcp_manager_module
+
+    original_client = mcp_manager_module._MCPServerOAuthClient
+    try:
+        mcp_manager_module._MCPServerOAuthClient = _FakeOAuthClient  # type: ignore[assignment]
+        agency = DummyAgency()
+        await attach_persistent_mcp_servers(agency)
+    finally:
+        mcp_manager_module._MCPServerOAuthClient = original_client
+
+    injected_tool = next(iter(agency.agents.values())).tools[0]
+    assert injected_tool.tool_config.get("authorization") == "token-legacy"
 
 
 @pytest.mark.asyncio
@@ -364,8 +583,8 @@ async def test_get_response_rejects_oauth_servers_without_streaming() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_response_rejects_hosted_mcp_tool_without_streaming() -> None:
-    """Non-streaming FastAPI endpoint rejects hosted MCP tools that need OAuth."""
+async def test_get_response_allows_hosted_mcp_tool_without_streaming_when_hosted_oauth_not_opted_in() -> None:
+    """Public HostedMCPTool definitions should not force streaming without explicit hosted OAuth opt-in."""
 
     class DummyRequest:
         def __init__(self) -> None:
@@ -386,7 +605,7 @@ async def test_get_response_rejects_hosted_mcp_tool_without_streaming() -> None:
     hosted_mcp = HostedMCPTool(
         tool_config=Mcp(
             type="mcp",
-            server_label="demo",
+            server_label="public-docs",
             server_url="https://example.com/mcp",
         )
     )
@@ -415,7 +634,133 @@ async def test_get_response_rejects_hosted_mcp_tool_without_streaming() -> None:
         DummyRequest,
         agency_factory,
         lambda *args, **kwargs: None,
-        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry()),
+        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry(), enable_hosted_mcp_oauth=False),
+    )
+
+    req = DummyRequest()
+    response = await endpoint(req, token=None, user_id="user-1")
+    assert response == {"response": "ok", "new_messages": []}
+
+
+@pytest.mark.asyncio
+async def test_get_response_without_oauth_config_marks_public_hosted_mcp_as_disabled() -> None:
+    """FastAPI requests without OAuth config must still disable hosted OAuth injection."""
+
+    class DummyRequest:
+        def __init__(self) -> None:
+            self.message = "hello"
+            self.recipient_agent = None
+            self.additional_instructions = None
+            self.file_ids = None
+            self.file_urls = None
+            self.chat_history = None
+            self.user_context = None
+            self.generate_chat_name = False
+            self.client_config = None
+
+    class DummyThreadManager:
+        def get_all_messages(self) -> list:
+            return []
+
+    hosted_mcp = HostedMCPTool(
+        tool_config=Mcp(
+            type="mcp",
+            server_label="public-docs",
+            server_url="https://example.com/mcp",
+        )
+    )
+    seen_flags: list[object] = []
+
+    class DummyAgent:
+        def __init__(self) -> None:
+            self.mcp_servers = []
+            self.tools = [hosted_mcp]
+
+    class DummyAgency:
+        def __init__(self) -> None:
+            self.agents = {"demo": DummyAgent()}
+            self.user_context = {}
+            self.thread_manager = DummyThreadManager()
+
+        async def get_response(self, *args, **kwargs):
+            seen_flags.append(getattr(self.agents["demo"], "_hosted_mcp_oauth_enabled", None))
+
+            class DummyResponse:
+                final_output = "ok"
+
+            return DummyResponse()
+
+    def agency_factory(load_threads_callback=None):
+        return DummyAgency()
+
+    endpoint = make_response_endpoint(
+        DummyRequest,
+        agency_factory,
+        lambda *args, **kwargs: None,
+        oauth_config=None,
+    )
+
+    req = DummyRequest()
+    response = await endpoint(req, token=None, user_id="user-1")
+    assert response == {"response": "ok", "new_messages": []}
+    assert seen_flags == [False]
+
+
+@pytest.mark.asyncio
+async def test_get_response_rejects_hosted_mcp_tool_without_streaming() -> None:
+    """Non-streaming FastAPI endpoint rejects hosted MCP tools that need OAuth."""
+
+    class DummyRequest:
+        def __init__(self) -> None:
+            self.message = "hello"
+            self.recipient_agent = None
+            self.additional_instructions = None
+            self.file_ids = None
+            self.file_urls = None
+            self.chat_history = None
+            self.user_context = None
+            self.generate_chat_name = False
+            self.client_config = None
+
+    class DummyThreadManager:
+        def get_all_messages(self) -> list:
+            return []
+
+    hosted_mcp = enable_hosted_mcp_tool_oauth(
+        HostedMCPTool(
+            tool_config=Mcp(
+                type="mcp",
+                server_label="demo",
+                server_url="https://example.com/mcp",
+            )
+        )
+    )
+
+    class DummyAgent:
+        def __init__(self) -> None:
+            self.mcp_servers = []
+            self.tools = [hosted_mcp]
+
+    class DummyAgency:
+        def __init__(self) -> None:
+            self.agents = {"demo": DummyAgent()}
+            self.user_context = {}
+            self.thread_manager = DummyThreadManager()
+
+        async def get_response(self, *args, **kwargs):
+            class DummyResponse:
+                final_output = "ok"
+
+            return DummyResponse()
+
+    def agency_factory(load_threads_callback=None):
+        return DummyAgency()
+
+    endpoint = make_response_endpoint(
+        DummyRequest,
+        agency_factory,
+        lambda *args, **kwargs: None,
+        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry(), enable_hosted_mcp_oauth=True),
     )
 
     req = DummyRequest()
@@ -423,6 +768,76 @@ async def test_get_response_rejects_hosted_mcp_tool_without_streaming() -> None:
         await endpoint(req, token=None, user_id="user-1")
     assert excinfo.value.status_code == 400
     assert "get_response_stream" in excinfo.value.detail
+
+
+@pytest.mark.asyncio
+async def test_agui_endpoint_enables_hosted_mcp_oauth_when_opted_in(monkeypatch) -> None:
+    """AG-UI endpoint should propagate hosted MCP OAuth opt-in into request runtime setup."""
+
+    class DummyRequest:
+        def __init__(self) -> None:
+            self.messages = None
+            self.chat_history = [{"role": "user", "content": "hello"}]
+            self.file_ids = None
+            self.file_urls = None
+            self.user_context = None
+            self.additional_instructions = None
+            self.client_config = None
+            self.thread_id = "thread-1"
+            self.run_id = "run-1"
+
+    hosted_mcp = enable_hosted_mcp_tool_oauth(
+        HostedMCPTool(
+            tool_config=Mcp(
+                type="mcp",
+                server_label="demo",
+                server_url="https://example.com/mcp",
+            )
+        )
+    )
+
+    class DummyAgent:
+        def __init__(self) -> None:
+            self.mcp_servers = []
+            self.tools = [hosted_mcp]
+
+    class DummyAgency:
+        def __init__(self) -> None:
+            self.agents = {"demo": DummyAgent()}
+            self.user_context = {}
+            self.entry_points = [next(iter(self.agents.values()))]
+
+        async def get_response_stream(self, *args, **kwargs):
+            if False:
+                yield None
+
+    attach_seen: dict[str, bool] = {}
+
+    async def _capture_attach(agency) -> None:  # noqa: ANN001
+        agent = agency.agents["demo"]
+        attach_seen["enabled"] = getattr(agent, "_hosted_mcp_oauth_enabled", False)
+        attach_seen["has_factory"] = callable(getattr(agent, "mcp_oauth_handler_factory", None))
+
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.attach_persistent_mcp_servers",
+        _capture_attach,
+    )
+
+    def agency_factory(load_threads_callback=None):
+        return DummyAgency()
+
+    endpoint = make_agui_chat_endpoint(
+        DummyRequest,
+        agency_factory,
+        lambda *args, **kwargs: None,
+        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry(), enable_hosted_mcp_oauth=True),
+    )
+
+    response = await endpoint(DummyRequest(), token=None, user_id="user-1")
+    async for _ in response.body_iterator:
+        pass
+
+    assert attach_seen == {"enabled": True, "has_factory": True}
 
 
 @pytest.mark.asyncio

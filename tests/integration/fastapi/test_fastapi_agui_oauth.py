@@ -5,7 +5,7 @@ from agents import HostedMCPTool
 from fastapi.testclient import TestClient
 from openai.types.responses.tool_param import Mcp
 
-from agency_swarm import Agency, Agent, run_fastapi
+from agency_swarm import Agency, Agent, enable_hosted_mcp_tool_oauth, run_fastapi
 from agency_swarm.integrations.fastapi_utils import endpoint_handlers
 from agency_swarm.integrations.fastapi_utils.oauth_support import OAuthStateRegistry
 from agency_swarm.mcp.oauth import MCPServerOAuth
@@ -83,13 +83,15 @@ def test_run_fastapi_enables_oauth_routes_for_deferred_oauth_server() -> None:
 
 
 def test_run_fastapi_enables_oauth_routes_for_hosted_mcp_tool() -> None:
-    """HostedMCPTool without an access token should enable FastAPI OAuth routes."""
+    """HostedMCPTool OAuth routes should be enabled for opted-in hosted-only apps."""
 
-    hosted_tool = HostedMCPTool(
-        tool_config=Mcp(
-            type="mcp",
-            server_label="notion",
-            server_url="https://mcp.notion.com/mcp",
+    hosted_tool = enable_hosted_mcp_tool_oauth(
+        HostedMCPTool(
+            tool_config=Mcp(
+                type="mcp",
+                server_label="notion",
+                server_url="https://mcp.notion.com/mcp",
+            )
         )
     )
 
@@ -112,6 +114,373 @@ def test_run_fastapi_enables_oauth_routes_for_hosted_mcp_tool() -> None:
     response = client.get("/auth/status/test-state")
     assert response.status_code == 200
     assert response.json()["status"] == "unknown"
+
+
+def test_run_fastapi_does_not_enable_hosted_mcp_oauth_routes_without_registry() -> None:
+    """Public HostedMCPTool setups should not be forced into OAuth by default."""
+
+    hosted_tool = HostedMCPTool(
+        tool_config=Mcp(
+            type="mcp",
+            server_label="public-docs",
+            server_url="https://example.com/mcp",
+        )
+    )
+
+    def agency_factory(load_threads_callback=None, save_threads_callback=None):
+        agent = Agent(name="TestAgent", instructions="Base instructions", tools=[hosted_tool])
+        return Agency(
+            agent,
+            load_threads_callback=load_threads_callback,
+            save_threads_callback=save_threads_callback,
+        )
+
+    app = run_fastapi(
+        agencies={"test_agency": agency_factory},
+        return_app=True,
+        app_token_env="",
+    )
+    client = TestClient(app)
+
+    response = client.get("/auth/status/test-state")
+    assert response.status_code == 404
+
+
+def test_run_fastapi_enables_opted_in_hosted_mcp_oauth_without_explicit_registry() -> None:
+    """Hosted MCP OAuth opt-in should create the default in-memory registry."""
+
+    hosted_tool = enable_hosted_mcp_tool_oauth(
+        HostedMCPTool(
+            tool_config=Mcp(
+                type="mcp",
+                server_label="notion",
+                server_url="https://mcp.notion.com/mcp",
+            )
+        )
+    )
+
+    def agency_factory(load_threads_callback=None, save_threads_callback=None):
+        agent = Agent(name="TestAgent", instructions="Base instructions", tools=[hosted_tool])
+        return Agency(
+            agent,
+            load_threads_callback=load_threads_callback,
+            save_threads_callback=save_threads_callback,
+        )
+
+    app = run_fastapi(
+        agencies={"test_agency": agency_factory},
+        return_app=True,
+        app_token_env="",
+    )
+    client = TestClient(app)
+
+    response = client.get("/auth/status/test-state")
+    assert response.status_code == 200
+    assert response.json()["status"] == "unknown"
+
+
+def test_run_fastapi_enables_hosted_mcp_oauth_for_mixed_agency_without_explicit_registry(monkeypatch) -> None:
+    """An agency that already has OAuth MCP routes should also enable hosted MCP auth."""
+    captured_configs: list[object | None] = []
+
+    async def _dummy_handler(*args, **kwargs):  # noqa: ANN002, ANN003
+        return {"ok": True}
+
+    def _capture_response_endpoint(*args, **kwargs):  # noqa: ANN002, ANN003
+        handler = _dummy_handler
+        handler.oauth_config = kwargs.get("oauth_config")
+        captured_configs.append(handler.oauth_config)
+        return handler
+
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.make_response_endpoint",
+        _capture_response_endpoint,
+    )
+
+    oauth_server = MCPServerOAuth(
+        url="http://localhost:9999/mcp",
+        name="oauth-demo",
+        client_id="client-id",
+        client_secret="client-secret",
+    )
+    hosted_tool = enable_hosted_mcp_tool_oauth(
+        HostedMCPTool(
+            tool_config=Mcp(
+                type="mcp",
+                server_label="notion",
+                server_url="https://mcp.notion.com/mcp",
+            )
+        )
+    )
+
+    def agency_factory(load_threads_callback=None, save_threads_callback=None):
+        agent = Agent(
+            name="TestAgent",
+            instructions="Base instructions",
+            mcp_servers=[oauth_server],
+            tools=[hosted_tool],
+        )
+        return Agency(
+            agent,
+            load_threads_callback=load_threads_callback,
+            save_threads_callback=save_threads_callback,
+        )
+
+    run_fastapi(
+        agencies={"test_agency": agency_factory},
+        return_app=True,
+        app_token_env="",
+    )
+
+    assert captured_configs
+    assert captured_configs[0] is not None
+    assert captured_configs[0].enable_hosted_mcp_oauth is True
+
+
+def test_run_fastapi_keeps_public_hosted_agency_unopted_when_another_agency_uses_oauth(monkeypatch) -> None:
+    """OAuth config should not leak from an OAuth agency into an unrelated public hosted agency."""
+    captured_configs: list[object | None] = []
+
+    async def _dummy_handler(*args, **kwargs):  # noqa: ANN002, ANN003
+        return {"ok": True}
+
+    def _capture_response_endpoint(*args, **kwargs):  # noqa: ANN002, ANN003
+        captured_configs.append(kwargs.get("oauth_config"))
+        return _dummy_handler
+
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.make_response_endpoint",
+        _capture_response_endpoint,
+    )
+
+    oauth_server = MCPServerOAuth(
+        url="http://localhost:9999/mcp",
+        name="oauth-demo",
+        client_id="client-id",
+        client_secret="client-secret",
+    )
+    public_hosted_tool = HostedMCPTool(
+        tool_config=Mcp(
+            type="mcp",
+            server_label="public-docs",
+            server_url="https://example.com/mcp",
+        )
+    )
+
+    def oauth_agency_factory(load_threads_callback=None, save_threads_callback=None):
+        agent = Agent(name="OAuthAgent", instructions="Base instructions", mcp_servers=[oauth_server])
+        return Agency(
+            agent,
+            load_threads_callback=load_threads_callback,
+            save_threads_callback=save_threads_callback,
+        )
+
+    def hosted_agency_factory(load_threads_callback=None, save_threads_callback=None):
+        agent = Agent(name="HostedAgent", instructions="Base instructions", tools=[public_hosted_tool])
+        return Agency(
+            agent,
+            load_threads_callback=load_threads_callback,
+            save_threads_callback=save_threads_callback,
+        )
+
+    app = run_fastapi(
+        agencies={"oauth_agency": oauth_agency_factory, "public_agency": hosted_agency_factory},
+        return_app=True,
+        app_token_env="",
+    )
+
+    assert app is not None
+    assert len(captured_configs) >= 2
+    assert captured_configs[0] is not None
+    assert captured_configs[0].enable_hosted_mcp_oauth is False
+    assert captured_configs[1] is None
+
+
+def test_run_fastapi_enables_opted_in_hosted_agency_when_another_agency_uses_oauth(monkeypatch) -> None:
+    """An app-level OAuth registry created by one agency should enable other opted-in hosted agencies."""
+    captured_configs: list[object | None] = []
+
+    async def _dummy_handler(*args, **kwargs):  # noqa: ANN002, ANN003
+        return {"ok": True}
+
+    def _capture_response_endpoint(*args, **kwargs):  # noqa: ANN002, ANN003
+        captured_configs.append(kwargs.get("oauth_config"))
+        return _dummy_handler
+
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.make_response_endpoint",
+        _capture_response_endpoint,
+    )
+
+    oauth_server = MCPServerOAuth(
+        url="http://localhost:9999/mcp",
+        name="oauth-demo",
+        client_id="client-id",
+        client_secret="client-secret",
+    )
+    hosted_tool = enable_hosted_mcp_tool_oauth(
+        HostedMCPTool(
+            tool_config=Mcp(
+                type="mcp",
+                server_label="notion",
+                server_url="https://mcp.notion.com/mcp",
+            )
+        )
+    )
+
+    def oauth_agency_factory(load_threads_callback=None, save_threads_callback=None):
+        agent = Agent(name="OAuthAgent", instructions="Base instructions", mcp_servers=[oauth_server])
+        return Agency(
+            agent,
+            load_threads_callback=load_threads_callback,
+            save_threads_callback=save_threads_callback,
+        )
+
+    def hosted_agency_factory(load_threads_callback=None, save_threads_callback=None):
+        agent = Agent(name="HostedAgent", instructions="Base instructions", tools=[hosted_tool])
+        return Agency(
+            agent,
+            load_threads_callback=load_threads_callback,
+            save_threads_callback=save_threads_callback,
+        )
+
+    app = run_fastapi(
+        agencies={"oauth_agency": oauth_agency_factory, "hosted_agency": hosted_agency_factory},
+        return_app=True,
+        app_token_env="",
+    )
+
+    assert app is not None
+    assert len(captured_configs) >= 2
+    assert captured_configs[0] is not None
+    assert captured_configs[0].enable_hosted_mcp_oauth is False
+    assert captured_configs[1] is not None
+    assert captured_configs[1].enable_hosted_mcp_oauth is True
+
+
+def test_run_fastapi_enables_opted_in_hosted_agency_before_oauth_agency(monkeypatch) -> None:
+    """Hosted-only agencies must not depend on iteration order once the app supports OAuth."""
+    captured_configs: list[object | None] = []
+
+    async def _dummy_handler(*args, **kwargs):  # noqa: ANN002, ANN003
+        return {"ok": True}
+
+    def _capture_response_endpoint(*args, **kwargs):  # noqa: ANN002, ANN003
+        captured_configs.append(kwargs.get("oauth_config"))
+        return _dummy_handler
+
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.make_response_endpoint",
+        _capture_response_endpoint,
+    )
+
+    oauth_server = MCPServerOAuth(
+        url="http://localhost:9999/mcp",
+        name="oauth-demo",
+        client_id="client-id",
+        client_secret="client-secret",
+    )
+    hosted_tool = enable_hosted_mcp_tool_oauth(
+        HostedMCPTool(
+            tool_config=Mcp(
+                type="mcp",
+                server_label="notion",
+                server_url="https://mcp.notion.com/mcp",
+            )
+        )
+    )
+
+    def hosted_agency_factory(load_threads_callback=None, save_threads_callback=None):
+        agent = Agent(name="HostedAgent", instructions="Base instructions", tools=[hosted_tool])
+        return Agency(
+            agent,
+            load_threads_callback=load_threads_callback,
+            save_threads_callback=save_threads_callback,
+        )
+
+    def oauth_agency_factory(load_threads_callback=None, save_threads_callback=None):
+        agent = Agent(name="OAuthAgent", instructions="Base instructions", mcp_servers=[oauth_server])
+        return Agency(
+            agent,
+            load_threads_callback=load_threads_callback,
+            save_threads_callback=save_threads_callback,
+        )
+
+    app = run_fastapi(
+        agencies={"hosted_agency": hosted_agency_factory, "oauth_agency": oauth_agency_factory},
+        return_app=True,
+        app_token_env="",
+    )
+
+    assert app is not None
+    assert len(captured_configs) >= 2
+    assert captured_configs[0] is not None
+    assert captured_configs[0].enable_hosted_mcp_oauth is True
+    assert captured_configs[1] is not None
+    assert captured_configs[1].enable_hosted_mcp_oauth is False
+
+
+def test_run_fastapi_limits_hosted_mcp_oauth_to_explicitly_opted_tools(monkeypatch) -> None:
+    """A shared registry must not force public HostedMCPTool definitions into OAuth."""
+    captured_configs: list[object | None] = []
+
+    async def _dummy_handler(*args, **kwargs):  # noqa: ANN002, ANN003
+        return {"ok": True}
+
+    def _capture_response_endpoint(*args, **kwargs):  # noqa: ANN002, ANN003
+        captured_configs.append(kwargs.get("oauth_config"))
+        return _dummy_handler
+
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.make_response_endpoint",
+        _capture_response_endpoint,
+    )
+
+    private_hosted_tool = enable_hosted_mcp_tool_oauth(
+        HostedMCPTool(
+            tool_config=Mcp(
+                type="mcp",
+                server_label="notion",
+                server_url="https://mcp.notion.com/mcp",
+            )
+        )
+    )
+    public_hosted_tool = HostedMCPTool(
+        tool_config=Mcp(
+            type="mcp",
+            server_label="public-docs",
+            server_url="https://example.com/mcp",
+        )
+    )
+
+    def private_agency_factory(load_threads_callback=None, save_threads_callback=None):
+        agent = Agent(name="PrivateHosted", instructions="Base instructions", tools=[private_hosted_tool])
+        return Agency(
+            agent,
+            load_threads_callback=load_threads_callback,
+            save_threads_callback=save_threads_callback,
+        )
+
+    def public_agency_factory(load_threads_callback=None, save_threads_callback=None):
+        agent = Agent(name="PublicHosted", instructions="Base instructions", tools=[public_hosted_tool])
+        return Agency(
+            agent,
+            load_threads_callback=load_threads_callback,
+            save_threads_callback=save_threads_callback,
+        )
+
+    app = run_fastapi(
+        agencies={"private_agency": private_agency_factory, "public_agency": public_agency_factory},
+        return_app=True,
+        app_token_env="",
+        oauth_registry=OAuthStateRegistry(),
+    )
+
+    assert app is not None
+    assert len(captured_configs) >= 2
+    assert captured_configs[0] is not None
+    assert captured_configs[0].enable_hosted_mcp_oauth is True
+    assert captured_configs[1] is None
 
 
 @pytest.mark.asyncio

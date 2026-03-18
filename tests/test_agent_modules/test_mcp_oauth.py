@@ -20,7 +20,9 @@ from agency_swarm.mcp.oauth import (
     default_redirect_handler,
     get_default_cache_dir,
     set_oauth_runtime_context,
+    set_oauth_user_id,
 )
+from agency_swarm.mcp.oauth_user import build_oauth_user_segment
 
 TEST_SERVER_URL = "http://localhost:8001/mcp"
 
@@ -122,11 +124,11 @@ class TestFileTokenStorage:
         """FileTokenStorage triggers load/save callbacks."""
         saved_tokens: dict[str, dict[str, str]] = {}
 
-        def load_callback(server_url: str) -> dict[str, str] | None:
-            return saved_tokens.get(server_url)
+        def load_callback(storage_key: str) -> dict[str, str] | None:
+            return saved_tokens.get(storage_key)
 
-        def save_callback(server_url: str, data: dict[str, Any]) -> None:  # type: ignore[name-defined]
-            saved_tokens[server_url] = data
+        def save_callback(storage_key: str, data: dict[str, Any]) -> None:  # type: ignore[name-defined]
+            saved_tokens[storage_key] = data
 
         registry = TokenCallbackRegistry(
             load_callback=load_callback,
@@ -154,6 +156,99 @@ class TestFileTokenStorage:
         loaded_token = await storage.get_tokens()
         assert loaded_token is not None
         assert loaded_token.access_token == "cb_access"
+
+    async def test_token_storage_scopes_callbacks_by_user_id(self, tmp_path: Path) -> None:
+        """FileTokenStorage should isolate callback-backed tokens per user."""
+        saved_tokens: dict[str, dict[str, str]] = {}
+
+        def load_callback(storage_key: str) -> dict[str, str] | None:
+            return saved_tokens.get(storage_key)
+
+        def save_callback(storage_key: str, data: dict[str, Any]) -> None:  # type: ignore[name-defined]
+            saved_tokens[storage_key] = data
+
+        registry = TokenCallbackRegistry(
+            load_callback=load_callback,
+            save_callback=save_callback,
+        )
+        storage = FileTokenStorage(
+            cache_dir=tmp_path,
+            server_name="callback-server",
+            server_url=TEST_SERVER_URL,
+            token_callbacks=registry,
+        )
+
+        try:
+            set_oauth_user_id("john@example.com")
+            await storage.set_tokens(
+                OAuthToken(access_token="token-a", token_type="Bearer", expires_in=3600, refresh_token="refresh-a")
+            )
+
+            set_oauth_user_id("john/example.com")
+            await storage.set_tokens(
+                OAuthToken(access_token="token-b", token_type="Bearer", expires_in=3600, refresh_token="refresh-b")
+            )
+
+            key_a = f"{build_oauth_user_segment('john@example.com', max_prefix_length=120)}::{TEST_SERVER_URL}"
+            key_b = f"{build_oauth_user_segment('john/example.com', max_prefix_length=120)}::{TEST_SERVER_URL}"
+
+            assert key_a in saved_tokens
+            assert key_b in saved_tokens
+            assert key_a != key_b
+
+            set_oauth_user_id("john@example.com")
+            loaded_a = await storage.get_tokens()
+            assert loaded_a is not None
+            assert loaded_a.access_token == "token-a"
+
+            set_oauth_user_id("john/example.com")
+            loaded_b = await storage.get_tokens()
+            assert loaded_b is not None
+            assert loaded_b.access_token == "token-b"
+        finally:
+            set_oauth_user_id(None)
+
+    async def test_token_storage_does_not_load_raw_callback_tokens_into_user_scoped_requests(
+        self, tmp_path: Path
+    ) -> None:
+        """The raw callback key is reserved for the shared default bucket."""
+        saved_tokens: dict[str, dict[str, str]] = {
+            TEST_SERVER_URL: {
+                "access_token": "legacy-token",
+                "token_type": "Bearer",
+                "expires_in": 3600,
+            }
+        }
+
+        def load_callback(storage_key: str) -> dict[str, str] | None:
+            return saved_tokens.get(storage_key)
+
+        def save_callback(storage_key: str, data: dict[str, Any]) -> None:  # type: ignore[name-defined]
+            saved_tokens[storage_key] = data
+
+        registry = TokenCallbackRegistry(
+            load_callback=load_callback,
+            save_callback=save_callback,
+        )
+        storage = FileTokenStorage(
+            cache_dir=tmp_path,
+            server_name="callback-server",
+            server_url=TEST_SERVER_URL,
+            token_callbacks=registry,
+        )
+
+        try:
+            set_oauth_user_id("user-a")
+            assert await storage.get_tokens() is None
+
+            await storage.set_tokens(
+                OAuthToken(access_token="token-a", token_type="Bearer", expires_in=3600, refresh_token="refresh-a")
+            )
+
+            set_oauth_user_id("user-b")
+            assert await storage.get_tokens() is None
+        finally:
+            set_oauth_user_id(None)
 
 
 class TestMCPServerOAuth:

@@ -12,6 +12,7 @@ import pytest
 import agency_swarm.tools.mcp_manager as mcp_manager
 from agency_swarm.mcp import MCPServerOAuth, MCPServerOAuthClient
 from agency_swarm.mcp.oauth import FileTokenStorage, OAuthRuntimeContext, set_oauth_runtime_context, set_oauth_user_id
+from agency_swarm.mcp.oauth_user import build_oauth_user_segment
 from agency_swarm.tools.mcp_manager import (
     LoopAffineAsyncProxy,
     PersistentMCPServerManager,
@@ -494,7 +495,7 @@ async def test_proxy_propagates_oauth_user_context_to_driver(tmp_path: Path) -> 
         set_oauth_user_id(None)
         await manager.shutdown()
 
-    assert bucket == "user_ctx"
+    assert bucket == build_oauth_user_segment("user_ctx", max_prefix_length=120)
 
 
 def test_update_oauth_cache_dir_updates_clients(tmp_path: Path) -> None:
@@ -567,7 +568,12 @@ def test_sync_oauth_client_handlers_keeps_authenticated_session() -> None:
     )
     persistent.session = object()
     persistent._authenticated = True
-    persistent._oauth_provider = object()
+    persistent._oauth_provider = SimpleNamespace(
+        context=SimpleNamespace(
+            redirect_handler=first_redirect,
+            callback_handler=first_callback,
+        )
+    )
 
     candidate = MCPServerOAuthClient(
         oauth_config,
@@ -579,6 +585,8 @@ def test_sync_oauth_client_handlers_keeps_authenticated_session() -> None:
     assert persistent._redirect_handler is second_redirect
     assert persistent._callback_handler is second_callback
     assert persistent._oauth_provider is not None
+    assert persistent._oauth_provider.context.redirect_handler is second_redirect
+    assert persistent._oauth_provider.context.callback_handler is second_callback
     assert persistent.session is not None
     assert persistent._authenticated is True
 
@@ -651,6 +659,36 @@ async def test_attach_persistent_isolates_oauth_clients_by_user_id() -> None:
         assert client_a is not None
         assert client_b is not None
         assert client_a is not client_b
+    finally:
+        set_oauth_user_id(None)
+        await default_mcp_manager.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_attach_persistent_rebuilds_oauth_client_when_same_agent_is_reused_across_users() -> None:
+    """Reusing one agent instance across users must not alias the first user's OAuth client."""
+    await default_mcp_manager.shutdown()
+
+    try:
+        agent = SimpleNamespace(
+            mcp_servers=[MCPServerOAuth(url="http://localhost:8001/mcp", name="github")],
+        )
+        agency = SimpleNamespace(agents={"a": agent})
+
+        set_oauth_user_id("user-a")
+        await attach_persistent_mcp_servers(agency)
+        key_a = _build_persistence_key(agent.mcp_servers[0], "user-a")
+        client_a = default_mcp_manager.get(key_a)
+
+        set_oauth_user_id("user-b")
+        await attach_persistent_mcp_servers(agency)
+        key_b = _build_persistence_key(agent.mcp_servers[0], "user-b")
+        client_b = default_mcp_manager.get(key_b)
+
+        assert client_a is not None
+        assert client_b is not None
+        assert client_a is not client_b
+        assert getattr(agent.mcp_servers[0], "_server", agent.mcp_servers[0]) is client_b
     finally:
         set_oauth_user_id(None)
         await default_mcp_manager.shutdown()
