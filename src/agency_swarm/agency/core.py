@@ -13,7 +13,7 @@ from agents import RunConfig, RunHooks, RunResult, Tool, TResponseInputItem
 from agency_swarm.agent.agent_flow import AgentFlow
 from agency_swarm.agent.core import AgencyContext, Agent
 from agency_swarm.agent.execution_streaming import StreamingRunResponse
-from agency_swarm.hooks import PersistenceHooks
+from agency_swarm.hooks import CompositeRunHooks, PersistenceHooks
 from agency_swarm.streaming.utils import EventStreamMerger
 from agency_swarm.tools import BaseTool
 from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers, default_mcp_manager
@@ -283,14 +283,14 @@ class Agency:
         """Return the agency-level hooks applied to each run.
 
         Notes:
-            The Agents SDK accepts either a single RunHooks instance or a list of them.
-            We keep the richer list shape at runtime but cast for typing.
+            The Agents SDK expects a single RunHooks instance, so multiple agency
+            hooks are composed into one wrapper before the run starts.
         """
         if not self._default_run_hooks:
             return None
         if len(self._default_run_hooks) == 1:
             return self._default_run_hooks[0]
-        return cast(RunHooks, self._default_run_hooks)
+        return CompositeRunHooks(list(self._default_run_hooks))
 
     def get_agent_context(
         self,

@@ -52,6 +52,19 @@ class TestOAuthStorageHooks:
 
         assert _user_id_context.get() is None
 
+    async def test_on_agent_start_and_end_bridge_current_sdk_hooks(self) -> None:
+        """OAuthStorageHooks should still set and clear user_id via the current SDK lifecycle."""
+        hooks = OAuthStorageHooks()
+        hook_context = Mock()
+        hook_context.context = Mock()
+        hook_context.context.user_context = {"user_id": "sdk-user"}
+
+        await hooks.on_agent_start(hook_context, Mock())
+        assert _user_id_context.get() == "sdk-user"
+
+        await hooks.on_agent_end(hook_context, Mock(), Mock())
+        assert _user_id_context.get() is None
+
 
 class TestFileTokenStorageWithContextVar:
     """Test FileTokenStorage uses per-user isolation."""
