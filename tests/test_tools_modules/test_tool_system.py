@@ -82,39 +82,36 @@ def mock_recipient_agent():
 
 @pytest.fixture
 def mock_master_context():
-    context = MagicMock(spec=MasterContext)
-    context.user_context = {"user_key": "user_value"}
-    return context
+    return MasterContext(
+        thread_manager=ThreadManager(),
+        agents={},
+        user_context={"user_key": "user_value"},
+    )
 
 
 @pytest.fixture
 def mock_run_context_wrapper(mock_master_context):
-    wrapper = MagicMock(spec=RunContextWrapper)
-    wrapper.context = mock_master_context
-    return wrapper
+    return RunContextWrapper(context=mock_master_context)
 
 
 @pytest.fixture
 def mock_context(mock_sender_agent, mock_recipient_agent):
-    context = MagicMock(spec=MasterContext)
-    context.agents = {"SenderAgent": mock_sender_agent, "RecipientAgent": mock_recipient_agent}
-    context.thread_manager = MagicMock(spec=ThreadManager)
-    context.thread_manager.get_thread = MagicMock(return_value=MagicMock())
-    context.thread_manager.add_items_and_save = AsyncMock()
-    context.user_context = {"user_key": "user_val"}
-    context.agent_runtime_state = {}
-    context.shared_instructions = None
-    context._current_agent_run_id = None
-    context._is_streaming = True
-    context.streaming_context = None
-    context._sub_agent_raw_responses = []
-    return context
+    thread_manager = MagicMock(spec=ThreadManager)
+    thread_manager.get_thread = MagicMock(return_value=MagicMock())
+    thread_manager.add_items_and_save = AsyncMock()
+    return MasterContext(
+        thread_manager=thread_manager,
+        agents={"SenderAgent": mock_sender_agent, "RecipientAgent": mock_recipient_agent},
+        user_context={"user_key": "user_val"},
+        agent_runtime_state={},
+        shared_instructions=None,
+        _is_streaming=True,
+    )
 
 
 @pytest.fixture
 def mock_wrapper(mock_context, mock_sender_agent):
-    wrapper = MagicMock(spec=RunContextWrapper)
-    wrapper.context = mock_context
+    wrapper = RunContextWrapper(context=mock_context)
     wrapper.hooks = MagicMock()
     wrapper.agent = mock_sender_agent
     return wrapper

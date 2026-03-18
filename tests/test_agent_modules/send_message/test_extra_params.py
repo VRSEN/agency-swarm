@@ -1,30 +1,23 @@
 import json
-from typing import Any, cast
 
 import pytest
+from agents import ModelSettings, RunContextWrapper
 from pydantic import BaseModel, Field
 
+from agency_swarm import Agent
+from agency_swarm.context import MasterContext
 from agency_swarm.tools.send_message import SendMessage
+from agency_swarm.utils.thread import ThreadManager
+from tests.deterministic_model import DeterministicModel
 
 
-class StubAgent:
-    def __init__(self, name: str):
-        self.name = name
-        self.description = ""
-        self.raise_input_guardrail_error = True
-
-    async def get_response(
-        self,
-        message: str,
-        sender_name: str,
-        additional_instructions: str | None,
-        agency_context,
-        parent_run_id: str | None,
-    ):
-        class Resp:
-            final_output = "ack"
-
-        return Resp()
+def _make_stub_agent(name: str, response: str = "ack") -> Agent:
+    return Agent(
+        name=name,
+        instructions="stub",
+        model=DeterministicModel(default_response=response),
+        model_settings=ModelSettings(temperature=0.0),
+    )
 
 
 class NumericContextParams(BaseModel):
@@ -48,29 +41,23 @@ class SendMessageBad(SendMessage):
     ExtraParams = BadExtra
 
 
-def _wrapper_with_recipient(recipient: StubAgent) -> Any:
-    class Wrapper:
-        class Context:
-            agents = {"B": recipient}
-            user_context = None
-            thread_manager = None
-            shared_instructions = None
-            agent_runtime_state: dict[str, Any] = {}
-            _current_agent_run_id = None
-            _is_streaming = False
-            streaming_context = None
-
-        context = Context()
-
-    return cast(Any, Wrapper())
+def _wrapper_with_recipient(recipient: Agent) -> RunContextWrapper[MasterContext]:
+    ctx = MasterContext(
+        thread_manager=ThreadManager(),
+        agents={"B": recipient},
+        user_context={},
+        agent_runtime_state={},
+        shared_instructions=None,
+    )
+    return RunContextWrapper(context=ctx)
 
 
 @pytest.mark.asyncio
 async def test_send_message_extra_params_schema_validation_and_success() -> None:
     """Extra params should be merged into schema, validate input, and still allow successful sends."""
-    sender = StubAgent("Sender")
-    recipient = StubAgent("Recipient")
-    tool = SendMessageWithContext(cast(Any, sender), recipients={"B": cast(Any, recipient)})
+    sender = _make_stub_agent("Sender")
+    recipient = _make_stub_agent("Recipient")
+    tool = SendMessageWithContext(sender, recipients={"B": recipient})
 
     properties = tool.params_json_schema["properties"]
     required = tool.params_json_schema["required"]
@@ -106,9 +93,9 @@ async def test_send_message_extra_params_schema_validation_and_success() -> None
 @pytest.mark.asyncio
 async def test_send_message_bad_extra_params_model_falls_back_without_validation() -> None:
     """Schema generation failures in ExtraParams should keep tool usable without extra field validation."""
-    sender = StubAgent("Sender")
-    recipient = StubAgent("Recipient")
-    tool = SendMessageBad(cast(Any, sender), recipients={"B": cast(Any, recipient)})
+    sender = _make_stub_agent("Sender")
+    recipient = _make_stub_agent("Recipient")
+    tool = SendMessageBad(sender, recipients={"B": recipient})
     assert "foo" not in tool.params_json_schema["properties"]
 
     wrapper = _wrapper_with_recipient(recipient)
