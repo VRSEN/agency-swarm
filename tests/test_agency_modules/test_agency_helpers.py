@@ -167,6 +167,26 @@ def test_run_fastapi_normalizes_relative_shared_folders_for_factory_calls(mocker
     assert "SampleTool" in ns["tool_names"]
 
 
+def test_run_fastapi_preserves_oauth_token_path(mocker, tmp_path: Path) -> None:
+    agent = Agent(name="HelperAgent", instructions="test", model="gpt-5-mini")
+    agency = Agency(agent, oauth_token_path=str(tmp_path / "oauth-cache"))
+
+    captured: dict[str, object] = {}
+
+    def fake_run_fastapi(*, agencies=None, **_kwargs):
+        captured["factory"] = agencies["agency"]
+        return None
+
+    mocker.patch("agency_swarm.integrations.fastapi.run_fastapi", side_effect=fake_run_fastapi)
+
+    helpers_run_fastapi(agency)
+    factory = captured["factory"]
+    assert callable(factory)
+
+    new_agency = factory()
+    assert new_agency.oauth_token_path == agency.oauth_token_path
+
+
 def test_package_star_import_succeeds_without_jupyter_dependencies() -> None:
     """`from agency_swarm import *` should not fail when jupyter extras are missing."""
     script = textwrap.dedent(
