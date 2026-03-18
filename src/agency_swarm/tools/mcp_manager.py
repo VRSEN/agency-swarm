@@ -98,7 +98,7 @@ def _clone_oauth_candidate(server: Any) -> Any:
     actual = getattr(server, "_server", server)
     if not isinstance(actual, _MCPServerOAuthClient):
         return server
-    client = cast("MCPServerOAuthClient", actual)
+    client = cast(Any, actual)
 
     handlers: OAuthHandlerMap = {}
     if client._redirect_handler is not None:
@@ -573,6 +573,9 @@ def _process_oauth_servers(agent: Any, servers: list[Any]) -> None:
     from agency_swarm.mcp.oauth_client import MCPServerOAuthClient
 
     handler_factory = getattr(agent, "mcp_oauth_handler_factory", None)
+    factory: Callable[[str], OAuthHandlerMap] | None = None
+    if callable(handler_factory):
+        factory = cast("Callable[[str], OAuthHandlerMap]", handler_factory)
 
     # Convert OAuth configs to OAuth clients
     for i, srv in enumerate(list(servers)):
@@ -612,6 +615,7 @@ def _process_oauth_servers(agent: Any, servers: list[Any]) -> None:
             logger.exception(f"Failed to create OAuth client for {oauth_srv.name}")
             raise
 
+
 async def _authorize_hosted_mcp_tools(agent: Any, *, cache_dir: Path | None) -> None:
     """Ensure HostedMCPTool has an OAuth access token when missing.
 
@@ -637,7 +641,7 @@ async def _authorize_hosted_mcp_tools(agent: Any, *, cache_dir: Path | None) -> 
         factory = cast("Callable[[str], OAuthHandlerMap]", handler_factory)
 
     oauth_config_type = cast("type[MCPServerOAuth]", _MCPServerOAuth)
-    oauth_client_type = cast("type[MCPServerOAuthClient]", _MCPServerOAuthClient)
+    oauth_client_type = cast(type[Any], _MCPServerOAuthClient)
 
     hosted_mcp_tool_type = _HostedMCPTool
 
@@ -711,8 +715,8 @@ def _sync_oauth_client_handlers(persistent: object, candidate: object) -> bool:
     if not isinstance(existing_client, _MCPServerOAuthClient) or not isinstance(new_client, _MCPServerOAuthClient):
         return False
 
-    client = cast("MCPServerOAuthClient", existing_client)
-    new_instance = cast("MCPServerOAuthClient", new_client)
+    client = cast(Any, existing_client)
+    new_instance = cast(Any, new_client)
     if new_instance._redirect_handler is not None:
         client._redirect_handler = new_instance._redirect_handler
     if new_instance._callback_handler is not None:

@@ -16,7 +16,7 @@ from collections.abc import Awaitable, Callable, Coroutine
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar, Literal, TypedDict, cast
+from typing import Any, ClassVar, Literal, TypedDict, cast
 from urllib.parse import parse_qs, urlparse, urlsplit
 
 from agents import RunHooks
