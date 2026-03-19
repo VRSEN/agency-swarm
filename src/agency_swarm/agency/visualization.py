@@ -171,11 +171,11 @@ def visualize(
 
 def terminal_demo(agency: "Agency", show_reasoning: bool | None = None, reload: bool = True) -> None:
     """
-    Run a terminal demo of the agency.
+    Run a terminal demo of the agency with Agent Swarm CLI.
 
     Args:
         agency: The Agency instance to run.
-        show_reasoning: Whether to show reasoning output. Falls back to the legacy demo when set to False.
+        show_reasoning: Whether to show reasoning output. `False` is not supported in the new TUI yet.
         reload: If True, watch for file changes and automatically restart on changes.
     """
     start_terminal(agency, show_reasoning=show_reasoning, reload=reload)

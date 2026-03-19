@@ -9,6 +9,7 @@ North Star: keep the user's general intent and direction clear; if literal words
 
 ## User Priority
 - User requests come first unless they conflict with system or developer rules; move fast within those limits.
+- Hard-cut policy: keep one canonical current-state path. Do not preserve or add legacy aliases, compatibility shims, fallbacks, migration glue, or dual behavior unless the user explicitly asks for them. If an exception is required, document why, why the main path fails, and when the exception will be deleted.
 
 ## AGENTS.md Maintenance
 - Treat AGENTS.md as the highest-priority maintenance file; refactor it to reduce entropy (remove or tighten before adding) and to improve clarity when needed.
@@ -92,6 +93,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - Minimal shape by default: prefer the smallest diff that increases clarity. Remove artificial indirection (gratuitous wrappers, redundant layers) or dead code when it is in scope, and avoid speculative configuration.
 - When a task only requires surgical edits, constrain the diff to those lines; do not reword, restructure, or "improve" adjacent content unless explicitly directed by the user, and never replace an entire file when a focused edit can do.
 - Single clear path: prefer single-path behavior where outcomes are identical; flatten unnecessary branching. Avoid optional fallbacks unless explicitly requested.
+- Touch upstream-shared general files only when required for correctness or integration hooks; prefer placing fork-specific behavior in fork-owned modules and keep shared-file edits light.
 
 ## Self-Improvement (High Priority)
 - When you receive user feedback, make a mistake, or spot a recurring pattern, add a generalized, minimal rule to AGENTS.md and revise relevant lines before any other work.

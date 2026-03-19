@@ -20,13 +20,11 @@ from agency_swarm.ui.demos.terminal import (
     TerminalReloader,
     _get_caller_script_path,
     _get_watch_directory,
-    start_terminal as start_legacy_terminal,
 )
 
 logger = logging.getLogger(__name__)
 
-_LEGACY_ENV = "AGENCY_SWARM_TERMINAL_LEGACY"
-_BIN_ENV = "AGENCY_CODE_BIN"
+_BIN_ENV = "AGENTSWARM_BIN"
 _ARGS_ENV = "AGENCY_SWARM_OPENCODE_ARGS"
 _HOST = "127.0.0.1"
 _MODEL = "agency-swarm/default"
@@ -51,10 +49,9 @@ class _Server:
 
 
 def start_terminal(agency, show_reasoning: bool | None = None, reload: bool = True) -> None:
-    """Launch the Agency Code terminal for a live agency instance."""
-    if _use_legacy(show_reasoning):
-        start_legacy_terminal(agency, show_reasoning=show_reasoning, reload=reload)
-        return
+    """Launch the Agent Swarm CLI terminal for a live agency instance."""
+    if show_reasoning is False:
+        raise NotImplementedError("terminal_demo(show_reasoning=False) is not supported in the new TUI yet.")
 
     if reload and not os.environ.get(_RELOAD_CHILD_ENV):
         script_path = _get_caller_script_path()
@@ -65,16 +62,12 @@ def start_terminal(agency, show_reasoning: bool | None = None, reload: bool = Tr
 
     command = _command()
     if command is None:
-        logger.warning("Agency Code CLI was not found. Falling back to the legacy terminal demo.")
-        start_legacy_terminal(agency, show_reasoning=show_reasoning, reload=reload)
-        return
+        raise RuntimeError("Agent Swarm CLI was not found. Install it with `npm i -g agentswarm-cli`.")
 
     try:
         server = _start_server(agency)
-    except Exception:
-        logger.warning("Agency Code bridge failed to start. Falling back to the legacy terminal demo.", exc_info=True)
-        start_legacy_terminal(agency, show_reasoning=show_reasoning, reload=reload)
-        return
+    except Exception as exc:
+        raise RuntimeError("Agent Swarm CLI bridge failed to start.") from exc
 
     try:
         result = subprocess.run(
@@ -83,25 +76,13 @@ def start_terminal(agency, show_reasoning: bool | None = None, reload: bool = Tr
             env=_env(server.port, _agency_id(agency)),
             check=False,
         )
-    except OSError:
-        logger.warning(
-            "Agency Code CLI could not be launched. Falling back to the legacy terminal demo.",
-            exc_info=True,
-        )
-        start_legacy_terminal(agency, show_reasoning=show_reasoning, reload=reload)
-        return
+    except OSError as exc:
+        raise RuntimeError("Agent Swarm CLI could not be launched.") from exc
     finally:
         server.stop()
 
-    if result.returncode in (0, 130):
-        return
-    raise subprocess.CalledProcessError(result.returncode, [*command, *_command_args()])
-
-
-def _use_legacy(show_reasoning: bool | None) -> bool:
-    if os.environ.get(_LEGACY_ENV) == "1":
-        return True
-    return show_reasoning is False
+    if result.returncode not in (0, 130):
+        raise subprocess.CalledProcessError(result.returncode, [*command, *_command_args()])
 
 
 def _command() -> list[str] | None:
@@ -109,7 +90,7 @@ def _command() -> list[str] | None:
     if explicit:
         return [explicit]
 
-    resolved = shutil.which("agency")
+    resolved = shutil.which("agentswarm")
     if resolved:
         return [resolved]
     return None
@@ -162,7 +143,7 @@ def _start_server(agency) -> _Server:
         return_app=True,
     )
     if app is None:
-        raise RuntimeError("Failed to build the Agency Swarm FastAPI app for Agency Code.")
+        raise RuntimeError("Failed to build the Agency Swarm FastAPI app for Agent Swarm CLI.")
 
     import uvicorn
 
