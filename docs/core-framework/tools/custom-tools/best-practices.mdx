@@ -6,30 +6,6 @@ icon: "code"
 
 Although the tool interface is straightforward and simple to use, there are actually quite a few practices and tricks that you can use to get significantly better results.
 
-### Use Chain-of-Thought Prompting for Complex Tools
-
-Use chain-of-thought prompting to allow the agent to think and plan before executing a complex tool.
-
-```python
-from agency_swarm import MasterContext, RunContextWrapper, function_tool
-from pydantic import BaseModel, Field
-
-class ComplexAnalysisArgs(BaseModel):
-    chain_of_thought: str = Field(
-        ...,
-        description="Think step-by-step about how to perform the analysis."
-    )
-    data: str = Field(..., description="Data to analyze.")
-
-@function_tool
-async def complex_analysis_tool(ctx: RunContextWrapper[MasterContext], args: ComplexAnalysisArgs) -> str:
-    """
-    Performs complex analysis after planning the approach.
-    """
-    # Analysis logic using the chain of thought
-    return "Analysis complete."
-```
-
 ### Provide Hints for the Agent
 
 Based on your tool's logic, you can provide hints for the agent in tool output on what to do next.

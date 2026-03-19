@@ -17,14 +17,8 @@ from agency_swarm import SendMessage
 class SendMessageTask(SendMessage):
     """Use this tool to send tasks to other agents within your agency."""
 
-    tool_name = "send_message_task"
+    tool_name = "send_message_task"  # optional, defaults to "send_message"
 
-    chain_of_thought: str = Field(
-        description=(
-            "Think step-by-step about how to solve your current task, then break it down "
-            "into smaller steps for the recipient agent."
-        )
-    )
     task: str = Field(
         description=(
             "Specify the task required for the recipient agent to complete. Focus on "
