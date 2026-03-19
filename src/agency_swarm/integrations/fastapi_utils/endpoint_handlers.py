@@ -262,6 +262,51 @@ def _build_file_upload_client(
     return RequestOverridePolicy(config).build_file_upload_client(agency, recipient_agent=recipient_agent)
 
 
+def _format_file_urls_context(file_urls: dict[str, str]) -> str:
+    """Build the persisted system message describing original file attachment sources."""
+    lines = [
+        (
+            "The user has provided file attachments in their message. The list below maps each attached "
+            "filename to the original URL or local file path used to attach it. Treat these source strings "
+            "as attachment metadata. Use them when relevant, and preserve them exactly if you reference them."
+        ),
+        "",
+        "Attached file sources:",
+    ]
+    for filename, source in file_urls.items():
+        lines.append(f"- `{filename}`: `{source}`")
+    return "\n".join(lines)
+
+
+def _build_message_with_file_urls_context(
+    message: str | list[TResponseInputItem],
+    file_urls: dict[str, str] | None,
+) -> str | list[TResponseInputItem]:
+    """Prepend a synthetic system message so original file_urls persist in thread history."""
+    if not file_urls:
+        return message
+
+    user_content = message if isinstance(message, str) else copy.deepcopy(message)
+    system_message = cast(
+        TResponseInputItem,
+        {
+            "role": "system",
+            "content": _format_file_urls_context(file_urls),
+        },
+    )
+    user_message = cast(
+        TResponseInputItem,
+        {
+            "role": "user",
+            "content": user_content,
+        },
+    )
+    return [
+        system_message,
+        user_message,
+    ]
+
+
 # Non‑streaming response endpoint
 def make_response_endpoint(
     request_model,
@@ -286,6 +331,7 @@ def make_response_endpoint(
 
         combined_file_ids = request.file_ids
         file_ids_map = None
+        message_input: str | list[TResponseInputItem] = request.message
 
         try:
             await override_session.acquire()
@@ -304,6 +350,7 @@ def make_response_endpoint(
                         openai_client=request_upload_client,
                     )
                     combined_file_ids = (combined_file_ids or []) + list(file_ids_map.values())
+                    message_input = _build_message_with_file_urls_context(request.message, request.file_urls)
                 except Exception as e:
                     return {"error": f"Error downloading file from provided urls: {e}"}
 
@@ -314,7 +361,7 @@ def make_response_endpoint(
             initial_message_count = len(agency_instance.thread_manager.get_all_messages())
 
             response = await agency_instance.get_response(
-                message=request.message,
+                message=message_input,
                 recipient_agent=request.recipient_agent,
                 context_override=request.user_context,
                 additional_instructions=request.additional_instructions,
@@ -381,6 +428,7 @@ def make_stream_endpoint(
 
         combined_file_ids = request.file_ids
         file_ids_map = None
+        message_input: str | list[TResponseInputItem] = request.message
 
         async def cleanup_setup_context() -> None:
             await override_session.cleanup()
@@ -401,6 +449,7 @@ def make_stream_endpoint(
                         openai_client=request_upload_client,
                     )
                     combined_file_ids = (combined_file_ids or []) + list(file_ids_map.values())
+                    message_input = _build_message_with_file_urls_context(request.message, request.file_urls)
                 except Exception as e:
                     error_msg = str(e)
                     await cleanup_setup_context()
@@ -448,7 +497,7 @@ def make_stream_endpoint(
             active_run: ActiveRun | None = None
             try:
                 stream = agency_instance.get_response_stream(
-                    message=request.message,
+                    message=message_input,
                     recipient_agent=request.recipient_agent,
                     context_override=request.user_context,
                     additional_instructions=request.additional_instructions,
@@ -617,6 +666,7 @@ def make_agui_chat_endpoint(
         encoder = EventEncoder()
 
         combined_file_ids = list(request.file_ids or []) if getattr(request, "file_ids", None) else []
+        message_input: str | list[TResponseInputItem] = request.messages[-1].content if request.messages else ""
 
         if request.chat_history is not None:
             # Chat history is now a flat list
@@ -667,6 +717,7 @@ def make_agui_chat_endpoint(
                         openai_client=request_upload_client,
                     )
                     combined_file_ids = combined_file_ids + list(file_ids_map.values())
+                    message_input = _build_message_with_file_urls_context(message_input, request.file_urls)
                 except Exception as exc:
                     error_message = f"Error downloading file from provided urls: {exc}"
                     await cleanup_setup_context()
@@ -718,7 +769,7 @@ def make_agui_chat_endpoint(
                 # Store in dict format to avoid converting to classes
                 snapshot_messages = [message.model_dump() for message in request.messages]
                 async for event in agency.get_response_stream(
-                    message=request.messages[-1].content,
+                    message=message_input,
                     context_override=request.user_context,
                     additional_instructions=request.additional_instructions,
                     file_ids=combined_file_ids or None,
