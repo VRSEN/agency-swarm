@@ -114,25 +114,7 @@ if __name__ == "__main__":
 
 ## Best Practices for Custom Tools
 
-### 1. Chain-of-Thought for Complex Tools
-For tools requiring multi-step planning:
-```python
-class ComplexAnalysisTool(BaseTool):
-    """Performs complex analysis after planning the approach."""
-
-    chain_of_thought: str = Field(
-        ...,
-        description="Think step-by-step about how to perform the analysis."
-    )
-    data: str = Field(..., description="Data to analyze.")
-
-    def run(self):
-        # The agent will fill chain_of_thought with its reasoning
-        # Use this for logging or conditional logic
-        return "Analysis complete."
-```
-
-### 2. Provide Next-Step Hints
+### 1. Provide Next-Step Hints
 Guide the agent on what to do next:
 ```python
 class QueryDatabase(BaseTool):
