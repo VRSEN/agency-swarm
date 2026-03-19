@@ -43,8 +43,10 @@ class _StubAgency:
         self.agents = {}
         self.entry_points = []
         self._stream = stream
+        self.last_kwargs: dict[str, Any] | None = None
 
     def get_response_stream(self, **_kwargs: Any) -> StreamingRunResponse:
+        self.last_kwargs = dict(_kwargs)
         return self._stream
 
 
@@ -80,6 +82,52 @@ def _parse_sse_stream_events(chunks: list[str]) -> list[dict[str, Any]]:
             if isinstance(data, dict) and isinstance(data.get("type"), str):
                 events.append(data)
     return events
+
+
+@pytest.mark.asyncio
+async def test_stream_endpoint_prepends_file_url_source_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Streaming FastAPI requests should prepend persisted file_urls source context."""
+
+    async def _noop_attach(_agency: Any) -> None:
+        return None
+
+    async def _fake_upload_from_urls(_file_urls, allowed_local_dirs=None, openai_client=None):
+        del allowed_local_dirs, openai_client
+        return {"doc.txt": "file-123"}
+
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.attach_persistent_mcp_servers",
+        _noop_attach,
+    )
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.upload_from_urls",
+        _fake_upload_from_urls,
+    )
+
+    async def _stream() -> AsyncGenerator[dict[str, Any]]:
+        if False:
+            yield {}
+
+    thread_manager = _StubThreadManager()
+    agency = _StubAgency(StreamingRunResponse(_stream()), thread_manager)
+
+    def agency_factory(**_kwargs: Any) -> _StubAgency:
+        return agency
+
+    handler = make_stream_endpoint(BaseRequest, agency_factory, lambda: None, ActiveRunRegistry())
+    response = await handler(
+        http_request=_StubRequest(),
+        request=BaseRequest(message="hello", file_urls={"doc.txt": "https://example.com/doc.txt"}),
+        token=None,
+    )
+    _ = [chunk async for chunk in response.body_iterator]
+
+    assert agency.last_kwargs is not None
+    assert agency.last_kwargs["file_ids"] == ["file-123"]
+    assert isinstance(agency.last_kwargs["message"], list)
+    assert agency.last_kwargs["message"][0]["role"] == "system"
+    assert "`doc.txt`: `https://example.com/doc.txt`" in str(agency.last_kwargs["message"][0]["content"])
+    assert agency.last_kwargs["message"][1] == {"role": "user", "content": "hello"}
 
 
 @pytest.mark.asyncio
