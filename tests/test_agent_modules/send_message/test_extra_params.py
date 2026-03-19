@@ -41,6 +41,18 @@ class SendMessageBad(SendMessage):
     ExtraParams = BadExtra
 
 
+# --- New pattern: inline field declarations ---
+
+
+class SendMessageInline(SendMessage):
+    """Inline extra params without nested class."""
+
+    tool_name = "send_message_inline"
+
+    priority: str = Field(description="Task priority level")
+    context_summary: str = Field(description="Summary of context")
+
+
 def _wrapper_with_recipient(recipient: Agent) -> RunContextWrapper[MasterContext]:
     ctx = MasterContext(
         thread_manager=ThreadManager(),
@@ -111,3 +123,86 @@ async def test_send_message_bad_extra_params_model_falls_back_without_validation
     assert isinstance(result_unknown_extra, str) and not result_unknown_extra.startswith(
         "Error: Invalid extra parameters"
     )
+
+
+def test_inline_fields_merged_into_schema() -> None:
+    """Inline field declarations should be auto-discovered and merged into the schema."""
+    sender = _make_stub_agent("Sender")
+    recipient = _make_stub_agent("Recipient")
+    tool = SendMessageInline(sender, recipients={"B": recipient})
+
+    properties = tool.params_json_schema["properties"]
+    required = tool.params_json_schema["required"]
+
+    assert "priority" in properties
+    assert properties["priority"]["type"] == "string"
+    assert "context_summary" in properties
+    assert properties["context_summary"]["type"] == "string"
+    assert "priority" in required
+    assert "context_summary" in required
+
+    # Verify tool_name was applied
+    assert tool.name == "send_message_inline"
+
+
+def test_tool_name_class_attribute() -> None:
+    """tool_name class attribute should set the tool name without __init__ override."""
+
+    class MySendMessage(SendMessage):
+        tool_name = "send_message_custom"
+
+    sender = _make_stub_agent("Sender")
+    tool = MySendMessage(sender)
+    assert tool.name == "send_message_custom"
+
+
+def test_tool_name_explicit_name_takes_precedence() -> None:
+    """Explicit name= kwarg should override tool_name class attribute."""
+
+    class MySendMessage(SendMessage):
+        tool_name = "send_message_custom"
+
+    sender = _make_stub_agent("Sender")
+    tool = MySendMessage(sender, name="send_message_override")
+    assert tool.name == "send_message_override"
+
+
+def test_inline_fields_not_picked_up_when_extra_params_exists() -> None:
+    """ExtraParams nested class should take priority over inline fields."""
+
+    class MixedSendMessage(SendMessage):
+        class ExtraParams(BaseModel):
+            from_nested: str = Field(description="From nested")
+
+        # This should be ignored because ExtraParams is present
+        inline_field: str = Field(description="Should be ignored")
+
+    sender = _make_stub_agent("Sender")
+    tool = MixedSendMessage(sender)
+    properties = tool.params_json_schema["properties"]
+    assert "from_nested" in properties
+    assert "inline_field" not in properties
+
+
+@pytest.mark.asyncio
+async def test_inline_fields_validation() -> None:
+    """Inline fields should be validated like ExtraParams fields."""
+    sender = _make_stub_agent("Sender")
+    recipient = _make_stub_agent("Recipient")
+
+    class StrictInline(SendMessage):
+        count: int = Field(description="Must be integer")
+
+    tool = StrictInline(sender, recipients={"Recipient": recipient})
+    wrapper = _wrapper_with_recipient(recipient)
+
+    invalid_args = json.dumps(
+        {
+            "recipient_agent": "Recipient",
+            "message": "test",
+            "additional_instructions": "",
+            "count": "not_a_number",
+        }
+    )
+    result = await tool.on_invoke_tool(wrapper, invalid_args)
+    assert isinstance(result, str) and result.startswith("Error: Invalid extra parameters")

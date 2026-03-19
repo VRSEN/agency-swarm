@@ -12,7 +12,7 @@ import logging
 import os
 import sys
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 # Path setup so the example can be run standalone
 examples_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -34,30 +34,26 @@ logging.getLogger("agency_swarm").setLevel(
 class SendMessageWithContext(SendMessage):
     """SendMessage with key moments and decisions tracking."""
 
-    class ExtraParams(BaseModel):
-        key_moments: str = Field(
-            description=(
-                "Document critical moments and decision points from the current conversation "
-                "that the recipient agent needs to understand. Include context about what "
-                "has been decided or prioritized that will guide the recipient's tool selection "
-                "and task execution. For example: 'User decided to prioritize performance over cost', "
-                "'Analysis focus shifted to Q4 optimization', etc."
-            )
-        )
-        decisions: str = Field(
-            description=(
-                "Summarize the specific decisions made that will directly impact which tools "
-                "or approaches the recipient agent should use. Be explicit about choices that "
-                "narrow down the scope of work. For example: 'Prioritized performance analysis "
-                "over cost reduction', 'Selected React over Vue for frontend', etc. This helps "
-                "the recipient agent choose the most appropriate tools and approach."
-            )
-        )
+    tool_name = "send_message_with_context"
 
-    def __init__(self, sender_agent: Agent, recipients: dict[str, Agent] | None = None) -> None:
-        super().__init__(sender_agent, recipients)
-        # Optionally set custom name for easier tracking (defaults to send_message)
-        self.name = "send_message_with_context"  # Name must start with send_message
+    key_moments: str = Field(
+        description=(
+            "Document critical moments and decision points from the current conversation "
+            "that the recipient agent needs to understand. Include context about what "
+            "has been decided or prioritized that will guide the recipient's tool selection "
+            "and task execution. For example: 'User decided to prioritize performance over cost', "
+            "'Analysis focus shifted to Q4 optimization', etc."
+        )
+    )
+    decisions: str = Field(
+        description=(
+            "Summarize the specific decisions made that will directly impact which tools "
+            "or approaches the recipient agent should use. Be explicit about choices that "
+            "narrow down the scope of work. For example: 'Prioritized performance analysis "
+            "over cost reduction', 'Selected React over Vue for frontend', etc. This helps "
+            "the recipient agent choose the most appropriate tools and approach."
+        )
+    )
 
 
 # Define tools for testing

@@ -61,6 +61,11 @@ class SendMessage(FunctionTool):
         runtime_state: "AgentRuntimeState | None" = None,
         name: str = "send_message",
     ):
+        # Support tool_name class attribute to avoid __init__ overrides
+        class_tool_name = getattr(type(self), "tool_name", None)
+        if class_tool_name and isinstance(class_tool_name, str) and name == "send_message":
+            name = class_tool_name
+
         self.sender_agent = sender_agent
         self._runtime_state = runtime_state
 
@@ -113,16 +118,27 @@ class SendMessage(FunctionTool):
             "additionalProperties": False,
         }
 
-        # Allow subclasses to define extra params via Pydantic
-        # Two supported patterns:
+        # Discover extra params model from subclass.
+        # Three supported patterns (in priority order):
         # 1) Nested class `ExtraParams(BaseModel)` on the subclass
         # 2) Class attribute `extra_params_model = MyModel`
+        # 3) Inline field declarations directly on the subclass (preferred)
         self._extra_params_model: type[BaseModel] | None = None
-        extra_model: Any = getattr(self.__class__, "ExtraParams", None) or getattr(
+        extra_model: type[BaseModel] | None = None
+
+        # Pattern 1 & 2: explicit model class
+        candidate: Any = getattr(self.__class__, "ExtraParams", None) or getattr(
             self.__class__, "extra_params_model", None
         )
+        if candidate and isinstance(candidate, type) and issubclass(candidate, BaseModel):
+            extra_model = candidate
+
+        # Pattern 3: inline field declarations on the subclass
+        if extra_model is None:
+            extra_model = self._discover_inline_fields()
+
         try:
-            if extra_model and isinstance(extra_model, type) and issubclass(extra_model, BaseModel):
+            if extra_model is not None:
                 # Merge model schema into params schema
                 model_schema: dict[str, Any] = extra_model.model_json_schema()  # type: ignore[assignment]
                 # Only use field-level schema content
@@ -142,7 +158,7 @@ class SendMessage(FunctionTool):
 
                 self._extra_params_model = extra_model
         except Exception as e:
-            logger.warning(f"Failed to merge ExtraParams model into schema for '{name}': {e}")
+            logger.warning(f"Failed to merge extra params model into schema for '{name}': {e}")
 
         # Build description with all recipient roles
         description_parts = [self.__doc__ or "Send a message to another agent."]
@@ -198,6 +214,45 @@ class SendMessage(FunctionTool):
                 agent_desc = getattr(agent, "description", "No description provided") or "No description provided"
                 description_parts.append(f"\n- {agent.name}: {agent_desc}")
         self.description = "".join(description_parts)
+
+    @classmethod
+    def _discover_inline_fields(cls) -> type[BaseModel] | None:
+        """Auto-discover extra field declarations from subclass annotations.
+
+        Allows subclasses to define extra parameters as class-level annotations
+        with Field() defaults, without needing a nested ExtraParams class::
+
+            class MySendMessage(SendMessage):
+                tool_name = "my_send_message"
+                priority: str = Field(description="Task priority level")
+                context: str = Field(description="Additional context")
+        """
+        from pydantic import create_model as _create_model
+        from pydantic.fields import FieldInfo
+
+        # Collect all annotation names from SendMessage and its parents
+        base_annotations: set[str] = set()
+        for base_cls in SendMessage.__mro__:
+            base_annotations.update(getattr(base_cls, "__annotations__", {}).keys())
+        reserved = {"tool_name"}
+
+        # Walk MRO from base-to-derived (reversed) so derived classes override
+        extra_field_defs: dict[str, Any] = {}
+        for mro_cls in reversed(cls.__mro__):
+            if mro_cls is SendMessage or not issubclass(mro_cls, SendMessage) or mro_cls is object:
+                continue
+            for field_name, annotation in getattr(mro_cls, "__annotations__", {}).items():
+                if field_name in base_annotations or field_name in reserved or field_name.startswith("_"):
+                    continue
+                default = mro_cls.__dict__.get(field_name, ...)
+                # Only include fields that look like Pydantic fields (have FieldInfo or Ellipsis)
+                if isinstance(default, FieldInfo) or default is ...:
+                    extra_field_defs[field_name] = (annotation, default)
+
+        if not extra_field_defs:
+            return None
+
+        return _create_model(f"{cls.__name__}Params", **extra_field_defs)
 
     def _create_recipient_agency_context(self, wrapper: RunContextWrapper[MasterContext]) -> "AgencyContext":
         """Create agency context for the recipient agent."""
