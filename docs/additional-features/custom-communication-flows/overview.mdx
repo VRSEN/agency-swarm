@@ -44,25 +44,24 @@ To create your own communication flow, you will first need to extend the `Functi
 
 ### Custom SendMessage Class
 
-To customize SendMessage parameters, extend the `SendMessage` class and declare additional fields using a Pydantic model:
+To customize SendMessage parameters, extend the `SendMessage` class and declare extra fields directly as class-level annotations with `Field()`:
 
 ```python
-from pydantic import BaseModel, Field
+from pydantic import Field
 from agency_swarm import SendMessage
 
 class CustomSendMessage(SendMessage):
     """
     Use this tool to facilitate direct, synchronous communication between specialized agents within your agency.
     """
-    
-    class ExtraParams(BaseModel):
-        key_moments: str = Field(description="Critical context and decision points relevant to the task")
-        decisions: str = Field(description="Specific decisions that guide tool choice and approach")
 
-    def __init__(self, sender_agent, recipients=None):
-        super().__init__(sender_agent, recipients)
-        self.name = "send_message_custom"  # Optional: custom name for this tool
+    tool_name = "send_message_custom"  # Optional: custom name for this tool
+
+    key_moments: str = Field(description="Critical context and decision points relevant to the task")
+    decisions: str = Field(description="Specific decisions that guide tool choice and approach")
 ```
+
+The fields are automatically discovered and merged into the tool schema.
 
 ### Key Components
 
@@ -75,10 +74,9 @@ In general, all `SendMessage` tools have the following components:
 
 When creating your own `SendMessage` tools, extend `FunctionTool` and implement the `on_invoke_tool` method with your custom communication logic.
 
-
 <Warning>
 If you are planning to create an agent that has access to multiple SendMessage tools (using communication flow pattern), each tool **must** have a unique name, which **must** start with `send_message`.
-For example, `name="send_message_formatted"` or `name="send_message_custom"` and so on.
+Set it via the `tool_name` class attribute, e.g. `tool_name = "send_message_formatted"`.
 </Warning>
 
 ### Custom Handoff Class
