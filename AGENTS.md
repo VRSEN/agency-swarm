@@ -9,6 +9,7 @@ North Star: keep the user's general intent and direction clear; if literal words
 
 ## User Priority
 - User requests come first unless they conflict with system or developer rules; move fast within those limits.
+- Hard-cut policy: keep one canonical current-state path. Do not preserve or add legacy aliases, compatibility shims, fallbacks, migration glue, or dual behavior unless the user explicitly asks for them. If an exception is required, document why, why the main path fails, and when the exception will be deleted.
 
 ## AGENTS.md Maintenance
 - Treat AGENTS.md as the highest-priority maintenance file; refactor it to reduce entropy (remove or tighten before adding) and to improve clarity when needed.
@@ -92,6 +93,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - Minimal shape by default: prefer the smallest diff that increases clarity. Remove artificial indirection (gratuitous wrappers, redundant layers) or dead code when it is in scope, and avoid speculative configuration.
 - When a task only requires surgical edits, constrain the diff to those lines; do not reword, restructure, or "improve" adjacent content unless explicitly directed by the user, and never replace an entire file when a focused edit can do.
 - Single clear path: prefer single-path behavior where outcomes are identical; flatten unnecessary branching. Avoid optional fallbacks unless explicitly requested.
+- Touch upstream-shared general files only when required for correctness or integration hooks; prefer placing fork-specific behavior in fork-owned modules and keep shared-file edits light.
 
 ## Self-Improvement (High Priority)
 - When you receive user feedback, make a mistake, or spot a recurring pattern, add a generalized, minimal rule to AGENTS.md and revise relevant lines before any other work.
@@ -159,9 +161,9 @@ After each meaningful tool call or code edit, validate the result in 1-2 lines a
 - Adding silent fallbacks, legacy shims, or workarounds. Prefer explicit, strict APIs that fail fast and loudly when contracts aren’t met.
 
 ## 🔴 API KEYS
-- Pre-flight gate (real-LLM only): if planned validation includes integration tests/examples that call a real LLM, verify `OPENAI_API_KEY` from environment or workspace `.env` before editing or running tests; if missing/invalid, stop and report the blocker.
+- Pre-flight gate (real-LLM only): if planned validation includes integration tests/examples that call a real LLM, verify `OPENAI_API_KEY` from environment or the repo-root `.env` before editing or running tests; if missing/invalid, stop and report the blocker.
 - Scope limit: this gate does not apply to docs-only changes, pure unit tests, or integrations fully mocked/patched to avoid real LLM calls.
-- Before asking the user for any key, inspect environment and `.env` to confirm it is actually missing or invalid.
+- Before asking the user for any key, inspect environment and the repo-root `.env` to confirm it is actually missing or invalid.
 
 ## Common Commands
 `make format`  # Auto-format and apply safe lint fixes
@@ -301,6 +303,7 @@ Strictness
 - After committing, double-check what you committed with `git show --name-only -1`.
 
 ### PR Comment Review Loop (Mandatory for Local Coding Work)
+- When your local branch contains user-requested work and a PR does not already exist, open or update the GitHub PR yourself before handing off; do not stop at "branch pushed" unless PR creation is blocked and you report the blocker explicitly.
 - If you are doing coding work locally (outside GitHub UI) for an open PR and you can post GitHub comments, you must run this loop:
   - Open the PR and resolve every correct active comment-thread finding.
   - Run local Codex CLI first with `high` or `extra-high` reasoning and write output to a `/tmp/codex_review_<sha>.txt` artifact.
