@@ -176,6 +176,8 @@ Terminal:
 agency.terminal_demo()
 ```
 
+See the terminal workflow guide: https://agency-swarm.ai/core-framework/agencies/agent-swarm-cli
+
 Programmatic (async):
 ```python
 import asyncio
@@ -220,7 +222,7 @@ This structure ensures that each agent has its dedicated space with all necessar
 - Agencies overview: https://agency-swarm.ai/core-framework/agencies/overview
 - Communication flows: https://agency-swarm.ai/core-framework/agencies/communication-flows
 - Running an agency: https://agency-swarm.ai/core-framework/agencies/running-agency
-- Agency Code example: https://github.com/VRSEN/Agency-Code
+- Agent Swarm CLI: https://agency-swarm.ai/core-framework/agencies/agent-swarm-cli
 - Observability: https://agency-swarm.ai/additional-features/observability
 
 ## Contributing
