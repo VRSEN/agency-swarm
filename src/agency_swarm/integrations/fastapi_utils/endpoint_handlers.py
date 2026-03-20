@@ -611,7 +611,7 @@ def make_stream_endpoint(
                     if request.generate_chat_name:
                         try:
                             result["chat_name"] = await generate_chat_name(
-                                filtered_messages,
+                                _build_chat_name_messages(filtered_messages),
                                 openai_client=request_upload_client,
                             )
                         except Exception as e:
