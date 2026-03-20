@@ -8,6 +8,7 @@ containing the expected file content.
 
 import asyncio
 import json
+import re
 import socket
 import subprocess
 import sys
@@ -269,6 +270,31 @@ class TestFastAPIFileProcessing:
         assert "response" in response_data
         response_text = response_data["response"].lower()
         assert "local secret phrase" in response_text
+
+        new_messages = response_data["new_messages"]
+        source_message = next(
+            msg
+            for msg in new_messages
+            if isinstance(msg, dict) and msg.get("role") == "system" and str(file_path) in str(msg.get("content", ""))
+        )
+        assert "The user has provided file attachments in their message." in str(source_message["content"])
+
+        follow_up_payload = {
+            "message": "What exact attachment source string was used for local-file.txt? Reply with only that string.",
+            "chat_history": new_messages,
+        }
+
+        async with self.get_http_client(timeout_seconds=120) as client:
+            follow_up_response = await client.post(url, json=follow_up_payload, headers=headers)
+
+        assert follow_up_response.status_code == 200
+        follow_up_data = follow_up_response.json()
+        normalized_follow_up_response = re.sub(
+            r"(?<=[/\\\\])\s+",
+            "",
+            str(follow_up_data["response"]).strip("` \n"),
+        )
+        assert str(file_path) in normalized_follow_up_response
 
     @pytest.mark.asyncio
     async def test_local_allowlist_created_after_start(self, tmp_path, agency_factory):

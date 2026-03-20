@@ -36,6 +36,7 @@ Before responding to the user and when you consider your task done, check whethe
 - Pending hosted CI, pending PR-bound Codex review, unresolved PR comments/threads, and any other agent-observable external workflow still count as outstanding work.
 - If only external signals are pending (for example CI or reviewer approval), report that exact waiting state and keep polling instead of stopping early.
 - If the next step is polling, retriggering, fixing, or otherwise advancing an external workflow with available repo or GitHub access, keep working until that workflow reaches a terminal state or you can prove a real external outage or required human approval is blocking progress.
+- If the next useful step is "wait, then check again," do that instead of stopping; use short sleeps such as `sleep 60` and keep polling for at least 15 minutes before treating the wait itself as a blocker, unless a longer documented timeout applies.
 
 ## Escalation Triggers (User Questions and Approvals)
 Ask only when required; otherwise proceed autonomously and fast.
@@ -159,9 +160,9 @@ After each meaningful tool call or code edit, validate the result in 1-2 lines a
 - Adding silent fallbacks, legacy shims, or workarounds. Prefer explicit, strict APIs that fail fast and loudly when contracts aren’t met.
 
 ## 🔴 API KEYS
-- Pre-flight gate (real-LLM only): if planned validation includes integration tests/examples that call a real LLM, verify `OPENAI_API_KEY` from environment or workspace `.env` before editing or running tests; if missing/invalid, stop and report the blocker.
+- Pre-flight gate (real-LLM only): if planned validation includes integration tests/examples that call a real LLM, verify `OPENAI_API_KEY` from environment, workspace `.env`, the worktree's git-common-dir/base-repo `.env`, and likely user-folder `.env` files before editing or running tests; if missing/invalid, stop and report the blocker.
 - Scope limit: this gate does not apply to docs-only changes, pure unit tests, or integrations fully mocked/patched to avoid real LLM calls.
-- Before asking the user for any key, inspect environment and `.env` to confirm it is actually missing or invalid.
+- Before asking the user for any key, inspect environment and `.env` locations in the worktree, git common dir/base repo, and user folder to confirm it is actually missing or invalid.
 
 ## Common Commands
 `make format`  # Auto-format and apply safe lint fixes
