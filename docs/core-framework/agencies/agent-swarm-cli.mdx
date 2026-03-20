@@ -1,0 +1,87 @@
+---
+title: "Agent Swarm CLI"
+description: "Use agent-swarm-cli as the terminal client for the agency-swarm FastAPI backend."
+icon: "terminal"
+---
+
+`agent-swarm-cli` is the terminal client for the `agency-swarm` FastAPI backend.
+
+It gives you one canonical flow:
+
+1. Start an `agency-swarm` FastAPI server.
+2. Open the CLI.
+3. Use `/connect` to choose a local server and set a token if the server requires one.
+4. Use `/agents` to choose the active agency and recipient agent.
+5. Chat, stream tools and events, and use `/compact` when the session gets long.
+
+## Install
+
+Install the npm package:
+
+```bash
+npm i -g agentswarm-cli
+```
+
+Run the CLI with:
+
+```bash
+agentswarm
+```
+
+## Use With `terminal_demo()`
+
+```python
+agency.terminal_demo()
+```
+
+`terminal_demo()` launches `agent-swarm-cli` and connects it to your local `agency-swarm` backend bridge.
+
+## Connect To A Local Server
+
+Use `/connect` to:
+
+- pick a local server such as `http://127.0.0.1:8000`
+- add another local port manually
+- store or clear an Agency token for authenticated servers
+- refresh server availability while the dialog is open
+
+If no local server is available, start one first. For the backend setup, see [FastAPI Integration](/additional-features/fastapi-integration).
+
+## Choose Agencies And Agents
+
+Use `/agents` after connecting.
+
+The CLI reads live metadata from the selected `agency-swarm` server and groups the available agents by agency.
+
+You can also direct a prompt with mentions:
+
+- `@Developer investigate the failing integration test`
+- `@SupportAgent summarize the uploaded PDF`
+
+Press `Tab` to autocomplete mentions.
+
+## Supported Workflow
+
+The current release is intentionally narrow:
+
+- local `agency-swarm` servers only
+- one connected backend path per session
+- `/connect`, `/agents`, mentions, streaming events, exports, undo/redo, and `/compact`
+
+## Current Limitations
+
+These inherited OpenCode surfaces are not part of the Agency Swarm product path:
+
+- `/models`
+- `/editor`
+- `/issues`
+- `/commit`
+- docs mode
+
+`terminal_demo(show_reasoning=False)` is not supported in the new TUI yet.
+
+## Related Pages
+
+- [Running an Agency](/core-framework/agencies/running-agency)
+- [FastAPI Integration](/additional-features/fastapi-integration)
+- [API Reference](/references/api)
