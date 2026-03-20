@@ -42,6 +42,26 @@ async def test_build_message_with_file_urls_context_prepends_system_message() ->
 
 
 @pytest.mark.asyncio
+async def test_build_message_with_file_urls_context_preserves_structured_input_items() -> None:
+    """Structured input lists should stay top-level after prepending the source-context message."""
+
+    message = _build_message_with_file_urls_context(
+        [
+            {"role": "user", "content": "First message"},
+            {"role": "assistant", "content": "Earlier reply"},
+            {"role": "user", "content": "Latest message"},
+        ],
+        {"report.pdf": "https://example.com/report.pdf"},
+    )
+
+    assert isinstance(message, list)
+    assert message[0]["role"] == "system"
+    assert message[1] == {"role": "user", "content": "First message"}
+    assert message[2] == {"role": "assistant", "content": "Earlier reply"}
+    assert message[3] == {"role": "user", "content": "Latest message"}
+
+
+@pytest.mark.asyncio
 async def test_make_response_endpoint_persists_file_url_sources(monkeypatch: pytest.MonkeyPatch) -> None:
     """Non-streaming requests should persist file_urls source context via a system message."""
 

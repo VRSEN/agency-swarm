@@ -286,7 +286,6 @@ def _build_message_with_file_urls_context(
     if not file_urls:
         return message
 
-    user_content = message if isinstance(message, str) else copy.deepcopy(message)
     system_message = cast(
         TResponseInputItem,
         {
@@ -294,11 +293,14 @@ def _build_message_with_file_urls_context(
             "content": _format_file_urls_context(file_urls),
         },
     )
+    if isinstance(message, list):
+        return [system_message, *copy.deepcopy(message)]
+
     user_message = cast(
         TResponseInputItem,
         {
             "role": "user",
-            "content": user_content,
+            "content": message,
         },
     )
     return [
