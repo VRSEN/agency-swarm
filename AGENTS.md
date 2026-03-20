@@ -36,6 +36,7 @@ Before responding to the user and when you consider your task done, check whethe
 - Pending hosted CI, pending PR-bound Codex review, unresolved PR comments/threads, and any other agent-observable external workflow still count as outstanding work.
 - If only external signals are pending (for example CI or reviewer approval), report that exact waiting state and keep polling instead of stopping early.
 - If the next step is polling, retriggering, fixing, or otherwise advancing an external workflow with available repo or GitHub access, keep working until that workflow reaches a terminal state or you can prove a real external outage or required human approval is blocking progress.
+- If the next useful step is "wait, then check again," do that instead of stopping; use short sleeps such as `sleep 60` and keep polling for at least 15 minutes before treating the wait itself as a blocker, unless a longer documented timeout applies.
 
 ## Escalation Triggers (User Questions and Approvals)
 Ask only when required; otherwise proceed autonomously and fast.
