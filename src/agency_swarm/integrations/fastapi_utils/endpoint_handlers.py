@@ -10,7 +10,7 @@ from collections.abc import AsyncGenerator, Callable, Sequence
 from dataclasses import dataclass, field
 from importlib import metadata
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 from weakref import WeakKeyDictionary
 
 from ag_ui.core import EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
@@ -278,6 +278,13 @@ def _format_file_urls_context(file_urls: dict[str, str]) -> str:
     return "\n".join(lines)
 
 
+def _is_file_urls_context_message(message: TResponseInputItem) -> bool:
+    """Return True when a message is the synthetic persisted file_urls context item."""
+    return message.get("role") == "system" and str(message.get("content", "")).startswith(
+        "The user has provided file attachments in their message."
+    )
+
+
 def _build_message_with_file_urls_context(
     message: str | list[TResponseInputItem],
     file_urls: dict[str, str] | None,
@@ -307,6 +314,36 @@ def _build_message_with_file_urls_context(
         system_message,
         user_message,
     ]
+
+
+def _build_chat_name_messages(messages: list[TResponseInputItem]) -> list[TResponseInputItem]:
+    """Drop synthetic file_urls metadata before generating a chat title."""
+    return [message for message in messages if not _is_file_urls_context_message(message)]
+
+
+def _build_agui_snapshot_messages(
+    request_messages: list[Any],
+    message_input: str | list[TResponseInputItem],
+) -> list[dict[str, Any]]:
+    """Seed AG-UI snapshots with the synthetic file_urls context when present."""
+    snapshot_messages = [message.model_dump() for message in request_messages]
+    if not snapshot_messages or not isinstance(message_input, list) or not message_input:
+        return snapshot_messages
+
+    file_urls_message = message_input[0]
+    if not _is_file_urls_context_message(file_urls_message):
+        return snapshot_messages
+
+    file_urls_message_dict = cast(dict[str, Any], file_urls_message)
+    agui_file_urls_message = {
+        "id": f"system_file_urls_{uuid.uuid4().hex}",
+        "role": "system",
+        "content": str(file_urls_message_dict["content"]),
+    }
+    if not snapshot_messages:
+        return [agui_file_urls_message]
+
+    return [*snapshot_messages[:-1], agui_file_urls_message, snapshot_messages[-1]]
 
 
 # Non‑streaming response endpoint
@@ -388,7 +425,7 @@ def make_response_endpoint(
             if request.generate_chat_name:
                 try:
                     result["chat_name"] = await generate_chat_name(
-                        filtered_messages,
+                        _build_chat_name_messages(filtered_messages),
                         openai_client=request_upload_client,
                     )
                 except Exception as e:
@@ -769,7 +806,7 @@ def make_agui_chat_endpoint(
                 agui_adapter = AguiAdapter()
 
                 # Store in dict format to avoid converting to classes
-                snapshot_messages = [message.model_dump() for message in request.messages]
+                snapshot_messages = _build_agui_snapshot_messages(request.messages, message_input)
                 async for event in agency.get_response_stream(
                     message=message_input,
                     context_override=request.user_context,

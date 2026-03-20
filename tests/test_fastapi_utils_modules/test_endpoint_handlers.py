@@ -1,7 +1,15 @@
 """Tests for AG-UI endpoint handler error paths."""
 
 import pytest
-from ag_ui.core import EventType, RunErrorEvent, RunFinishedEvent, RunStartedEvent, UserMessage
+from ag_ui.core import (
+    AssistantMessage,
+    EventType,
+    MessagesSnapshotEvent,
+    RunErrorEvent,
+    RunFinishedEvent,
+    RunStartedEvent,
+    UserMessage,
+)
 from ag_ui.encoder import EventEncoder
 
 from agency_swarm.integrations.fastapi_utils.endpoint_handlers import (
@@ -114,6 +122,65 @@ async def test_make_response_endpoint_persists_file_url_sources(monkeypatch: pyt
     assert "`doc.txt`: `https://example.com/doc.txt`" in str(agency.last_kwargs["message"][0]["content"])
     assert response["new_messages"][0]["role"] == "system"
     assert response["new_messages"][1] == {"role": "user", "content": "Use the attachment."}
+
+
+@pytest.mark.asyncio
+async def test_make_response_endpoint_excludes_file_url_context_from_chat_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Chat-name generation should use the user's prompt, not the synthetic file_urls metadata."""
+
+    async def _noop_attach(_agency):
+        return None
+
+    async def _fake_upload_from_urls(_file_urls, allowed_local_dirs=None, openai_client=None):
+        del allowed_local_dirs, openai_client
+        return {"doc.txt": "file-123"}
+
+    async def _fake_generate_chat_name(messages, openai_client=None):
+        del openai_client
+        assert messages[0] == {"role": "user", "content": "Use the attachment."}
+        assert all(
+            "The user has provided file attachments in their message." not in str(message.get("content", ""))
+            for message in messages
+            if isinstance(message, dict)
+        )
+        return "attachment title"
+
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.attach_persistent_mcp_servers",
+        _noop_attach,
+    )
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.upload_from_urls",
+        _fake_upload_from_urls,
+    )
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.generate_chat_name",
+        _fake_generate_chat_name,
+    )
+
+    class _AgencyStub:
+        def __init__(self) -> None:
+            self.thread_manager = _ThreadManagerStub()
+
+        async def get_response(self, **kwargs):
+            self.thread_manager.messages.extend(kwargs["message"])
+            self.thread_manager.messages.append({"role": "assistant", "content": "ok", "type": "message"})
+            return _ResponseStub("ok")
+
+    handler = make_response_endpoint(BaseRequest, lambda **_: _AgencyStub(), verify_token=lambda: None)
+
+    response = await handler(
+        BaseRequest(
+            message="Use the attachment.",
+            file_urls={"doc.txt": "https://example.com/doc.txt"},
+            generate_chat_name=True,
+        ),
+        token=None,
+    )
+
+    assert response["chat_name"] == "attachment title"
 
 
 @pytest.mark.asyncio
@@ -240,3 +307,85 @@ async def test_agui_chat_endpoint_prepends_file_url_sources(monkeypatch: pytest.
     assert agency.last_kwargs["message"][0]["role"] == "system"
     assert "`doc.txt`: `https://example.com/doc.txt`" in str(agency.last_kwargs["message"][0]["content"])
     assert agency.last_kwargs["message"][1] == {"role": "user", "content": "hello"}
+
+
+@pytest.mark.asyncio
+async def test_agui_chat_endpoint_snapshot_includes_file_url_sources(monkeypatch: pytest.MonkeyPatch) -> None:
+    """AG-UI snapshots should persist the synthetic file_urls context for replay on later turns."""
+
+    async def _noop_attach(_agency):
+        return None
+
+    async def _fake_upload_from_urls(_file_urls, allowed_local_dirs=None, openai_client=None):
+        del allowed_local_dirs, openai_client
+        return {"doc.txt": "file-123"}
+
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.attach_persistent_mcp_servers",
+        _noop_attach,
+    )
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.upload_from_urls",
+        _fake_upload_from_urls,
+    )
+
+    class _AdapterStub:
+        def openai_to_agui_events(self, _event, run_id=None):
+            del run_id
+            return MessagesSnapshotEvent(
+                type=EventType.MESSAGES_SNAPSHOT,
+                messages=[AssistantMessage(id="a1", role="assistant", content="ok")],
+            )
+
+    monkeypatch.setattr("agency_swarm.integrations.fastapi_utils.endpoint_handlers.AguiAdapter", _AdapterStub)
+
+    class _StreamStub:
+        def __aiter__(self):
+            self._done = False
+            return self
+
+        async def __anext__(self):
+            if self._done:
+                raise StopAsyncIteration
+            self._done = True
+            return {"type": "dummy"}
+
+    class _AgentStub:
+        name = "A"
+
+    class _AgencyStub:
+        def __init__(self):
+            self.entry_points = [_AgentStub()]
+            self.agents = {"A": _AgentStub()}
+
+        def get_response_stream(self, **kwargs):
+            del kwargs
+            return _StreamStub()
+
+    handler = make_agui_chat_endpoint(
+        RunAgentInputCustom,
+        agency_factory=lambda **_: _AgencyStub(),
+        verify_token=lambda: None,
+        allowed_local_dirs=None,
+    )
+
+    response = await handler(
+        RunAgentInputCustom(
+            thread_id="thread-1",
+            run_id="run-1",
+            state=None,
+            messages=[UserMessage(id="u1", role="user", content="hello")],
+            tools=[],
+            context=[],
+            forwarded_props=None,
+            file_urls={"doc.txt": "https://example.com/doc.txt"},
+            file_ids=None,
+        ),
+        token=None,
+    )
+
+    chunks = [chunk async for chunk in response.body_iterator]
+    payload = "".join(chunks)
+
+    assert "The user has provided file attachments in their message." in payload
+    assert "`doc.txt`: `https://example.com/doc.txt`" in payload
