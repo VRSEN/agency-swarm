@@ -433,9 +433,109 @@ async def test_download_file_concurrent_same_base_name(tmp_path: Path) -> None:
         fh.httpx.AsyncClient = original_client
 
     # Both coroutines must complete without OSError/WinError 32 (file in use).
-    # result1 and result2 both resolve to DASDA.pdf — the last writer wins,
-    # which is acceptable. The key guarantee is no crash during concurrent rename.
+    # With unique final paths derived from mkstemp, each download gets its own
+    # output file — no content is lost.
+    assert result1 != result2, "Each download must produce a unique output path"
     assert Path(result1).exists(), "First download result must exist"
     assert Path(result2).exists(), "Second download result must exist"
-    assert Path(result1).read_bytes() in (fake_content_1, fake_content_2)
-    assert Path(result2).read_bytes() in (fake_content_1, fake_content_2)
+    contents_found = {Path(result1).read_bytes(), Path(result2).read_bytes()}
+    assert contents_found == {fake_content_1, fake_content_2}, "Each download's content must be preserved"
+
+
+@pytest.mark.asyncio
+async def test_download_file_uses_shutil_move_for_cross_device_rename(tmp_path: Path) -> None:
+    """download_file must use shutil.move instead of Path.replace so it survives
+    cross-device rename errors on deployed Linux containers (Docker overlay2 / tmpfs).
+
+    os.rename / Path.replace can fail with OSError on certain container filesystem
+    configurations. shutil.move falls back to copy+delete, which always works.
+    """
+    import agency_swarm.integrations.fastapi_utils.file_handler as fh
+
+    fake_content = b"%PDF-1.4 fake content"
+    pdf_name = "DASDA.pdf"
+
+    async def mock_aiter_bytes():
+        yield fake_content
+
+    response_obj = MagicMock()
+    response_obj.raise_for_status = MagicMock()
+    response_obj.aiter_bytes = MagicMock(return_value=mock_aiter_bytes())
+
+    stream_cm = MagicMock()
+    stream_cm.__aenter__ = AsyncMock(return_value=response_obj)
+    stream_cm.__aexit__ = AsyncMock(return_value=False)
+
+    client_obj = MagicMock()
+    client_obj.stream = MagicMock(return_value=stream_cm)
+    client_cm = MagicMock()
+    client_cm.__aenter__ = AsyncMock(return_value=client_obj)
+    client_cm.__aexit__ = AsyncMock(return_value=False)
+
+    original_client = fh.httpx.AsyncClient
+    original_move = fh.shutil.move
+    move_was_called = []
+
+    def tracking_move(src: str, dst: str):
+        move_was_called.append((src, dst))
+        return original_move(src, dst)
+
+    fh.httpx.AsyncClient = MagicMock(return_value=client_cm)
+    fh.shutil.move = tracking_move
+    try:
+        result = await fh.download_file("https://example.com/DASDA.pdf", pdf_name, str(tmp_path))
+    finally:
+        fh.httpx.AsyncClient = original_client
+        fh.shutil.move = original_move
+
+    assert Path(result).suffix == ".pdf"
+    assert Path(result).parent == tmp_path
+    assert Path(result).exists()
+    assert Path(result).read_bytes() == fake_content
+    assert len(move_was_called) == 1
+    src, dst = move_was_called[0]
+    assert src.endswith(".tmp")
+    assert dst.endswith(".pdf")
+    assert not list(tmp_path.glob("*.tmp")), ".tmp file should be removed after move"
+
+
+@pytest.mark.asyncio
+async def test_download_file_long_filename_does_not_crash(tmp_path: Path) -> None:
+    """A filename with a ~250-char base must not crash mkstemp with a filesystem limit error.
+
+    mkstemp appends a random suffix on top of the prefix, so passing the full
+    base unsanitised can exceed the 255-byte filename limit. The prefix must be
+    truncated before being handed to mkstemp.
+    """
+    import agency_swarm.integrations.fastapi_utils.file_handler as fh
+
+    long_name = "A" * 250 + ".pdf"
+    fake_content = b"%PDF-1.4 long name"
+
+    async def mock_aiter_bytes():
+        yield fake_content
+
+    response_obj = MagicMock()
+    response_obj.raise_for_status = MagicMock()
+    response_obj.aiter_bytes = MagicMock(return_value=mock_aiter_bytes())
+
+    stream_cm = MagicMock()
+    stream_cm.__aenter__ = AsyncMock(return_value=response_obj)
+    stream_cm.__aexit__ = AsyncMock(return_value=False)
+
+    client_obj = MagicMock()
+    client_obj.stream = MagicMock(return_value=stream_cm)
+    client_cm = MagicMock()
+    client_cm.__aenter__ = AsyncMock(return_value=client_obj)
+    client_cm.__aexit__ = AsyncMock(return_value=False)
+
+    original_client = fh.httpx.AsyncClient
+    fh.httpx.AsyncClient = MagicMock(return_value=client_cm)
+    try:
+        result = await fh.download_file("https://example.com/long.pdf", long_name, str(tmp_path))
+    finally:
+        fh.httpx.AsyncClient = original_client
+
+    assert Path(result).exists()
+    assert Path(result).suffix == ".pdf"
+    assert len(Path(result).name) <= 255

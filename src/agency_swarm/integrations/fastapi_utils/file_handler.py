@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import shutil
 import sys
 import tempfile
 from collections.abc import Sequence
@@ -198,7 +199,9 @@ async def download_file(url: str, name: str, save_dir: str) -> str:
     ext = get_extension_from_name(name) or get_extension_from_url(url)
     base = os.path.splitext(name)[0]
 
-    tmp_fd, tmp_str = tempfile.mkstemp(dir=save_dir, prefix=f"{base}_", suffix=".tmp")
+    # Truncate prefix to avoid exceeding the 255-byte filename limit on most
+    # filesystems (mkstemp appends a random suffix + ".tmp" on top of the prefix).
+    tmp_fd, tmp_str = tempfile.mkstemp(dir=save_dir, prefix=f"{base[:50]}_", suffix=".tmp")
     os.close(tmp_fd)
     tmp_path = Path(tmp_str)
 
@@ -225,8 +228,10 @@ async def download_file(url: str, name: str, save_dir: str) -> str:
         tmp_path.unlink(missing_ok=True)
         raise ValueError(f"No extension detected for {url}")
 
-    final_path = Path(save_dir) / f"{base}{ext}"
-    tmp_path.replace(final_path)
+    # Derive the final path from the unique tmp path so concurrent downloads
+    # with the same base+ext never overwrite each other's output.
+    final_path = tmp_path.with_suffix(ext)
+    shutil.move(str(tmp_path), str(final_path))
     return str(final_path)
 
 
