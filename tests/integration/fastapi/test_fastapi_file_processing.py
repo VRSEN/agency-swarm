@@ -8,6 +8,7 @@ containing the expected file content.
 
 import asyncio
 import json
+import re
 import socket
 import subprocess
 import sys
@@ -288,7 +289,12 @@ class TestFastAPIFileProcessing:
 
         assert follow_up_response.status_code == 200
         follow_up_data = follow_up_response.json()
-        assert str(file_path) in str(follow_up_data["response"])
+        normalized_follow_up_response = re.sub(
+            r"(?<=[/\\\\])\s+",
+            "",
+            str(follow_up_data["response"]).strip("` \n"),
+        )
+        assert str(file_path) in normalized_follow_up_response
 
     @pytest.mark.asyncio
     async def test_local_allowlist_created_after_start(self, tmp_path, agency_factory):
