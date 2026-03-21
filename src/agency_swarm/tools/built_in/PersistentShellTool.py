@@ -8,7 +8,7 @@ from pydantic import Field
 from agency_swarm.tools.base_tool import BaseTool
 
 
-class PersistentShellTool(BaseTool):  # type: ignore[misc]
+class PersistentShellTool(BaseTool):  # type: ignore[metaclass]
     """
     Execute shell commands locally with persistent working directory.
 

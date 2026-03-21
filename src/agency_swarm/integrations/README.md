@@ -17,6 +17,24 @@ It is needed because it does three things together:
 
 Without this helper, the OpenClaw proxy endpoints are not mounted and the OpenClaw runtime process is not managed by the app.
 
+### Worker-facing agent wrapper
+
+Use `OpenClawAgent` when Agency Swarm should delegate work into an OpenClaw worker:
+
+```python
+from agency_swarm.agents import OpenClawAgent
+
+openclaw_worker = OpenClawAgent(
+    name="OpenClawWorker",
+    description="Handles OpenClaw-native work.",
+    instructions="Return the result to the calling agent.",
+)
+```
+
+`OpenClawAgent` configures the model automatically and is receive-only in
+`communication_flows`. It can receive delegated work, but it cannot be used as
+the sender in Agency Swarm handoffs or `send_message` routes.
+
 ### Why `openclaw:main` exists
 
 OpenClaw itself does not expose a native model id like OpenAI does.
@@ -43,6 +61,17 @@ Generated gateway config enables:
 
 - `gateway.http.endpoints.responses.enabled=true`
 
+Worker mode is available when the runtime is used as a delegated OpenClaw worker:
+
+- `OPENCLAW_TOOL_MODE=worker`
+
+Worker mode disables the OpenClaw messaging paths that compete with Agency Swarm
+delegation:
+
+- `message`
+- `sessions_send`
+- `sessions_spawn`
+
 ### End-to-end app wiring example
 
 ```python
@@ -61,25 +90,14 @@ if app is None:
 attach_openclaw_to_fastapi(app)
 ```
 
-### Current template scope
+### Tool extension boundary
 
-The starter template currently ships with one OpenClaw-backed agent by default.
-It does not ship a pre-built multi-agent delegation topology.
+The OpenClaw proxy can forward Open Responses function schemas, but the clean
+OpenClaw-native extension paths are still:
 
-If you want collaboration/delegation, you can add more Agency Swarm agents and handoff rules on top of this integration.
+- OpenClaw plugin tools via `api.registerTool(...)`
+- MCP servers exposed to OpenClaw
+- OpenClaw tool policy config (`tools.allow`, `tools.deny`, `tools.byProvider`)
 
-### Setup-time Codex OAuth bootstrap (template default)
-
-The starter template's onboarding defaults set:
-
-- `OPENCLAW_PROVIDER_MODEL=openai-codex/gpt-5.2`
-
-That model requires one interactive bootstrap in the same runtime environment where `main.py` runs:
-
-```bash
-openclaw models auth login --provider openai-codex
-```
-
-Auth profile state is persisted under:
-
-- `/mnt/openclaw/state/agents/main/agent/auth-profiles.json` (canonical in deployed runtime)
+Do not treat ordinary Agency Swarm Python tools as the main extension story for
+`OpenClawAgent`.

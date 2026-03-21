@@ -55,6 +55,7 @@ from openai.types.shared import Reasoning  # noqa: E402
 from .agency.core import Agency  # noqa: E402
 from .agent.core import AgencyContext, Agent  # noqa: E402
 from .agent.execution_streaming import StreamingRunResponse  # noqa: E402
+from .agents import OpenClawAgent  # noqa: E402
 from .context import MasterContext  # noqa: E402
 from .hooks import PersistenceHooks  # noqa: E402
 from .integrations.fastapi import run_fastapi  # noqa: E402
@@ -171,6 +172,7 @@ __all__ = [
     "tool_output_file_from_path",
     "tool_output_file_from_url",
     "tool_output_file_from_file_id",
+    "OpenClawAgent",
 ]
 
 _OPENCLAW_EXPORTS = {

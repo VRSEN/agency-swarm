@@ -22,11 +22,11 @@ from agents import OpenAIResponsesModel
 from dotenv import dotenv_values
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
-from openai import AsyncOpenAI
+
+from . import openclaw_model
+from .openclaw_model import DEFAULT_OPENCLAW_MODEL
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_OPENCLAW_MODEL = "openclaw:main"
 
 _OPENRESPONSES_ALLOWED_KEYS: tuple[str, ...] = (
     "model",
@@ -157,6 +157,7 @@ class OpenClawIntegrationConfig:
     default_model: str
     provider_model: str
     gateway_command: str | None
+    tool_mode: str = "full"
 
     @property
     def upstream_base_url(self) -> str:
@@ -199,6 +200,7 @@ class OpenClawIntegrationConfig:
             default_model=os.getenv("OPENCLAW_DEFAULT_MODEL", DEFAULT_OPENCLAW_MODEL),
             provider_model=os.getenv("OPENCLAW_PROVIDER_MODEL", "openai/gpt-5.2"),
             gateway_command=gateway_command,
+            tool_mode=_read_openclaw_tool_mode_env(),
         )
 
 
@@ -319,6 +321,8 @@ class OpenClawRuntime:
             endpoints["responses"] = responses
         responses["enabled"] = True
 
+        backup_to_remove = _apply_tool_mode_config(current, self.config.tool_mode, self.config.config_path)
+
         agents = current.setdefault("agents", {})
         if not isinstance(agents, dict):
             agents = {}
@@ -338,6 +342,12 @@ class OpenClawRuntime:
             self.config.config_path.chmod(0o600)
         except OSError:
             logger.debug("Unable to set restrictive permissions on OpenClaw config path", exc_info=True)
+        if backup_to_remove is not None:
+            _remove_tool_mode_backup(backup_to_remove)
+        if self.config.tool_mode == "worker":
+            _record_worker_tool_mode_state(
+                self.config.config_path, _tool_mode_backup_path(self.config.config_path), current
+            )
 
     def _resolve_gateway_command(self) -> list[str]:
         if self.config.gateway_command:
@@ -756,6 +766,201 @@ def _forward_response_passthrough(upstream: httpx.Response) -> Response:
     )
 
 
+def _read_openclaw_tool_mode_env() -> str:
+    raw_value = os.getenv("OPENCLAW_TOOL_MODE", "full").strip().lower()
+    if raw_value in {"", "full", "assistant"}:
+        return "full"
+    if raw_value == "worker":
+        return raw_value
+    raise RuntimeError("OPENCLAW_TOOL_MODE must be 'full' or 'worker'.")
+
+
+def _tool_mode_backup_path(config_path: Path) -> Path:
+    return config_path.with_name(f".{config_path.name}.agency-swarm-tool-mode.json")
+
+
+def _write_json_file(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+    finally:
+        try:
+            path.chmod(0o600)
+        except OSError:
+            logger.debug("Could not chmod %s", path, exc_info=True)
+
+
+def _read_tool_mode_backup(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        logger.warning("Could not read OpenClaw tool-mode backup at %s", path, exc_info=True)
+        return None
+    return raw if isinstance(raw, dict) else None
+
+
+def _apply_tool_mode_config(current: dict[str, Any], tool_mode: str, config_path: Path) -> Path | None:
+    if tool_mode == "worker":
+        _apply_worker_tool_mode_config(current, _tool_mode_backup_path(config_path))
+        return None
+
+    backup_path = _tool_mode_backup_path(config_path)
+    restored = _restore_full_tool_mode_config(current, backup_path, config_path)
+    return backup_path if restored else None
+
+
+def _apply_worker_tool_mode_config(current: dict[str, Any], backup_path: Path) -> None:
+    existing_tools = current.get("tools")
+    existing_agent_to_agent = existing_tools.get("agentToAgent") if isinstance(existing_tools, dict) else None
+    existing_deny = existing_tools.get("deny") if isinstance(existing_tools, dict) else None
+
+    if not backup_path.exists():
+        _write_json_file(
+            backup_path,
+            {
+                "had_tools": isinstance(existing_tools, dict),
+                "agent_to_agent": existing_agent_to_agent if isinstance(existing_agent_to_agent, dict) else None,
+                "deny": list(existing_deny) if isinstance(existing_deny, list) else None,
+            },
+        )
+
+    tools = current.setdefault("tools", {})
+    if not isinstance(tools, dict):
+        tools = {}
+        current["tools"] = tools
+
+    agent_to_agent = tools.setdefault("agentToAgent", {})
+    if not isinstance(agent_to_agent, dict):
+        agent_to_agent = {}
+        tools["agentToAgent"] = agent_to_agent
+    agent_to_agent["enabled"] = False
+
+    deny = tools.get("deny")
+    if not isinstance(deny, list):
+        deny = []
+
+    for tool_name in ["message", "sessions_send", "sessions_spawn"]:
+        if tool_name not in deny:
+            deny.append(tool_name)
+    tools["deny"] = deny
+
+
+def _restore_full_tool_mode_config(current: dict[str, Any], backup_path: Path, config_path: Path) -> bool:
+    backup = _read_tool_mode_backup(backup_path)
+    if backup is None:
+        return False
+
+    tools = current.get("tools")
+    if not isinstance(tools, dict):
+        tools = {}
+        current["tools"] = tools
+
+    current_agent_to_agent = tools.get("agentToAgent")
+    restored_agent_to_agent = backup.get("agent_to_agent")
+    worker_agent_to_agent = backup.get("worker_agent_to_agent")
+    if isinstance(restored_agent_to_agent, dict):
+        if isinstance(current_agent_to_agent, dict) and isinstance(worker_agent_to_agent, dict):
+            if current_agent_to_agent == worker_agent_to_agent:
+                tools["agentToAgent"] = restored_agent_to_agent.copy()
+            else:
+                merged_agent_to_agent = restored_agent_to_agent.copy()
+                merged_agent_to_agent.update(current_agent_to_agent)
+                removed_agent_to_agent_keys = set(worker_agent_to_agent) - set(current_agent_to_agent)
+                for removed_key in removed_agent_to_agent_keys:
+                    merged_agent_to_agent.pop(removed_key, None)
+                if (
+                    current_agent_to_agent.get("enabled") == worker_agent_to_agent.get("enabled")
+                    and "enabled" in restored_agent_to_agent
+                ):
+                    merged_agent_to_agent["enabled"] = restored_agent_to_agent["enabled"]
+                tools["agentToAgent"] = merged_agent_to_agent
+        else:
+            merged_agent_to_agent = restored_agent_to_agent.copy()
+            if isinstance(current_agent_to_agent, dict):
+                merged_agent_to_agent.update(current_agent_to_agent)
+            tools["agentToAgent"] = merged_agent_to_agent
+    else:
+        if isinstance(current_agent_to_agent, dict):
+            current_agent_to_agent.pop("enabled", None)
+            if current_agent_to_agent:
+                tools["agentToAgent"] = current_agent_to_agent
+            else:
+                tools.pop("agentToAgent", None)
+        else:
+            tools.pop("agentToAgent", None)
+
+    current_deny = tools.get("deny")
+    restored_deny = backup.get("deny")
+    worker_deny = backup.get("worker_deny")
+    if isinstance(restored_deny, list):
+        worker_only_denies = _worker_only_denies(restored_deny, worker_deny)
+        if isinstance(current_deny, list) and isinstance(worker_deny, list) and current_deny == worker_deny:
+            tools["deny"] = restored_deny.copy()
+        elif isinstance(current_deny, list):
+            filtered_deny = [item for item in current_deny if item not in worker_only_denies]
+            if filtered_deny:
+                tools["deny"] = filtered_deny
+            else:
+                tools.pop("deny", None)
+        else:
+            tools["deny"] = restored_deny.copy()
+    else:
+        if isinstance(current_deny, list):
+            filtered_deny = [item for item in current_deny if item not in _worker_only_denies([], worker_deny)]
+            if filtered_deny:
+                tools["deny"] = filtered_deny
+            else:
+                tools.pop("deny", None)
+        else:
+            tools.pop("deny", None)
+
+    if not backup.get("had_tools") and not tools:
+        current.pop("tools", None)
+    return True
+
+
+def _record_worker_tool_mode_state(config_path: Path, backup_path: Path, current: dict[str, Any]) -> None:
+    backup = _read_tool_mode_backup(backup_path)
+    if backup is None:
+        return
+    updates: dict[str, Any] = {}
+
+    tools = current.get("tools")
+    agent_to_agent = tools.get("agentToAgent") if isinstance(tools, dict) else None
+    deny = tools.get("deny") if isinstance(tools, dict) else None
+    if "worker_agent_to_agent" not in backup:
+        updates["worker_agent_to_agent"] = agent_to_agent if isinstance(agent_to_agent, dict) else None
+    if "worker_deny" not in backup:
+        updates["worker_deny"] = list(deny) if isinstance(deny, list) else None
+
+    if not updates:
+        return
+    backup.update(updates)
+    _write_json_file(backup_path, backup)
+
+
+def _remove_tool_mode_backup(backup_path: Path) -> None:
+    try:
+        backup_path.unlink()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        logger.warning("Could not remove OpenClaw tool-mode backup at %s", backup_path, exc_info=True)
+
+
+def _worker_only_denies(restored_deny: list[Any], worker_deny: Any) -> set[str]:
+    restored = {item for item in restored_deny if isinstance(item, str)}
+    worker = {item for item in worker_deny if isinstance(item, str)} if isinstance(worker_deny, list) else set()
+    if worker:
+        return worker - restored
+    return {"message", "sessions_send", "sessions_spawn"} - restored
+
+
 def _is_upstream_port_open(config: OpenClawIntegrationConfig, timeout: float = 0.5) -> bool:
     try:
         addresses = socket.getaddrinfo(config.host, config.port, type=socket.SOCK_STREAM)
@@ -935,16 +1140,4 @@ def build_openclaw_responses_model(
     api_key: str | None = None,
 ) -> OpenAIResponsesModel:
     """Build an OpenAIResponsesModel that targets the mounted OpenClaw proxy."""
-    if isinstance(model, str) and model.strip():
-        resolved_model = model.strip()
-    else:
-        env_default_model = os.getenv("OPENCLAW_DEFAULT_MODEL", "").strip()
-        resolved_model = env_default_model or DEFAULT_OPENCLAW_MODEL
-
-    resolved_base_url = (
-        base_url or os.getenv("OPENCLAW_PROXY_BASE_URL") or "http://127.0.0.1:8000/openclaw/v1"
-    ).rstrip("/")
-    resolved_api_key = api_key or os.getenv("OPENCLAW_PROXY_API_KEY") or os.getenv("APP_TOKEN") or "sk-openclaw-proxy"
-
-    client = AsyncOpenAI(base_url=resolved_base_url, api_key=resolved_api_key)
-    return OpenAIResponsesModel(model=resolved_model, openai_client=client)
+    return openclaw_model.build_openclaw_responses_model(model=model, base_url=base_url, api_key=api_key)
