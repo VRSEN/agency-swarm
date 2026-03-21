@@ -114,6 +114,23 @@ def test_openclaw_agent_keeps_app_token_first_for_local_proxy_urls(monkeypatch: 
     assert agent.model._client.api_key == "app-token"
 
 
+def test_openclaw_agent_uses_gateway_token_for_external_openclaw_proxy_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENCLAW_PROXY_API_KEY", raising=False)
+    monkeypatch.setenv("APP_TOKEN", "app-token")
+    monkeypatch.setenv("OPENCLAW_GATEWAY_TOKEN", "gateway-token")
+
+    agent = OpenClawAgent(
+        name="OpenClawWorker",
+        description="Worker",
+        instructions="Handle OpenClaw work.",
+        base_url="https://example.com/openclaw/v1",
+    )
+
+    assert agent.model._client.api_key == "gateway-token"
+
+
 def test_openclaw_agent_rejects_manual_handoffs() -> None:
     recipient = Agent(
         name="Recipient",
