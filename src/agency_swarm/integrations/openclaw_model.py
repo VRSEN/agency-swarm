@@ -46,5 +46,7 @@ def _resolve_openclaw_responses_api_key(base_url: str, api_key: str | None) -> s
 
 def _uses_local_openclaw_proxy_alias(base_url: str) -> bool:
     parsed = httpx.URL(base_url)
+    if parsed.host not in {"127.0.0.1", "localhost", "::1", "0.0.0.0"}:
+        return False
     normalized_path = parsed.path.rstrip("/")
     return normalized_path.endswith(DEFAULT_OPENCLAW_PROXY_API_PATH) or "/openclaw/" in normalized_path
