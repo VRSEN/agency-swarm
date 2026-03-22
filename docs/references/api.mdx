@@ -26,6 +26,8 @@ class Agency:
         load_threads_callback: ThreadLoadCallback | None = None,
         save_threads_callback: ThreadSaveCallback | None = None,
         user_context: dict[str, Any] | None = None,
+        randomize_agent_voices: bool = False,
+        voice_random_seed: int | None = None,
     ):
         """
         Initialize an Agency instance.
@@ -43,6 +45,8 @@ class Agency:
             load_threads_callback: Callable used to load persisted conversation threads
             save_threads_callback: Callable used to save conversation threads
             user_context: Initial shared context accessible to all agents
+            randomize_agent_voices: Assign random realtime voices to agents that do not set `voice`
+            voice_random_seed: Optional seed used to make voice randomization deterministic
         """
 ```
 
@@ -176,6 +180,8 @@ def run_fastapi(
     app_token_env: str = "APP_TOKEN",
     cors_origins: list[str] | None = None,
     enable_agui: bool = False,
+    enable_realtime: bool = False,
+    realtime_options: dict[str, Any] | None = None,
 ):
     """
     Serve this agency via the FastAPI integration.
@@ -186,6 +192,8 @@ def run_fastapi(
         app_token_env: Environment variable name for authentication token
         cors_origins: List of allowed CORS origins
         enable_agui: Enable Agency UI interface
+        enable_realtime: Mount `/<agency_name>/realtime` websocket routes
+        realtime_options: Optional realtime overrides (for example provider/model/voice)
     """
 ```
 
@@ -302,6 +310,7 @@ class Agent(BaseAgent[MasterContext]):
             tool_use_behavior ("run_llm_again" | "stop_on_first_tool" | StopAtTools | dict[str, Any] | Callable):
                 Tool execution policy passed through to the agents SDK
             reset_tool_choice (bool | None): Whether to reset tool choice after tool calls
+            voice (str | None): Preferred realtime voice token for this agent
         """
 ```
 
@@ -318,6 +327,7 @@ class Agent(BaseAgent[MasterContext]):
 - **`raise_input_guardrail_error`** (bool): Controls input guardrail mode—False for non-strict (guidance as assistant), True for strict (raises exceptions).
 - **`handoff_reminder`** (str | None): Custom reminder appended to handoff prompts
 - **`tool_concurrency_manager`** (ToolConcurrencyManager): Coordinates concurrent tool execution
+- **`voice`** (str | None): Preferred realtime voice token used for audio sessions
 
 ### Core Execution Methods
 
