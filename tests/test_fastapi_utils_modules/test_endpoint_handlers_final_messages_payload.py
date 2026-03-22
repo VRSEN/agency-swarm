@@ -84,6 +84,10 @@ def _parse_sse_stream_events(chunks: list[str]) -> list[dict[str, Any]]:
     return events
 
 
+def _parse_file_urls_context(content: str) -> dict[str, str]:
+    return json.loads(content.split("Attached file sources (JSON):\n", 1)[1])
+
+
 @pytest.mark.asyncio
 async def test_stream_endpoint_excludes_file_url_context_from_chat_name(
     monkeypatch: pytest.MonkeyPatch,
@@ -196,7 +200,9 @@ async def test_stream_endpoint_prepends_file_url_source_context(monkeypatch: pyt
     assert agency.last_kwargs["file_ids"] == ["file-123"]
     assert isinstance(agency.last_kwargs["message"], list)
     assert agency.last_kwargs["message"][0]["role"] == "system"
-    assert "`doc.txt`: `https://example.com/doc.txt`" in str(agency.last_kwargs["message"][0]["content"])
+    assert _parse_file_urls_context(str(agency.last_kwargs["message"][0]["content"])) == {
+        "doc.txt": "https://example.com/doc.txt"
+    }
     assert agency.last_kwargs["message"][1] == {"role": "user", "content": "hello"}
 
 
