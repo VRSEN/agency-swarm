@@ -523,3 +523,88 @@ async def test_agui_chat_endpoint_snapshot_includes_file_url_sources(monkeypatch
     assert "The user has provided file attachments in their message." in payload
     assert "doc.txt" in payload
     assert "https://example.com/doc.txt" in payload
+
+
+@pytest.mark.asyncio
+async def test_agui_chat_endpoint_snapshot_includes_file_url_sources_when_messages_start_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AG-UI snapshots should persist file_urls context even when the incoming snapshot is empty."""
+
+    async def _noop_attach(_agency):
+        return None
+
+    async def _fake_upload_from_urls(_file_urls, allowed_local_dirs=None, openai_client=None):
+        del allowed_local_dirs, openai_client
+        return {"doc.txt": "file-123"}
+
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.attach_persistent_mcp_servers",
+        _noop_attach,
+    )
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.upload_from_urls",
+        _fake_upload_from_urls,
+    )
+
+    class _AdapterStub:
+        def openai_to_agui_events(self, _event, run_id=None):
+            del run_id
+            return MessagesSnapshotEvent(
+                type=EventType.MESSAGES_SNAPSHOT,
+                messages=[AssistantMessage(id="a1", role="assistant", content="ok")],
+            )
+
+    monkeypatch.setattr("agency_swarm.integrations.fastapi_utils.endpoint_handlers.AguiAdapter", _AdapterStub)
+
+    class _StreamStub:
+        def __aiter__(self):
+            self._done = False
+            return self
+
+        async def __anext__(self):
+            if self._done:
+                raise StopAsyncIteration
+            self._done = True
+            return {"type": "dummy"}
+
+    class _AgentStub:
+        name = "A"
+
+    class _AgencyStub:
+        def __init__(self):
+            self.entry_points = [_AgentStub()]
+            self.agents = {"A": _AgentStub()}
+
+        def get_response_stream(self, **kwargs):
+            del kwargs
+            return _StreamStub()
+
+    handler = make_agui_chat_endpoint(
+        RunAgentInputCustom,
+        agency_factory=lambda **_: _AgencyStub(),
+        verify_token=lambda: None,
+        allowed_local_dirs=None,
+    )
+
+    response = await handler(
+        RunAgentInputCustom(
+            thread_id="thread-1",
+            run_id="run-1",
+            state=None,
+            messages=[],
+            tools=[],
+            context=[],
+            forwarded_props=None,
+            file_urls={"doc.txt": "https://example.com/doc.txt"},
+            file_ids=None,
+        ),
+        token=None,
+    )
+
+    chunks = [chunk async for chunk in response.body_iterator]
+    payload = "".join(chunks)
+
+    assert "The user has provided file attachments in their message." in payload
+    assert "doc.txt" in payload
+    assert "https://example.com/doc.txt" in payload
