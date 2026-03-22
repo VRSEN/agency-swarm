@@ -264,18 +264,14 @@ def _build_file_upload_client(
 
 def _format_file_urls_context(file_urls: dict[str, str]) -> str:
     """Build the persisted system message describing original file attachment sources."""
-    lines = [
-        (
-            "The user has provided file attachments in their message. The list below maps each attached "
-            "filename to the original URL or local file path used to attach it. Treat these source strings "
-            "as attachment metadata. Use them when relevant, and preserve them exactly if you reference them."
-        ),
-        "",
-        "Attached file sources:",
-    ]
-    for filename, source in file_urls.items():
-        lines.append(f"- `{filename}`: `{source}`")
-    return "\n".join(lines)
+    serialized_sources = json.dumps(file_urls, ensure_ascii=True)
+    return (
+        "The user has provided file attachments in their message. The JSON object below maps each attached "
+        "filename to the original URL or local file path used to attach it. Treat these source strings as "
+        "attachment metadata. Use them when relevant, and preserve them exactly if you reference them.\n\n"
+        "Attached file sources (JSON):\n"
+        f"{serialized_sources}"
+    )
 
 
 def _is_file_urls_context_message(message: TResponseInputItem) -> bool:
@@ -319,6 +315,26 @@ def _build_message_with_file_urls_context(
 def _build_chat_name_messages(messages: list[TResponseInputItem]) -> list[TResponseInputItem]:
     """Drop synthetic file_urls metadata before generating a chat title."""
     return [message for message in messages if not _is_file_urls_context_message(message)]
+
+
+def _build_agui_message_input(request_messages: list[Any] | None) -> str | list[TResponseInputItem]:
+    """Convert the latest AG-UI message into a Responses input shape."""
+    if not request_messages:
+        return ""
+
+    last_message = request_messages[-1]
+    content = getattr(last_message, "content", "")
+    if isinstance(content, list):
+        return [
+            cast(
+                TResponseInputItem,
+                {
+                    "role": getattr(last_message, "role", "user"),
+                    "content": copy.deepcopy(content),
+                },
+            )
+        ]
+    return cast(str, content)
 
 
 def _build_agui_snapshot_messages(
@@ -705,7 +721,7 @@ def make_agui_chat_endpoint(
         encoder = EventEncoder()
 
         combined_file_ids = list(request.file_ids or []) if getattr(request, "file_ids", None) else []
-        message_input: str | list[TResponseInputItem] = request.messages[-1].content if request.messages else ""
+        message_input = _build_agui_message_input(request.messages)
 
         if request.chat_history is not None:
             # Chat history is now a flat list
