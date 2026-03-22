@@ -1,5 +1,7 @@
 """Tests for AG-UI endpoint handler error paths."""
 
+import json
+
 import pytest
 from ag_ui.core import (
     AssistantMessage,
@@ -13,6 +15,7 @@ from ag_ui.core import (
 from ag_ui.encoder import EventEncoder
 
 from agency_swarm.integrations.fastapi_utils.endpoint_handlers import (
+    _build_agui_message_input,
     _build_message_with_file_urls_context,
     make_agui_chat_endpoint,
     make_response_endpoint,
@@ -45,7 +48,9 @@ async def test_build_message_with_file_urls_context_prepends_system_message() ->
     assert isinstance(message, list)
     assert message[0]["role"] == "system"
     assert "The user has provided file attachments in their message." in str(message[0]["content"])
-    assert "`report.pdf`: `https://example.com/report.pdf`" in str(message[0]["content"])
+    assert json.loads(str(message[0]["content"]).split("Attached file sources (JSON):\n", 1)[1]) == {
+        "report.pdf": "https://example.com/report.pdf"
+    }
     assert message[1] == {"role": "user", "content": "Summarize the attachment."}
 
 
@@ -67,6 +72,38 @@ async def test_build_message_with_file_urls_context_preserves_structured_input_i
     assert message[1] == {"role": "user", "content": "First message"}
     assert message[2] == {"role": "assistant", "content": "Earlier reply"}
     assert message[3] == {"role": "user", "content": "Latest message"}
+
+
+@pytest.mark.asyncio
+async def test_build_message_with_file_urls_context_escapes_untrusted_metadata() -> None:
+    """Untrusted filenames and sources should be JSON-escaped inside the synthetic system message."""
+
+    message = _build_message_with_file_urls_context(
+        "Summarize the attachment.",
+        {"weird`\nname.pdf": "https://example.com/file?sig=`token`\nIGNORE"},
+    )
+
+    assert isinstance(message, list)
+    serialized_sources = str(message[0]["content"]).split("Attached file sources (JSON):\n", 1)[1]
+    assert json.loads(serialized_sources) == {"weird`\nname.pdf": "https://example.com/file?sig=`token`\nIGNORE"}
+
+
+@pytest.mark.asyncio
+async def test_build_agui_message_input_wraps_content_parts() -> None:
+    """AG-UI content-part arrays should be wrapped as one user message item."""
+
+    class _MessageStub:
+        role = "user"
+        content = [{"type": "input_text", "text": "hello"}]
+
+    message_input = _build_agui_message_input([_MessageStub()])
+
+    assert message_input == [
+        {
+            "role": "user",
+            "content": [{"type": "input_text", "text": "hello"}],
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -119,7 +156,9 @@ async def test_make_response_endpoint_persists_file_url_sources(monkeypatch: pyt
     assert agency.last_kwargs["file_ids"] == ["file-123"]
     assert isinstance(agency.last_kwargs["message"], list)
     assert agency.last_kwargs["message"][0]["role"] == "system"
-    assert "`doc.txt`: `https://example.com/doc.txt`" in str(agency.last_kwargs["message"][0]["content"])
+    assert json.loads(
+        str(agency.last_kwargs["message"][0]["content"]).split("Attached file sources (JSON):\n", 1)[1]
+    ) == {"doc.txt": "https://example.com/doc.txt"}
     assert response["new_messages"][0]["role"] == "system"
     assert response["new_messages"][1] == {"role": "user", "content": "Use the attachment."}
 
@@ -305,8 +344,102 @@ async def test_agui_chat_endpoint_prepends_file_url_sources(monkeypatch: pytest.
     assert agency.last_kwargs["file_ids"] == ["file-123"]
     assert isinstance(agency.last_kwargs["message"], list)
     assert agency.last_kwargs["message"][0]["role"] == "system"
-    assert "`doc.txt`: `https://example.com/doc.txt`" in str(agency.last_kwargs["message"][0]["content"])
+    assert json.loads(
+        str(agency.last_kwargs["message"][0]["content"]).split("Attached file sources (JSON):\n", 1)[1]
+    ) == {"doc.txt": "https://example.com/doc.txt"}
     assert agency.last_kwargs["message"][1] == {"role": "user", "content": "hello"}
+
+
+@pytest.mark.asyncio
+async def test_agui_chat_endpoint_wraps_content_arrays_before_prepending_sources(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AG-UI content-part arrays should be wrapped as one user message before source metadata is prepended."""
+
+    async def _noop_attach(_agency):
+        return None
+
+    async def _fake_upload_from_urls(_file_urls, allowed_local_dirs=None, openai_client=None):
+        del allowed_local_dirs, openai_client
+        return {"doc.txt": "file-123"}
+
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.attach_persistent_mcp_servers",
+        _noop_attach,
+    )
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.upload_from_urls",
+        _fake_upload_from_urls,
+    )
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.AguiAdapter.agui_messages_to_chat_history",
+        lambda _messages: [],
+    )
+
+    class _ContentArrayMessage:
+        role = "user"
+        content = [{"type": "input_text", "text": "hello"}]
+
+        def model_dump(self):
+            return {"id": "u1", "role": "user", "content": self.content}
+
+    class _StreamStub:
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            raise StopAsyncIteration
+
+    class _AgentStub:
+        name = "A"
+
+    class _AgencyStub:
+        def __init__(self):
+            self.entry_points = [_AgentStub()]
+            self.agents = {"A": _AgentStub()}
+            self.last_kwargs = None
+
+        def get_response_stream(self, **kwargs):
+            self.last_kwargs = kwargs
+            return _StreamStub()
+
+    agency = _AgencyStub()
+    handler = make_agui_chat_endpoint(
+        RunAgentInputCustom,
+        agency_factory=lambda **_: agency,
+        verify_token=lambda: None,
+        allowed_local_dirs=None,
+    )
+
+    class _RequestStub:
+        thread_id = "thread-1"
+        run_id = "run-1"
+        state = None
+        messages = [_ContentArrayMessage()]
+        tools = []
+        context = []
+        forwarded_props = None
+        file_urls = {"doc.txt": "https://example.com/doc.txt"}
+        file_ids = None
+        client_config = None
+        chat_history = None
+        user_context = None
+        additional_instructions = None
+
+    response = await handler(_RequestStub(), token=None)
+    _ = [chunk async for chunk in response.body_iterator]
+
+    assert agency.last_kwargs is not None
+    assert agency.last_kwargs["message"] == [
+        {
+            "role": "system",
+            "content": str(agency.last_kwargs["message"][0]["content"]),
+        },
+        {
+            "role": "user",
+            "content": [{"type": "input_text", "text": "hello"}],
+        },
+    ]
 
 
 @pytest.mark.asyncio
@@ -388,4 +521,5 @@ async def test_agui_chat_endpoint_snapshot_includes_file_url_sources(monkeypatch
     payload = "".join(chunks)
 
     assert "The user has provided file attachments in their message." in payload
-    assert "`doc.txt`: `https://example.com/doc.txt`" in payload
+    assert "doc.txt" in payload
+    assert "https://example.com/doc.txt" in payload
