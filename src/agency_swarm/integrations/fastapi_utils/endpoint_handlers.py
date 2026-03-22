@@ -343,7 +343,7 @@ def _build_agui_snapshot_messages(
 ) -> list[dict[str, Any]]:
     """Seed AG-UI snapshots with the synthetic file_urls context when present."""
     snapshot_messages = [message.model_dump() for message in request_messages]
-    if not snapshot_messages or not isinstance(message_input, list) or not message_input:
+    if not isinstance(message_input, list) or not message_input:
         return snapshot_messages
 
     file_urls_message = message_input[0]
