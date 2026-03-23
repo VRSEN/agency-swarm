@@ -780,6 +780,8 @@ def make_metadata_endpoint(
     allowed_local_dirs: Sequence[str | Path] | None = None,
 ):
     async def handler(token: str = Depends(verify_token)):
+        # Metadata must reflect current factory state for /connect and agent
+        # selection flows; a startup snapshot goes stale.
         agency_metadata = agency_factory(load_threads_callback=lambda: []).get_metadata()
         metadata_with_version = dict(agency_metadata)
         agency_swarm_version = _get_agency_swarm_version()
