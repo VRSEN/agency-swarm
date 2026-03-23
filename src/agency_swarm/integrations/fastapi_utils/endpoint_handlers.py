@@ -775,11 +775,14 @@ def _normalize_new_messages_for_client(messages: list[TResponseInputItem]) -> li
 
 
 def make_metadata_endpoint(
-    agency_metadata: dict,
+    agency_factory: Callable[..., Agency],
     verify_token,
     allowed_local_dirs: Sequence[str | Path] | None = None,
 ):
     async def handler(token: str = Depends(verify_token)):
+        # Metadata must reflect current factory state for /connect and agent
+        # selection flows; a startup snapshot goes stale.
+        agency_metadata = agency_factory(load_threads_callback=lambda: []).get_metadata()
         metadata_with_version = dict(agency_metadata)
         agency_swarm_version = _get_agency_swarm_version()
         if agency_swarm_version is not None:

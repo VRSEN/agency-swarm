@@ -85,6 +85,7 @@
                   "core-framework/agencies/overview",
                   "core-framework/agencies/communication-flows",
                   "core-framework/agencies/running-agency",
+                  "core-framework/agencies/agent-swarm-cli",
                   "core-framework/agencies/visualization"
                 ]
               }
