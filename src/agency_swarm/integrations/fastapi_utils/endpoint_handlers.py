@@ -261,13 +261,28 @@ def _build_file_upload_client(
     return RequestOverridePolicy(config).build_file_upload_client(agency, recipient_agent=recipient_agent)
 
 
-def _format_file_urls_context(file_urls: dict[str, str]) -> str:
+def _format_file_urls_context(
+    file_urls: dict[str, str],
+    file_ids_map: dict[str, str] | None = None,
+) -> str:
     """Build the persisted system message describing original file attachment sources."""
-    serialized_sources = json.dumps(file_urls, ensure_ascii=True)
+    sources = {
+        name: {
+            "url": url,
+            **({"oai_file_id": file_ids_map[name]} if file_ids_map and name in file_ids_map else {}),
+        }
+        for name, url in file_urls.items()
+    }
+    serialized_sources = json.dumps(sources, ensure_ascii=True)
     return (
         "The user has provided file attachments in their message. The JSON object below maps each attached "
-        "filename to the original URL or local file path used to attach it. Treat these source strings as "
-        "attachment metadata. Use them when relevant, and preserve them exactly if you reference them.\n\n"
+        "filename to its source metadata: the original URL or local file path used to upload it, and the "
+        "OpenAI file_id when available. Treat these as attachment metadata. Use them when relevant, and "
+        "preserve them exactly if you reference them.\n\n"
+        "IMPORTANT: The 'url' field is the original upload source (a remote URL or the user's local machine "
+        "path). It is NOT accessible at runtime. When you access uploaded files via the code interpreter, "
+        "they appear under OpenAI's internal sandbox path /mnt/data/<file_id>-<filename> — that sandbox "
+        "path is entirely separate from the original source URL or local path shown here.\n\n"
         "Attached file sources (JSON):\n"
         f"{serialized_sources}"
     )
@@ -283,6 +298,7 @@ def _is_file_urls_context_message(message: TResponseInputItem) -> bool:
 def _build_message_with_file_urls_context(
     message: str | list[TResponseInputItem],
     file_urls: dict[str, str] | None,
+    file_ids_map: dict[str, str] | None = None,
 ) -> str | list[TResponseInputItem]:
     """Prepend a synthetic system message so original file_urls persist in thread history."""
     if not file_urls:
@@ -292,7 +308,7 @@ def _build_message_with_file_urls_context(
         TResponseInputItem,
         {
             "role": "system",
-            "content": _format_file_urls_context(file_urls),
+            "content": _format_file_urls_context(file_urls, file_ids_map),
         },
     )
     if isinstance(message, list):
@@ -404,7 +420,9 @@ def make_response_endpoint(
                         openai_client=request_upload_client,
                     )
                     combined_file_ids = (combined_file_ids or []) + list(file_ids_map.values())
-                    message_input = _build_message_with_file_urls_context(request.message, request.file_urls)
+                    message_input = _build_message_with_file_urls_context(
+                        request.message, request.file_urls, file_ids_map
+                    )
                 except Exception as e:
                     return {"error": f"Error downloading file from provided urls: {e}"}
 
@@ -503,7 +521,9 @@ def make_stream_endpoint(
                         openai_client=request_upload_client,
                     )
                     combined_file_ids = (combined_file_ids or []) + list(file_ids_map.values())
-                    message_input = _build_message_with_file_urls_context(request.message, request.file_urls)
+                    message_input = _build_message_with_file_urls_context(
+                        request.message, request.file_urls, file_ids_map
+                    )
                 except Exception as e:
                     error_msg = str(e)
                     await cleanup_setup_context()
@@ -771,7 +791,9 @@ def make_agui_chat_endpoint(
                         openai_client=request_upload_client,
                     )
                     combined_file_ids = combined_file_ids + list(file_ids_map.values())
-                    message_input = _build_message_with_file_urls_context(message_input, request.file_urls)
+                    message_input = _build_message_with_file_urls_context(
+                        message_input, request.file_urls, file_ids_map
+                    )
                 except Exception as exc:
                     error_message = f"Error downloading file from provided urls: {exc}"
                     await cleanup_setup_context()
