@@ -272,10 +272,15 @@ class TestFastAPIFileProcessing:
         assert "local secret phrase" in response_text
 
         new_messages = response_data["new_messages"]
+        # json.dumps encodes the path consistently with how it appears inside the JSON
+        # stored in the message content (e.g. backslashes are doubled on Windows).
+        file_path_json_fragment = json.dumps(str(file_path))[1:-1]
         source_message = next(
             msg
             for msg in new_messages
-            if isinstance(msg, dict) and msg.get("role") == "system" and str(file_path) in str(msg.get("content", ""))
+            if isinstance(msg, dict)
+            and msg.get("role") == "system"
+            and file_path_json_fragment in str(msg.get("content", ""))
         )
         assert "The user has provided file attachments in their message." in str(source_message["content"])
 
