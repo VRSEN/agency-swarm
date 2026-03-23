@@ -201,7 +201,7 @@ async def test_stream_endpoint_prepends_file_url_source_context(monkeypatch: pyt
     assert isinstance(agency.last_kwargs["message"], list)
     assert agency.last_kwargs["message"][0]["role"] == "system"
     assert _parse_file_urls_context(str(agency.last_kwargs["message"][0]["content"])) == {
-        "doc.txt": "https://example.com/doc.txt"
+        "doc.txt": {"url": "https://example.com/doc.txt", "oai_file_id": "file-123"}
     }
     assert agency.last_kwargs["message"][1] == {"role": "user", "content": "hello"}
 
