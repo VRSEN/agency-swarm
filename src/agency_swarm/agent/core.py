@@ -211,6 +211,12 @@ class Agent(BaseAgent[MasterContext]):
         self.include_web_search_sources = bool(current_agent_params.get("include_web_search_sources", True))
         self.validation_attempts = int(current_agent_params.get("validation_attempts", 1))
         self.raise_input_guardrail_error = bool(current_agent_params.get("raise_input_guardrail_error", False))
+        self.supports_outbound_communication = bool(
+            current_agent_params.get("supports_outbound_communication", self.supports_outbound_communication)
+        )
+        self.supports_framework_tool_wiring = bool(
+            current_agent_params.get("supports_framework_tool_wiring", self.supports_framework_tool_wiring)
+        )
         self.handoff_reminder = current_agent_params.get("handoff_reminder")
 
         # Internal state

@@ -167,6 +167,19 @@ def test_agent_initialization_guardrail_flag_aliases_and_failures() -> None:
     assert agent.raise_input_guardrail_error is False
 
 
+def test_agent_initialization_support_flags_override_defaults() -> None:
+    """Capability flags should persist when a plain Agent overrides them."""
+    agent = Agent(
+        name="RestrictedAgent",
+        instructions="Test",
+        supports_outbound_communication=False,
+        supports_framework_tool_wiring=False,
+    )
+
+    assert agent.supports_outbound_communication is False
+    assert agent.supports_framework_tool_wiring is False
+
+
 def test_agent_initialization_with_all_parameters():
     """Test Agent initialization with all parameters including output_type."""
     tool1 = MagicMock(spec=FunctionTool)
