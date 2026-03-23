@@ -222,6 +222,41 @@ def test_metadata_includes_quick_replies() -> None:
     assert data["quickReplies"] == ["hi", "hello"]
 
 
+def test_metadata_endpoint_reads_live_metadata():
+    """Metadata should reflect the current agency factory state on each request."""
+
+    state = {"quick": ["hi"]}
+
+    def create_agency(load_threads_callback=None, save_threads_callback=None):
+        agent = Agent(
+            name="LiveMetadataAgent",
+            instructions="Use quick replies",
+            quick_replies=list(state["quick"]),
+        )
+        return Agency(
+            agent,
+            load_threads_callback=load_threads_callback,
+            save_threads_callback=save_threads_callback,
+        )
+
+    app = run_fastapi(agencies={"test_agency": create_agency}, return_app=True, app_token_env="")
+    client = TestClient(app)
+
+    first = client.get("/test_agency/get_metadata")
+    assert first.status_code == 200
+    first_agent = next((n for n in first.json().get("nodes", []) if n["id"] == "LiveMetadataAgent"), None)
+    assert first_agent is not None
+    assert first_agent["data"]["quickReplies"] == ["hi"]
+
+    state["quick"] = ["bye"]
+
+    second = client.get("/test_agency/get_metadata")
+    assert second.status_code == 200
+    second_agent = next((n for n in second.json().get("nodes", []) if n["id"] == "LiveMetadataAgent"), None)
+    assert second_agent is not None
+    assert second_agent["data"]["quickReplies"] == ["bye"]
+
+
 def test_metadata_includes_tool_input_schema():
     """Metadata should include input schema for function tools when available."""
 
