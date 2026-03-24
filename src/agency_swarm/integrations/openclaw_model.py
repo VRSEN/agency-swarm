@@ -16,12 +16,11 @@ DEFAULT_OPENCLAW_PROVIDER_MODEL = "openai/gpt-5.4"
 
 @dataclass(frozen=True)
 class _CurrentAppOpenClawDefaults:
-    proxy_base_url: tuple[str, str, int, str]
     default_model: str
     provider_model: str
 
 
-_CURRENT_APP_OPENCLAW_DEFAULTS: _CurrentAppOpenClawDefaults | None = None
+_CURRENT_APP_OPENCLAW_DEFAULTS: dict[tuple[str, str, int, str], _CurrentAppOpenClawDefaults] = {}
 
 
 def build_openclaw_responses_model(
@@ -96,17 +95,18 @@ def _uses_current_app_openclaw_proxy(base_url: str) -> bool:
 
 def register_current_app_openclaw_defaults(default_model: str, provider_model: str) -> None:
     global _CURRENT_APP_OPENCLAW_DEFAULTS
+    proxy_base_url = _normalize_openclaw_proxy_url(_resolve_current_openclaw_proxy_base_url())
     new_defaults = _CurrentAppOpenClawDefaults(
-        proxy_base_url=_normalize_openclaw_proxy_url(_resolve_current_openclaw_proxy_base_url()),
         default_model=default_model.strip() or DEFAULT_OPENCLAW_MODEL,
         provider_model=provider_model.strip() or DEFAULT_OPENCLAW_PROVIDER_MODEL,
     )
-    if _CURRENT_APP_OPENCLAW_DEFAULTS is not None and _CURRENT_APP_OPENCLAW_DEFAULTS != new_defaults:
+    existing_defaults = _CURRENT_APP_OPENCLAW_DEFAULTS.get(proxy_base_url)
+    if existing_defaults is not None and existing_defaults != new_defaults:
         raise ValueError(
             "Conflicting current-app OpenClaw defaults for the same proxy base URL. "
             "Use one current-app proxy config per process or set distinct proxy base URLs."
         )
-    _CURRENT_APP_OPENCLAW_DEFAULTS = new_defaults
+    _CURRENT_APP_OPENCLAW_DEFAULTS[proxy_base_url] = new_defaults
 
 
 def _resolve_current_openclaw_proxy_base_url() -> str:
@@ -146,11 +146,7 @@ def _normalize_openclaw_proxy_host(hostname: str) -> str:
 
 
 def _get_current_app_openclaw_defaults(base_url: str) -> _CurrentAppOpenClawDefaults | None:
-    if _CURRENT_APP_OPENCLAW_DEFAULTS is None:
-        return None
-    if _CURRENT_APP_OPENCLAW_DEFAULTS.proxy_base_url != _normalize_openclaw_proxy_url(base_url):
-        return None
-    return _CURRENT_APP_OPENCLAW_DEFAULTS
+    return _CURRENT_APP_OPENCLAW_DEFAULTS.get(_normalize_openclaw_proxy_url(base_url))
 
 
 class _ResponsesModelWithUsageName(Protocol):
