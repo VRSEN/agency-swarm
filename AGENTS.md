@@ -28,10 +28,12 @@ Begin each task after reviewing this readiness checklist:
 - When a non-readonly command is blocked by sandboxing, rerun it with escalated permissions if needed.
 - Before adding or changing any rule, locate related AGENTS.md rules and consolidate by reinforcing, generalizing, or removing conflicts; never append blindly.
 - Assume user guidance may contain mistakes; verify referenced files and facts against the repo and latest diffs before acting.
+- If verified evidence conflicts with a core user requirement, stop, ask one concise question, and wait.
 - Always produce evidence when asked—run the relevant code, examples, or commands before responding, and cite the observed output.
 
 ## Continuous Work Rule
-Before responding to the user and when you consider your task done, check whether the outstanding-task or todo list is empty. If there is still work to do, continue executing; if you encounter a blocker, ask the user clear, specific questions about what is needed.
+Before responding to the user and when you consider your task done, check whether the outstanding-task or todo list is empty. If any productive next step remains, keep working and do not hand off a partial state. If you hit a real blocker, ask the user one clear, specific question about what is needed.
+- Do not leave verified local changes sitting uncommitted or unpushed when user approval to ship is already clear; ship them promptly or remove them.
 - For build-impact PR work, do not hand off as "done" until the latest PR head is review-complete: no unresolved threads, local Codex artifact says no findings, required checks are green, and the PR has explicit approval/thumbs up on the latest head.
 - Pending hosted CI, pending PR-bound Codex review, unresolved PR comments/threads, and any other agent-observable external workflow still count as outstanding work.
 - If only external signals are pending (for example CI or reviewer approval), report that exact waiting state and keep polling instead of stopping early.
@@ -42,10 +44,12 @@ Ask only when required; otherwise proceed autonomously and fast.
 
 - Pause and ask the user when:
   - Requirements or behavior remain ambiguous after deep research.
+  - Verified evidence conflicts with a core user requirement.
   - You cannot articulate a plan for the change.
   - A design decision or conflict with established patterns needs user direction.
   - You find failures or root causes that change scope or expectations.
   - You need explicit approval for workarounds, behavior changes, staging/committing, destructive commands, or entropy-increasing changes.
+  - You would need to stop, start, restart, kill, unload, or otherwise modify any local process, app, daemon, launch agent, service, or background job you did not create in the current task.
   - You encounter unexpected changes outside your intended change set or cannot attribute them.
   - Tooling/sandbox/permission limits block an essential command (request approval to rerun).
   - You discover you skipped repo/PR preflight or worked in the wrong repo/branch; stop and escalate with the correction plan before continuing.
