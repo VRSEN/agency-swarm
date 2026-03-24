@@ -28,9 +28,7 @@ def build_openclaw_responses_model(
     base_url: str | None = None,
     api_key: str | None = None,
 ) -> OpenAIResponsesModel:
-    resolved_base_url = (
-        base_url or os.getenv("OPENCLAW_PROXY_BASE_URL") or f"http://127.0.0.1:8000{DEFAULT_OPENCLAW_PROXY_API_PATH}"
-    ).rstrip("/")
+    resolved_base_url = (base_url or _resolve_current_openclaw_proxy_base_url()).rstrip("/")
 
     if isinstance(model, str) and model.strip():
         resolved_model = model.strip()
@@ -53,7 +51,7 @@ def build_openclaw_responses_model(
 
 def _resolve_openclaw_usage_model(model_name: str, base_url: str) -> str | None:
     if model_name.startswith("openclaw:"):
-        current_app_defaults = _get_current_app_openclaw_defaults(base_url)
+        current_app_defaults = _resolve_current_app_openclaw_defaults(base_url)
         if current_app_defaults is not None:
             return current_app_defaults.provider_model
         if _uses_raw_openclaw_gateway(base_url):
@@ -70,7 +68,7 @@ def _resolve_openclaw_default_model(base_url: str) -> str:
         if env_default_model and not env_default_model.startswith("openclaw:"):
             return env_default_model
         return os.getenv("OPENCLAW_PROVIDER_MODEL", "").strip() or DEFAULT_OPENCLAW_PROVIDER_MODEL
-    current_app_defaults = _get_current_app_openclaw_defaults(base_url)
+    current_app_defaults = _resolve_current_app_openclaw_defaults(base_url)
     if current_app_defaults is not None:
         return current_app_defaults.default_model
     if env_default_model:
@@ -82,17 +80,27 @@ def _resolve_openclaw_responses_api_key(base_url: str, api_key: str | None) -> s
     if api_key:
         return api_key
 
+    if _uses_current_app_openclaw_proxy(base_url):
+        return (
+            os.getenv("APP_TOKEN")
+            or os.getenv("OPENCLAW_PROXY_API_KEY")
+            or os.getenv("OPENCLAW_GATEWAY_TOKEN")
+            or "sk-openclaw-proxy"
+        )
+
+    if _uses_raw_openclaw_gateway(base_url):
+        return os.getenv("OPENCLAW_GATEWAY_TOKEN") or os.getenv("OPENCLAW_PROXY_API_KEY") or "sk-openclaw-proxy"
+
     proxy_api_key = os.getenv("OPENCLAW_PROXY_API_KEY")
     if proxy_api_key:
         return proxy_api_key
-
-    if _uses_current_app_openclaw_proxy(base_url):
-        return os.getenv("APP_TOKEN") or os.getenv("OPENCLAW_GATEWAY_TOKEN") or "sk-openclaw-proxy"
 
     return os.getenv("OPENCLAW_GATEWAY_TOKEN") or "sk-openclaw-proxy"
 
 
 def _uses_current_app_openclaw_proxy(base_url: str) -> bool:
+    if _resolve_current_app_openclaw_defaults(base_url) is not None:
+        return True
     return _normalize_openclaw_proxy_url(base_url) == _normalize_openclaw_proxy_url(
         _resolve_current_openclaw_proxy_base_url()
     )
@@ -159,8 +167,12 @@ def _get_current_app_openclaw_defaults(base_url: str) -> _CurrentAppOpenClawDefa
     return _CURRENT_APP_OPENCLAW_DEFAULTS.get(_normalize_openclaw_proxy_url(base_url))
 
 
+def _resolve_current_app_openclaw_defaults(base_url: str) -> _CurrentAppOpenClawDefaults | None:
+    return _get_current_app_openclaw_defaults(base_url)
+
+
 def _resolve_openclaw_default_settings_model_name(model_name: str) -> str:
-    if model_name.startswith("openai/"):
+    if "/" in model_name:
         _, _, bare_model_name = model_name.rpartition("/")
         return bare_model_name or model_name
     return model_name

@@ -1146,6 +1146,10 @@ def attach_openclaw_to_fastapi(
     openclaw_model.register_current_app_openclaw_defaults(
         default_model=resolved_config.default_model,
         provider_model=resolved_config.provider_model,
+    )
+    openclaw_model.register_current_app_openclaw_defaults(
+        default_model=resolved_config.default_model,
+        provider_model=resolved_config.provider_model,
         base_url=f"{resolved_config.upstream_base_url}{DEFAULT_OPENCLAW_PROXY_API_PATH}",
     )
 

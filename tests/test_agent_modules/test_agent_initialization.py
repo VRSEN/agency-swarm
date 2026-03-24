@@ -305,10 +305,12 @@ def test_agent_initialization_model_settings_defaults_and_overrides():
     assert provider_prefixed_gpt5_agent.model_settings.verbosity is None
 
 
+@pytest.mark.parametrize("provider_model", ["openai/gpt-5.4", "azure/gpt-5.4"])
 def test_agent_initialization_model_objects_use_openclaw_default_settings_alias(
     monkeypatch: pytest.MonkeyPatch,
+    provider_model: str,
 ) -> None:
-    monkeypatch.setenv("OPENCLAW_PROVIDER_MODEL", "openai/gpt-5.4")
+    monkeypatch.setenv("OPENCLAW_PROVIDER_MODEL", provider_model)
     model = build_openclaw_responses_model(base_url="http://127.0.0.1:18789/v1", api_key="test-key")
 
     agent = Agent(name="UsageTrackedModel", instructions="Test", model=model)

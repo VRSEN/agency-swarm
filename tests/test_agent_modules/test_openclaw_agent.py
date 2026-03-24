@@ -6,7 +6,11 @@ import pytest
 from agents.models.openai_responses import OpenAIResponsesModel
 
 from agency_swarm import Agency, Agent, OpenClawAgent
-from agency_swarm.integrations.openclaw_model import build_openclaw_responses_model
+from agency_swarm.integrations import openclaw_model as openclaw_model_mod
+from agency_swarm.integrations.openclaw_model import (
+    build_openclaw_responses_model,
+    register_current_app_openclaw_defaults,
+)
 from agency_swarm.tools.send_message import Handoff
 from agency_swarm.utils.model_utils import get_model_name, get_usage_tracking_model_name
 
@@ -132,7 +136,7 @@ def test_openclaw_agent_uses_gateway_token_when_proxy_key_and_app_token_are_miss
 def test_openclaw_agent_uses_gateway_token_before_app_token_for_direct_gateway_urls(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("OPENCLAW_PROXY_API_KEY", raising=False)
+    monkeypatch.setenv("OPENCLAW_PROXY_API_KEY", "proxy-token")
     monkeypatch.setenv("APP_TOKEN", "app-token")
     monkeypatch.setenv("OPENCLAW_GATEWAY_TOKEN", "gateway-token")
 
@@ -173,6 +177,32 @@ def test_openclaw_agent_treats_localhost_proxy_aliases_as_current_app_proxy(
 
     assert model._client.api_key == "app-token"
     assert get_usage_tracking_model_name(model) == "openai/gpt-5.4"
+
+
+def test_openclaw_agent_uses_app_token_for_explicit_same_app_proxy_url_when_one_current_app_proxy_is_registered(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENCLAW_PROXY_API_KEY", "proxy-token")
+    monkeypatch.setenv("OPENCLAW_PROXY_BASE_URL", "http://127.0.0.1:9000/openclaw/v1")
+    monkeypatch.setenv("APP_TOKEN", "app-token")
+    monkeypatch.setenv("OPENCLAW_GATEWAY_TOKEN", "gateway-token")
+    monkeypatch.setattr(openclaw_model_mod, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
+    register_current_app_openclaw_defaults(
+        default_model="openclaw:custom",
+        provider_model="openai/gpt-5.4",
+        base_url="http://127.0.0.1:9000/openclaw/v1",
+    )
+
+    agent = OpenClawAgent(
+        name="OpenClawWorker",
+        description="Worker",
+        instructions="Handle OpenClaw work.",
+        host="127.0.0.1",
+        port=9000,
+    )
+
+    assert agent.model.model == "openclaw:custom"
+    assert agent.model._client.api_key == "app-token"
 
 
 def test_openclaw_agent_uses_gateway_token_for_external_openclaw_proxy_paths(
