@@ -22,23 +22,28 @@ def build_openclaw_responses_model(
     else:
         env_default_model = os.getenv("OPENCLAW_DEFAULT_MODEL", "").strip()
         resolved_model = env_default_model or DEFAULT_OPENCLAW_MODEL
-    resolved_usage_model = _resolve_openclaw_usage_model(resolved_model)
 
     resolved_base_url = (
         base_url or os.getenv("OPENCLAW_PROXY_BASE_URL") or f"http://127.0.0.1:8000{DEFAULT_OPENCLAW_PROXY_API_PATH}"
     ).rstrip("/")
+    resolved_usage_model = _resolve_openclaw_usage_model(resolved_model, resolved_base_url)
     resolved_api_key = _resolve_openclaw_responses_api_key(resolved_base_url, api_key)
 
     client = AsyncOpenAI(base_url=resolved_base_url, api_key=resolved_api_key)
     responses_model = OpenAIResponsesModel(model=resolved_model, openai_client=client)
-    cast(_ResponsesModelWithUsageName, responses_model)._agency_swarm_usage_model_name = resolved_usage_model
+    if resolved_usage_model is not None:
+        cast(_ResponsesModelWithUsageName, responses_model)._agency_swarm_usage_model_name = resolved_usage_model
     return responses_model
 
 
-def _resolve_openclaw_usage_model(model_name: str) -> str:
+def _resolve_openclaw_usage_model(model_name: str, base_url: str) -> str | None:
     if model_name.startswith("openclaw:"):
         provider_model = os.getenv("OPENCLAW_PROVIDER_MODEL", "").strip()
-        return provider_model or DEFAULT_OPENCLAW_PROVIDER_MODEL
+        if provider_model:
+            return provider_model
+        if _uses_local_openclaw_proxy_alias(base_url):
+            return DEFAULT_OPENCLAW_PROVIDER_MODEL
+        return None
     return model_name
 
 

@@ -31,9 +31,11 @@ openclaw_worker = OpenClawAgent(
 )
 ```
 
-`OpenClawAgent` configures the model automatically and is receive-only in
-`communication_flows`. It can receive delegated work, but it cannot be used as
-the sender in Agency Swarm handoffs or `send_message` routes.
+`OpenClawAgent` configures the model automatically by default and is receive-only
+in `communication_flows`. It can receive delegated work, but it cannot be used
+as the sender in Agency Swarm handoffs or `send_message` routes. When a remote
+OpenClaw server expects a different public alias, pass that string with the
+agent's `model=` argument.
 
 ### Why `openclaw:main` exists
 
@@ -56,6 +58,9 @@ Default runtime paths are designed for persistent E2B storage:
 - `OPENCLAW_CONFIG_PATH=/mnt/openclaw/openclaw.json`
 - `OPENCLAW_LOG_PATH=/mnt/openclaw/logs/openclaw-gateway.log`
 - `OPENCLAW_PORT=18789`
+
+These are runtime paths from inside the app.
+In the sandbox filesystem and Agent Swarm file browser, the same mounted volume is visible under `/app/mnt/openclaw`.
 
 Generated gateway config enables:
 

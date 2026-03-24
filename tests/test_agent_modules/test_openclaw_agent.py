@@ -6,6 +6,7 @@ import pytest
 from agents.models.openai_responses import OpenAIResponsesModel
 
 from agency_swarm import Agency, Agent, OpenClawAgent
+from agency_swarm.integrations.openclaw_model import build_openclaw_responses_model
 from agency_swarm.tools.send_message import Handoff
 from agency_swarm.utils.model_utils import get_model_name, get_usage_tracking_model_name
 
@@ -69,6 +70,30 @@ def test_openclaw_agent_defaults_external_v1_urls_to_public_alias() -> None:
 
     assert str(agent.model._client.base_url) == "http://127.0.0.1:18789/v1/"
     assert agent.model.model == "openclaw:main"
+
+
+def test_openclaw_agent_allows_model_alias_override_for_external_servers() -> None:
+    agent = OpenClawAgent(
+        name="OpenClawWorker",
+        description="Worker",
+        instructions="Handle OpenClaw work.",
+        base_url="https://example.com/openclaw/v1",
+        api_key="external-token",
+        model="openclaw:custom",
+    )
+
+    assert str(agent.model._client.base_url) == "https://example.com/openclaw/v1/"
+    assert agent.model.model == "openclaw:custom"
+
+
+def test_build_openclaw_responses_model_keeps_public_alias_for_external_usage_when_provider_env_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENCLAW_PROVIDER_MODEL", raising=False)
+
+    model = build_openclaw_responses_model(base_url="https://example.com/openclaw/v1", api_key="external-token")
+
+    assert get_usage_tracking_model_name(model) == "openclaw:main"
 
 
 def test_openclaw_agent_uses_gateway_token_when_proxy_key_and_app_token_are_missing(

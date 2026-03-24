@@ -25,6 +25,7 @@ class OpenClawAgent(Agent):
         api_key: str | None = None,
         **kwargs: Any,
     ) -> None:
+        resolved_model = _pop_openclaw_model_override(kwargs)
         _validate_openclaw_agent_kwargs(kwargs)
         resolved_base_url = _resolve_openclaw_base_url(
             base_url=base_url,
@@ -33,7 +34,11 @@ class OpenClawAgent(Agent):
             api_path=api_path,
         )
 
-        kwargs["model"] = build_openclaw_responses_model(base_url=resolved_base_url, api_key=api_key)
+        kwargs["model"] = build_openclaw_responses_model(
+            model=resolved_model,
+            base_url=resolved_base_url,
+            api_key=api_key,
+        )
         super().__init__(**kwargs)
 
 
@@ -69,10 +74,16 @@ def _normalize_http_host(host: str) -> str:
     return host
 
 
-def _validate_openclaw_agent_kwargs(kwargs: dict[str, Any]) -> None:
-    if "model" in kwargs:
-        raise TypeError("OpenClawAgent configures its model automatically. Remove the 'model' argument.")
+def _pop_openclaw_model_override(kwargs: dict[str, Any]) -> str | None:
+    model = kwargs.pop("model", None)
+    if model is None:
+        return None
+    if not isinstance(model, str) or not model.strip():
+        raise TypeError("OpenClawAgent only accepts non-empty string model aliases.")
+    return model.strip()
 
+
+def _validate_openclaw_agent_kwargs(kwargs: dict[str, Any]) -> None:
     if kwargs.get("handoffs"):
         raise TypeError(
             "OpenClawAgent does not accept manual handoffs. Use a normal Agency Swarm agent as the delegator."
