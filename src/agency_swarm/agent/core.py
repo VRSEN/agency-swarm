@@ -247,13 +247,14 @@ class Agent(BaseAgent[MasterContext]):
             raise RuntimeError(f"Agent {self.name} has no file manager configured")
 
         self.file_manager.read_instructions()
-        # Skip side-effectful OpenAI file/vector-store setup when DRY_RUN is enabled
-        _dry_run_env = os.getenv("DRY_RUN", "")
-        _DRY_RUN = str(_dry_run_env).strip().lower() in {"1", "true", "yes", "on"}
-        if not _DRY_RUN:
-            self.file_manager.parse_files_folder_for_vs_id()
-        parse_schemas(self)
-        load_tools_from_folder(self)
+        if self.supports_framework_tool_wiring:
+            # Skip side-effectful OpenAI file/vector-store setup when DRY_RUN is enabled
+            _dry_run_env = os.getenv("DRY_RUN", "")
+            _DRY_RUN = str(_dry_run_env).strip().lower() in {"1", "true", "yes", "on"}
+            if not _DRY_RUN:
+                self.file_manager.parse_files_folder_for_vs_id()
+            parse_schemas(self)
+            load_tools_from_folder(self)
 
         # Wrap input guardrails
         wrap_input_guardrails(self)
@@ -263,7 +264,8 @@ class Agent(BaseAgent[MasterContext]):
             _attach_one_call_guard(tool, self)
 
         # Convert MCP servers to tools and add them to the agent
-        convert_mcp_servers_to_tools(self)
+        if self.supports_framework_tool_wiring:
+            convert_mcp_servers_to_tools(self)
         if self.include_web_search_sources and any(isinstance(tool, WebSearchTool) for tool in self.tools):
             existing_includes = list(self.model_settings.response_include or [])
             if _WEB_SEARCH_SOURCES_INCLUDE not in existing_includes:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 import os
 from typing import Protocol, cast
 
@@ -70,7 +71,9 @@ def _resolve_openclaw_responses_api_key(base_url: str, api_key: str | None) -> s
 
 
 def _uses_current_app_openclaw_proxy(base_url: str) -> bool:
-    return base_url.rstrip("/") == _resolve_current_openclaw_proxy_base_url()
+    return _normalize_openclaw_proxy_url(base_url) == _normalize_openclaw_proxy_url(
+        _resolve_current_openclaw_proxy_base_url()
+    )
 
 
 def _resolve_current_openclaw_proxy_base_url() -> str:
@@ -89,6 +92,24 @@ def _uses_raw_openclaw_gateway(base_url: str) -> bool:
     parsed = httpx.URL(base_url)
     normalized_path = parsed.path.rstrip("/")
     return normalized_path == "/v1"
+
+
+def _normalize_openclaw_proxy_url(base_url: str) -> tuple[str, str, int, str]:
+    parsed = httpx.URL(base_url)
+    hostname = parsed.host or ""
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    normalized_path = parsed.path.rstrip("/")
+    return parsed.scheme, _normalize_openclaw_proxy_host(hostname), port, normalized_path
+
+
+def _normalize_openclaw_proxy_host(hostname: str) -> str:
+    lowered = hostname.lower()
+    if lowered in {"localhost", "localhost.localdomain"}:
+        return "loopback"
+    try:
+        return "loopback" if ipaddress.ip_address(hostname).is_loopback else lowered
+    except ValueError:
+        return lowered
 
 
 class _ResponsesModelWithUsageName(Protocol):

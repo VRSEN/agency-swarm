@@ -147,6 +147,21 @@ def test_openclaw_agent_keeps_app_token_first_for_local_proxy_urls(monkeypatch: 
     assert agent.model._client.api_key == "app-token"
 
 
+def test_openclaw_agent_treats_localhost_proxy_aliases_as_current_app_proxy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENCLAW_PROXY_API_KEY", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROVIDER_MODEL", raising=False)
+    monkeypatch.setenv("APP_TOKEN", "app-token")
+    monkeypatch.delenv("OPENCLAW_GATEWAY_TOKEN", raising=False)
+    monkeypatch.setenv("OPENCLAW_PROXY_BASE_URL", "http://127.0.0.1:8000/openclaw/v1")
+
+    model = build_openclaw_responses_model(base_url="http://localhost:8000/openclaw/v1")
+
+    assert model._client.api_key == "app-token"
+    assert get_usage_tracking_model_name(model) == "openai/gpt-5.4"
+
+
 def test_openclaw_agent_uses_gateway_token_for_external_openclaw_proxy_paths(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

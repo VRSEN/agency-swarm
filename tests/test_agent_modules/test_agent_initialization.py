@@ -180,6 +180,25 @@ def test_agent_initialization_support_flags_override_defaults() -> None:
     assert agent.supports_framework_tool_wiring is False
 
 
+def test_agent_initialization_skips_framework_tool_wiring_when_disabled(tmp_path) -> None:
+    """Framework-managed tool folders should be ignored when tool wiring is disabled."""
+    tools_dir = tmp_path / "tools"
+    tools_dir.mkdir()
+    (tools_dir / "loaded_tool.py").write_text(
+        "from agents import function_tool\n\n@function_tool\ndef loaded_tool() -> str:\n    return 'loaded'\n",
+        encoding="utf-8",
+    )
+
+    agent = Agent(
+        name="RestrictedAgent",
+        instructions="Test",
+        tools_folder=str(tools_dir),
+        supports_framework_tool_wiring=False,
+    )
+
+    assert agent.tools == []
+
+
 def test_agent_initialization_with_all_parameters():
     """Test Agent initialization with all parameters including output_type."""
     tool1 = MagicMock(spec=FunctionTool)
