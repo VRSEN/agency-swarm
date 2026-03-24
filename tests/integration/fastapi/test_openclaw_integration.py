@@ -838,6 +838,32 @@ def test_build_openclaw_responses_model_uses_programmatic_current_app_defaults(
     assert get_usage_tracking_model_name(model) == "anthropic/claude-sonnet-4-5"
 
 
+def test_attach_openclaw_to_fastapi_rejects_conflicting_current_app_defaults(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("OPENCLAW_PROXY_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_HOST", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_PORT", raising=False)
+    monkeypatch.delenv("PORT", raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULTS", None, raising=False)
+
+    first_config = replace(
+        _build_openclaw_config(tmp_path / "first"),
+        default_model="openclaw:first",
+        provider_model="openai/gpt-4o",
+    )
+    second_config = replace(
+        _build_openclaw_config(tmp_path / "second"),
+        default_model="openclaw:second",
+        provider_model="openai/gpt-5.4",
+    )
+
+    attach_openclaw_to_fastapi(FastAPI(), first_config)
+
+    with pytest.raises(ValueError, match="Conflicting current-app OpenClaw defaults"):
+        attach_openclaw_to_fastapi(FastAPI(), second_config)
+
+
 def test_build_openclaw_responses_model_ignores_openclaw_alias_defaults_for_direct_gateway_urls(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

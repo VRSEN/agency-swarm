@@ -96,11 +96,17 @@ def _uses_current_app_openclaw_proxy(base_url: str) -> bool:
 
 def register_current_app_openclaw_defaults(default_model: str, provider_model: str) -> None:
     global _CURRENT_APP_OPENCLAW_DEFAULTS
-    _CURRENT_APP_OPENCLAW_DEFAULTS = _CurrentAppOpenClawDefaults(
+    new_defaults = _CurrentAppOpenClawDefaults(
         proxy_base_url=_normalize_openclaw_proxy_url(_resolve_current_openclaw_proxy_base_url()),
         default_model=default_model.strip() or DEFAULT_OPENCLAW_MODEL,
         provider_model=provider_model.strip() or DEFAULT_OPENCLAW_PROVIDER_MODEL,
     )
+    if _CURRENT_APP_OPENCLAW_DEFAULTS is not None and _CURRENT_APP_OPENCLAW_DEFAULTS != new_defaults:
+        raise ValueError(
+            "Conflicting current-app OpenClaw defaults for the same proxy base URL. "
+            "Use one current-app proxy config per process or set distinct proxy base URLs."
+        )
+    _CURRENT_APP_OPENCLAW_DEFAULTS = new_defaults
 
 
 def _resolve_current_openclaw_proxy_base_url() -> str:
