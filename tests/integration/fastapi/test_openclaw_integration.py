@@ -42,7 +42,7 @@ def _build_openclaw_config(tmp_path: Path) -> OpenClawIntegrationConfig:
         startup_timeout_seconds=5.0,
         proxy_timeout_seconds=30.0,
         default_model="openclaw:main",
-        provider_model="openai/gpt-5.2",
+        provider_model="openai/gpt-5.4",
         gateway_command="openclaw gateway",
         tool_mode="full",
     )
@@ -62,7 +62,7 @@ def test_openclaw_config_manual_construction_defaults_to_full_tool_mode(tmp_path
         startup_timeout_seconds=5.0,
         proxy_timeout_seconds=30.0,
         default_model="openclaw:main",
-        provider_model="openai/gpt-5.2",
+        provider_model="openai/gpt-5.4",
         gateway_command="openclaw gateway",
     )
 
@@ -191,7 +191,7 @@ def test_openclaw_proxy_filters_request_keys_and_normalizes_payload(
     }
     assert "include" not in forwarded
     assert "parallel_tool_calls" not in forwarded
-    assert forwarded["model"] == "openai/gpt-5.2"
+    assert forwarded["model"] == "openai/gpt-5.4"
     assert forwarded["input"] == [
         {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hello"}]}
     ]
@@ -1093,7 +1093,7 @@ def test_openclaw_ensure_layout_normalizes_existing_non_dict_config_sections(tmp
     saved = json.loads(config.config_path.read_text(encoding="utf-8"))
     assert saved["gateway"]["auth"]["mode"] == "token"
     assert saved["gateway"]["http"]["endpoints"]["responses"]["enabled"] is True
-    assert saved["agents"]["defaults"]["model"] == {"primary": "openai/gpt-5.2"}
+    assert saved["agents"]["defaults"]["model"] == {"primary": "openai/gpt-5.4"}
 
 
 def test_openclaw_resolve_gateway_command_errors_when_binary_is_unavailable(
@@ -1522,6 +1522,33 @@ def test_openclaw_full_tool_mode_preserves_deleted_deny_entries(tmp_path: Path) 
 
     restored = json.loads(config.config_path.read_text(encoding="utf-8"))
     assert restored["tools"]["deny"] == ["shell"]
+
+
+def test_openclaw_full_tool_mode_preserves_explicit_worker_style_deny_entries(tmp_path: Path) -> None:
+    config = replace(_build_openclaw_config(tmp_path), tool_mode="worker")
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps(
+            {
+                "tools": {
+                    "agentToAgent": {"enabled": True, "mode": "custom"},
+                    "deny": ["browser"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+    payload["tools"]["deny"] = ["browser", "message"]
+    config.config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    OpenClawRuntime(replace(config, tool_mode="full")).ensure_layout()
+
+    restored = json.loads(config.config_path.read_text(encoding="utf-8"))
+    assert restored["tools"]["deny"] == ["browser", "message"]
 
 
 def test_openclaw_full_tool_mode_restores_agent_to_agent_when_only_deny_changes(tmp_path: Path) -> None:

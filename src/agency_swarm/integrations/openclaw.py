@@ -198,7 +198,7 @@ class OpenClawIntegrationConfig:
             startup_timeout_seconds=float(os.getenv("OPENCLAW_STARTUP_TIMEOUT_SECONDS", "60")),
             proxy_timeout_seconds=float(os.getenv("OPENCLAW_PROXY_TIMEOUT_SECONDS", "120")),
             default_model=os.getenv("OPENCLAW_DEFAULT_MODEL", DEFAULT_OPENCLAW_MODEL),
-            provider_model=os.getenv("OPENCLAW_PROVIDER_MODEL", "openai/gpt-5.2"),
+            provider_model=os.getenv("OPENCLAW_PROVIDER_MODEL", "openai/gpt-5.4"),
             gateway_command=gateway_command,
             tool_mode=_read_openclaw_tool_mode_env(),
         )
@@ -873,6 +873,12 @@ def _restore_full_tool_mode_config(current: dict[str, Any], backup_path: Path, c
                 removed_agent_to_agent_keys = set(worker_agent_to_agent) - set(current_agent_to_agent)
                 for removed_key in removed_agent_to_agent_keys:
                     merged_agent_to_agent.pop(removed_key, None)
+                # If enabled still matches the worker-forced override, restore the backed-up
+                # full-mode value. A bare false here is ambiguous: it can mean "untouched worker
+                # override" or "user explicitly wants false", and the config file does not record
+                # which happened.
+                # We intentionally prefer the original full-mode setting unless the user changed
+                # enabled away from the worker snapshot.
                 if (
                     current_agent_to_agent.get("enabled") == worker_agent_to_agent.get("enabled")
                     and "enabled" in restored_agent_to_agent
@@ -898,30 +904,44 @@ def _restore_full_tool_mode_config(current: dict[str, Any], backup_path: Path, c
     restored_deny = backup.get("deny")
     worker_deny = backup.get("worker_deny")
     if isinstance(restored_deny, list):
-        worker_only_denies = _worker_only_denies(restored_deny, worker_deny)
-        if isinstance(current_deny, list) and isinstance(worker_deny, list) and current_deny == worker_deny:
-            tools["deny"] = restored_deny.copy()
-        elif isinstance(current_deny, list):
-            filtered_deny = [item for item in current_deny if item not in worker_only_denies]
-            if filtered_deny:
-                tools["deny"] = filtered_deny
-            else:
-                tools.pop("deny", None)
+        restored_deny_result = _restore_full_tool_mode_deny_list(
+            current_deny=current_deny,
+            restored_deny=restored_deny,
+            worker_deny=worker_deny,
+        )
+        if restored_deny_result:
+            tools["deny"] = restored_deny_result
         else:
-            tools["deny"] = restored_deny.copy()
+            tools.pop("deny", None)
     else:
-        if isinstance(current_deny, list):
-            filtered_deny = [item for item in current_deny if item not in _worker_only_denies([], worker_deny)]
-            if filtered_deny:
-                tools["deny"] = filtered_deny
-            else:
-                tools.pop("deny", None)
+        restored_deny_result = _restore_full_tool_mode_deny_list(
+            current_deny=current_deny,
+            restored_deny=[],
+            worker_deny=worker_deny,
+        )
+        if restored_deny_result:
+            tools["deny"] = restored_deny_result
         else:
             tools.pop("deny", None)
 
     if not backup.get("had_tools") and not tools:
         current.pop("tools", None)
     return True
+
+
+def _restore_full_tool_mode_deny_list(*, current_deny: Any, restored_deny: list[Any], worker_deny: Any) -> list[Any]:
+    worker_only_denies = _worker_only_denies(restored_deny, worker_deny)
+    if isinstance(current_deny, list) and isinstance(worker_deny, list) and current_deny == worker_deny:
+        return restored_deny.copy()
+
+    if not isinstance(current_deny, list):
+        return []
+
+    current_worker_only_denies = {item for item in current_deny if isinstance(item, str) and item in worker_only_denies}
+    if current_worker_only_denies == worker_only_denies:
+        return [item for item in current_deny if not (isinstance(item, str) and item in worker_only_denies)]
+
+    return current_deny.copy()
 
 
 def _record_worker_tool_mode_state(config_path: Path, backup_path: Path, current: dict[str, Any]) -> None:

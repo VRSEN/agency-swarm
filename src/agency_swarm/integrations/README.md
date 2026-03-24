@@ -43,7 +43,7 @@ Agency Swarm still needs a stable model string for the Responses model client, s
 Runtime mapping:
 
 - External alias used by Agency Swarm agent config: `openclaw:main`
-- Upstream provider model used by OpenClaw gateway: `OPENCLAW_PROVIDER_MODEL` (default `openai/gpt-5.2`)
+- Upstream provider model used by OpenClaw gateway: `OPENCLAW_PROVIDER_MODEL` (default `openai/gpt-5.4`)
 
 When the proxy receives `model=openclaw:main`, it rewrites that value to the configured provider model before forwarding upstream.
 

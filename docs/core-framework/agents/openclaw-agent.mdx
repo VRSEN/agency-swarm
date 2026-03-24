@@ -23,7 +23,7 @@ coordinator = Agent(
     name="Coordinator",
     description="Routes work to the right specialist.",
     instructions="Delegate OpenClaw-specific tasks to OpenClawWorker.",
-    model="gpt-5.2",
+    model="gpt-5.4",
 )
 
 openclaw_worker = OpenClawAgent(
@@ -143,7 +143,7 @@ Use OpenClaw plugins or MCP when you need to extend OpenClaw itself.
           name="Coordinator",
           description="Routes work to the OpenClaw worker.",
           instructions="Delegate OpenClaw-specific work to OpenClawWorker.",
-          model="gpt-5.2",
+          model="gpt-5.4",
       )
       openclaw_worker = OpenClawAgent(
           name="OpenClawWorker",

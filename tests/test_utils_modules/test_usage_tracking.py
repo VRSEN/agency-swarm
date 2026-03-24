@@ -31,6 +31,7 @@ from agency_swarm.utils.usage_tracking import (
     extract_usage_from_run_result,
     format_usage_for_display,
     get_model_pricing,
+    load_pricing_data,
 )
 
 
@@ -387,6 +388,15 @@ def test_calculate_openai_cost_handles_cached_and_reasoning_tokens() -> None:
     )
     assert cost == pytest.approx(15.0)
     assert calculate_openai_cost("missing", 1, 1, pricing_data=pricing_data) == 0.0
+
+
+def test_bundled_pricing_supports_gpt_5_4_defaults() -> None:
+    pricing_data = load_pricing_data()
+
+    assert get_model_pricing("gpt-5.4", pricing_data) is not None
+    assert get_model_pricing("openai/gpt-5.4", pricing_data) == pricing_data["gpt-5.4"]
+    assert calculate_openai_cost("gpt-5.4", 1000, 1000, pricing_data=pricing_data) > 0.0
+    assert calculate_openai_cost("openai/gpt-5.4", 1000, 1000, pricing_data=pricing_data) > 0.0
 
 
 def test_extract_usage_from_run_result_skips_malformed_subagent_entries() -> None:
