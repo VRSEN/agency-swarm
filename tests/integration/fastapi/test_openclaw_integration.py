@@ -26,6 +26,7 @@ from agency_swarm.integrations.openclaw import (
     build_openclaw_responses_model,
     normalize_openclaw_responses_request,
 )
+from agency_swarm.utils.model_utils import get_usage_tracking_model_name
 
 
 def _build_openclaw_config(tmp_path: Path) -> OpenClawIntegrationConfig:
@@ -810,6 +811,31 @@ def test_build_openclaw_responses_model_uses_openclaw_default_model_env_when_mod
     model = build_openclaw_responses_model()
 
     assert model.model == "openclaw:beta"
+
+
+def test_build_openclaw_responses_model_uses_programmatic_current_app_defaults(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("OPENCLAW_DEFAULT_MODEL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROVIDER_MODEL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_HOST", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_PORT", raising=False)
+    monkeypatch.delenv("PORT", raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULTS", None, raising=False)
+
+    app = FastAPI()
+    config = replace(
+        _build_openclaw_config(tmp_path),
+        default_model="openclaw:custom",
+        provider_model="anthropic/claude-sonnet-4-5",
+    )
+    attach_openclaw_to_fastapi(app, config)
+
+    model = build_openclaw_responses_model(base_url="http://127.0.0.1:8000/openclaw/v1", api_key="app-token")
+
+    assert model.model == "openclaw:custom"
+    assert get_usage_tracking_model_name(model) == "anthropic/claude-sonnet-4-5"
 
 
 def test_build_openclaw_responses_model_ignores_openclaw_alias_defaults_for_direct_gateway_urls(
@@ -1727,6 +1753,37 @@ def test_openclaw_full_tool_mode_preserves_user_changes_across_worker_restart(tm
         "notes": "keep-me",
     }
     assert restored["tools"]["deny"] == ["browser", "shell"]
+
+
+def test_openclaw_full_tool_mode_drops_worker_enabled_flag_when_backup_never_had_it(tmp_path: Path) -> None:
+    config = replace(_build_openclaw_config(tmp_path), tool_mode="worker")
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps(
+            {
+                "tools": {
+                    "agentToAgent": {"mode": "custom"},
+                    "deny": ["browser"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    worker_runtime = OpenClawRuntime(config)
+    worker_runtime.ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+    payload["tools"]["agentToAgent"]["notes"] = "keep-me"
+    config.config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    OpenClawRuntime(replace(config, tool_mode="full")).ensure_layout()
+
+    restored = json.loads(config.config_path.read_text(encoding="utf-8"))
+    assert restored["tools"]["agentToAgent"] == {
+        "mode": "custom",
+        "notes": "keep-me",
+    }
 
 
 def test_openclaw_full_tool_mode_restores_original_tools_after_unrelated_worker_edits(tmp_path: Path) -> None:

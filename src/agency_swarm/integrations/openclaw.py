@@ -898,6 +898,8 @@ def _restore_full_tool_mode_config(current: dict[str, Any], backup_path: Path, c
                         and "enabled" in restored_agent_to_agent
                     ):
                         merged_agent_to_agent["enabled"] = restored_agent_to_agent["enabled"]
+                    elif current_agent_to_agent.get("enabled") == worker_agent_to_agent.get("enabled"):
+                        merged_agent_to_agent.pop("enabled", None)
                     tools["agentToAgent"] = merged_agent_to_agent
             else:
                 tools.pop("agentToAgent", None)
@@ -1141,6 +1143,10 @@ def attach_openclaw_to_fastapi(
     resolved_config = config or OpenClawIntegrationConfig.from_env()
     resolved_verify_token = verify_token or getattr(app.state, "verify_token", None)
     runtime = OpenClawRuntime(resolved_config)
+    openclaw_model.register_current_app_openclaw_defaults(
+        default_model=resolved_config.default_model,
+        provider_model=resolved_config.provider_model,
+    )
 
     app.include_router(
         create_openclaw_proxy_router(resolved_config, verify_token=resolved_verify_token),

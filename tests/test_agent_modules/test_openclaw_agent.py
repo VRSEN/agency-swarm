@@ -100,6 +100,16 @@ def test_build_openclaw_responses_model_keeps_public_alias_for_external_usage_wh
     assert get_usage_tracking_model_name(model) == "openclaw:main"
 
 
+def test_build_openclaw_responses_model_keeps_public_alias_for_remote_worker_usage_when_provider_env_is_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENCLAW_PROVIDER_MODEL", "openai/gpt-5.4")
+
+    model = build_openclaw_responses_model(base_url="https://remote.example/openclaw/v1", api_key="external-token")
+
+    assert get_usage_tracking_model_name(model) == "openclaw:main"
+
+
 def test_openclaw_agent_uses_gateway_token_when_proxy_key_and_app_token_are_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

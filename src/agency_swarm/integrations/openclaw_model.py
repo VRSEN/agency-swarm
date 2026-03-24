@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ipaddress
 import os
+from dataclasses import dataclass
 from typing import Protocol, cast
 
 import httpx
@@ -11,6 +12,16 @@ from openai import AsyncOpenAI
 DEFAULT_OPENCLAW_MODEL = "openclaw:main"
 DEFAULT_OPENCLAW_PROXY_API_PATH = "/openclaw/v1"
 DEFAULT_OPENCLAW_PROVIDER_MODEL = "openai/gpt-5.4"
+
+
+@dataclass(frozen=True)
+class _CurrentAppOpenClawDefaults:
+    proxy_base_url: tuple[str, str, int, str]
+    default_model: str
+    provider_model: str
+
+
+_CURRENT_APP_OPENCLAW_DEFAULTS: _CurrentAppOpenClawDefaults | None = None
 
 
 def build_openclaw_responses_model(
@@ -38,12 +49,14 @@ def build_openclaw_responses_model(
 
 def _resolve_openclaw_usage_model(model_name: str, base_url: str) -> str | None:
     if model_name.startswith("openclaw:"):
-        provider_model = os.getenv("OPENCLAW_PROVIDER_MODEL", "").strip()
-        if provider_model:
-            return provider_model
+        current_app_defaults = _get_current_app_openclaw_defaults(base_url)
+        if current_app_defaults is not None:
+            return current_app_defaults.provider_model
+        if _uses_raw_openclaw_gateway(base_url):
+            return os.getenv("OPENCLAW_PROVIDER_MODEL", "").strip() or DEFAULT_OPENCLAW_PROVIDER_MODEL
         if _uses_current_app_openclaw_proxy(base_url):
-            return DEFAULT_OPENCLAW_PROVIDER_MODEL
-        return None
+            return os.getenv("OPENCLAW_PROVIDER_MODEL", "").strip() or DEFAULT_OPENCLAW_PROVIDER_MODEL
+        return model_name
     return model_name
 
 
@@ -53,6 +66,9 @@ def _resolve_openclaw_default_model(base_url: str) -> str:
         if env_default_model and not env_default_model.startswith("openclaw:"):
             return env_default_model
         return os.getenv("OPENCLAW_PROVIDER_MODEL", "").strip() or DEFAULT_OPENCLAW_PROVIDER_MODEL
+    current_app_defaults = _get_current_app_openclaw_defaults(base_url)
+    if current_app_defaults is not None:
+        return current_app_defaults.default_model
     if env_default_model:
         return env_default_model
     return DEFAULT_OPENCLAW_MODEL
@@ -75,6 +91,15 @@ def _resolve_openclaw_responses_api_key(base_url: str, api_key: str | None) -> s
 def _uses_current_app_openclaw_proxy(base_url: str) -> bool:
     return _normalize_openclaw_proxy_url(base_url) == _normalize_openclaw_proxy_url(
         _resolve_current_openclaw_proxy_base_url()
+    )
+
+
+def register_current_app_openclaw_defaults(default_model: str, provider_model: str) -> None:
+    global _CURRENT_APP_OPENCLAW_DEFAULTS
+    _CURRENT_APP_OPENCLAW_DEFAULTS = _CurrentAppOpenClawDefaults(
+        proxy_base_url=_normalize_openclaw_proxy_url(_resolve_current_openclaw_proxy_base_url()),
+        default_model=default_model.strip() or DEFAULT_OPENCLAW_MODEL,
+        provider_model=provider_model.strip() or DEFAULT_OPENCLAW_PROVIDER_MODEL,
     )
 
 
@@ -112,6 +137,14 @@ def _normalize_openclaw_proxy_host(hostname: str) -> str:
         return "loopback" if ipaddress.ip_address(hostname).is_loopback else lowered
     except ValueError:
         return lowered
+
+
+def _get_current_app_openclaw_defaults(base_url: str) -> _CurrentAppOpenClawDefaults | None:
+    if _CURRENT_APP_OPENCLAW_DEFAULTS is None:
+        return None
+    if _CURRENT_APP_OPENCLAW_DEFAULTS.proxy_base_url != _normalize_openclaw_proxy_url(base_url):
+        return None
+    return _CURRENT_APP_OPENCLAW_DEFAULTS
 
 
 class _ResponsesModelWithUsageName(Protocol):
