@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from typing import Protocol, cast
 
 import httpx
 from agents import OpenAIResponsesModel
@@ -8,6 +9,7 @@ from openai import AsyncOpenAI
 
 DEFAULT_OPENCLAW_MODEL = "openclaw:main"
 DEFAULT_OPENCLAW_PROXY_API_PATH = "/openclaw/v1"
+DEFAULT_OPENCLAW_PROVIDER_MODEL = "openai/gpt-5.4"
 
 
 def build_openclaw_responses_model(
@@ -20,6 +22,7 @@ def build_openclaw_responses_model(
     else:
         env_default_model = os.getenv("OPENCLAW_DEFAULT_MODEL", "").strip()
         resolved_model = env_default_model or DEFAULT_OPENCLAW_MODEL
+    resolved_usage_model = _resolve_openclaw_usage_model(resolved_model)
 
     resolved_base_url = (
         base_url or os.getenv("OPENCLAW_PROXY_BASE_URL") or f"http://127.0.0.1:8000{DEFAULT_OPENCLAW_PROXY_API_PATH}"
@@ -27,7 +30,16 @@ def build_openclaw_responses_model(
     resolved_api_key = _resolve_openclaw_responses_api_key(resolved_base_url, api_key)
 
     client = AsyncOpenAI(base_url=resolved_base_url, api_key=resolved_api_key)
-    return OpenAIResponsesModel(model=resolved_model, openai_client=client)
+    responses_model = OpenAIResponsesModel(model=resolved_model, openai_client=client)
+    cast(_ResponsesModelWithUsageName, responses_model)._agency_swarm_usage_model_name = resolved_usage_model
+    return responses_model
+
+
+def _resolve_openclaw_usage_model(model_name: str) -> str:
+    if model_name.startswith("openclaw:"):
+        provider_model = os.getenv("OPENCLAW_PROVIDER_MODEL", "").strip()
+        return provider_model or DEFAULT_OPENCLAW_PROVIDER_MODEL
+    return model_name
 
 
 def _resolve_openclaw_responses_api_key(base_url: str, api_key: str | None) -> str:
@@ -50,3 +62,7 @@ def _uses_local_openclaw_proxy_alias(base_url: str) -> bool:
         return False
     normalized_path = parsed.path.rstrip("/")
     return normalized_path.endswith(DEFAULT_OPENCLAW_PROXY_API_PATH) or "/openclaw/" in normalized_path
+
+
+class _ResponsesModelWithUsageName(Protocol):
+    _agency_swarm_usage_model_name: str

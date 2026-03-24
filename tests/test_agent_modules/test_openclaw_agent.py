@@ -7,12 +7,14 @@ from agents.models.openai_responses import OpenAIResponsesModel
 
 from agency_swarm import Agency, Agent, OpenClawAgent
 from agency_swarm.tools.send_message import Handoff
+from agency_swarm.utils.model_utils import get_model_name, get_usage_tracking_model_name
 
 
 def test_openclaw_agent_auto_builds_responses_model(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPENCLAW_PROXY_BASE_URL", raising=False)
     monkeypatch.delenv("OPENCLAW_PROXY_PORT", raising=False)
     monkeypatch.delenv("PORT", raising=False)
+    monkeypatch.setenv("OPENCLAW_PROVIDER_MODEL", "openai/gpt-5.4")
 
     agent = OpenClawAgent(
         name="OpenClawWorker",
@@ -22,6 +24,8 @@ def test_openclaw_agent_auto_builds_responses_model(monkeypatch: pytest.MonkeyPa
 
     assert isinstance(agent.model, OpenAIResponsesModel)
     assert agent.model.model == "openclaw:main"
+    assert get_model_name(agent.model) == "openclaw:main"
+    assert get_usage_tracking_model_name(agent.model) == "openai/gpt-5.4"
     assert str(agent.model._client.base_url) == "http://127.0.0.1:8000/openclaw/v1/"
     assert agent.supports_outbound_communication is False
 

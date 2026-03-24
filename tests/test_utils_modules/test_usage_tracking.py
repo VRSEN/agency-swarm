@@ -265,6 +265,86 @@ async def test_calculate_usage_with_cost_uses_model_name_from_model_instance() -
     assert with_cost.total_cost == pytest.approx(3.0)
 
 
+@pytest.mark.asyncio
+async def test_calculate_usage_with_cost_prefers_usage_tracking_model_name() -> None:
+    """Regression: proxy aliases should keep pricing tied to the real upstream model."""
+
+    class FakeOpenClawModel(Model):
+        model = "openclaw:main"
+        _agency_swarm_usage_model_name = "openai/gpt-5.4"
+
+        async def get_response(
+            self,
+            system_instructions: str | None,
+            input: str | list[TResponseInputItem],
+            model_settings: ModelSettings,
+            tools: list[Tool],
+            output_schema: AgentOutputSchemaBase | None,
+            handoffs: list[Handoff],
+            tracing: ModelTracing,
+            *,
+            previous_response_id: str | None,
+            conversation_id: str | None,
+            prompt: ResponsePromptParam | None,
+        ) -> ModelResponse:
+            usage = Usage(
+                requests=1,
+                input_tokens=2,
+                output_tokens=1,
+                total_tokens=3,
+                input_tokens_details=InputTokensDetails(cached_tokens=0),
+                output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
+            )
+            msg = ResponseOutputMessage(
+                id="msg_2",
+                content=[ResponseOutputText(text="ok", type="output_text", annotations=[])],
+                role="assistant",
+                status="completed",
+                type="message",
+            )
+            return ModelResponse(output=[msg], usage=usage, response_id="resp_2")
+
+        def stream_response(
+            self,
+            system_instructions: str | None,
+            input: str | list[TResponseInputItem],
+            model_settings: ModelSettings,
+            tools: list[Tool],
+            output_schema: AgentOutputSchemaBase | None,
+            handoffs: list[Handoff],
+            tracing: ModelTracing,
+            *,
+            previous_response_id: str | None,
+            conversation_id: str | None,
+            prompt: ResponsePromptParam | None,
+        ) -> AsyncIterator[TResponseStreamEvent]:
+            async def _stream() -> AsyncIterator[TResponseStreamEvent]:
+                if False:
+                    yield typing.cast(TResponseStreamEvent, {})
+                return
+
+            return _stream()
+
+    agent = Agent(name="OpenClawProxyAgent", instructions="Respond with 'ok'.", model=FakeOpenClawModel())
+    result = await agent.get_response("hi")
+
+    assert typing.cast(_HasMainAgentModel, result)._main_agent_model == "openai/gpt-5.4"
+
+    usage_stats = extract_usage_from_run_result(result)
+    assert usage_stats is not None
+
+    pricing_data = {
+        "gpt-5.4": {
+            "input_cost_per_token": 1.0,
+            "cache_read_input_token_cost": 0.0,
+            "output_cost_per_token": 2.0,
+            "output_cost_per_reasoning_token": 0.0,
+        }
+    }
+    with_cost = calculate_usage_with_cost(usage_stats, pricing_data=pricing_data, run_result=result)
+    assert with_cost.total_cost == pytest.approx(4.0)
+
+
 def test_load_pricing_data_is_single_load_under_concurrency(tmp_path, monkeypatch) -> None:
     """Regression: cache lock must prevent concurrent duplicate JSON parses."""
     pricing_file = tmp_path / "pricing.json"

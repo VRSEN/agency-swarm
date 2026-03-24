@@ -30,6 +30,26 @@ def get_model_name(model: str | Model | None) -> str | None:
     return None
 
 
+def get_usage_tracking_model_name(model: str | Model | None) -> str | None:
+    """Extract the model name that should be used for usage pricing.
+
+    Some proxy-backed models expose a stable public alias (for example
+    ``openclaw:main``) while real token pricing depends on the upstream provider
+    model. Those adapters can attach ``_agency_swarm_usage_model_name`` to the
+    model object so cost calculation stays accurate without changing the public
+    alias.
+    """
+    if isinstance(model, Model):
+        try:
+            usage_model_name = cast("_ModelWithUsageName", model)._agency_swarm_usage_model_name
+        except AttributeError:
+            usage_model_name = None
+        if isinstance(usage_model_name, str) and usage_model_name.strip():
+            return usage_model_name.strip()
+
+    return get_model_name(model)
+
+
 def is_reasoning_model(model: str | Model | None) -> bool:
     """Determine if a model supports reasoning capabilities.
 
@@ -127,6 +147,10 @@ def get_agent_capabilities(agent: "Agent") -> list[str]:
 
 class _ModelWithName(Protocol):
     model: str
+
+
+class _ModelWithUsageName(Protocol):
+    _agency_swarm_usage_model_name: str
 
 
 def _runtime_types_for_check(cls: Any) -> tuple[type[Any], ...]:
