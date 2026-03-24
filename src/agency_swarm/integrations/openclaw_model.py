@@ -101,8 +101,10 @@ def _resolve_openclaw_responses_api_key(base_url: str, api_key: str | None) -> s
 def _uses_current_app_openclaw_proxy(base_url: str) -> bool:
     if _resolve_current_app_openclaw_defaults(base_url) is not None:
         return True
-    return _normalize_openclaw_proxy_url(base_url) == _normalize_openclaw_proxy_url(
-        _resolve_current_openclaw_proxy_base_url()
+    current_proxy_base_url = _normalize_openclaw_proxy_url(_resolve_current_openclaw_proxy_base_url())
+    return (
+        _is_loopback_openclaw_proxy_url(current_proxy_base_url)
+        and _normalize_openclaw_proxy_url(base_url) == current_proxy_base_url
     )
 
 
@@ -165,6 +167,15 @@ def _normalize_openclaw_proxy_host(hostname: str) -> str:
 
 def _get_current_app_openclaw_defaults(base_url: str) -> _CurrentAppOpenClawDefaults | None:
     return _CURRENT_APP_OPENCLAW_DEFAULTS.get(_normalize_openclaw_proxy_url(base_url))
+
+
+def is_loopback_openclaw_proxy_url(base_url: str) -> bool:
+    return _is_loopback_openclaw_proxy_url(_normalize_openclaw_proxy_url(base_url))
+
+
+def _is_loopback_openclaw_proxy_url(base_url: tuple[str, str, int, str]) -> bool:
+    scheme, host, _port, path = base_url
+    return scheme in {"http", "https"} and host == "loopback" and path == DEFAULT_OPENCLAW_PROXY_API_PATH
 
 
 def _resolve_current_app_openclaw_defaults(base_url: str) -> _CurrentAppOpenClawDefaults | None:

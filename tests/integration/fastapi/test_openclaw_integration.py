@@ -941,6 +941,33 @@ def test_attach_openclaw_to_fastapi_keeps_distinct_current_app_defaults_separate
     assert second_model.model == "openclaw:second"
 
 
+def test_attach_openclaw_to_fastapi_does_not_treat_external_proxy_urls_as_current_app(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("OPENCLAW_DEFAULT_MODEL", raising=False)
+    monkeypatch.setenv("OPENCLAW_PROVIDER_MODEL", "openai/gpt-5.4")
+    monkeypatch.setenv("OPENCLAW_PROXY_BASE_URL", "https://external.example/openclaw/v1")
+    monkeypatch.setenv("APP_TOKEN", "app-token")
+    monkeypatch.setenv("OPENCLAW_PROXY_API_KEY", "proxy-token")
+    monkeypatch.setenv("OPENCLAW_GATEWAY_TOKEN", "gateway-token")
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
+
+    app = FastAPI()
+    config = replace(
+        _build_openclaw_config(tmp_path),
+        port=9000,
+        default_model="openclaw:custom",
+        provider_model="openai/gpt-4o",
+    )
+    attach_openclaw_to_fastapi(app, config)
+
+    model = build_openclaw_responses_model(base_url="https://external.example/openclaw/v1")
+
+    assert model.model == "openclaw:main"
+    assert get_usage_tracking_model_name(model) == "openclaw:main"
+    assert model._client.api_key == "proxy-token"
+
+
 def test_build_openclaw_responses_model_ignores_openclaw_alias_defaults_for_direct_gateway_urls(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
