@@ -812,6 +812,17 @@ def test_build_openclaw_responses_model_uses_openclaw_default_model_env_when_mod
     assert model.model == "openclaw:beta"
 
 
+def test_build_openclaw_responses_model_ignores_openclaw_alias_defaults_for_direct_gateway_urls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENCLAW_DEFAULT_MODEL", "openclaw:main")
+    monkeypatch.setenv("OPENCLAW_PROVIDER_MODEL", "anthropic/claude-sonnet-4-5")
+
+    model = build_openclaw_responses_model(base_url="http://127.0.0.1:18789/v1", api_key="external-token")
+
+    assert model.model == "anthropic/claude-sonnet-4-5"
+
+
 def test_build_openclaw_responses_model_defaults_external_v1_to_provider_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

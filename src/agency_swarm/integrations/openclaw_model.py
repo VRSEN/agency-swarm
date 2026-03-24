@@ -49,10 +49,12 @@ def _resolve_openclaw_usage_model(model_name: str, base_url: str) -> str | None:
 
 def _resolve_openclaw_default_model(base_url: str) -> str:
     env_default_model = os.getenv("OPENCLAW_DEFAULT_MODEL", "").strip()
+    if _uses_raw_openclaw_gateway(base_url):
+        if env_default_model and not env_default_model.startswith("openclaw:"):
+            return env_default_model
+        return os.getenv("OPENCLAW_PROVIDER_MODEL", "").strip() or DEFAULT_OPENCLAW_PROVIDER_MODEL
     if env_default_model:
         return env_default_model
-    if _uses_raw_openclaw_gateway(base_url):
-        return os.getenv("OPENCLAW_PROVIDER_MODEL", "").strip() or DEFAULT_OPENCLAW_PROVIDER_MODEL
     return DEFAULT_OPENCLAW_MODEL
 
 
