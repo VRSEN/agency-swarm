@@ -812,10 +812,14 @@ def test_build_openclaw_responses_model_uses_openclaw_default_model_env_when_mod
     assert model.model == "openclaw:beta"
 
 
-def test_build_openclaw_responses_model_defaults_external_v1_to_public_alias() -> None:
+def test_build_openclaw_responses_model_defaults_external_v1_to_provider_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENCLAW_PROVIDER_MODEL", "anthropic/claude-sonnet-4-5")
+
     model = build_openclaw_responses_model(base_url="http://127.0.0.1:18789/v1", api_key="external-token")
 
-    assert model.model == "openclaw:main"
+    assert model.model == "anthropic/claude-sonnet-4-5"
 
 
 def test_openclaw_start_closes_log_handle_when_popen_fails(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -1450,6 +1454,34 @@ def test_openclaw_full_tool_mode_keeps_backup_when_tool_mode_backup_is_unreadabl
     OpenClawRuntime(replace(config, tool_mode="full")).ensure_layout()
 
     assert backup_path.exists()
+
+
+def test_openclaw_full_tool_mode_preserves_deleted_agent_to_agent_block(tmp_path: Path) -> None:
+    config = replace(_build_openclaw_config(tmp_path), tool_mode="worker")
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps(
+            {
+                "tools": {
+                    "agentToAgent": {"enabled": True, "mode": "custom"},
+                    "deny": ["browser"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+    payload["tools"].pop("agentToAgent")
+    config.config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    OpenClawRuntime(replace(config, tool_mode="full")).ensure_layout()
+
+    restored = json.loads(config.config_path.read_text(encoding="utf-8"))
+    assert "agentToAgent" not in restored["tools"]
+    assert restored["tools"]["deny"] == ["browser"]
 
 
 def test_openclaw_full_tool_mode_preserves_user_changes_made_while_worker_mode_is_active(tmp_path: Path) -> None:

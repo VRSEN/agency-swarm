@@ -98,7 +98,9 @@ Use this when you are talking to a raw OpenClaw gateway that serves `/v1` direct
 If the remote server is another Agency Swarm app using this integration, use its `/openclaw/v1` path instead of `/v1`.
 When that remote server is a delegated worker, start it with `OPENCLAW_TOOL_MODE=worker`.
 If it is plain OpenClaw outside Agency Swarm, disable its competing delegation paths in that runtime instead of copying this env var blindly.
-If that remote server expects a different public model alias, pass it with `model="openclaw:custom"` so this agent matches the target runtime.
+Raw `/v1` gateways default to the upstream provider model, not `openclaw:main`.
+If that remote server expects a different model id, pass it with `model="openclaw:custom"` so this agent matches the target runtime.
+If you point to another Agency Swarm worker at `/openclaw/v1`, pass that worker's `api_key=` explicitly unless you are using the same in-process proxy.
   </Tab>
 </Tabs>
 

@@ -33,9 +33,12 @@ openclaw_worker = OpenClawAgent(
 
 `OpenClawAgent` configures the model automatically by default and is receive-only
 in `communication_flows`. It can receive delegated work, but it cannot be used
-as the sender in Agency Swarm handoffs or `send_message` routes. When a remote
-OpenClaw server expects a different public alias, pass that string with the
-agent's `model=` argument.
+as the sender in Agency Swarm handoffs or `send_message` routes. Raw `/v1`
+gateways default to the upstream provider model, while `/openclaw/v1` keeps the
+public alias path. When a remote server expects a different model id, pass that
+string with the agent's `model=` argument. When pointing at another Agency
+Swarm worker, pass its `api_key=` explicitly unless you are using the same
+in-process proxy.
 
 ### Why `openclaw:main` exists
 

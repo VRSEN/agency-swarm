@@ -877,32 +877,37 @@ def _restore_full_tool_mode_config(current: dict[str, Any], backup_path: Path, c
     restored_agent_to_agent = backup.get("agent_to_agent")
     worker_agent_to_agent = backup.get("worker_agent_to_agent")
     if isinstance(restored_agent_to_agent, dict):
-        if isinstance(current_agent_to_agent, dict) and isinstance(worker_agent_to_agent, dict):
-            if current_agent_to_agent == worker_agent_to_agent:
-                tools["agentToAgent"] = restored_agent_to_agent.copy()
+        if isinstance(worker_agent_to_agent, dict):
+            if isinstance(current_agent_to_agent, dict):
+                if current_agent_to_agent == worker_agent_to_agent:
+                    tools["agentToAgent"] = restored_agent_to_agent.copy()
+                else:
+                    merged_agent_to_agent = restored_agent_to_agent.copy()
+                    merged_agent_to_agent.update(current_agent_to_agent)
+                    removed_agent_to_agent_keys = set(worker_agent_to_agent) - set(current_agent_to_agent)
+                    for removed_key in removed_agent_to_agent_keys:
+                        merged_agent_to_agent.pop(removed_key, None)
+                    # If enabled still matches the worker-forced override, restore the backed-up
+                    # full-mode value. A bare false here is ambiguous: it can mean "untouched worker
+                    # override" or "user explicitly wants false", and the config file does not record
+                    # which happened.
+                    # We intentionally prefer the original full-mode setting unless the user changed
+                    # enabled away from the worker snapshot.
+                    if (
+                        current_agent_to_agent.get("enabled") == worker_agent_to_agent.get("enabled")
+                        and "enabled" in restored_agent_to_agent
+                    ):
+                        merged_agent_to_agent["enabled"] = restored_agent_to_agent["enabled"]
+                    tools["agentToAgent"] = merged_agent_to_agent
             else:
-                merged_agent_to_agent = restored_agent_to_agent.copy()
-                merged_agent_to_agent.update(current_agent_to_agent)
-                removed_agent_to_agent_keys = set(worker_agent_to_agent) - set(current_agent_to_agent)
-                for removed_key in removed_agent_to_agent_keys:
-                    merged_agent_to_agent.pop(removed_key, None)
-                # If enabled still matches the worker-forced override, restore the backed-up
-                # full-mode value. A bare false here is ambiguous: it can mean "untouched worker
-                # override" or "user explicitly wants false", and the config file does not record
-                # which happened.
-                # We intentionally prefer the original full-mode setting unless the user changed
-                # enabled away from the worker snapshot.
-                if (
-                    current_agent_to_agent.get("enabled") == worker_agent_to_agent.get("enabled")
-                    and "enabled" in restored_agent_to_agent
-                ):
-                    merged_agent_to_agent["enabled"] = restored_agent_to_agent["enabled"]
-                tools["agentToAgent"] = merged_agent_to_agent
+                tools.pop("agentToAgent", None)
         else:
             merged_agent_to_agent = restored_agent_to_agent.copy()
             if isinstance(current_agent_to_agent, dict):
                 merged_agent_to_agent.update(current_agent_to_agent)
-            tools["agentToAgent"] = merged_agent_to_agent
+                tools["agentToAgent"] = merged_agent_to_agent
+            else:
+                tools.pop("agentToAgent", None)
     else:
         if isinstance(current_agent_to_agent, dict):
             current_agent_to_agent.pop("enabled", None)

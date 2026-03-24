@@ -17,15 +17,14 @@ def build_openclaw_responses_model(
     base_url: str | None = None,
     api_key: str | None = None,
 ) -> OpenAIResponsesModel:
-    if isinstance(model, str) and model.strip():
-        resolved_model = model.strip()
-    else:
-        env_default_model = os.getenv("OPENCLAW_DEFAULT_MODEL", "").strip()
-        resolved_model = env_default_model or DEFAULT_OPENCLAW_MODEL
-
     resolved_base_url = (
         base_url or os.getenv("OPENCLAW_PROXY_BASE_URL") or f"http://127.0.0.1:8000{DEFAULT_OPENCLAW_PROXY_API_PATH}"
     ).rstrip("/")
+
+    if isinstance(model, str) and model.strip():
+        resolved_model = model.strip()
+    else:
+        resolved_model = _resolve_openclaw_default_model(resolved_base_url)
     resolved_usage_model = _resolve_openclaw_usage_model(resolved_model, resolved_base_url)
     resolved_api_key = _resolve_openclaw_responses_api_key(resolved_base_url, api_key)
 
@@ -41,10 +40,19 @@ def _resolve_openclaw_usage_model(model_name: str, base_url: str) -> str | None:
         provider_model = os.getenv("OPENCLAW_PROVIDER_MODEL", "").strip()
         if provider_model:
             return provider_model
-        if _uses_local_openclaw_proxy_alias(base_url):
+        if _uses_current_app_openclaw_proxy(base_url):
             return DEFAULT_OPENCLAW_PROVIDER_MODEL
         return None
     return model_name
+
+
+def _resolve_openclaw_default_model(base_url: str) -> str:
+    env_default_model = os.getenv("OPENCLAW_DEFAULT_MODEL", "").strip()
+    if env_default_model:
+        return env_default_model
+    if _uses_raw_openclaw_gateway(base_url):
+        return os.getenv("OPENCLAW_PROVIDER_MODEL", "").strip() or DEFAULT_OPENCLAW_PROVIDER_MODEL
+    return DEFAULT_OPENCLAW_MODEL
 
 
 def _resolve_openclaw_responses_api_key(base_url: str, api_key: str | None) -> str:
@@ -55,18 +63,32 @@ def _resolve_openclaw_responses_api_key(base_url: str, api_key: str | None) -> s
     if proxy_api_key:
         return proxy_api_key
 
-    if _uses_local_openclaw_proxy_alias(base_url):
+    if _uses_current_app_openclaw_proxy(base_url):
         return os.getenv("APP_TOKEN") or os.getenv("OPENCLAW_GATEWAY_TOKEN") or "sk-openclaw-proxy"
 
-    return os.getenv("OPENCLAW_GATEWAY_TOKEN") or os.getenv("APP_TOKEN") or "sk-openclaw-proxy"
+    return os.getenv("OPENCLAW_GATEWAY_TOKEN") or "sk-openclaw-proxy"
 
 
-def _uses_local_openclaw_proxy_alias(base_url: str) -> bool:
+def _uses_current_app_openclaw_proxy(base_url: str) -> bool:
+    return base_url.rstrip("/") == _resolve_current_openclaw_proxy_base_url()
+
+
+def _resolve_current_openclaw_proxy_base_url() -> str:
+    env_base_url = os.getenv("OPENCLAW_PROXY_BASE_URL", "").strip()
+    if env_base_url:
+        return env_base_url.rstrip("/")
+
+    host = os.getenv("OPENCLAW_PROXY_HOST") or "127.0.0.1"
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    port = os.getenv("OPENCLAW_PROXY_PORT") or os.getenv("PORT") or "8000"
+    return f"http://{host}:{port}{DEFAULT_OPENCLAW_PROXY_API_PATH}".rstrip("/")
+
+
+def _uses_raw_openclaw_gateway(base_url: str) -> bool:
     parsed = httpx.URL(base_url)
-    if parsed.host not in {"127.0.0.1", "localhost", "::1", "0.0.0.0"}:
-        return False
     normalized_path = parsed.path.rstrip("/")
-    return normalized_path.endswith(DEFAULT_OPENCLAW_PROXY_API_PATH) or "/openclaw/" in normalized_path
+    return normalized_path == "/v1"
 
 
 class _ResponsesModelWithUsageName(Protocol):
