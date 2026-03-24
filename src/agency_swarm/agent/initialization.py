@@ -19,6 +19,7 @@ from agents.models.default_models import get_default_model_settings as get_sdk_d
 from agency_swarm.agent.attachment_manager import AttachmentManager
 from agency_swarm.agent.file_manager import AgentFileManager
 from agency_swarm.tools import BaseTool, ToolFactory
+from agency_swarm.utils.model_utils import get_default_settings_model_name
 
 if TYPE_CHECKING:
     from agency_swarm.agent.core import Agent
@@ -128,7 +129,7 @@ def apply_framework_defaults(kwargs: dict[str, Any]) -> None:
         kwargs: The initialization keyword arguments (modified in place)
     """
     model_arg = kwargs.get("model")
-    model_name = model_arg if isinstance(model_arg, str) else None
+    model_name = get_default_settings_model_name(model_arg)
     base_defaults = _get_framework_default_model_settings(model_name)
 
     existing_settings = kwargs.get("model_settings")

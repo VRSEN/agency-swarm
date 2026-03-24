@@ -2,6 +2,8 @@ from unittest.mock import MagicMock
 
 import pytest
 from agents import FunctionTool, ModelSettings, StopAtTools, WebSearchTool
+from agents.models.openai_responses import OpenAIResponsesModel
+from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 
 from agency_swarm import Agent
@@ -298,6 +300,25 @@ def test_agent_initialization_model_settings_defaults_and_overrides():
     gpt5_agent = Agent(name="Gpt5", instructions="Test", model="gpt-5-mini")
     assert gpt5_agent.model_settings.reasoning is not None
     assert gpt5_agent.model_settings.reasoning.effort == "low"
+
+    provider_prefixed_gpt5_agent = Agent(name="ProviderPrefixedGpt5", instructions="Test", model="openai/gpt-5.4")
+    assert provider_prefixed_gpt5_agent.model_settings.reasoning is not None
+    assert provider_prefixed_gpt5_agent.model_settings.reasoning.effort == "low"
+    assert provider_prefixed_gpt5_agent.model_settings.verbosity == "low"
+
+
+def test_agent_initialization_model_objects_use_usage_tracking_defaults() -> None:
+    model = OpenAIResponsesModel(
+        model="openclaw:main",
+        openai_client=AsyncOpenAI(base_url="http://127.0.0.1:8000/openclaw/v1", api_key="test-key"),
+    )
+    model._agency_swarm_usage_model_name = "openai/gpt-5.4"
+
+    agent = Agent(name="UsageTrackedModel", instructions="Test", model=model)
+
+    assert agent.model_settings.reasoning is not None
+    assert agent.model_settings.reasoning.effort == "low"
+    assert agent.model_settings.verbosity == "low"
 
 
 def test_agent_initialization_adapts_basetool_type():

@@ -33,7 +33,7 @@ from openai.types.responses.response_reasoning_item import ResponseReasoningItem
 
 from agency_swarm.messages import MessageFilter
 from agency_swarm.utils.files import get_chats_dir
-from agency_swarm.utils.model_utils import get_model_name
+from agency_swarm.utils.model_utils import get_model_name, get_usage_tracking_model_name
 
 if TYPE_CHECKING:
     from agency_swarm.agent.context_types import AgentRuntimeState
@@ -80,6 +80,7 @@ def compute_starter_cache_fingerprint(
 ) -> str:
     instructions = instructions_override if use_instructions_override else agent.instructions
     model_name = get_model_name(agent.model)
+    usage_model_name = get_usage_tracking_model_name(agent.model)
     tools = [_tool_signature(tool) for tool in agent.tools]
     runtime_tools = _runtime_tool_signatures(runtime_state)
     if runtime_tools:
@@ -100,6 +101,7 @@ def compute_starter_cache_fingerprint(
         "shared_instructions": shared_instructions_text,
         "prompt": _serialize_value(agent.prompt),
         "model": model_name,
+        "usage_model": usage_model_name,
         "model_settings": _serialize_value(agent.model_settings),
         "input_guardrails": _serialize_value(agent.input_guardrails),
         "output_guardrails": _serialize_value(agent.output_guardrails),

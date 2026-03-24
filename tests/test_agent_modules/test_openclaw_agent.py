@@ -29,6 +29,9 @@ def test_openclaw_agent_auto_builds_responses_model(monkeypatch: pytest.MonkeyPa
     assert get_usage_tracking_model_name(agent.model) == "openai/gpt-5.4"
     assert str(agent.model._client.base_url) == "http://127.0.0.1:8000/openclaw/v1/"
     assert agent.supports_outbound_communication is False
+    assert agent.model_settings.reasoning is not None
+    assert agent.model_settings.reasoning.effort == "low"
+    assert agent.model_settings.verbosity == "low"
 
 
 def test_openclaw_agent_supports_custom_host_port_and_path() -> None:

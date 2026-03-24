@@ -50,6 +50,23 @@ def get_usage_tracking_model_name(model: str | Model | None) -> str | None:
     return get_model_name(model)
 
 
+def get_default_settings_model_name(model: str | Model | None) -> str | None:
+    """Extract the SDK default-settings lookup key for a model.
+
+    Provider-prefixed OpenAI-style model strings such as ``openai/gpt-5.4``
+    should inherit the same SDK defaults as their bare model ids.
+    """
+    model_name = get_usage_tracking_model_name(model)
+    if not model_name:
+        return None
+    if "/" not in model_name:
+        return model_name
+    provider, _, bare_model_name = model_name.rpartition("/")
+    if not provider or not bare_model_name:
+        return model_name
+    return bare_model_name
+
+
 def is_reasoning_model(model: str | Model | None) -> bool:
     """Determine if a model supports reasoning capabilities.
 
