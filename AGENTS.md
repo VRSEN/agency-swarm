@@ -33,6 +33,7 @@ Begin each task after reviewing this readiness checklist:
 
 ## Continuous Work Rule
 Before responding to the user and when you consider your task done, check whether the outstanding-task or todo list is empty. If any productive next step remains, keep working and do not hand off a partial state. If you hit a real blocker, ask the user one clear, specific question about what is needed.
+- Exercise normal collaborator common sense: keep local state tidy, ship correct approved work quickly, and do not let local drift age.
 - Do not leave verified local changes sitting uncommitted or unpushed when user approval to ship is already clear; ship them promptly or remove them.
 - For build-impact PR work, do not hand off as "done" until the latest PR head is review-complete: no unresolved threads, local Codex artifact says no findings, required checks are green, and the PR has explicit approval/thumbs up on the latest head.
 - Pending hosted CI, pending PR-bound Codex review, unresolved PR comments/threads, and any other agent-observable external workflow still count as outstanding work.
