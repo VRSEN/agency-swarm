@@ -24,7 +24,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from . import openclaw_model
-from .openclaw_model import DEFAULT_OPENCLAW_MODEL
+from .openclaw_model import DEFAULT_OPENCLAW_MODEL, DEFAULT_OPENCLAW_PROXY_API_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -1146,6 +1146,7 @@ def attach_openclaw_to_fastapi(
     openclaw_model.register_current_app_openclaw_defaults(
         default_model=resolved_config.default_model,
         provider_model=resolved_config.provider_model,
+        base_url=f"{resolved_config.upstream_base_url}{DEFAULT_OPENCLAW_PROXY_API_PATH}",
     )
 
     app.include_router(

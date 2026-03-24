@@ -832,10 +832,36 @@ def test_build_openclaw_responses_model_uses_programmatic_current_app_defaults(
     )
     attach_openclaw_to_fastapi(app, config)
 
-    model = build_openclaw_responses_model(base_url="http://127.0.0.1:8000/openclaw/v1", api_key="app-token")
+    model = build_openclaw_responses_model(base_url=f"{config.upstream_base_url}/openclaw/v1", api_key="app-token")
 
     assert model.model == "openclaw:custom"
     assert get_usage_tracking_model_name(model) == "anthropic/claude-sonnet-4-5"
+
+
+def test_build_openclaw_responses_model_uses_programmatic_current_app_defaults_for_custom_proxy_url(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("OPENCLAW_DEFAULT_MODEL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROVIDER_MODEL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_HOST", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_PORT", raising=False)
+    monkeypatch.delenv("PORT", raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
+
+    app = FastAPI()
+    config = replace(
+        _build_openclaw_config(tmp_path),
+        port=9000,
+        default_model="openclaw:custom",
+        provider_model="openai/gpt-4o",
+    )
+    attach_openclaw_to_fastapi(app, config)
+
+    model = build_openclaw_responses_model(base_url="http://127.0.0.1:9000/openclaw/v1", api_key="app-token")
+
+    assert model.model == "openclaw:custom"
+    assert get_usage_tracking_model_name(model) == "openai/gpt-4o"
 
 
 def test_attach_openclaw_to_fastapi_rejects_conflicting_current_app_defaults(
@@ -871,7 +897,6 @@ def test_attach_openclaw_to_fastapi_keeps_distinct_current_app_defaults_separate
     monkeypatch.delenv("OPENCLAW_PROVIDER_MODEL", raising=False)
     monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
 
-    monkeypatch.setenv("OPENCLAW_PROXY_BASE_URL", "http://127.0.0.1:8000/openclaw/v1")
     first_config = replace(
         _build_openclaw_config(tmp_path / "first"),
         default_model="openclaw:first",
@@ -879,16 +904,20 @@ def test_attach_openclaw_to_fastapi_keeps_distinct_current_app_defaults_separate
     )
     attach_openclaw_to_fastapi(FastAPI(), first_config)
 
-    monkeypatch.setenv("OPENCLAW_PROXY_BASE_URL", "http://127.0.0.1:9000/openclaw/v1")
     second_config = replace(
         _build_openclaw_config(tmp_path / "second"),
+        port=9000,
         default_model="openclaw:second",
         provider_model="openai/gpt-5.4",
     )
     attach_openclaw_to_fastapi(FastAPI(), second_config)
 
-    first_model = build_openclaw_responses_model(base_url="http://127.0.0.1:8000/openclaw/v1", api_key="first-token")
-    second_model = build_openclaw_responses_model(base_url="http://127.0.0.1:9000/openclaw/v1", api_key="second-token")
+    first_model = build_openclaw_responses_model(
+        base_url=f"{first_config.upstream_base_url}/openclaw/v1", api_key="first-token"
+    )
+    second_model = build_openclaw_responses_model(
+        base_url=f"{second_config.upstream_base_url}/openclaw/v1", api_key="second-token"
+    )
 
     assert first_model.model == "openclaw:first"
     assert second_model.model == "openclaw:second"

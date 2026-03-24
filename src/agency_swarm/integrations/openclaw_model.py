@@ -98,9 +98,14 @@ def _uses_current_app_openclaw_proxy(base_url: str) -> bool:
     )
 
 
-def register_current_app_openclaw_defaults(default_model: str, provider_model: str) -> None:
+def register_current_app_openclaw_defaults(
+    default_model: str,
+    provider_model: str,
+    *,
+    base_url: str | None = None,
+) -> None:
     global _CURRENT_APP_OPENCLAW_DEFAULTS
-    proxy_base_url = _normalize_openclaw_proxy_url(_resolve_current_openclaw_proxy_base_url())
+    proxy_base_url = _normalize_openclaw_proxy_url(base_url or _resolve_current_openclaw_proxy_base_url())
     new_defaults = _CurrentAppOpenClawDefaults(
         default_model=default_model.strip() or DEFAULT_OPENCLAW_MODEL,
         provider_model=provider_model.strip() or DEFAULT_OPENCLAW_PROVIDER_MODEL,
