@@ -897,6 +897,50 @@ def test_openclaw_failed_startup_cleans_process_and_log_handle(
     assert runtime._log_handle is None
 
 
+def test_openclaw_start_includes_gateway_log_tail_when_process_exits_early(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config = _build_openclaw_config(tmp_path)
+    runtime = OpenClawRuntime(config)
+    runtime.config.log_path.parent.mkdir(parents=True, exist_ok=True)
+    runtime.config.log_path.write_text("fatal gateway error", encoding="utf-8")
+
+    class _ExitedProcess:
+        pid = 4242
+        returncode = 1
+
+        def poll(self) -> int | None:
+            return 1
+
+        def terminate(self) -> None:
+            return None
+
+        def kill(self) -> None:
+            return None
+
+        def wait(self, timeout: float | None = None) -> int:
+            return 1
+
+    process = _ExitedProcess()
+
+    monkeypatch.setattr(runtime, "ensure_layout", lambda: None)
+    monkeypatch.setattr(runtime, "_resolve_gateway_command", lambda: ["openclaw", "gateway"])
+    monkeypatch.setattr(runtime, "_merge_provider_keys_from_dotenv", lambda env: None)
+    monkeypatch.setattr(runtime, "_is_port_open", lambda: False)
+    monkeypatch.setattr("agency_swarm.integrations.openclaw.subprocess.Popen", lambda *a, **k: process)
+    monkeypatch.setattr(
+        "agency_swarm.integrations.openclaw._select_compatible_node_binary",
+        lambda: ("/opt/homebrew/bin/node", (22, 22, 0)),
+    )
+    monkeypatch.setattr("agency_swarm.integrations.openclaw.time.sleep", lambda _delay: None)
+
+    with pytest.raises(RuntimeError, match="OpenClaw exited early with code 1") as excinfo:
+        runtime.start()
+
+    assert "fatal gateway error" in str(excinfo.value)
+
+
 def test_openclaw_failed_startup_cleanup_closes_log_handle_when_kill_wait_times_out(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

@@ -75,6 +75,17 @@ def _extract_port_from_gateway_command(command: list[str]) -> int | None:
     return None
 
 
+def _read_log_tail(log_path: Path, max_bytes: int = 4096) -> str:
+    try:
+        with log_path.open("rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            size = handle.tell()
+            handle.seek(max(size - max_bytes, 0))
+            return handle.read().decode("utf-8", errors="replace").strip()
+    except OSError:
+        return ""
+
+
 def _read_bool_env(name: str, default: bool) -> bool:
     value = os.getenv(name)
     if value is None:
@@ -448,9 +459,11 @@ class OpenClawRuntime:
             deadline = time.time() + self.config.startup_timeout_seconds
             while time.time() < deadline:
                 if self._process.poll() is not None:
+                    log_tail = _read_log_tail(self.config.log_path)
+                    tail_message = f" Last gateway log output:\n{log_tail}" if log_tail else ""
                     raise RuntimeError(
                         f"OpenClaw exited early with code {self._process.returncode}. "
-                        f"Check logs at {self.config.log_path}."
+                        f"Check logs at {self.config.log_path}.{tail_message}"
                     )
                 if self._is_port_open():
                     logger.info("OpenClaw runtime listening at %s", self.upstream_base_url)
