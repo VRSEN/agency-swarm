@@ -2,11 +2,10 @@ from unittest.mock import MagicMock
 
 import pytest
 from agents import FunctionTool, ModelSettings, StopAtTools, WebSearchTool
-from agents.models.openai_responses import OpenAIResponsesModel
-from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 
 from agency_swarm import Agent
+from agency_swarm.integrations.openclaw_model import build_openclaw_responses_model
 
 
 class TaskOutput(BaseModel):
@@ -302,17 +301,15 @@ def test_agent_initialization_model_settings_defaults_and_overrides():
     assert gpt5_agent.model_settings.reasoning.effort == "low"
 
     provider_prefixed_gpt5_agent = Agent(name="ProviderPrefixedGpt5", instructions="Test", model="openai/gpt-5.4")
-    assert provider_prefixed_gpt5_agent.model_settings.reasoning is not None
-    assert provider_prefixed_gpt5_agent.model_settings.reasoning.effort == "low"
-    assert provider_prefixed_gpt5_agent.model_settings.verbosity == "low"
+    assert provider_prefixed_gpt5_agent.model_settings.reasoning is None
+    assert provider_prefixed_gpt5_agent.model_settings.verbosity is None
 
 
-def test_agent_initialization_model_objects_use_usage_tracking_defaults() -> None:
-    model = OpenAIResponsesModel(
-        model="openclaw:main",
-        openai_client=AsyncOpenAI(base_url="http://127.0.0.1:8000/openclaw/v1", api_key="test-key"),
-    )
-    model._agency_swarm_usage_model_name = "openai/gpt-5.4"
+def test_agent_initialization_model_objects_use_openclaw_default_settings_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENCLAW_PROVIDER_MODEL", "openai/gpt-5.4")
+    model = build_openclaw_responses_model(base_url="http://127.0.0.1:18789/v1", api_key="test-key")
 
     agent = Agent(name="UsageTrackedModel", instructions="Test", model=model)
 

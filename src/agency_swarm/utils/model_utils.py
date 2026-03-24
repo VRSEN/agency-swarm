@@ -51,20 +51,16 @@ def get_usage_tracking_model_name(model: str | Model | None) -> str | None:
 
 
 def get_default_settings_model_name(model: str | Model | None) -> str | None:
-    """Extract the SDK default-settings lookup key for a model.
+    """Extract the SDK default-settings lookup key for a model."""
+    if isinstance(model, Model):
+        try:
+            default_settings_model_name = cast("_ModelWithDefaultSettingsName", model)._agency_swarm_default_model_name
+        except AttributeError:
+            default_settings_model_name = None
+        if isinstance(default_settings_model_name, str) and default_settings_model_name.strip():
+            return default_settings_model_name.strip()
 
-    Provider-prefixed OpenAI-style model strings such as ``openai/gpt-5.4``
-    should inherit the same SDK defaults as their bare model ids.
-    """
-    model_name = get_usage_tracking_model_name(model)
-    if not model_name:
-        return None
-    if "/" not in model_name:
-        return model_name
-    provider, _, bare_model_name = model_name.rpartition("/")
-    if not provider or not bare_model_name:
-        return model_name
-    return bare_model_name
+    return get_model_name(model)
 
 
 def is_reasoning_model(model: str | Model | None) -> bool:
@@ -168,6 +164,10 @@ class _ModelWithName(Protocol):
 
 class _ModelWithUsageName(Protocol):
     _agency_swarm_usage_model_name: str
+
+
+class _ModelWithDefaultSettingsName(Protocol):
+    _agency_swarm_default_model_name: str
 
 
 def _runtime_types_for_check(cls: Any) -> tuple[type[Any], ...]:

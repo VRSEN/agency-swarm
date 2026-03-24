@@ -43,6 +43,11 @@ def build_openclaw_responses_model(
     responses_model = OpenAIResponsesModel(model=resolved_model, openai_client=client)
     if resolved_usage_model is not None:
         cast(_ResponsesModelWithUsageName, responses_model)._agency_swarm_usage_model_name = resolved_usage_model
+    cast(
+        _ResponsesModelWithDefaultSettingsName, responses_model
+    )._agency_swarm_default_model_name = _resolve_openclaw_default_settings_model_name(
+        resolved_usage_model or resolved_model
+    )
     return responses_model
 
 
@@ -149,5 +154,16 @@ def _get_current_app_openclaw_defaults(base_url: str) -> _CurrentAppOpenClawDefa
     return _CURRENT_APP_OPENCLAW_DEFAULTS.get(_normalize_openclaw_proxy_url(base_url))
 
 
+def _resolve_openclaw_default_settings_model_name(model_name: str) -> str:
+    if model_name.startswith("openai/"):
+        _, _, bare_model_name = model_name.rpartition("/")
+        return bare_model_name or model_name
+    return model_name
+
+
 class _ResponsesModelWithUsageName(Protocol):
     _agency_swarm_usage_model_name: str
+
+
+class _ResponsesModelWithDefaultSettingsName(Protocol):
+    _agency_swarm_default_model_name: str

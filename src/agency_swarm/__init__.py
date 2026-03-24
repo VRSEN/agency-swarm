@@ -55,7 +55,6 @@ from openai.types.shared import Reasoning  # noqa: E402
 from .agency.core import Agency  # noqa: E402
 from .agent.core import AgencyContext, Agent  # noqa: E402
 from .agent.execution_streaming import StreamingRunResponse  # noqa: E402
-from .agents import OpenClawAgent  # noqa: E402
 from .context import MasterContext  # noqa: E402
 from .hooks import PersistenceHooks  # noqa: E402
 from .integrations.fastapi import run_fastapi  # noqa: E402
@@ -219,6 +218,16 @@ def __getattr__(name: str):
             raise ImportError(
                 "OpenClaw FastAPI integration requires optional dependencies. "
                 "Install with `pip install 'agency-swarm[fastapi]'`."
+            ) from exc
+        value = getattr(module, name)
+        globals()[name] = value
+        return value
+    if name == "OpenClawAgent":
+        try:
+            module = importlib.import_module(".agents", package=__name__)
+        except ModuleNotFoundError as exc:
+            raise ImportError(
+                "OpenClawAgent requires optional dependencies. Install with `pip install 'agency-swarm[fastapi]'`."
             ) from exc
         value = getattr(module, name)
         globals()[name] = value
