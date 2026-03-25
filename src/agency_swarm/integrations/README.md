@@ -54,16 +54,18 @@ When the proxy receives `model=openclaw:main`, it rewrites that value to the con
 
 ### Runtime defaults and persistence
 
-Default runtime paths are designed for persistent E2B storage:
+For Agent Swarm deploys, set:
 
-- `OPENCLAW_HOME=/mnt/openclaw`
-- `OPENCLAW_STATE_DIR=/mnt/openclaw/state`
-- `OPENCLAW_CONFIG_PATH=/mnt/openclaw/openclaw.json`
-- `OPENCLAW_LOG_PATH=/mnt/openclaw/logs/openclaw-gateway.log`
+- `OPENCLAW_HOME=/app/mnt/openclaw`
 - `OPENCLAW_PORT=18789`
 
-These are runtime paths from inside the app.
-In the sandbox filesystem and Agent Swarm file browser, the same mounted volume is visible under `/app/mnt/openclaw`.
+From `OPENCLAW_HOME`, the integration derives:
+
+- `OPENCLAW_STATE_DIR=<OPENCLAW_HOME>/state`
+- `OPENCLAW_CONFIG_PATH=<OPENCLAW_HOME>/openclaw.json`
+- `OPENCLAW_LOG_PATH=<OPENCLAW_HOME>/logs/openclaw-gateway.log`
+
+In Agent Swarm's file browser, the same mounted volume should be visible directly at `/app/mnt/openclaw`.
 
 Generated gateway config enables:
 

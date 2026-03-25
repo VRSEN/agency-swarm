@@ -1144,12 +1144,11 @@ def attach_openclaw_to_fastapi(
     resolved_verify_token = verify_token or getattr(app.state, "verify_token", None)
     runtime = OpenClawRuntime(resolved_config)
     current_proxy_base_url = openclaw_model._resolve_current_openclaw_proxy_base_url()
-    if openclaw_model.is_loopback_openclaw_proxy_url(current_proxy_base_url):
-        openclaw_model.register_current_app_openclaw_defaults(
-            default_model=resolved_config.default_model,
-            provider_model=resolved_config.provider_model,
-            base_url=current_proxy_base_url,
-        )
+    openclaw_model.register_current_app_openclaw_defaults(
+        default_model=resolved_config.default_model,
+        provider_model=resolved_config.provider_model,
+        base_url=current_proxy_base_url,
+    )
     openclaw_model.register_current_app_openclaw_defaults(
         default_model=resolved_config.default_model,
         provider_model=resolved_config.provider_model,

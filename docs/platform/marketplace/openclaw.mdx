@@ -34,8 +34,8 @@ On Agent Swarm, you can launch it from a ready template and chat with it inside 
   <Step title="Enable persistent storage">
     Turn on **Persistent File Storage** for the swarm before the first deploy.
 
-    OpenClaw uses `/mnt/openclaw` as its runtime root.
-    In Agent Swarm's file browser, the same mounted volume appears under `/app/mnt/openclaw`.
+    For Agent Swarm deploys, set `OPENCLAW_HOME=/app/mnt/openclaw`.
+    The file browser should show that same path directly.
   </Step>
 
   <Step title="Add your AI provider secrets">
@@ -67,8 +67,8 @@ OpenClaw keeps its own workspace files on persistent storage.
 That is where you update its personality, rules, and long-term notes.
 
 OpenClaw stores that workspace inside its own `.openclaw` folder.
-Its runtime path is `/mnt/openclaw/.openclaw/workspace`.
 In Agent Swarm's file browser, open `/app/mnt/openclaw/.openclaw/workspace`.
+At the storage root, you should also see sibling folders like `logs` and `activity-logs`.
 
 The most important files are:
 
@@ -84,7 +84,7 @@ To replace them:
 3. Open `/app/mnt/openclaw/.openclaw/workspace`
 4. Upload the replacement file
 
-![Agent Swarm persistent file storage view for OpenClaw workspace](/images/platform/openclaw-persistent-storage.png)
+![Agent Swarm persistent file storage view for OpenClaw workspace](/images/platform/openclaw-persistent-storage-live.png)
 
 <Note>
 If OpenClaw starts behaving strangely, check both the onboarding instructions and the workspace files. They are both part of the final behavior.
@@ -94,7 +94,7 @@ If OpenClaw starts behaving strangely, check both the onboarding instructions an
 
 - A private OpenClaw deployment running on Agent Swarm
 - Normal chat inside your Agent Swarm workspace
-- Persistent OpenClaw files under `/mnt/openclaw`, visible in the file browser at `/app/mnt/openclaw`
+- Persistent OpenClaw files under `/app/mnt/openclaw`
 - A clean upgrade path through the starter template repo
 
 <Warning>
