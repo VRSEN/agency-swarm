@@ -861,7 +861,7 @@ def test_build_openclaw_responses_model_uses_app_token_and_defaults_for_explicit
     monkeypatch.delenv("OPENCLAW_PROVIDER_MODEL", raising=False)
     monkeypatch.delenv("OPENCLAW_PROXY_BASE_URL", raising=False)
     monkeypatch.delenv("OPENCLAW_PROXY_HOST", raising=False)
-    monkeypatch.delenv("OPENCLAW_PROXY_PORT", raising=False)
+    monkeypatch.setenv("OPENCLAW_PROXY_PORT", "9000")
     monkeypatch.delenv("PORT", raising=False)
     monkeypatch.setenv("APP_TOKEN", "app-token")
     monkeypatch.setenv("OPENCLAW_GATEWAY_TOKEN", "gateway-token")
@@ -882,6 +882,29 @@ def test_build_openclaw_responses_model_uses_app_token_and_defaults_for_explicit
     assert model.model == "openclaw:custom"
     assert get_usage_tracking_model_name(model) == "openai/gpt-4o"
     assert model._client.api_key == "app-token"
+
+
+def test_attach_openclaw_to_fastapi_does_not_register_gateway_port_as_proxy_url(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("OPENCLAW_DEFAULT_MODEL", raising=False)
+    monkeypatch.setenv("OPENCLAW_PROVIDER_MODEL", "openai/gpt-5.4")
+    monkeypatch.delenv("OPENCLAW_PROXY_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_HOST", raising=False)
+    monkeypatch.setenv("OPENCLAW_PROXY_PORT", "8000")
+    monkeypatch.delenv("PORT", raising=False)
+    monkeypatch.setenv("APP_TOKEN", "app-token")
+    monkeypatch.setenv("OPENCLAW_PROXY_API_KEY", "proxy-token")
+    monkeypatch.setenv("OPENCLAW_GATEWAY_TOKEN", "gateway-token")
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
+
+    attach_openclaw_to_fastapi(FastAPI(), replace(_build_openclaw_config(tmp_path), port=9000))
+
+    model = build_openclaw_responses_model(base_url="http://127.0.0.1:9000/openclaw/v1")
+
+    assert model.model == "openclaw:main"
+    assert get_usage_tracking_model_name(model) == "openclaw:main"
+    assert model._client.api_key == "proxy-token"
 
 
 def test_attach_openclaw_to_fastapi_rejects_conflicting_current_app_defaults(

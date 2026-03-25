@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -198,6 +199,26 @@ def test_agent_initialization_skips_framework_tool_wiring_when_disabled(tmp_path
     )
 
     assert agent.tools == []
+
+
+def test_agent_initialization_converts_explicit_mcp_servers_when_framework_tool_wiring_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    converted: list[str] = []
+
+    def _convert(agent: Agent) -> None:
+        converted.append(agent.name)
+
+    monkeypatch.setattr("agency_swarm.agent.core.convert_mcp_servers_to_tools", _convert)
+
+    Agent(
+        name="RestrictedAgent",
+        instructions="Test",
+        mcp_servers=[SimpleNamespace(name="demo")],
+        supports_framework_tool_wiring=False,
+    )
+
+    assert converted == ["RestrictedAgent"]
 
 
 def test_agent_initialization_with_all_parameters():

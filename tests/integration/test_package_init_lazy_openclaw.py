@@ -61,3 +61,41 @@ def test_openclaw_agent_export_loads_module_lazily() -> None:
         assert lines[1] == "skip"
     else:
         assert lines == ["False", "True"]
+
+
+def test_wildcard_import_agency_swarm_skips_optional_openclaw_exports_without_deps() -> None:
+    output = _run_inline(
+        """
+import importlib.util
+real_find_spec = importlib.util.find_spec
+
+def fake_find_spec(name, package=None):
+    if name in {"fastapi", "httpx"}:
+        return None
+    return real_find_spec(name, package)
+
+importlib.util.find_spec = fake_find_spec
+from agency_swarm import *  # noqa: F403
+print("ok")
+"""
+    )
+    assert output == "ok"
+
+
+def test_wildcard_import_agency_swarm_agents_skips_openclaw_agent_without_deps() -> None:
+    output = _run_inline(
+        """
+import importlib.util
+real_find_spec = importlib.util.find_spec
+
+def fake_find_spec(name, package=None):
+    if name == "httpx":
+        return None
+    return real_find_spec(name, package)
+
+importlib.util.find_spec = fake_find_spec
+from agency_swarm.agents import *  # noqa: F403
+print("ok")
+"""
+    )
+    assert output == "ok"

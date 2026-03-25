@@ -46,6 +46,7 @@ _JUPYTER_AVAILABLE = importlib.util.find_spec("jupyter_client") is not None
 _OPENCLAW_DEPS_AVAILABLE = (
     importlib.util.find_spec("fastapi") is not None and importlib.util.find_spec("httpx") is not None
 )
+_OPENCLAW_AGENT_DEPS_AVAILABLE = importlib.util.find_spec("httpx") is not None
 
 from agents.model_settings import Headers, MCPToolChoice, ToolChoice  # noqa: E402
 from openai._types import Body, Query  # noqa: E402
@@ -171,7 +172,6 @@ __all__ = [
     "tool_output_file_from_path",
     "tool_output_file_from_url",
     "tool_output_file_from_file_id",
-    "OpenClawAgent",
 ]
 
 _OPENCLAW_EXPORTS = {
@@ -183,6 +183,8 @@ _OPENCLAW_EXPORTS = {
 }
 if _OPENCLAW_DEPS_AVAILABLE:
     __all__.extend(sorted(_OPENCLAW_EXPORTS))
+if _OPENCLAW_AGENT_DEPS_AVAILABLE:
+    __all__.append("OpenClawAgent")
 
 # Conditionally add LitellmModel if available
 if _LITELLM_AVAILABLE:

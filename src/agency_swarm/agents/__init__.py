@@ -1,8 +1,13 @@
 import importlib
+import importlib.util
 
 from agency_swarm.agent.core import Agent
 
-__all__ = ["Agent", "OpenClawAgent"]
+_OPENCLAW_AGENT_DEPS_AVAILABLE = importlib.util.find_spec("httpx") is not None
+
+__all__ = ["Agent"]
+if _OPENCLAW_AGENT_DEPS_AVAILABLE:
+    __all__.append("OpenClawAgent")
 
 
 def __getattr__(name: str):

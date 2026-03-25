@@ -263,9 +263,8 @@ class Agent(BaseAgent[MasterContext]):
         for tool in self.tools:
             _attach_one_call_guard(tool, self)
 
-        # Convert MCP servers to tools and add them to the agent
-        if self.supports_framework_tool_wiring:
-            convert_mcp_servers_to_tools(self)
+        # Explicit MCP servers are constructor input, not framework-managed wiring.
+        convert_mcp_servers_to_tools(self)
         if self.include_web_search_sources and any(isinstance(tool, WebSearchTool) for tool in self.tools):
             existing_includes = list(self.model_settings.response_include or [])
             if _WEB_SEARCH_SOURCES_INCLUDE not in existing_includes:
