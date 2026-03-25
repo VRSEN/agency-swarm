@@ -26,7 +26,7 @@ from agency_swarm.integrations.openclaw import (
     build_openclaw_responses_model,
     normalize_openclaw_responses_request,
 )
-from agency_swarm.utils.model_utils import get_usage_tracking_model_name
+from agency_swarm.utils.model_utils import get_default_settings_model_name, get_usage_tracking_model_name
 
 
 def _build_openclaw_config(tmp_path: Path) -> OpenClawIntegrationConfig:
@@ -888,7 +888,6 @@ def test_build_openclaw_responses_model_uses_app_token_and_defaults_for_explicit
     ("server_url", "base_url"),
     [
         ("http://localhost:9000", "http://127.0.0.1:9000/openclaw/v1"),
-        ("/api", "https://example.com/api/openclaw/v1"),
         ("https://example.com/{stage}", "https://example.com/prod/openclaw/v1"),
     ],
 )
@@ -920,6 +919,36 @@ def test_attach_openclaw_to_fastapi_uses_app_server_url_for_same_app_proxy_defau
     assert model.model == "openclaw:custom"
     assert get_usage_tracking_model_name(model) == "anthropic/claude-sonnet-4-5"
     assert model._client.api_key == "app-token"
+
+
+def test_attach_openclaw_to_fastapi_does_not_trust_relative_server_urls_as_current_app_proxy(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("OPENCLAW_DEFAULT_MODEL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROVIDER_MODEL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_HOST", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_PORT", raising=False)
+    monkeypatch.delenv("PORT", raising=False)
+    monkeypatch.setenv("APP_TOKEN", "app-token")
+    monkeypatch.setenv("OPENCLAW_GATEWAY_TOKEN", "gateway-token")
+    monkeypatch.setenv("OPENCLAW_PROXY_API_KEY", "proxy-token")
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULT_PATTERNS", [], raising=False)
+
+    app = FastAPI(servers=[{"url": "/api"}])
+    config = replace(
+        _build_openclaw_config(tmp_path),
+        default_model="openclaw:custom",
+        provider_model="anthropic/claude-sonnet-4-5",
+    )
+    attach_openclaw_to_fastapi(app, config)
+
+    model = build_openclaw_responses_model(base_url="https://example.com/api/openclaw/v1")
+
+    assert model.model == "openclaw:main"
+    assert get_usage_tracking_model_name(model) == "openclaw:main"
+    assert model._client.api_key == "proxy-token"
 
 
 def test_attach_openclaw_to_fastapi_does_not_register_gateway_port_as_proxy_url(
@@ -1090,6 +1119,28 @@ def test_build_openclaw_responses_model_translates_openclaw_aliases_for_direct_g
 
     assert model.model == "anthropic/claude-sonnet-4-5"
     assert get_usage_tracking_model_name(model) == "anthropic/claude-sonnet-4-5"
+
+
+def test_build_openclaw_responses_model_preserves_explicit_nondefault_alias_metadata_for_current_app_proxy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULT_PATTERNS", [], raising=False)
+    openclaw_mod.openclaw_model.register_current_app_openclaw_defaults(
+        default_model="openclaw:main",
+        provider_model="openai/gpt-5.4",
+        base_url="https://app.example/openclaw/v1",
+    )
+
+    model = build_openclaw_responses_model(
+        model="openclaw:alt",
+        base_url="https://app.example/openclaw/v1",
+        api_key="app-token",
+    )
+
+    assert model.model == "openclaw:alt"
+    assert get_usage_tracking_model_name(model) == "openclaw:alt"
+    assert get_default_settings_model_name(model) == "openclaw:alt"
 
 
 def test_openclaw_start_closes_log_handle_when_popen_fails(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
