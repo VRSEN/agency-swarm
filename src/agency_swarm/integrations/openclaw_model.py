@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ipaddress
 import os
+import re
 from dataclasses import dataclass
 from typing import Protocol, cast
 
@@ -20,7 +21,18 @@ class _CurrentAppOpenClawDefaults:
     provider_model: str
 
 
+@dataclass(frozen=True)
+class _CurrentAppOpenClawDefaultsPattern:
+    scheme: str | None
+    host_pattern: str | None
+    port: int | None
+    path_pattern: str
+
+
 _CURRENT_APP_OPENCLAW_DEFAULTS: dict[tuple[str, str, int, str], _CurrentAppOpenClawDefaults] = {}
+_CURRENT_APP_OPENCLAW_DEFAULT_PATTERNS: list[
+    tuple[_CurrentAppOpenClawDefaultsPattern, _CurrentAppOpenClawDefaults]
+] = []
 
 
 def build_openclaw_responses_model(
@@ -31,7 +43,7 @@ def build_openclaw_responses_model(
     resolved_base_url = (base_url or _resolve_current_openclaw_proxy_base_url()).rstrip("/")
 
     if isinstance(model, str) and model.strip():
-        resolved_model = model.strip()
+        resolved_model = _resolve_openclaw_requested_model(model.strip(), resolved_base_url)
     else:
         resolved_model = _resolve_openclaw_default_model(resolved_base_url)
     resolved_usage_model = _resolve_openclaw_usage_model(resolved_model, resolved_base_url)
@@ -47,6 +59,12 @@ def build_openclaw_responses_model(
         resolved_usage_model or resolved_model
     )
     return responses_model
+
+
+def _resolve_openclaw_requested_model(model_name: str, base_url: str) -> str:
+    if model_name.startswith("openclaw:") and _uses_raw_openclaw_gateway(base_url):
+        return _resolve_openclaw_default_model(base_url)
+    return model_name
 
 
 def _resolve_openclaw_usage_model(model_name: str, base_url: str) -> str | None:
@@ -115,18 +133,35 @@ def register_current_app_openclaw_defaults(
     base_url: str | None = None,
 ) -> None:
     global _CURRENT_APP_OPENCLAW_DEFAULTS
-    proxy_base_url = _normalize_openclaw_proxy_url(base_url or _resolve_current_openclaw_proxy_base_url())
+    global _CURRENT_APP_OPENCLAW_DEFAULT_PATTERNS
+    proxy_base_url = _normalize_current_app_openclaw_proxy_matcher(
+        base_url or _resolve_current_openclaw_proxy_base_url()
+    )
     new_defaults = _CurrentAppOpenClawDefaults(
         default_model=default_model.strip() or DEFAULT_OPENCLAW_MODEL,
         provider_model=provider_model.strip() or DEFAULT_OPENCLAW_PROVIDER_MODEL,
     )
-    existing_defaults = _CURRENT_APP_OPENCLAW_DEFAULTS.get(proxy_base_url)
-    if existing_defaults is not None and existing_defaults != new_defaults:
-        raise ValueError(
-            "Conflicting current-app OpenClaw defaults for the same proxy base URL. "
-            "Use one current-app proxy config per process or set distinct proxy base URLs."
-        )
-    _CURRENT_APP_OPENCLAW_DEFAULTS[proxy_base_url] = new_defaults
+    if isinstance(proxy_base_url, tuple):
+        existing_defaults = _CURRENT_APP_OPENCLAW_DEFAULTS.get(proxy_base_url)
+        if existing_defaults is not None and existing_defaults != new_defaults:
+            raise ValueError(
+                "Conflicting current-app OpenClaw defaults for the same proxy base URL. "
+                "Use one current-app proxy config per process or set distinct proxy base URLs."
+            )
+        _CURRENT_APP_OPENCLAW_DEFAULTS[proxy_base_url] = new_defaults
+        return
+
+    for existing_pattern, existing_defaults in _CURRENT_APP_OPENCLAW_DEFAULT_PATTERNS:
+        if existing_pattern != proxy_base_url:
+            continue
+        if existing_defaults != new_defaults:
+            raise ValueError(
+                "Conflicting current-app OpenClaw defaults for the same proxy base URL. "
+                "Use one current-app proxy config per process or set distinct proxy base URLs."
+            )
+        return
+
+    _CURRENT_APP_OPENCLAW_DEFAULT_PATTERNS.append((proxy_base_url, new_defaults))
 
 
 def _resolve_current_openclaw_proxy_base_url() -> str:
@@ -155,6 +190,29 @@ def _normalize_openclaw_proxy_url(base_url: str) -> tuple[str, str, int, str]:
     return parsed.scheme, _normalize_openclaw_proxy_host(hostname), port, normalized_path
 
 
+def _normalize_current_app_openclaw_proxy_matcher(
+    base_url: str,
+) -> tuple[str, str, int, str] | _CurrentAppOpenClawDefaultsPattern:
+    parsed = httpx.URL(base_url)
+    normalized_path = parsed.path.rstrip("/")
+    host = parsed.host or None
+    path_has_template = _has_openclaw_proxy_url_template(normalized_path)
+    host_has_template = _has_openclaw_proxy_url_template(host or "")
+    if parsed.scheme and host and not path_has_template and not host_has_template:
+        return _normalize_openclaw_proxy_url(base_url)
+
+    normalized_host_pattern: str | None = None
+    if host:
+        normalized_host_pattern = _normalize_openclaw_proxy_host(host) if not host_has_template else host.lower()
+    port = parsed.port or (443 if parsed.scheme == "https" else 80) if parsed.scheme and host else None
+    return _CurrentAppOpenClawDefaultsPattern(
+        scheme=parsed.scheme or None,
+        host_pattern=normalized_host_pattern,
+        port=port,
+        path_pattern=normalized_path,
+    )
+
+
 def _normalize_openclaw_proxy_host(hostname: str) -> str:
     lowered = hostname.lower()
     if lowered in {"localhost", "localhost.localdomain"}:
@@ -179,7 +237,55 @@ def _is_loopback_openclaw_proxy_url(base_url: tuple[str, str, int, str]) -> bool
 
 
 def _resolve_current_app_openclaw_defaults(base_url: str) -> _CurrentAppOpenClawDefaults | None:
-    return _get_current_app_openclaw_defaults(base_url)
+    exact_match = _get_current_app_openclaw_defaults(base_url)
+    if exact_match is not None:
+        return exact_match
+
+    normalized_base_url = _normalize_openclaw_proxy_url(base_url)
+    for pattern, defaults in _CURRENT_APP_OPENCLAW_DEFAULT_PATTERNS:
+        if _matches_current_app_openclaw_defaults_pattern(normalized_base_url, pattern):
+            return defaults
+    return None
+
+
+def _matches_current_app_openclaw_defaults_pattern(
+    base_url: tuple[str, str, int, str], pattern: _CurrentAppOpenClawDefaultsPattern
+) -> bool:
+    scheme, host, port, path = base_url
+    if pattern.scheme is not None and scheme != pattern.scheme:
+        return False
+    if pattern.port is not None and port != pattern.port:
+        return False
+    if pattern.host_pattern is not None and not _matches_openclaw_url_component(
+        host, pattern.host_pattern, segment_separator="."
+    ):
+        return False
+    return _matches_openclaw_url_component(path, pattern.path_pattern, segment_separator="/")
+
+
+def _matches_openclaw_url_component(value: str, pattern: str, *, segment_separator: str) -> bool:
+    if not _has_openclaw_proxy_url_template(pattern):
+        return value == pattern
+    regex = _build_openclaw_url_component_regex(pattern, segment_separator=segment_separator)
+    return regex.fullmatch(value) is not None
+
+
+def _build_openclaw_url_component_regex(pattern: str, *, segment_separator: str) -> re.Pattern[str]:
+    placeholder_pattern = re.compile(r"(\{[^{}]+\})")
+    wildcard = f"[^{re.escape(segment_separator)}]+"
+    regex_parts: list[str] = []
+    for part in placeholder_pattern.split(pattern):
+        if not part:
+            continue
+        if part.startswith("{") and part.endswith("}"):
+            regex_parts.append(wildcard)
+        else:
+            regex_parts.append(re.escape(part))
+    return re.compile("^" + "".join(regex_parts) + "$")
+
+
+def _has_openclaw_proxy_url_template(value: str) -> bool:
+    return "{" in value and "}" in value
 
 
 def _resolve_openclaw_default_settings_model_name(model_name: str) -> str:
