@@ -24,7 +24,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from . import openclaw_model
-from .openclaw_model import DEFAULT_OPENCLAW_MODEL
+from .openclaw_model import DEFAULT_OPENCLAW_MODEL, DEFAULT_OPENCLAW_PROXY_API_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -1143,12 +1143,12 @@ def attach_openclaw_to_fastapi(
     resolved_config = config or OpenClawIntegrationConfig.from_env()
     resolved_verify_token = verify_token or getattr(app.state, "verify_token", None)
     runtime = OpenClawRuntime(resolved_config)
-    current_proxy_base_url = openclaw_model._resolve_current_openclaw_proxy_base_url()
-    openclaw_model.register_current_app_openclaw_defaults(
-        default_model=resolved_config.default_model,
-        provider_model=resolved_config.provider_model,
-        base_url=current_proxy_base_url,
-    )
+    for proxy_base_url in _resolve_current_app_openclaw_proxy_base_urls(app):
+        openclaw_model.register_current_app_openclaw_defaults(
+            default_model=resolved_config.default_model,
+            provider_model=resolved_config.provider_model,
+            base_url=proxy_base_url,
+        )
 
     app.include_router(
         create_openclaw_proxy_router(resolved_config, verify_token=resolved_verify_token),
@@ -1178,6 +1178,25 @@ def attach_openclaw_to_fastapi(
     app.router.lifespan_context = _openclaw_lifespan
 
     return runtime
+
+
+def _resolve_current_app_openclaw_proxy_base_urls(app: FastAPI) -> list[str]:
+    proxy_base_urls = [openclaw_model._resolve_current_openclaw_proxy_base_url()]
+    servers = getattr(app, "servers", None)
+    if isinstance(servers, list):
+        for server in servers:
+            if not isinstance(server, dict):
+                continue
+            server_url = server.get("url")
+            if isinstance(server_url, str) and server_url.strip():
+                proxy_base_urls.append(f"{server_url.rstrip('/')}{DEFAULT_OPENCLAW_PROXY_API_PATH}")
+
+    # Preserve insertion order while deduplicating equivalent URLs.
+    deduped: dict[tuple[str, str, int, str], str] = {}
+    for proxy_base_url in proxy_base_urls:
+        normalized = openclaw_model._normalize_openclaw_proxy_url(proxy_base_url)
+        deduped.setdefault(normalized, proxy_base_url)
+    return list(deduped.values())
 
 
 def build_openclaw_responses_model(
