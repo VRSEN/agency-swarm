@@ -64,8 +64,12 @@ From `OPENCLAW_HOME`, the integration derives:
 - `OPENCLAW_STATE_DIR=<OPENCLAW_HOME>/state`
 - `OPENCLAW_CONFIG_PATH=<OPENCLAW_HOME>/openclaw.json`
 - `OPENCLAW_LOG_PATH=<OPENCLAW_HOME>/logs/openclaw-gateway.log`
+- `agents.defaults.workspace=<OPENCLAW_HOME>/workspace` in the generated `openclaw.json`
 
-In Agent Swarm's file browser, the same mounted volume should be visible directly at `/app/mnt/openclaw`.
+In Agent Swarm's file browser, the mounted volume is visible at `/app/mnt/openclaw`.
+OpenClaw workspace files should appear at `/app/mnt/openclaw/workspace`.
+
+If an older deploy already has files under the legacy `.openclaw/workspace` path, the integration migrates that workspace to the cleaner path when it is safe to do so.
 
 Generated gateway config enables:
 

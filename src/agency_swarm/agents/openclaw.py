@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from typing import Any
 
+import httpx
+
 from agency_swarm.agent.core import Agent
 from agency_swarm.integrations.openclaw_model import build_openclaw_responses_model
 
@@ -52,15 +54,24 @@ def _resolve_openclaw_base_url(
     if base_url:
         return base_url.rstrip("/")
 
+    env_base_url = os.getenv("OPENCLAW_PROXY_BASE_URL", "").strip()
+    if env_base_url:
+        if host is None and port is None and api_path == DEFAULT_OPENCLAW_API_PATH:
+            return env_base_url.rstrip("/")
+        parsed_env_base_url = httpx.URL(env_base_url.rstrip("/"))
+        normalized_api_path = api_path if api_path.startswith("/") else f"/{api_path}"
+        resolved_base_url = parsed_env_base_url.copy_with(
+            host=host or parsed_env_base_url.host,
+            port=port or parsed_env_base_url.port,
+            path=normalized_api_path if api_path != DEFAULT_OPENCLAW_API_PATH else parsed_env_base_url.path,
+        )
+        return str(resolved_base_url).rstrip("/")
+
     if host is not None or port is not None or api_path != DEFAULT_OPENCLAW_API_PATH:
         resolved_host = _normalize_http_host(host or os.getenv("OPENCLAW_PROXY_HOST") or "127.0.0.1")
         resolved_port = port or int(os.getenv("OPENCLAW_PROXY_PORT") or os.getenv("PORT") or "8000")
         normalized_api_path = api_path if api_path.startswith("/") else f"/{api_path}"
         return f"http://{resolved_host}:{resolved_port}{normalized_api_path}".rstrip("/")
-
-    env_base_url = os.getenv("OPENCLAW_PROXY_BASE_URL", "").strip()
-    if env_base_url:
-        return env_base_url.rstrip("/")
 
     resolved_host = _normalize_http_host(host or os.getenv("OPENCLAW_PROXY_HOST") or "127.0.0.1")
     resolved_port = port or int(os.getenv("OPENCLAW_PROXY_PORT") or os.getenv("PORT") or "8000")

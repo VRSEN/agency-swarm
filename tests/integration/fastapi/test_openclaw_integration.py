@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import gzip
 import json
 import os
@@ -590,6 +591,191 @@ def test_openclaw_ensure_layout_writes_config_with_secure_create_mode(
     assert seen_modes[-1] == 0o600
 
 
+def test_openclaw_ensure_layout_defaults_workspace_to_home_workspace(tmp_path: Path) -> None:
+    config = _build_openclaw_config(tmp_path)
+    runtime = OpenClawRuntime(config)
+
+    runtime.ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+
+    assert payload["agents"]["defaults"]["workspace"] == str(config.workspace_dir)
+    assert config.workspace_dir.is_dir()
+
+
+def test_openclaw_ensure_layout_keeps_existing_workspace_override(tmp_path: Path) -> None:
+    config = _build_openclaw_config(tmp_path)
+    custom_workspace = tmp_path / "custom-workspace"
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps({"agents": {"defaults": {"workspace": str(custom_workspace)}}}),
+        encoding="utf-8",
+    )
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+
+    assert payload["agents"]["defaults"]["workspace"] == str(custom_workspace)
+    assert not config.workspace_dir.exists()
+
+
+def test_openclaw_ensure_layout_replaces_blank_workspace_override(tmp_path: Path) -> None:
+    config = _build_openclaw_config(tmp_path)
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps({"agents": {"defaults": {"workspace": "   "}}}),
+        encoding="utf-8",
+    )
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+
+    assert payload["agents"]["defaults"]["workspace"] == str(config.workspace_dir)
+    assert config.workspace_dir.is_dir()
+
+
+def test_openclaw_ensure_layout_migrates_legacy_workspace_when_default_is_missing(tmp_path: Path) -> None:
+    config = _build_openclaw_config(tmp_path)
+    legacy_workspace = config.legacy_workspace_dir
+    legacy_workspace.mkdir(parents=True, exist_ok=True)
+    (legacy_workspace / "AGENTS.md").write_text("legacy", encoding="utf-8")
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+
+    assert payload["agents"]["defaults"]["workspace"] == str(config.workspace_dir)
+    assert (config.workspace_dir / "AGENTS.md").read_text(encoding="utf-8") == "legacy"
+    assert not legacy_workspace.exists()
+
+
+def test_openclaw_ensure_layout_preserves_legacy_workspace_when_new_and_old_both_exist(tmp_path: Path) -> None:
+    config = _build_openclaw_config(tmp_path)
+    legacy_workspace = config.legacy_workspace_dir
+    legacy_workspace.mkdir(parents=True, exist_ok=True)
+    (legacy_workspace / "AGENTS.md").write_text("legacy", encoding="utf-8")
+    config.workspace_dir.mkdir(parents=True, exist_ok=True)
+    (config.workspace_dir / "AGENTS.md").write_text("new", encoding="utf-8")
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+
+    assert payload["agents"]["defaults"]["workspace"] == str(legacy_workspace)
+    assert (legacy_workspace / "AGENTS.md").read_text(encoding="utf-8") == "legacy"
+    assert (config.workspace_dir / "AGENTS.md").read_text(encoding="utf-8") == "new"
+
+
+def test_openclaw_ensure_layout_merges_legacy_workspace_into_empty_new_dir(tmp_path: Path) -> None:
+    config = _build_openclaw_config(tmp_path)
+    legacy_workspace = config.legacy_workspace_dir
+    legacy_workspace.mkdir(parents=True, exist_ok=True)
+    (legacy_workspace / "AGENTS.md").write_text("legacy", encoding="utf-8")
+    config.workspace_dir.mkdir(parents=True, exist_ok=True)
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+
+    assert payload["agents"]["defaults"]["workspace"] == str(config.workspace_dir)
+    assert (config.workspace_dir / "AGENTS.md").read_text(encoding="utf-8") == "legacy"
+    assert not legacy_workspace.exists()
+
+
+def test_openclaw_ensure_layout_keeps_explicit_agent_workspace_override(tmp_path: Path) -> None:
+    config = _build_openclaw_config(tmp_path)
+    legacy_workspace = config.legacy_workspace_dir
+    legacy_workspace.mkdir(parents=True, exist_ok=True)
+    (legacy_workspace / "AGENTS.md").write_text("legacy", encoding="utf-8")
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps({"agents": {"list": [{"id": "main", "workspace": str(legacy_workspace)}]}}),
+        encoding="utf-8",
+    )
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+
+    assert payload["agents"]["list"][0]["workspace"] == str(legacy_workspace)
+    assert (legacy_workspace / "AGENTS.md").read_text(encoding="utf-8") == "legacy"
+    assert not config.workspace_dir.exists()
+
+
+def test_openclaw_ensure_layout_keeps_default_workspace_migration_when_other_agent_has_override(tmp_path: Path) -> None:
+    config = _build_openclaw_config(tmp_path)
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    specialist_workspace = tmp_path / "specialist-workspace"
+    config.config_path.write_text(
+        json.dumps(
+            {
+                "agents": {
+                    "list": [
+                        {"id": "main", "default": True},
+                        {"id": "specialist", "workspace": str(specialist_workspace)},
+                    ]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+
+    assert payload["agents"]["defaults"]["workspace"] == str(config.workspace_dir)
+    assert payload["agents"]["list"][1]["workspace"] == str(specialist_workspace)
+
+
+def test_openclaw_ensure_layout_uses_profile_aware_workspace_suffix(tmp_path: Path) -> None:
+    config = replace(_build_openclaw_config(tmp_path), profile="team-a")
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+
+    assert payload["agents"]["defaults"]["workspace"] == str(config.home_dir / "workspace-team-a")
+    assert (config.home_dir / "workspace-team-a").is_dir()
+
+
+def test_openclaw_ensure_layout_uses_env_profile_for_manual_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENCLAW_PROFILE", "team-a")
+    config = _build_openclaw_config(tmp_path)
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+
+    assert payload["agents"]["defaults"]["workspace"] == str(config.home_dir / "workspace-team-a")
+
+
+def test_openclaw_ensure_layout_treats_default_profile_as_unsuffixed_workspace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENCLAW_PROFILE", "default")
+    config = _build_openclaw_config(tmp_path)
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+
+    assert payload["agents"]["defaults"]["workspace"] == str(config.home_dir / "workspace")
+
+
+def test_openclaw_ensure_layout_fails_cleanly_when_workspace_path_is_a_file(tmp_path: Path) -> None:
+    config = _build_openclaw_config(tmp_path)
+    config.workspace_dir.parent.mkdir(parents=True, exist_ok=True)
+    config.workspace_dir.write_text("not-a-dir", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="workspace path collision"):
+        OpenClawRuntime(config).ensure_layout()
+
+
 def test_openclaw_runtime_uses_lifespan_hooks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     app = FastAPI()
     runtime = attach_openclaw_to_fastapi(app, replace(_build_openclaw_config(tmp_path), autostart=True))
@@ -1000,6 +1186,34 @@ def test_attach_openclaw_to_fastapi_rejects_conflicting_current_app_defaults(
         attach_openclaw_to_fastapi(FastAPI(), second_config)
 
 
+def test_attach_openclaw_to_fastapi_releases_current_app_defaults_when_app_is_discarded(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("OPENCLAW_PROXY_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_HOST", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_PORT", raising=False)
+    monkeypatch.delenv("PORT", raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULT_COUNTS", {}, raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULT_PATTERNS", [], raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULT_PATTERN_COUNTS", {}, raising=False)
+
+    first_config = replace(
+        _build_openclaw_config(tmp_path / "first"),
+        default_model="openclaw:first",
+        provider_model="openai/gpt-4o",
+    )
+    attach_openclaw_to_fastapi(FastAPI(), first_config)
+    gc.collect()
+
+    second_config = replace(
+        _build_openclaw_config(tmp_path / "second"),
+        default_model="openclaw:second",
+        provider_model="openai/gpt-5.4",
+    )
+    attach_openclaw_to_fastapi(FastAPI(), second_config)
+
+
 def test_attach_openclaw_to_fastapi_keeps_distinct_current_app_defaults_separate(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -1106,19 +1320,16 @@ def test_build_openclaw_responses_model_defaults_external_v1_to_provider_model(
     assert model.model == "anthropic/claude-sonnet-4-5"
 
 
-def test_build_openclaw_responses_model_translates_openclaw_aliases_for_direct_gateway_urls(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("OPENCLAW_PROVIDER_MODEL", "anthropic/claude-sonnet-4-5")
-
+def test_build_openclaw_responses_model_preserves_openclaw_aliases_for_direct_gateway_urls() -> None:
     model = build_openclaw_responses_model(
         model="openclaw:custom",
         base_url="http://127.0.0.1:18789/v1",
         api_key="external-token",
     )
 
-    assert model.model == "anthropic/claude-sonnet-4-5"
-    assert get_usage_tracking_model_name(model) == "anthropic/claude-sonnet-4-5"
+    assert model.model == "openclaw:custom"
+    assert get_usage_tracking_model_name(model) == "openclaw:custom"
+    assert get_default_settings_model_name(model) == "openclaw:custom"
 
 
 def test_build_openclaw_responses_model_preserves_explicit_nondefault_alias_metadata_for_current_app_proxy(
@@ -1463,6 +1674,7 @@ def test_openclaw_ensure_layout_normalizes_existing_non_dict_config_sections(tmp
     assert saved["gateway"]["auth"]["mode"] == "token"
     assert saved["gateway"]["http"]["endpoints"]["responses"]["enabled"] is True
     assert saved["agents"]["defaults"]["model"] == {"primary": "openai/gpt-5.4"}
+    assert saved["agents"]["defaults"]["workspace"] == str(config.workspace_dir)
 
 
 def test_openclaw_resolve_gateway_command_errors_when_binary_is_unavailable(

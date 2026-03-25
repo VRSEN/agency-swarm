@@ -247,12 +247,13 @@ class Agent(BaseAgent[MasterContext]):
             raise RuntimeError(f"Agent {self.name} has no file manager configured")
 
         self.file_manager.read_instructions()
+        # Explicit files_folder support must keep working even when framework-managed tool wiring is disabled.
+        # Skip side-effectful OpenAI file/vector-store setup when DRY_RUN is enabled.
+        _dry_run_env = os.getenv("DRY_RUN", "")
+        _DRY_RUN = str(_dry_run_env).strip().lower() in {"1", "true", "yes", "on"}
+        if not _DRY_RUN:
+            self.file_manager.parse_files_folder_for_vs_id()
         if self.supports_framework_tool_wiring:
-            # Skip side-effectful OpenAI file/vector-store setup when DRY_RUN is enabled
-            _dry_run_env = os.getenv("DRY_RUN", "")
-            _DRY_RUN = str(_dry_run_env).strip().lower() in {"1", "true", "yes", "on"}
-            if not _DRY_RUN:
-                self.file_manager.parse_files_folder_for_vs_id()
             parse_schemas(self)
             load_tools_from_folder(self)
 

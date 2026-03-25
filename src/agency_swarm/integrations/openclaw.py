@@ -11,6 +11,7 @@ import signal
 import socket
 import subprocess
 import time
+import weakref
 from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -100,6 +101,27 @@ def _default_gateway_token() -> str:
     return "openclaw-local-token"
 
 
+def _workspace_suffix(profile: str | None) -> str:
+    if not isinstance(profile, str):
+        return ""
+    normalized = profile.strip()
+    if not normalized or normalized.lower() == "default":
+        return ""
+    return f"-{normalized}"
+
+
+def _default_agent_has_explicit_workspace(agents: dict[str, Any]) -> bool:
+    entries = agents.get("list")
+    if not isinstance(entries, list):
+        return False
+    normalized_entries = [entry for entry in entries if isinstance(entry, dict)]
+    if not normalized_entries:
+        return False
+    default_entry = next((entry for entry in normalized_entries if entry.get("default")), normalized_entries[0])
+    workspace = default_entry.get("workspace")
+    return isinstance(workspace, str) and bool(workspace.strip())
+
+
 def _parse_node_semver(raw: str) -> tuple[int, int, int] | None:
     match = re.search(r"v?(\d+)\.(\d+)\.(\d+)", raw.strip())
     if not match:
@@ -168,6 +190,7 @@ class OpenClawIntegrationConfig:
     default_model: str
     provider_model: str
     gateway_command: str | None
+    profile: str | None = None
     tool_mode: str = "full"
 
     @property
@@ -176,6 +199,16 @@ class OpenClawIntegrationConfig:
         if ":" in host and not host.startswith("["):
             host = f"[{host}]"
         return f"http://{host}:{self.port}"
+
+    @property
+    def workspace_dir(self) -> Path:
+        return self.home_dir / f"workspace{_workspace_suffix(self.profile or os.getenv('OPENCLAW_PROFILE'))}"
+
+    @property
+    def legacy_workspace_dir(self) -> Path:
+        return (
+            self.home_dir / ".openclaw" / f"workspace{_workspace_suffix(self.profile or os.getenv('OPENCLAW_PROFILE'))}"
+        )
 
     @classmethod
     def from_env(cls) -> OpenClawIntegrationConfig:
@@ -211,6 +244,7 @@ class OpenClawIntegrationConfig:
             default_model=os.getenv("OPENCLAW_DEFAULT_MODEL", DEFAULT_OPENCLAW_MODEL),
             provider_model=os.getenv("OPENCLAW_PROVIDER_MODEL", "openai/gpt-5.4"),
             gateway_command=gateway_command,
+            profile=os.getenv("OPENCLAW_PROFILE"),
             tool_mode=_read_openclaw_tool_mode_env(),
         )
 
@@ -344,6 +378,8 @@ class OpenClawRuntime:
             agents["defaults"] = defaults
         if "model" not in defaults:
             defaults["model"] = self._normalize_model_config(self.config.provider_model)
+        if not _default_agent_has_explicit_workspace(agents):
+            self._ensure_default_workspace(defaults)
 
         config_payload = json.dumps(current, indent=2)
         fd = os.open(self.config.config_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -359,6 +395,37 @@ class OpenClawRuntime:
             _record_worker_tool_mode_state(
                 self.config.config_path, _tool_mode_backup_path(self.config.config_path), current
             )
+
+    def _ensure_default_workspace(self, defaults: dict[str, Any]) -> None:
+        workspace = defaults.get("workspace")
+        if isinstance(workspace, str) and workspace.strip():
+            return
+
+        legacy_workspace_dir = self.config.legacy_workspace_dir
+        workspace_dir = self.config.workspace_dir
+
+        if legacy_workspace_dir.exists():
+            if not workspace_dir.exists():
+                workspace_dir.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(legacy_workspace_dir), str(workspace_dir))
+            elif workspace_dir.is_dir() and not any(workspace_dir.iterdir()):
+                for child in legacy_workspace_dir.iterdir():
+                    shutil.move(str(child), str(workspace_dir / child.name))
+                try:
+                    legacy_workspace_dir.rmdir()
+                except OSError:
+                    logger.debug("Unable to remove migrated OpenClaw legacy workspace dir", exc_info=True)
+            elif legacy_workspace_dir.is_dir() and any(legacy_workspace_dir.iterdir()):
+                defaults["workspace"] = str(legacy_workspace_dir)
+                return
+
+        if workspace_dir.exists() and not workspace_dir.is_dir():
+            raise RuntimeError(
+                f"OpenClaw workspace path collision at {workspace_dir}. "
+                "Remove the file or set agents.defaults.workspace explicitly."
+            )
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+        defaults["workspace"] = str(workspace_dir)
 
     def _resolve_gateway_command(self) -> list[str]:
         if self.config.gateway_command:
@@ -1143,12 +1210,24 @@ def attach_openclaw_to_fastapi(
     resolved_config = config or OpenClawIntegrationConfig.from_env()
     resolved_verify_token = verify_token or getattr(app.state, "verify_token", None)
     runtime = OpenClawRuntime(resolved_config)
-    for proxy_base_url in _resolve_current_app_openclaw_proxy_base_urls(app):
+    proxy_base_urls = _resolve_current_app_openclaw_proxy_base_urls(app)
+    for proxy_base_url in proxy_base_urls:
         openclaw_model.register_current_app_openclaw_defaults(
             default_model=resolved_config.default_model,
             provider_model=resolved_config.provider_model,
             base_url=proxy_base_url,
         )
+    defaults_unregistered = False
+
+    def _unregister_current_app_defaults() -> None:
+        nonlocal defaults_unregistered
+        if defaults_unregistered:
+            return
+        defaults_unregistered = True
+        for proxy_base_url in proxy_base_urls:
+            openclaw_model.unregister_current_app_openclaw_defaults(base_url=proxy_base_url)
+
+    weakref.finalize(app, _unregister_current_app_defaults)
 
     app.include_router(
         create_openclaw_proxy_router(resolved_config, verify_token=resolved_verify_token),
@@ -1172,6 +1251,7 @@ def attach_openclaw_to_fastapi(
             try:
                 yield lifespan_state
             finally:
+                _unregister_current_app_defaults()
                 if should_stop_runtime:
                     await asyncio.to_thread(runtime.stop)
 

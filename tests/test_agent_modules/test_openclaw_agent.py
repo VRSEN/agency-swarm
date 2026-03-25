@@ -12,7 +12,11 @@ from agency_swarm.integrations.openclaw_model import (
     register_current_app_openclaw_defaults,
 )
 from agency_swarm.tools.send_message import Handoff
-from agency_swarm.utils.model_utils import get_model_name, get_usage_tracking_model_name
+from agency_swarm.utils.model_utils import (
+    get_default_settings_model_name,
+    get_model_name,
+    get_usage_tracking_model_name,
+)
 
 
 def test_openclaw_agent_auto_builds_responses_model(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -54,6 +58,32 @@ def test_openclaw_agent_supports_custom_host_port_and_path() -> None:
     assert agent.model.model == "openclaw:main"
 
 
+@pytest.mark.parametrize(
+    ("kwargs", "expected_url"),
+    [
+        ({"api_path": "/worker/v1"}, "https://proxy.example/worker/v1/"),
+        ({"host": "worker.example"}, "https://worker.example/openclaw/v1/"),
+        ({"port": 9443}, "https://proxy.example:9443/openclaw/v1/"),
+    ],
+)
+def test_openclaw_agent_preserves_env_proxy_base_url_when_partially_overridden(
+    monkeypatch: pytest.MonkeyPatch,
+    kwargs: dict[str, str | int],
+    expected_url: str,
+) -> None:
+    monkeypatch.setenv("OPENCLAW_PROXY_BASE_URL", "https://proxy.example/openclaw/v1")
+
+    agent = OpenClawAgent(
+        name="OpenClawWorker",
+        description="Worker",
+        instructions="Handle OpenClaw work.",
+        api_key="external-token",
+        **kwargs,
+    )
+
+    assert str(agent.model._client.base_url) == expected_url
+
+
 def test_openclaw_agent_brackets_ipv6_hosts() -> None:
     agent = OpenClawAgent(
         name="OpenClawWorker",
@@ -83,17 +113,36 @@ def test_openclaw_agent_defaults_external_v1_urls_to_provider_model(
     assert agent.model.model == "anthropic/claude-sonnet-4-5"
 
 
-def test_openclaw_agent_allows_model_alias_override_for_external_servers() -> None:
+def test_build_openclaw_responses_model_defaults_raw_gateway_to_local_runtime_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENCLAW_GATEWAY_TOKEN", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_API_KEY", raising=False)
+    monkeypatch.delenv("APP_TOKEN", raising=False)
+
+    model = build_openclaw_responses_model(base_url="http://127.0.0.1:18789/v1")
+
+    assert model._client.api_key == "openclaw-local-token"
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "https://example.com/openclaw/v1",
+        "http://127.0.0.1:18789/v1",
+    ],
+)
+def test_openclaw_agent_preserves_model_alias_override_for_external_servers(base_url: str) -> None:
     agent = OpenClawAgent(
         name="OpenClawWorker",
         description="Worker",
         instructions="Handle OpenClaw work.",
-        base_url="https://example.com/openclaw/v1",
+        base_url=base_url,
         api_key="external-token",
         model="openclaw:custom",
     )
 
-    assert str(agent.model._client.base_url) == "https://example.com/openclaw/v1/"
+    assert str(agent.model._client.base_url) == f"{base_url}/"
     assert agent.model.model == "openclaw:custom"
 
 
@@ -115,6 +164,18 @@ def test_build_openclaw_responses_model_keeps_public_alias_for_remote_worker_usa
     model = build_openclaw_responses_model(base_url="https://remote.example/openclaw/v1", api_key="external-token")
 
     assert get_usage_tracking_model_name(model) == "openclaw:main"
+
+
+def test_build_openclaw_responses_model_preserves_explicit_alias_for_direct_gateway_urls() -> None:
+    model = build_openclaw_responses_model(
+        model="openclaw:custom",
+        base_url="http://127.0.0.1:18789/v1",
+        api_key="external-token",
+    )
+
+    assert model.model == "openclaw:custom"
+    assert get_usage_tracking_model_name(model) == "openclaw:custom"
+    assert get_default_settings_model_name(model) == "openclaw:custom"
 
 
 def test_openclaw_agent_uses_gateway_token_when_proxy_key_and_app_token_are_missing(

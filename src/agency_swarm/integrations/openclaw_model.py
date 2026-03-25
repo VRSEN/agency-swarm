@@ -13,6 +13,7 @@ from openai import AsyncOpenAI
 DEFAULT_OPENCLAW_MODEL = "openclaw:main"
 DEFAULT_OPENCLAW_PROXY_API_PATH = "/openclaw/v1"
 DEFAULT_OPENCLAW_PROVIDER_MODEL = "openai/gpt-5.4"
+DEFAULT_OPENCLAW_LOCAL_GATEWAY_TOKEN = "openclaw-local-token"
 
 
 @dataclass(frozen=True)
@@ -30,9 +31,11 @@ class _CurrentAppOpenClawDefaultsPattern:
 
 
 _CURRENT_APP_OPENCLAW_DEFAULTS: dict[tuple[str, str, int, str], _CurrentAppOpenClawDefaults] = {}
+_CURRENT_APP_OPENCLAW_DEFAULT_COUNTS: dict[tuple[str, str, int, str], int] = {}
 _CURRENT_APP_OPENCLAW_DEFAULT_PATTERNS: list[
     tuple[_CurrentAppOpenClawDefaultsPattern, _CurrentAppOpenClawDefaults]
 ] = []
+_CURRENT_APP_OPENCLAW_DEFAULT_PATTERN_COUNTS: dict[_CurrentAppOpenClawDefaultsPattern, int] = {}
 
 
 def build_openclaw_responses_model(
@@ -43,7 +46,7 @@ def build_openclaw_responses_model(
     resolved_base_url = (base_url or _resolve_current_openclaw_proxy_base_url()).rstrip("/")
 
     if isinstance(model, str) and model.strip():
-        resolved_model = _resolve_openclaw_requested_model(model.strip(), resolved_base_url)
+        resolved_model = model.strip()
     else:
         resolved_model = _resolve_openclaw_default_model(resolved_base_url)
     resolved_usage_model = _resolve_openclaw_usage_model(resolved_model, resolved_base_url)
@@ -61,12 +64,6 @@ def build_openclaw_responses_model(
     return responses_model
 
 
-def _resolve_openclaw_requested_model(model_name: str, base_url: str) -> str:
-    if model_name.startswith("openclaw:") and _uses_raw_openclaw_gateway(base_url):
-        return _resolve_openclaw_default_model(base_url)
-    return model_name
-
-
 def _resolve_openclaw_usage_model(model_name: str, base_url: str) -> str | None:
     if model_name.startswith("openclaw:"):
         current_app_defaults = _resolve_current_app_openclaw_defaults(base_url)
@@ -75,7 +72,7 @@ def _resolve_openclaw_usage_model(model_name: str, base_url: str) -> str | None:
                 return current_app_defaults.provider_model
             return model_name
         if _uses_raw_openclaw_gateway(base_url):
-            return os.getenv("OPENCLAW_PROVIDER_MODEL", "").strip() or DEFAULT_OPENCLAW_PROVIDER_MODEL
+            return model_name
         if _uses_current_app_openclaw_proxy(base_url):
             return os.getenv("OPENCLAW_PROVIDER_MODEL", "").strip() or DEFAULT_OPENCLAW_PROVIDER_MODEL
         return model_name
@@ -109,7 +106,12 @@ def _resolve_openclaw_responses_api_key(base_url: str, api_key: str | None) -> s
         )
 
     if _uses_raw_openclaw_gateway(base_url):
-        return os.getenv("OPENCLAW_GATEWAY_TOKEN") or os.getenv("OPENCLAW_PROXY_API_KEY") or "sk-openclaw-proxy"
+        return (
+            os.getenv("OPENCLAW_GATEWAY_TOKEN")
+            or os.getenv("OPENCLAW_PROXY_API_KEY")
+            or os.getenv("APP_TOKEN")
+            or DEFAULT_OPENCLAW_LOCAL_GATEWAY_TOKEN
+        )
 
     proxy_api_key = os.getenv("OPENCLAW_PROXY_API_KEY")
     if proxy_api_key:
@@ -151,6 +153,9 @@ def register_current_app_openclaw_defaults(
                 "Use one current-app proxy config per process or set distinct proxy base URLs."
             )
         _CURRENT_APP_OPENCLAW_DEFAULTS[proxy_base_url] = new_defaults
+        _CURRENT_APP_OPENCLAW_DEFAULT_COUNTS[proxy_base_url] = (
+            _CURRENT_APP_OPENCLAW_DEFAULT_COUNTS.get(proxy_base_url, 0) + 1
+        )
         return
 
     if proxy_base_url.scheme is None or proxy_base_url.host_pattern is None or proxy_base_url.port is None:
@@ -164,9 +169,40 @@ def register_current_app_openclaw_defaults(
                 "Conflicting current-app OpenClaw defaults for the same proxy base URL. "
                 "Use one current-app proxy config per process or set distinct proxy base URLs."
             )
+        _CURRENT_APP_OPENCLAW_DEFAULT_PATTERN_COUNTS[proxy_base_url] = (
+            _CURRENT_APP_OPENCLAW_DEFAULT_PATTERN_COUNTS.get(proxy_base_url, 0) + 1
+        )
         return
 
     _CURRENT_APP_OPENCLAW_DEFAULT_PATTERNS.append((proxy_base_url, new_defaults))
+    _CURRENT_APP_OPENCLAW_DEFAULT_PATTERN_COUNTS[proxy_base_url] = 1
+
+
+def unregister_current_app_openclaw_defaults(*, base_url: str) -> None:
+    global _CURRENT_APP_OPENCLAW_DEFAULT_PATTERNS
+    proxy_base_url = _normalize_current_app_openclaw_proxy_matcher(base_url)
+    if isinstance(proxy_base_url, tuple):
+        registration_count = _CURRENT_APP_OPENCLAW_DEFAULT_COUNTS.get(proxy_base_url)
+        if registration_count is None:
+            return
+        if registration_count > 1:
+            _CURRENT_APP_OPENCLAW_DEFAULT_COUNTS[proxy_base_url] = registration_count - 1
+            return
+        _CURRENT_APP_OPENCLAW_DEFAULT_COUNTS.pop(proxy_base_url, None)
+        _CURRENT_APP_OPENCLAW_DEFAULTS.pop(proxy_base_url, None)
+        return
+
+    registration_count = _CURRENT_APP_OPENCLAW_DEFAULT_PATTERN_COUNTS.get(proxy_base_url)
+    if registration_count is None:
+        return
+    if registration_count > 1:
+        _CURRENT_APP_OPENCLAW_DEFAULT_PATTERN_COUNTS[proxy_base_url] = registration_count - 1
+        return
+
+    _CURRENT_APP_OPENCLAW_DEFAULT_PATTERN_COUNTS.pop(proxy_base_url, None)
+    _CURRENT_APP_OPENCLAW_DEFAULT_PATTERNS = [
+        (pattern, defaults) for pattern, defaults in _CURRENT_APP_OPENCLAW_DEFAULT_PATTERNS if pattern != proxy_base_url
+    ]
 
 
 def _resolve_current_openclaw_proxy_base_url() -> str:

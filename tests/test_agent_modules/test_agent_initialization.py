@@ -201,6 +201,22 @@ def test_agent_initialization_skips_framework_tool_wiring_when_disabled(tmp_path
     assert agent.tools == []
 
 
+def test_agent_initialization_keeps_explicit_files_folder_when_framework_tool_wiring_disabled(tmp_path) -> None:
+    """Explicit files_folder support should survive even when framework-managed tool wiring is disabled."""
+    files_dir = tmp_path / "docs_vs_abcdefghijklmnop"
+    files_dir.mkdir()
+
+    agent = Agent(
+        name="RestrictedAgent",
+        instructions="Test",
+        files_folder=str(files_dir),
+        supports_framework_tool_wiring=False,
+    )
+
+    assert agent._associated_vector_store_id == "vs_abcdefghijklmnop"
+    assert [tool.__class__.__name__ for tool in agent.tools] == ["FileSearchTool"]
+
+
 def test_agent_initialization_converts_explicit_mcp_servers_when_framework_tool_wiring_disabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -339,6 +355,19 @@ def test_agent_initialization_model_objects_use_openclaw_default_settings_alias(
     assert agent.model_settings.reasoning is not None
     assert agent.model_settings.reasoning.effort == "low"
     assert agent.model_settings.verbosity == "low"
+
+
+def test_agent_initialization_model_objects_preserve_explicit_openclaw_alias_defaults() -> None:
+    model = build_openclaw_responses_model(
+        model="openclaw:custom",
+        base_url="http://127.0.0.1:18789/v1",
+        api_key="test-key",
+    )
+
+    agent = Agent(name="UsageTrackedModel", instructions="Test", model=model)
+
+    assert agent.model_settings.reasoning is None
+    assert agent.model_settings.verbosity is None
 
 
 def test_agent_initialization_adapts_basetool_type():
