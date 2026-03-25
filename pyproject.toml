@@ -30,6 +30,12 @@ dependencies = [
     "types-requests>=2.0,<3",
     "typing-extensions>=4.13,<5",
     "watchfiles>=1.0.0,<2.0.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.35.0",
+    "ag-ui-protocol>=0.1.4",
+    "aiofiles>=23.2.1",
+    "filetype>=1.2.0",
+    "httpx>=0.28.0",
 ]
 classifiers = [
     "Typing :: Typed",

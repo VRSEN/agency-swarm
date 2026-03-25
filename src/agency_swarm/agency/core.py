@@ -424,7 +424,7 @@ class Agency:
 
     def terminal_demo(self, show_reasoning: bool | None = None, reload: bool = True) -> None:
         """
-        Run a terminal demo of the agency.
+        Run the terminal UI for the agency.
 
         Args:
             show_reasoning: Whether to show reasoning output. Auto-detected if None.
