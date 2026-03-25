@@ -171,7 +171,7 @@ def visualize(
 
 def terminal_demo(agency: "Agency", show_reasoning: bool | None = None, reload: bool = True) -> None:
     """
-    Run a terminal demo of the agency with Agent Swarm CLI.
+    Run the terminal UI for the agency.
 
     Args:
         agency: The Agency instance to run.

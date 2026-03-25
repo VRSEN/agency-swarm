@@ -23,9 +23,14 @@ name = "agency-swarm"
 version = "1.8.0"
 source = { editable = "." }
 dependencies = [
+    { name = "ag-ui-protocol" },
+    { name = "aiofiles" },
     { name = "datamodel-code-generator" },
     { name = "docstring-parser" },
+    { name = "fastapi" },
     { name = "fastmcp" },
+    { name = "filetype" },
+    { name = "httpx" },
     { name = "jsonref" },
     { name = "mcp" },
     { name = "openai" },
@@ -38,6 +43,7 @@ dependencies = [
     { name = "termcolor" },
     { name = "types-requests" },
     { name = "typing-extensions" },
+    { name = "uvicorn", extra = ["standard"] },
     { name = "watchfiles" },
 ]
 
@@ -90,14 +96,19 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "ag-ui-protocol", specifier = ">=0.1.4" },
     { name = "ag-ui-protocol", marker = "extra == 'fastapi'", specifier = ">=0.1.4" },
+    { name = "aiofiles", specifier = ">=23.2.1" },
     { name = "aiofiles", marker = "extra == 'fastapi'", specifier = ">=23.2.1" },
     { name = "datamodel-code-generator", specifier = ">=0.33.0,<0.34.0" },
     { name = "docstring-parser", specifier = ">=0.16,<1.0.0" },
+    { name = "fastapi", specifier = ">=0.115.0" },
     { name = "fastapi", marker = "extra == 'fastapi'", specifier = ">=0.115.0" },
     { name = "fastmcp", specifier = ">=2.13.1" },
+    { name = "filetype", specifier = ">=1.2.0" },
     { name = "filetype", marker = "extra == 'fastapi'", specifier = ">=1.2.0" },
     { name = "graphviz", marker = "extra == 'viz'", specifier = ">=0.17" },
+    { name = "httpx", specifier = ">=0.28.0" },
     { name = "httpx", marker = "extra == 'fastapi'", specifier = ">=0.28.0" },
     { name = "ipykernel", marker = "extra == 'jupyter'", specifier = ">=6.29.0,<7.0.0" },
     { name = "jsonref", specifier = ">=1.1.0,<2.0.0" },
@@ -116,6 +127,7 @@ requires-dist = [
     { name = "termcolor", specifier = ">=2.3.0,<3.0.0" },
     { name = "types-requests", specifier = ">=2.0,<3" },
     { name = "typing-extensions", specifier = ">=4.13,<5" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.35.0" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'fastapi'", specifier = ">=0.35.0" },
     { name = "watchfiles", specifier = ">=1.0.0,<2.0.0" },
     { name = "websockets", marker = "extra == 'voice'", specifier = ">=15.0,<16" },

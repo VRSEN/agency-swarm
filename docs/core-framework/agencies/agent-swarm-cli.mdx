@@ -1,32 +1,18 @@
 ---
 title: "Agent Swarm CLI"
-description: "Use agent-swarm-cli as the terminal client for the agency-swarm FastAPI backend."
+description: "Use the built-in terminal UI for agency-swarm without a second manual install."
 icon: "terminal"
 ---
 
-`agent-swarm-cli` is the terminal client for the `agency-swarm` FastAPI backend.
+`agent-swarm-cli` is the terminal UI binary used by `agency-swarm`.
 
 It gives you one canonical flow:
 
-1. Start an `agency-swarm` FastAPI server.
-2. Open the CLI.
-3. Use `/connect` to choose a local server and set a token if the server requires one.
-4. Use `/agents` to choose the active agency and recipient agent.
-5. Chat, stream tools and events, and use `/compact` when the session gets long.
-
-## Install
-
-Install the npm package:
-
-```bash
-npm i -g agentswarm-cli
-```
-
-Run the CLI with:
-
-```bash
-agentswarm
-```
+1. Install `agency-swarm` in Python.
+2. Call `agency.terminal_demo()`.
+3. On first run, `agency-swarm` downloads the matching `agent-swarm-cli` binary automatically.
+4. The binary is cached locally and reused on later runs.
+5. The backend bridge starts automatically, then the terminal UI opens.
 
 ## Use With `terminal_demo()`
 
@@ -34,7 +20,7 @@ agentswarm
 agency.terminal_demo()
 ```
 
-`terminal_demo()` launches `agent-swarm-cli` and connects it to your local `agency-swarm` backend bridge.
+`terminal_demo()` provisions the matching terminal binary if needed, starts the local `agency-swarm` bridge automatically, and launches the terminal UI.
 
 ## Connect To A Local Server
 
@@ -45,7 +31,7 @@ Use `/connect` to:
 - store or clear an Agency token for authenticated servers
 - refresh server availability while the dialog is open
 
-If no local server is available, start one first. For the backend setup, see [FastAPI Integration](/additional-features/fastapi-integration).
+This is the advanced path for attaching to another already running local `agency-swarm` server. The default `terminal_demo()` path starts its own local bridge automatically.
 
 ## Choose Agencies And Agents
 
@@ -64,7 +50,7 @@ Press `Tab` to autocomplete mentions.
 
 The current release is intentionally narrow:
 
-- local `agency-swarm` servers only
+- local `agency-swarm` backends only
 - one connected backend path per session
 - `/connect`, `/agents`, mentions, streaming events, exports, undo/redo, and `/compact`
 
