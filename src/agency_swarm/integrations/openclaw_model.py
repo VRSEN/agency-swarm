@@ -217,6 +217,12 @@ def _resolve_current_openclaw_proxy_base_url() -> str:
     return f"http://{host}:{port}{DEFAULT_OPENCLAW_PROXY_API_PATH}".rstrip("/")
 
 
+def _has_explicit_openclaw_proxy_base_url() -> bool:
+    if os.getenv("OPENCLAW_PROXY_BASE_URL", "").strip():
+        return True
+    return bool(os.getenv("OPENCLAW_PROXY_HOST") or os.getenv("OPENCLAW_PROXY_PORT") or os.getenv("PORT"))
+
+
 def _uses_raw_openclaw_gateway(base_url: str) -> bool:
     parsed = httpx.URL(base_url)
     normalized_path = parsed.path.rstrip("/")

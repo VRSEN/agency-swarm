@@ -1211,57 +1211,66 @@ def attach_openclaw_to_fastapi(
     resolved_verify_token = verify_token or getattr(app.state, "verify_token", None)
     runtime = OpenClawRuntime(resolved_config)
     proxy_base_urls = _resolve_current_app_openclaw_proxy_base_urls(app)
-    for proxy_base_url in proxy_base_urls:
-        openclaw_model.register_current_app_openclaw_defaults(
-            default_model=resolved_config.default_model,
-            provider_model=resolved_config.provider_model,
-            base_url=proxy_base_url,
-        )
     defaults_unregistered = False
+    registered_urls: list[str] = []
 
     def _unregister_current_app_defaults() -> None:
         nonlocal defaults_unregistered
         if defaults_unregistered:
             return
         defaults_unregistered = True
+        for url in registered_urls:
+            openclaw_model.unregister_current_app_openclaw_defaults(base_url=url)
+
+    try:
         for proxy_base_url in proxy_base_urls:
-            openclaw_model.unregister_current_app_openclaw_defaults(base_url=proxy_base_url)
+            openclaw_model.register_current_app_openclaw_defaults(
+                default_model=resolved_config.default_model,
+                provider_model=resolved_config.provider_model,
+                base_url=proxy_base_url,
+            )
+            registered_urls.append(proxy_base_url)
 
-    weakref.finalize(app, _unregister_current_app_defaults)
+        weakref.finalize(app, _unregister_current_app_defaults)
 
-    app.include_router(
-        create_openclaw_proxy_router(resolved_config, verify_token=resolved_verify_token),
-        prefix="/openclaw",
-        tags=["openclaw"],
-    )
-    app.state.openclaw_runtime = runtime
-    app.state.openclaw_config = resolved_config
+        app.include_router(
+            create_openclaw_proxy_router(resolved_config, verify_token=resolved_verify_token),
+            prefix="/openclaw",
+            tags=["openclaw"],
+        )
+        app.state.openclaw_runtime = runtime
+        app.state.openclaw_config = resolved_config
 
-    existing_lifespan = app.router.lifespan_context
+        existing_lifespan = app.router.lifespan_context
 
-    @asynccontextmanager
-    async def _openclaw_lifespan(inner_app: FastAPI) -> AsyncIterator[Any]:
-        async with existing_lifespan(inner_app) as lifespan_state:
-            should_stop_runtime = False
-            if resolved_config.autostart:
-                await asyncio.to_thread(runtime.start)
-                should_stop_runtime = True
-            else:
-                logger.info("OpenClaw runtime autostart disabled")
-            try:
-                yield lifespan_state
-            finally:
-                _unregister_current_app_defaults()
-                if should_stop_runtime:
-                    await asyncio.to_thread(runtime.stop)
+        @asynccontextmanager
+        async def _openclaw_lifespan(inner_app: FastAPI) -> AsyncIterator[Any]:
+            async with existing_lifespan(inner_app) as lifespan_state:
+                should_stop_runtime = False
+                if resolved_config.autostart:
+                    await asyncio.to_thread(runtime.start)
+                    should_stop_runtime = True
+                else:
+                    logger.info("OpenClaw runtime autostart disabled")
+                try:
+                    yield lifespan_state
+                finally:
+                    _unregister_current_app_defaults()
+                    if should_stop_runtime:
+                        await asyncio.to_thread(runtime.stop)
 
-    app.router.lifespan_context = _openclaw_lifespan
+        app.router.lifespan_context = _openclaw_lifespan
 
-    return runtime
+        return runtime
+    except Exception:
+        _unregister_current_app_defaults()
+        raise
 
 
 def _resolve_current_app_openclaw_proxy_base_urls(app: FastAPI) -> list[str]:
-    proxy_base_urls = [openclaw_model._resolve_current_openclaw_proxy_base_url()]
+    proxy_base_urls: list[str] = []
+    if openclaw_model._has_explicit_openclaw_proxy_base_url():
+        proxy_base_urls.append(openclaw_model._resolve_current_openclaw_proxy_base_url())
     servers = getattr(app, "servers", None)
     if isinstance(servers, list):
         for server in servers:
