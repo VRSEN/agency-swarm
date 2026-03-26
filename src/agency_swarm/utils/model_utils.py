@@ -66,6 +66,37 @@ def is_reasoning_model(model: str | Model | None) -> bool:
     return any(model_name.startswith(prefix) for prefix in REASONING_MODEL_PREFIXES)
 
 
+def is_anthropic_model(model: str | Model | None) -> bool:
+    """Determine if a model is an Anthropic/Claude model.
+
+    Matches models specified with the ``anthropic/`` LiteLLM provider prefix
+    or whose base name starts with ``claude``.
+
+    Parameters
+    ----------
+    model : str | Model | None
+        The model identifier (e.g., "anthropic/claude-sonnet-4-20250514", "claude-3-opus")
+
+    Returns
+    -------
+    bool
+        True if the model is an Anthropic model, False otherwise
+    """
+    if not model:
+        return False
+    model_name: str | None = None
+    if isinstance(model, Model):
+        model_name = getattr(model, "name", None) or getattr(model, "model", None)
+    elif isinstance(model, str):
+        model_name = model
+    else:
+        return False
+    if not model_name:
+        return False
+    lower = model_name.lower()
+    return lower.startswith("anthropic/") or lower.startswith("claude")
+
+
 def get_agent_capabilities(agent: "Agent") -> list[str]:
     """Detect capabilities of an agent based on its configuration.
 

@@ -19,6 +19,7 @@ from agents.models.default_models import get_default_model_settings as get_sdk_d
 from agency_swarm.agent.attachment_manager import AttachmentManager
 from agency_swarm.agent.file_manager import AgentFileManager
 from agency_swarm.tools import BaseTool, ToolFactory
+from agency_swarm.utils.model_utils import get_model_name, is_anthropic_model
 
 if TYPE_CHECKING:
     from agency_swarm.agent.core import Agent
@@ -144,6 +145,25 @@ def apply_framework_defaults(kwargs: dict[str, Any]) -> None:
 
     # User-specified values override defaults; unset fields inherit framework+SDK defaults
     kwargs["model_settings"] = base_defaults.resolve(existing_settings)
+
+    # Anthropic models don't support reasoning.summary via LiteLLM — strip it to avoid silent drops
+    resolved: ModelSettings = kwargs["model_settings"]
+    if resolved.reasoning is not None and is_anthropic_model(model_arg):
+        reasoning = resolved.reasoning
+        summary = getattr(reasoning, "summary", None)
+        if summary is not None:
+            from openai.types.shared.reasoning import Reasoning
+
+            kwargs["model_settings"] = dataclasses.replace(
+                resolved,
+                reasoning=Reasoning(effort=reasoning.effort),
+            )
+            logger.warning(
+                "Stripped reasoning.summary for Anthropic model '%s' — "
+                "LiteLLM does not forward summary to the Anthropic API. "
+                "Only reasoning.effort will be used.",
+                get_model_name(model_arg) or model_name,
+            )
 
 
 def separate_kwargs(kwargs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
