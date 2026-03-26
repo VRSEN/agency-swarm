@@ -26,7 +26,7 @@ from pydantic import BaseModel, ValidationError
 from ..context import MasterContext
 from ..messages import MessageFormatter
 from ..streaming.utils import add_agent_name_to_event
-from ..utils.model_utils import get_model_name
+from ..utils.model_utils import get_usage_tracking_model_name
 
 if TYPE_CHECKING:
     from ..agent.context_types import AgentRuntimeState
@@ -412,7 +412,7 @@ class SendMessage(FunctionTool):
                         sub_raw_responses = final_result.raw_responses
                         if sub_raw_responses:
                             # Get sub-agent's model name for accurate per-response pricing
-                            sub_agent_model_name = get_model_name(self.recipient_agent.model)
+                            sub_agent_model_name = get_usage_tracking_model_name(self.recipient_agent.model)
                             # Store tuples of (model_name, response) for per-model cost calculation
                             for resp in sub_raw_responses:
                                 wrapper.context._sub_agent_raw_responses.append((sub_agent_model_name, resp))
@@ -444,7 +444,7 @@ class SendMessage(FunctionTool):
                         sub_raw_responses = response.raw_responses
                         if sub_raw_responses:
                             # Get sub-agent's model name for accurate per-response pricing
-                            sub_agent_model_name = get_model_name(self.recipient_agent.model)
+                            sub_agent_model_name = get_usage_tracking_model_name(self.recipient_agent.model)
                             # Store tuples of (model_name, response) for per-model cost calculation
                             for resp in sub_raw_responses:
                                 wrapper.context._sub_agent_raw_responses.append((sub_agent_model_name, resp))

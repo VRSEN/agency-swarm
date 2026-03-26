@@ -1,0 +1,111 @@
+---
+title: "OpenClaw"
+description: "Deploy your own private OpenClaw assistant on Agent Swarm."
+icon: "lobster"
+---
+
+OpenClaw is a personal AI assistant you run in your own environment.
+On Agent Swarm, you can launch it from a ready template and chat with it inside your workspace in a few clicks.
+
+<CardGroup cols={2}>
+  <Card title="Open The Template" icon="github" href="https://github.com/agency-ai-solutions/openclaw-starter-template">
+    Create your own repository from the official OpenClaw starter template.
+  </Card>
+  <Card title="Official OpenClaw Docs" icon="book-open" href="https://docs.openclaw.ai/start/getting-started">
+    Learn what OpenClaw can do and how its workspace files work.
+  </Card>
+</CardGroup>
+
+## Launch OpenClaw On Agent Swarm
+
+<Steps>
+  <Step title="Create your repository">
+    Open [agency-ai-solutions/openclaw-starter-template](https://github.com/agency-ai-solutions/openclaw-starter-template).
+
+    Click **Use this template** and create a repository in your own GitHub account or organization.
+
+    ![Use this template dropdown](/images/getting-started/github-use-this-template-dropdown.png)
+  </Step>
+
+  <Step title="Connect the repository">
+    In Agent Swarm, connect your GitHub account and pick the repository you created from the template.
+  </Step>
+
+  <Step title="Enable persistent storage">
+    Turn on **Persistent File Storage** for the swarm before the first deploy.
+
+    For Agent Swarm deploys, set `OPENCLAW_HOME=/app/mnt/openclaw`.
+    The file browser should show that same path directly, not a raw `/mnt` root.
+  </Step>
+
+  <Step title="Add your AI provider secrets">
+    Default deploy: add `OPENAI_API_KEY` in **Secrets Vault** before you deploy.
+
+    If you later switch away from the default OpenAI GPT-5.4 setup, add the matching provider secret for that model too.
+
+    Optional advanced settings:
+
+    - `OPENCLAW_PROVIDER_MODEL` only if you want a different provider or model
+    - `ANTHROPIC_API_KEY` only if you switch to an Anthropic model
+    - `OPENCLAW_GATEWAY_TOKEN` only if you want to override the internal gateway token
+  </Step>
+
+  <Step title="Fill the onboarding form">
+    Choose the assistant name, describe what it should help with, and add any extra instructions you want before deploy.
+
+    ![Marketplace onboarding form example](/images/platform/onboarding_form.png)
+  </Step>
+
+  <Step title="Deploy and chat">
+    Start the deployment, wait for the build to finish, then open the chat and send your first message.
+  </Step>
+</Steps>
+
+## Customize OpenClaw After Deploy
+
+OpenClaw keeps its own workspace files on persistent storage.
+That is where you update its personality, rules, and long-term notes.
+
+Agency Swarm now writes the default OpenClaw workspace to `/app/mnt/openclaw/workspace`.
+At the storage root, you should also see sibling folders like `logs` and `state`.
+
+The most important files are:
+
+- `AGENTS.md` for operating rules and priorities
+- `SOUL.md` for voice, tone, and personality
+- `USER.md` for user-specific preferences
+- `MEMORY.md` for durable notes you want OpenClaw to keep
+
+To replace them:
+
+1. Open your deployed agent
+2. Go to **Customization** -> **Persistent File Storage**
+3. Open `/app/mnt/openclaw/workspace`
+4. Upload the replacement file
+
+![Agent Swarm persistent file storage view for OpenClaw workspace](/images/platform/openclaw-persistent-storage-live.png)
+
+<Note>
+If OpenClaw starts behaving strangely, check both the onboarding instructions and the workspace files. They are both part of the final behavior.
+</Note>
+
+<Note>
+If you are upgrading an older deploy, OpenClaw may still have legacy files under `.openclaw/workspace` until the integration migrates them to the cleaner `workspace` path.
+</Note>
+
+## What You Get
+
+- A private OpenClaw deployment running on Agent Swarm
+- Normal chat inside your Agent Swarm workspace
+- Persistent OpenClaw files under `/app/mnt/openclaw`
+- A clean upgrade path through the starter template repo
+
+<Warning>
+This deployment is meant for one trusted user or one trusted team.
+The provider secrets you add in Agent Swarm are available inside the sandbox so OpenClaw can call model providers.
+Review [OpenClaw Security](https://docs.openclaw.ai/gateway/security) before you expose access more broadly.
+</Warning>
+
+## Want To Use It In Code?
+
+If you want to use OpenClaw inside your own Agency Swarm code, continue with [OpenClawAgent](/core-framework/agents/openclaw-agent).

@@ -50,7 +50,10 @@ def _build_agency(*tool_types: type[BaseTool]) -> Agency:
     agent = Agent(
         name="GalleryAgent",
         description="Provides gallery outputs with narrative context.",
-        instructions="Use each tool's description to decide which attachment to load for analysis.",
+        instructions=(
+            "Use each tool's description to decide which attachment to load for analysis. "
+            "When a matching attachment tool exists, call it immediately instead of asking for confirmation."
+        ),
         tools=list(tool_types),
         model="gpt-5-mini",
     )
@@ -69,7 +72,9 @@ async def test_multimodal_outputs_image_description() -> None:
 @pytest.mark.asyncio
 async def test_multimodal_outputs_remote_pdf() -> None:
     agency = _build_agency(LoadReferenceReportFromUrl)
-    result = await agency.get_response("Summarise the attached PDF and quote its secret phrase.")
+    result = await agency.get_response(
+        "Use the PDF URL tool now, then summarise the attached PDF and quote its secret phrase."
+    )
     assert isinstance(result.final_output, str)
     output = result.final_output.lower()
     assert "first pdf secret phrase" in output
@@ -79,7 +84,9 @@ async def test_multimodal_outputs_remote_pdf() -> None:
 @pytest.mark.asyncio
 async def test_multimodal_outputs_local_pdf() -> None:
     agency = _build_agency(LoadReferenceReportFromPath)
-    result = await agency.get_response("Summarise the attached PDF and quote its secret phrase.")
+    result = await agency.get_response(
+        "Use the local PDF tool now, then summarise the attached PDF and quote its secret phrase."
+    )
     assert isinstance(result.final_output, str)
     output = result.final_output.lower()
     assert "first pdf secret phrase" in output

@@ -87,6 +87,8 @@ class Agent(BaseAgent[MasterContext]):
     include_web_search_sources: bool = True
     validation_attempts: int = 1
     raise_input_guardrail_error: bool = False
+    supports_outbound_communication: bool = True
+    supports_framework_tool_wiring: bool = True
 
     # --- Internal State ---
     _associated_vector_store_id: str | None = None
@@ -137,7 +139,7 @@ class Agent(BaseAgent[MasterContext]):
 
         ## OpenAI Agents SDK Parameters:
             prompt (Prompt | DynamicPromptFunction | None): Dynamic prompt configuration.
-            model (str | Model | None): Model identifier (e.g., "gpt-5.2") or Model instance.
+            model (str | Model | None): Model identifier (e.g., "gpt-5.4") or Model instance.
                 If not provided, the agents SDK default model will be used: https://openai.github.io/openai-agents-python/models
             model_settings (ModelSettings | None): Model configuration (temperature, max_tokens, etc.).
             tools (list[Tool] | None): Tool instances for the agent. Defaults to empty list.
@@ -209,6 +211,12 @@ class Agent(BaseAgent[MasterContext]):
         self.include_web_search_sources = bool(current_agent_params.get("include_web_search_sources", True))
         self.validation_attempts = int(current_agent_params.get("validation_attempts", 1))
         self.raise_input_guardrail_error = bool(current_agent_params.get("raise_input_guardrail_error", False))
+        self.supports_outbound_communication = bool(
+            current_agent_params.get("supports_outbound_communication", self.supports_outbound_communication)
+        )
+        self.supports_framework_tool_wiring = bool(
+            current_agent_params.get("supports_framework_tool_wiring", self.supports_framework_tool_wiring)
+        )
         self.handoff_reminder = current_agent_params.get("handoff_reminder")
 
         # Internal state
@@ -239,13 +247,15 @@ class Agent(BaseAgent[MasterContext]):
             raise RuntimeError(f"Agent {self.name} has no file manager configured")
 
         self.file_manager.read_instructions()
-        # Skip side-effectful OpenAI file/vector-store setup when DRY_RUN is enabled
+        # Explicit files_folder support must keep working even when framework-managed tool wiring is disabled.
+        # Skip side-effectful OpenAI file/vector-store setup when DRY_RUN is enabled.
         _dry_run_env = os.getenv("DRY_RUN", "")
         _DRY_RUN = str(_dry_run_env).strip().lower() in {"1", "true", "yes", "on"}
         if not _DRY_RUN:
             self.file_manager.parse_files_folder_for_vs_id()
-        parse_schemas(self)
-        load_tools_from_folder(self)
+        if self.supports_framework_tool_wiring:
+            parse_schemas(self)
+            load_tools_from_folder(self)
 
         # Wrap input guardrails
         wrap_input_guardrails(self)
@@ -254,7 +264,7 @@ class Agent(BaseAgent[MasterContext]):
         for tool in self.tools:
             _attach_one_call_guard(tool, self)
 
-        # Convert MCP servers to tools and add them to the agent
+        # Explicit MCP servers are constructor input, not framework-managed wiring.
         convert_mcp_servers_to_tools(self)
         if self.include_web_search_sources and any(isinstance(tool, WebSearchTool) for tool in self.tools):
             existing_includes = list(self.model_settings.response_include or [])
@@ -571,6 +581,9 @@ class Agent(BaseAgent[MasterContext]):
             send_message_tool_class: Optional custom SendMessage tool for this specific communication.
             runtime_state: Optional runtime state container injected by the owning Agency
         """
+        if not self.supports_outbound_communication:
+            raise ValueError(f"Agent '{self.name}' cannot register subagents because it is configured as receive-only.")
+
         # Import to avoid circular dependency
         from .subagents import register_subagent as register_subagent_func
 

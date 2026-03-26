@@ -143,7 +143,7 @@ Use this guide when you need to build everything manually. Otherwise, start from
         description="Responsible for executing tasks.",
         instructions="./instructions.md",
         tools=[my_custom_tool, MyCustomTool],  # Import tools directly
-        model="gpt-5.2",
+        model="gpt-5.4",
         model_settings=ModelSettings(
             temperature=0.3,
             max_tokens=25000,
@@ -162,7 +162,7 @@ Use this guide when you need to build everything manually. Otherwise, start from
       developer = Agent(
           name="Developer",
           description="Responsible for executing tasks.",
-          model="gpt-5.2",
+          model="gpt-5.4",
           instructions="./instructions.md",
           tools_folder="./tools",
           files_folder="./files",

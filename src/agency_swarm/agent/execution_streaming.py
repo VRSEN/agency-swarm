@@ -23,7 +23,7 @@ from agency_swarm.messages import MessageFilter, MessageFormatter
 from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
 from agency_swarm.streaming.utils import add_agent_name_to_event
 from agency_swarm.tools.mcp_manager import default_mcp_manager
-from agency_swarm.utils.model_utils import get_model_name
+from agency_swarm.utils.model_utils import get_usage_tracking_model_name
 
 from .execution_guardrails import append_guardrail_feedback, extract_guardrail_texts
 from .execution_stream_persistence import (
@@ -576,7 +576,7 @@ def run_stream_with_guardrails(
                     # Store main agent's model on streaming_result for automatic cost calculation
                     if streaming_result:
                         try:
-                            main_model_name = get_model_name(agent.model)
+                            main_model_name = get_usage_tracking_model_name(agent.model)
                             if main_model_name:
                                 cast(_UsageTrackingRunResult, streaming_result)._main_agent_model = main_model_name
                         except Exception as e:

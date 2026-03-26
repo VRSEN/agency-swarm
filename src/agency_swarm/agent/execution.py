@@ -49,7 +49,7 @@ from agency_swarm.messages import (
 )
 from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
 from agency_swarm.utils.citation_extractor import extract_direct_file_annotations
-from agency_swarm.utils.model_utils import get_model_name
+from agency_swarm.utils.model_utils import get_usage_tracking_model_name
 
 if TYPE_CHECKING:
     from agents.items import ModelResponse
@@ -265,7 +265,7 @@ class Execution:
             # Store main agent's model on run_result for automatic cost calculation
             if run_result:
                 try:
-                    main_model_name = get_model_name(self.agent.model)
+                    main_model_name = get_usage_tracking_model_name(self.agent.model)
                     if main_model_name:
                         typing.cast(_UsageTrackingRunResult, run_result)._main_agent_model = main_model_name
                 except Exception as e:
@@ -578,7 +578,7 @@ class Execution:
                         _last_agent=self.agent,
                     )
 
-                    main_model_name = get_model_name(self.agent.model)
+                    main_model_name = get_usage_tracking_model_name(self.agent.model)
                     if main_model_name:
                         typing.cast(_UsageTrackingRunResult, run_result)._main_agent_model = main_model_name
 

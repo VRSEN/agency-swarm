@@ -399,6 +399,10 @@ class TestSharedFilesFolderLive:
         second_vs_id = vs_folders_after[0].name.split("_vs_")[1]
         assert first_vs_id == second_vs_id, "Vector store ID should be reused"
 
+    @pytest.mark.skipif(
+        os.getenv("CI") == "true",
+        reason="Requires live OpenAI vector-store ingestion; skipped on CI due to upstream flake.",
+    )
     def test_shared_files_folder_hot_reload_uploads_new_files(self, temp_files_folder: Path):
         """New files placed into the original folder path on hot reload should be uploaded."""
         original_name = temp_files_folder.name
@@ -458,6 +462,10 @@ class TestSharedFilesFolderLive:
         assert new_filename in filenames
 
     @pytest.mark.asyncio
+    @pytest.mark.skipif(
+        os.getenv("CI") == "true",
+        reason="Requires live OpenAI vector-store ingestion; skipped on CI due to upstream flake.",
+    )
     async def test_shared_files_folder_file_search_works(self, temp_files_folder: Path):
         """Agent should be able to search shared files and find content."""
         agent_a, agent_b = _create_fresh_agents()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import gzip
 import json
 import os
@@ -26,6 +27,7 @@ from agency_swarm.integrations.openclaw import (
     build_openclaw_responses_model,
     normalize_openclaw_responses_request,
 )
+from agency_swarm.utils.model_utils import get_default_settings_model_name, get_usage_tracking_model_name
 
 
 def _build_openclaw_config(tmp_path: Path) -> OpenClawIntegrationConfig:
@@ -42,9 +44,31 @@ def _build_openclaw_config(tmp_path: Path) -> OpenClawIntegrationConfig:
         startup_timeout_seconds=5.0,
         proxy_timeout_seconds=30.0,
         default_model="openclaw:main",
-        provider_model="openai/gpt-5.2",
+        provider_model="openai/gpt-5.4",
+        gateway_command="openclaw gateway",
+        tool_mode="full",
+    )
+
+
+def test_openclaw_config_manual_construction_defaults_to_full_tool_mode(tmp_path: Path) -> None:
+    home_dir = tmp_path / "openclaw"
+    config = OpenClawIntegrationConfig(
+        autostart=False,
+        host="127.0.0.1",
+        port=18789,
+        gateway_token="gateway-token",
+        home_dir=home_dir,
+        state_dir=home_dir / "state",
+        config_path=home_dir / "openclaw.json",
+        log_path=home_dir / "logs" / "openclaw-gateway.log",
+        startup_timeout_seconds=5.0,
+        proxy_timeout_seconds=30.0,
+        default_model="openclaw:main",
+        provider_model="openai/gpt-5.4",
         gateway_command="openclaw gateway",
     )
+
+    assert config.tool_mode == "full"
 
 
 def test_openclaw_proxy_mount_paths_exist(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -169,7 +193,7 @@ def test_openclaw_proxy_filters_request_keys_and_normalizes_payload(
     }
     assert "include" not in forwarded
     assert "parallel_tool_calls" not in forwarded
-    assert forwarded["model"] == "openai/gpt-5.2"
+    assert forwarded["model"] == "openai/gpt-5.4"
     assert forwarded["input"] == [
         {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hello"}]}
     ]
@@ -567,6 +591,191 @@ def test_openclaw_ensure_layout_writes_config_with_secure_create_mode(
     assert seen_modes[-1] == 0o600
 
 
+def test_openclaw_ensure_layout_defaults_workspace_to_home_workspace(tmp_path: Path) -> None:
+    config = _build_openclaw_config(tmp_path)
+    runtime = OpenClawRuntime(config)
+
+    runtime.ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+
+    assert payload["agents"]["defaults"]["workspace"] == str(config.workspace_dir)
+    assert config.workspace_dir.is_dir()
+
+
+def test_openclaw_ensure_layout_keeps_existing_workspace_override(tmp_path: Path) -> None:
+    config = _build_openclaw_config(tmp_path)
+    custom_workspace = tmp_path / "custom-workspace"
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps({"agents": {"defaults": {"workspace": str(custom_workspace)}}}),
+        encoding="utf-8",
+    )
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+
+    assert payload["agents"]["defaults"]["workspace"] == str(custom_workspace)
+    assert not config.workspace_dir.exists()
+
+
+def test_openclaw_ensure_layout_replaces_blank_workspace_override(tmp_path: Path) -> None:
+    config = _build_openclaw_config(tmp_path)
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps({"agents": {"defaults": {"workspace": "   "}}}),
+        encoding="utf-8",
+    )
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+
+    assert payload["agents"]["defaults"]["workspace"] == str(config.workspace_dir)
+    assert config.workspace_dir.is_dir()
+
+
+def test_openclaw_ensure_layout_migrates_legacy_workspace_when_default_is_missing(tmp_path: Path) -> None:
+    config = _build_openclaw_config(tmp_path)
+    legacy_workspace = config.legacy_workspace_dir
+    legacy_workspace.mkdir(parents=True, exist_ok=True)
+    (legacy_workspace / "AGENTS.md").write_text("legacy", encoding="utf-8")
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+
+    assert payload["agents"]["defaults"]["workspace"] == str(config.workspace_dir)
+    assert (config.workspace_dir / "AGENTS.md").read_text(encoding="utf-8") == "legacy"
+    assert not legacy_workspace.exists()
+
+
+def test_openclaw_ensure_layout_preserves_legacy_workspace_when_new_and_old_both_exist(tmp_path: Path) -> None:
+    config = _build_openclaw_config(tmp_path)
+    legacy_workspace = config.legacy_workspace_dir
+    legacy_workspace.mkdir(parents=True, exist_ok=True)
+    (legacy_workspace / "AGENTS.md").write_text("legacy", encoding="utf-8")
+    config.workspace_dir.mkdir(parents=True, exist_ok=True)
+    (config.workspace_dir / "AGENTS.md").write_text("new", encoding="utf-8")
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+
+    assert payload["agents"]["defaults"]["workspace"] == str(legacy_workspace)
+    assert (legacy_workspace / "AGENTS.md").read_text(encoding="utf-8") == "legacy"
+    assert (config.workspace_dir / "AGENTS.md").read_text(encoding="utf-8") == "new"
+
+
+def test_openclaw_ensure_layout_merges_legacy_workspace_into_empty_new_dir(tmp_path: Path) -> None:
+    config = _build_openclaw_config(tmp_path)
+    legacy_workspace = config.legacy_workspace_dir
+    legacy_workspace.mkdir(parents=True, exist_ok=True)
+    (legacy_workspace / "AGENTS.md").write_text("legacy", encoding="utf-8")
+    config.workspace_dir.mkdir(parents=True, exist_ok=True)
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+
+    assert payload["agents"]["defaults"]["workspace"] == str(config.workspace_dir)
+    assert (config.workspace_dir / "AGENTS.md").read_text(encoding="utf-8") == "legacy"
+    assert not legacy_workspace.exists()
+
+
+def test_openclaw_ensure_layout_keeps_explicit_agent_workspace_override(tmp_path: Path) -> None:
+    config = _build_openclaw_config(tmp_path)
+    legacy_workspace = config.legacy_workspace_dir
+    legacy_workspace.mkdir(parents=True, exist_ok=True)
+    (legacy_workspace / "AGENTS.md").write_text("legacy", encoding="utf-8")
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps({"agents": {"list": [{"id": "main", "workspace": str(legacy_workspace)}]}}),
+        encoding="utf-8",
+    )
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+
+    assert payload["agents"]["list"][0]["workspace"] == str(legacy_workspace)
+    assert (legacy_workspace / "AGENTS.md").read_text(encoding="utf-8") == "legacy"
+    assert not config.workspace_dir.exists()
+
+
+def test_openclaw_ensure_layout_keeps_default_workspace_migration_when_other_agent_has_override(tmp_path: Path) -> None:
+    config = _build_openclaw_config(tmp_path)
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    specialist_workspace = tmp_path / "specialist-workspace"
+    config.config_path.write_text(
+        json.dumps(
+            {
+                "agents": {
+                    "list": [
+                        {"id": "main", "default": True},
+                        {"id": "specialist", "workspace": str(specialist_workspace)},
+                    ]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+
+    assert payload["agents"]["defaults"]["workspace"] == str(config.workspace_dir)
+    assert payload["agents"]["list"][1]["workspace"] == str(specialist_workspace)
+
+
+def test_openclaw_ensure_layout_uses_profile_aware_workspace_suffix(tmp_path: Path) -> None:
+    config = replace(_build_openclaw_config(tmp_path), profile="team-a")
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+
+    assert payload["agents"]["defaults"]["workspace"] == str(config.home_dir / "workspace-team-a")
+    assert (config.home_dir / "workspace-team-a").is_dir()
+
+
+def test_openclaw_ensure_layout_uses_env_profile_for_manual_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENCLAW_PROFILE", "team-a")
+    config = _build_openclaw_config(tmp_path)
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+
+    assert payload["agents"]["defaults"]["workspace"] == str(config.home_dir / "workspace-team-a")
+
+
+def test_openclaw_ensure_layout_treats_default_profile_as_unsuffixed_workspace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENCLAW_PROFILE", "default")
+    config = _build_openclaw_config(tmp_path)
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+
+    assert payload["agents"]["defaults"]["workspace"] == str(config.home_dir / "workspace")
+
+
+def test_openclaw_ensure_layout_fails_cleanly_when_workspace_path_is_a_file(tmp_path: Path) -> None:
+    config = _build_openclaw_config(tmp_path)
+    config.workspace_dir.parent.mkdir(parents=True, exist_ok=True)
+    config.workspace_dir.write_text("not-a-dir", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="workspace path collision"):
+        OpenClawRuntime(config).ensure_layout()
+
+
 def test_openclaw_runtime_uses_lifespan_hooks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     app = FastAPI()
     runtime = attach_openclaw_to_fastapi(app, replace(_build_openclaw_config(tmp_path), autostart=True))
@@ -745,7 +954,7 @@ def test_build_openclaw_responses_model_uses_app_token_when_proxy_key_is_missing
     assert model._client.api_key == "app-token"
 
 
-def test_build_openclaw_responses_model_prefers_openclaw_proxy_key_over_app_token(
+def test_build_openclaw_responses_model_prefers_app_token_over_proxy_key_for_current_app_proxy(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("OPENCLAW_PROXY_API_KEY", "proxy-token")
@@ -753,17 +962,503 @@ def test_build_openclaw_responses_model_prefers_openclaw_proxy_key_over_app_toke
 
     model = build_openclaw_responses_model()
 
+    assert model._client.api_key == "app-token"
+
+
+def test_build_openclaw_responses_model_prefers_openclaw_proxy_key_for_external_proxy_urls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENCLAW_PROXY_API_KEY", "proxy-token")
+    monkeypatch.setenv("APP_TOKEN", "app-token")
+
+    model = build_openclaw_responses_model(base_url="https://example.com/openclaw/v1")
+
     assert model._client.api_key == "proxy-token"
+
+
+def test_build_openclaw_responses_model_uses_gateway_token_when_proxy_and_app_tokens_are_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENCLAW_PROXY_API_KEY", raising=False)
+    monkeypatch.delenv("APP_TOKEN", raising=False)
+    monkeypatch.setenv("OPENCLAW_GATEWAY_TOKEN", "gateway-token")
+
+    model = build_openclaw_responses_model()
+
+    assert model._client.api_key == "gateway-token"
+
+
+def test_build_openclaw_responses_model_uses_gateway_token_before_app_token_for_direct_gateway_urls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENCLAW_PROXY_API_KEY", "proxy-token")
+    monkeypatch.setenv("APP_TOKEN", "app-token")
+    monkeypatch.setenv("OPENCLAW_GATEWAY_TOKEN", "gateway-token")
+
+    model = build_openclaw_responses_model(base_url="http://127.0.0.1:18789/v1")
+
+    assert model._client.api_key == "gateway-token"
 
 
 def test_build_openclaw_responses_model_uses_openclaw_default_model_env_when_model_unspecified(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.delenv("OPENCLAW_PROXY_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_HOST", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_PORT", raising=False)
+    monkeypatch.delenv("PORT", raising=False)
     monkeypatch.setenv("OPENCLAW_DEFAULT_MODEL", "openclaw:beta")
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
 
     model = build_openclaw_responses_model()
 
     assert model.model == "openclaw:beta"
+
+
+def test_build_openclaw_responses_model_uses_programmatic_current_app_defaults(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("OPENCLAW_DEFAULT_MODEL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROVIDER_MODEL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_HOST", raising=False)
+    monkeypatch.setenv("OPENCLAW_PROXY_PORT", "8000")
+    monkeypatch.delenv("PORT", raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
+
+    app = FastAPI()
+    config = replace(
+        _build_openclaw_config(tmp_path),
+        default_model="openclaw:custom",
+        provider_model="anthropic/claude-sonnet-4-5",
+    )
+    attach_openclaw_to_fastapi(app, config)
+
+    model = build_openclaw_responses_model(base_url="http://127.0.0.1:8000/openclaw/v1", api_key="app-token")
+
+    assert model.model == "openclaw:custom"
+    assert get_usage_tracking_model_name(model) == "anthropic/claude-sonnet-4-5"
+
+
+def test_build_openclaw_responses_model_uses_programmatic_current_app_defaults_for_proxy_host_only(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("OPENCLAW_DEFAULT_MODEL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROVIDER_MODEL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_BASE_URL", raising=False)
+    monkeypatch.setenv("OPENCLAW_PROXY_HOST", "proxy.internal")
+    monkeypatch.delenv("OPENCLAW_PROXY_PORT", raising=False)
+    monkeypatch.delenv("PORT", raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
+
+    app = FastAPI()
+    config = replace(
+        _build_openclaw_config(tmp_path),
+        default_model="openclaw:custom",
+        provider_model="anthropic/claude-sonnet-4-5",
+    )
+    attach_openclaw_to_fastapi(app, config)
+
+    model = build_openclaw_responses_model(base_url="http://proxy.internal:8000/openclaw/v1", api_key="app-token")
+
+    assert model.model == "openclaw:custom"
+    assert get_usage_tracking_model_name(model) == "anthropic/claude-sonnet-4-5"
+
+
+def test_build_openclaw_responses_model_uses_app_token_and_defaults_for_explicit_same_app_proxy_url(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("OPENCLAW_DEFAULT_MODEL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROVIDER_MODEL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_HOST", raising=False)
+    monkeypatch.setenv("OPENCLAW_PROXY_PORT", "9000")
+    monkeypatch.delenv("PORT", raising=False)
+    monkeypatch.setenv("APP_TOKEN", "app-token")
+    monkeypatch.setenv("OPENCLAW_GATEWAY_TOKEN", "gateway-token")
+    monkeypatch.setenv("OPENCLAW_PROXY_API_KEY", "proxy-token")
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
+
+    app = FastAPI()
+    config = replace(
+        _build_openclaw_config(tmp_path),
+        port=9000,
+        default_model="openclaw:custom",
+        provider_model="openai/gpt-4o",
+    )
+    attach_openclaw_to_fastapi(app, config)
+
+    model = build_openclaw_responses_model(base_url="http://127.0.0.1:9000/openclaw/v1")
+
+    assert model.model == "openclaw:custom"
+    assert get_usage_tracking_model_name(model) == "openai/gpt-4o"
+    assert model._client.api_key == "app-token"
+
+
+@pytest.mark.parametrize(
+    ("server_url", "base_url"),
+    [
+        ("http://localhost:9000", "http://127.0.0.1:9000/openclaw/v1"),
+        ("https://example.com/{stage}", "https://example.com/prod/openclaw/v1"),
+    ],
+)
+def test_attach_openclaw_to_fastapi_uses_app_server_url_for_same_app_proxy_defaults(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, server_url: str, base_url: str
+) -> None:
+    monkeypatch.delenv("OPENCLAW_DEFAULT_MODEL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROVIDER_MODEL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_HOST", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_PORT", raising=False)
+    monkeypatch.delenv("PORT", raising=False)
+    monkeypatch.setenv("APP_TOKEN", "app-token")
+    monkeypatch.setenv("OPENCLAW_GATEWAY_TOKEN", "gateway-token")
+    monkeypatch.setenv("OPENCLAW_PROXY_API_KEY", "proxy-token")
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULT_PATTERNS", [], raising=False)
+
+    app = FastAPI(servers=[{"url": server_url}])
+    config = replace(
+        _build_openclaw_config(tmp_path),
+        default_model="openclaw:custom",
+        provider_model="anthropic/claude-sonnet-4-5",
+    )
+    attach_openclaw_to_fastapi(app, config)
+
+    model = build_openclaw_responses_model(base_url=base_url)
+
+    assert model.model == "openclaw:custom"
+    assert get_usage_tracking_model_name(model) == "anthropic/claude-sonnet-4-5"
+    assert model._client.api_key == "app-token"
+
+
+def test_attach_openclaw_to_fastapi_does_not_trust_relative_server_urls_as_current_app_proxy(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("OPENCLAW_DEFAULT_MODEL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROVIDER_MODEL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_HOST", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_PORT", raising=False)
+    monkeypatch.delenv("PORT", raising=False)
+    monkeypatch.setenv("APP_TOKEN", "app-token")
+    monkeypatch.setenv("OPENCLAW_GATEWAY_TOKEN", "gateway-token")
+    monkeypatch.setenv("OPENCLAW_PROXY_API_KEY", "proxy-token")
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULT_PATTERNS", [], raising=False)
+
+    app = FastAPI(servers=[{"url": "/api"}])
+    config = replace(
+        _build_openclaw_config(tmp_path),
+        default_model="openclaw:custom",
+        provider_model="anthropic/claude-sonnet-4-5",
+    )
+    attach_openclaw_to_fastapi(app, config)
+
+    model = build_openclaw_responses_model(base_url="https://example.com/api/openclaw/v1")
+
+    assert model.model == "openclaw:main"
+    assert get_usage_tracking_model_name(model) == "openclaw:main"
+    assert model._client.api_key == "proxy-token"
+
+
+def test_attach_openclaw_to_fastapi_does_not_register_gateway_port_as_proxy_url(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("OPENCLAW_DEFAULT_MODEL", raising=False)
+    monkeypatch.setenv("OPENCLAW_PROVIDER_MODEL", "openai/gpt-5.4")
+    monkeypatch.delenv("OPENCLAW_PROXY_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_HOST", raising=False)
+    monkeypatch.setenv("OPENCLAW_PROXY_PORT", "8000")
+    monkeypatch.delenv("PORT", raising=False)
+    monkeypatch.setenv("APP_TOKEN", "app-token")
+    monkeypatch.setenv("OPENCLAW_PROXY_API_KEY", "proxy-token")
+    monkeypatch.setenv("OPENCLAW_GATEWAY_TOKEN", "gateway-token")
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
+
+    attach_openclaw_to_fastapi(FastAPI(), replace(_build_openclaw_config(tmp_path), port=9000))
+
+    model = build_openclaw_responses_model(base_url="http://127.0.0.1:9000/openclaw/v1")
+
+    assert model.model == "openclaw:main"
+    assert get_usage_tracking_model_name(model) == "openclaw:main"
+    assert model._client.api_key == "proxy-token"
+
+
+def test_attach_openclaw_to_fastapi_rejects_conflicting_current_app_defaults(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("OPENCLAW_PROXY_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_HOST", raising=False)
+    monkeypatch.setenv("OPENCLAW_PROXY_PORT", "8000")
+    monkeypatch.delenv("PORT", raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
+
+    first_config = replace(
+        _build_openclaw_config(tmp_path / "first"),
+        default_model="openclaw:first",
+        provider_model="openai/gpt-4o",
+    )
+    second_config = replace(
+        _build_openclaw_config(tmp_path / "second"),
+        default_model="openclaw:second",
+        provider_model="openai/gpt-5.4",
+    )
+
+    attach_openclaw_to_fastapi(FastAPI(), first_config)
+
+    with pytest.raises(ValueError, match="Conflicting current-app OpenClaw defaults"):
+        attach_openclaw_to_fastapi(FastAPI(), second_config)
+
+
+def test_attach_openclaw_to_fastapi_rolls_back_defaults_on_partial_registration_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """P1-a: earlier URLs are cleaned up when a later registration fails."""
+    monkeypatch.delenv("OPENCLAW_PROXY_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_HOST", raising=False)
+    monkeypatch.setenv("OPENCLAW_PROXY_PORT", "9000")
+    monkeypatch.delenv("PORT", raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULT_COUNTS", {}, raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULT_PATTERNS", [], raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULT_PATTERN_COUNTS", {}, raising=False)
+
+    # Pre-register a conflicting entry for the server URL so the second
+    # registration in the loop raises ValueError.
+    conflict_url = "https://conflict.example/openclaw/v1"
+    openclaw_mod.openclaw_model.register_current_app_openclaw_defaults(
+        default_model="openclaw:existing",
+        provider_model="openai/gpt-4o",
+        base_url=conflict_url,
+    )
+
+    app = FastAPI(servers=[{"url": "https://conflict.example"}])
+    config = replace(
+        _build_openclaw_config(tmp_path),
+        default_model="openclaw:new",
+        provider_model="openai/gpt-5.4",
+    )
+
+    with pytest.raises(ValueError, match="Conflicting"):
+        attach_openclaw_to_fastapi(app, config)
+
+    # The first URL (http://127.0.0.1:9000/openclaw/v1) should have been
+    # rolled back.  Only the pre-registered conflict entry should remain.
+    default_url_key = openclaw_mod.openclaw_model._normalize_openclaw_proxy_url("http://127.0.0.1:9000/openclaw/v1")
+    assert default_url_key not in openclaw_mod.openclaw_model._CURRENT_APP_OPENCLAW_DEFAULTS
+    assert default_url_key not in openclaw_mod.openclaw_model._CURRENT_APP_OPENCLAW_DEFAULT_COUNTS
+
+
+def test_attach_openclaw_to_fastapi_distinct_apps_coexist_without_explicit_proxy_port(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """P1-b: two apps with different defaults coexist when OPENCLAW_PROXY_PORT is unset."""
+    monkeypatch.delenv("OPENCLAW_DEFAULT_MODEL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROVIDER_MODEL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_HOST", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_PORT", raising=False)
+    monkeypatch.delenv("PORT", raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULT_COUNTS", {}, raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULT_PATTERNS", [], raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULT_PATTERN_COUNTS", {}, raising=False)
+
+    first_config = replace(
+        _build_openclaw_config(tmp_path / "first"),
+        default_model="openclaw:first",
+        provider_model="openai/gpt-4o",
+    )
+    second_config = replace(
+        _build_openclaw_config(tmp_path / "second"),
+        default_model="openclaw:second",
+        provider_model="openai/gpt-5.4",
+    )
+
+    app1 = FastAPI()
+    app2 = FastAPI()
+
+    # Both should succeed — no ValueError.
+    attach_openclaw_to_fastapi(app1, first_config)
+    attach_openclaw_to_fastapi(app2, second_config)
+
+    # Synthetic loopback URLs are not registered in the defaults map, so no
+    # collision occurs.  Verify the runtimes were attached to each app.
+    assert hasattr(app1.state, "openclaw_runtime")
+    assert hasattr(app2.state, "openclaw_runtime")
+    assert openclaw_mod.openclaw_model._CURRENT_APP_OPENCLAW_DEFAULTS == {}
+    assert openclaw_mod.openclaw_model._CURRENT_APP_OPENCLAW_DEFAULT_COUNTS == {}
+
+
+def test_attach_openclaw_to_fastapi_releases_current_app_defaults_when_app_is_discarded(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("OPENCLAW_PROXY_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROXY_HOST", raising=False)
+    monkeypatch.setenv("OPENCLAW_PROXY_PORT", "8000")
+    monkeypatch.delenv("PORT", raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULT_COUNTS", {}, raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULT_PATTERNS", [], raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULT_PATTERN_COUNTS", {}, raising=False)
+
+    first_config = replace(
+        _build_openclaw_config(tmp_path / "first"),
+        default_model="openclaw:first",
+        provider_model="openai/gpt-4o",
+    )
+    attach_openclaw_to_fastapi(FastAPI(), first_config)
+    gc.collect()
+
+    second_config = replace(
+        _build_openclaw_config(tmp_path / "second"),
+        default_model="openclaw:second",
+        provider_model="openai/gpt-5.4",
+    )
+    attach_openclaw_to_fastapi(FastAPI(), second_config)
+
+
+def test_attach_openclaw_to_fastapi_keeps_distinct_current_app_defaults_separate(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("OPENCLAW_DEFAULT_MODEL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROVIDER_MODEL", raising=False)
+    monkeypatch.setenv("OPENCLAW_PROXY_BASE_URL", "http://127.0.0.1:8000/openclaw/v1")
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
+
+    first_app = FastAPI()
+    first_config = replace(
+        _build_openclaw_config(tmp_path / "first"),
+        default_model="openclaw:first",
+        provider_model="openai/gpt-4o",
+    )
+    attach_openclaw_to_fastapi(first_app, first_config)
+
+    monkeypatch.setenv("OPENCLAW_PROXY_BASE_URL", "http://127.0.0.1:9000/openclaw/v1")
+    second_app = FastAPI()
+    second_config = replace(
+        _build_openclaw_config(tmp_path / "second"),
+        port=9000,
+        default_model="openclaw:second",
+        provider_model="openai/gpt-5.4",
+    )
+    attach_openclaw_to_fastapi(second_app, second_config)
+
+    first_model = build_openclaw_responses_model(base_url="http://127.0.0.1:8000/openclaw/v1", api_key="first-token")
+    second_model = build_openclaw_responses_model(base_url="http://127.0.0.1:9000/openclaw/v1", api_key="second-token")
+
+    assert first_model.model == "openclaw:first"
+    assert second_model.model == "openclaw:second"
+
+
+def test_attach_openclaw_to_fastapi_uses_current_app_defaults_for_public_proxy_urls(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("OPENCLAW_DEFAULT_MODEL", raising=False)
+    monkeypatch.delenv("OPENCLAW_PROVIDER_MODEL", raising=False)
+    monkeypatch.setenv("OPENCLAW_PROXY_BASE_URL", "https://worker.example/openclaw/v1")
+    monkeypatch.setenv("APP_TOKEN", "app-token")
+    monkeypatch.setenv("OPENCLAW_PROXY_API_KEY", "proxy-token")
+    monkeypatch.setenv("OPENCLAW_GATEWAY_TOKEN", "gateway-token")
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
+
+    app = FastAPI()
+    config = replace(
+        _build_openclaw_config(tmp_path),
+        port=9000,
+        default_model="openclaw:custom",
+        provider_model="openai/gpt-5.4",
+    )
+    attach_openclaw_to_fastapi(app, config)
+
+    model = build_openclaw_responses_model(base_url="https://worker.example/openclaw/v1")
+
+    assert model.model == "openclaw:custom"
+    assert get_usage_tracking_model_name(model) == "openai/gpt-5.4"
+    assert model._client.api_key == "app-token"
+
+
+def test_attach_openclaw_to_fastapi_does_not_treat_other_public_proxy_urls_as_current_app(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("OPENCLAW_DEFAULT_MODEL", raising=False)
+    monkeypatch.setenv("OPENCLAW_PROVIDER_MODEL", "openai/gpt-5.4")
+    monkeypatch.setenv("OPENCLAW_PROXY_BASE_URL", "https://external.example/openclaw/v1")
+    monkeypatch.setenv("APP_TOKEN", "app-token")
+    monkeypatch.setenv("OPENCLAW_PROXY_API_KEY", "proxy-token")
+    monkeypatch.setenv("OPENCLAW_GATEWAY_TOKEN", "gateway-token")
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
+
+    app = FastAPI()
+    config = replace(
+        _build_openclaw_config(tmp_path),
+        port=9000,
+        default_model="openclaw:custom",
+        provider_model="openai/gpt-4o",
+    )
+    attach_openclaw_to_fastapi(app, config)
+
+    model = build_openclaw_responses_model(base_url="https://other.example/openclaw/v1")
+
+    assert model.model == "openclaw:main"
+    assert get_usage_tracking_model_name(model) == "openclaw:main"
+    assert model._client.api_key == "proxy-token"
+
+
+def test_build_openclaw_responses_model_ignores_openclaw_alias_defaults_for_direct_gateway_urls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENCLAW_DEFAULT_MODEL", "openclaw:main")
+    monkeypatch.setenv("OPENCLAW_PROVIDER_MODEL", "anthropic/claude-sonnet-4-5")
+
+    model = build_openclaw_responses_model(base_url="http://127.0.0.1:18789/v1", api_key="external-token")
+
+    assert model.model == "anthropic/claude-sonnet-4-5"
+
+
+def test_build_openclaw_responses_model_defaults_external_v1_to_provider_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENCLAW_PROVIDER_MODEL", "anthropic/claude-sonnet-4-5")
+
+    model = build_openclaw_responses_model(base_url="http://127.0.0.1:18789/v1", api_key="external-token")
+
+    assert model.model == "anthropic/claude-sonnet-4-5"
+
+
+def test_build_openclaw_responses_model_preserves_openclaw_aliases_for_direct_gateway_urls() -> None:
+    model = build_openclaw_responses_model(
+        model="openclaw:custom",
+        base_url="http://127.0.0.1:18789/v1",
+        api_key="external-token",
+    )
+
+    assert model.model == "openclaw:custom"
+    assert get_usage_tracking_model_name(model) == "openclaw:custom"
+    assert get_default_settings_model_name(model) == "openclaw:custom"
+
+
+def test_build_openclaw_responses_model_preserves_explicit_nondefault_alias_metadata_for_current_app_proxy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULT_PATTERNS", [], raising=False)
+    openclaw_mod.openclaw_model.register_current_app_openclaw_defaults(
+        default_model="openclaw:main",
+        provider_model="openai/gpt-5.4",
+        base_url="https://app.example/openclaw/v1",
+    )
+
+    model = build_openclaw_responses_model(
+        model="openclaw:alt",
+        base_url="https://app.example/openclaw/v1",
+        api_key="app-token",
+    )
+
+    assert model.model == "openclaw:alt"
+    assert get_usage_tracking_model_name(model) == "openclaw:alt"
+    assert get_default_settings_model_name(model) == "openclaw:alt"
 
 
 def test_openclaw_start_closes_log_handle_when_popen_fails(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -843,6 +1538,50 @@ def test_openclaw_failed_startup_cleans_process_and_log_handle(
     assert fake_process.killed is True
     assert runtime._process is None
     assert runtime._log_handle is None
+
+
+def test_openclaw_start_includes_gateway_log_tail_when_process_exits_early(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config = _build_openclaw_config(tmp_path)
+    runtime = OpenClawRuntime(config)
+    runtime.config.log_path.parent.mkdir(parents=True, exist_ok=True)
+    runtime.config.log_path.write_text("fatal gateway error", encoding="utf-8")
+
+    class _ExitedProcess:
+        pid = 4242
+        returncode = 1
+
+        def poll(self) -> int | None:
+            return 1
+
+        def terminate(self) -> None:
+            return None
+
+        def kill(self) -> None:
+            return None
+
+        def wait(self, timeout: float | None = None) -> int:
+            return 1
+
+    process = _ExitedProcess()
+
+    monkeypatch.setattr(runtime, "ensure_layout", lambda: None)
+    monkeypatch.setattr(runtime, "_resolve_gateway_command", lambda: ["openclaw", "gateway"])
+    monkeypatch.setattr(runtime, "_merge_provider_keys_from_dotenv", lambda env: None)
+    monkeypatch.setattr(runtime, "_is_port_open", lambda: False)
+    monkeypatch.setattr("agency_swarm.integrations.openclaw.subprocess.Popen", lambda *a, **k: process)
+    monkeypatch.setattr(
+        "agency_swarm.integrations.openclaw._select_compatible_node_binary",
+        lambda: ("/opt/homebrew/bin/node", (22, 22, 0)),
+    )
+    monkeypatch.setattr("agency_swarm.integrations.openclaw.time.sleep", lambda _delay: None)
+
+    with pytest.raises(RuntimeError, match="OpenClaw exited early with code 1") as excinfo:
+        runtime.start()
+
+    assert "fatal gateway error" in str(excinfo.value)
 
 
 def test_openclaw_failed_startup_cleanup_closes_log_handle_when_kill_wait_times_out(
@@ -1041,7 +1780,8 @@ def test_openclaw_ensure_layout_normalizes_existing_non_dict_config_sections(tmp
     saved = json.loads(config.config_path.read_text(encoding="utf-8"))
     assert saved["gateway"]["auth"]["mode"] == "token"
     assert saved["gateway"]["http"]["endpoints"]["responses"]["enabled"] is True
-    assert saved["agents"]["defaults"]["model"] == {"primary": "openai/gpt-5.2"}
+    assert saved["agents"]["defaults"]["model"] == {"primary": "openai/gpt-5.4"}
+    assert saved["agents"]["defaults"]["workspace"] == str(config.workspace_dir)
 
 
 def test_openclaw_resolve_gateway_command_errors_when_binary_is_unavailable(
@@ -1255,3 +1995,426 @@ def test_openclaw_header_helpers() -> None:
     )
     assert "content-encoding" in openclaw_mod._passthrough_response_headers(upstream, decoded_body=False)
     assert "content-encoding" not in openclaw_mod._passthrough_response_headers(upstream, decoded_body=True)
+
+
+def test_openclaw_worker_tool_mode_disables_competing_native_messaging(tmp_path: Path) -> None:
+    config = replace(_build_openclaw_config(tmp_path), tool_mode="worker")
+    runtime = OpenClawRuntime(config)
+
+    runtime.ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+    assert payload["tools"]["agentToAgent"]["enabled"] is False
+    assert payload["tools"]["deny"] == ["message", "sessions_send", "sessions_spawn"]
+
+
+def test_openclaw_full_tool_mode_restores_previous_settings(tmp_path: Path) -> None:
+    config = replace(_build_openclaw_config(tmp_path), tool_mode="worker")
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps(
+            {
+                "tools": {
+                    "agentToAgent": {"enabled": True, "mode": "custom"},
+                    "deny": ["browser"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    OpenClawRuntime(config).ensure_layout()
+
+    restore_config = replace(config, tool_mode="full")
+    OpenClawRuntime(restore_config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+    assert payload["tools"]["agentToAgent"] == {"enabled": True, "mode": "custom"}
+    assert payload["tools"]["deny"] == ["browser"]
+    backup_path = openclaw_mod._tool_mode_backup_path(config.config_path)
+    assert not backup_path.exists()
+
+
+def test_openclaw_full_tool_mode_keeps_backup_when_config_write_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config = replace(_build_openclaw_config(tmp_path), tool_mode="worker")
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps(
+            {
+                "tools": {
+                    "agentToAgent": {"enabled": True, "mode": "custom"},
+                    "deny": ["browser"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    OpenClawRuntime(config).ensure_layout()
+    backup_path = openclaw_mod._tool_mode_backup_path(config.config_path)
+    assert backup_path.exists()
+
+    original_open = openclaw_mod.os.open
+
+    def _failing_open(path: str | os.PathLike[str], flags: int, mode: int = 0o777) -> int:
+        if Path(path) == config.config_path:
+            raise OSError("disk full")
+        return original_open(path, flags, mode)
+
+    monkeypatch.setattr(openclaw_mod.os, "open", _failing_open)
+
+    with pytest.raises(OSError, match="disk full"):
+        OpenClawRuntime(replace(config, tool_mode="full")).ensure_layout()
+
+    assert backup_path.exists()
+
+
+def test_openclaw_full_tool_mode_keeps_backup_when_tool_mode_backup_is_unreadable(tmp_path: Path) -> None:
+    config = replace(_build_openclaw_config(tmp_path), tool_mode="worker")
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps(
+            {
+                "tools": {
+                    "agentToAgent": {"enabled": True, "mode": "custom"},
+                    "deny": ["browser"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    OpenClawRuntime(config).ensure_layout()
+    backup_path = openclaw_mod._tool_mode_backup_path(config.config_path)
+    backup_path.write_text("{invalid", encoding="utf-8")
+
+    OpenClawRuntime(replace(config, tool_mode="full")).ensure_layout()
+
+    assert backup_path.exists()
+
+
+def test_openclaw_full_tool_mode_preserves_deleted_agent_to_agent_block(tmp_path: Path) -> None:
+    config = replace(_build_openclaw_config(tmp_path), tool_mode="worker")
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps(
+            {
+                "tools": {
+                    "agentToAgent": {"enabled": True, "mode": "custom"},
+                    "deny": ["browser"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+    payload["tools"].pop("agentToAgent")
+    config.config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    OpenClawRuntime(replace(config, tool_mode="full")).ensure_layout()
+
+    restored = json.loads(config.config_path.read_text(encoding="utf-8"))
+    assert "agentToAgent" not in restored["tools"]
+    assert restored["tools"]["deny"] == ["browser"]
+
+
+def test_openclaw_full_tool_mode_preserves_user_changes_made_while_worker_mode_is_active(tmp_path: Path) -> None:
+    config = replace(_build_openclaw_config(tmp_path), tool_mode="worker")
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps(
+            {
+                "tools": {
+                    "agentToAgent": {"enabled": True, "mode": "custom"},
+                    "deny": ["browser"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+    payload["tools"]["deny"].append("shell")
+    payload["tools"]["agentToAgent"]["notes"] = "keep-me"
+    config.config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    OpenClawRuntime(replace(config, tool_mode="full")).ensure_layout()
+
+    restored = json.loads(config.config_path.read_text(encoding="utf-8"))
+    assert restored["tools"]["agentToAgent"] == {
+        "enabled": True,
+        "mode": "custom",
+        "notes": "keep-me",
+    }
+    assert restored["tools"]["deny"] == ["browser", "shell"]
+
+
+def test_openclaw_full_tool_mode_preserves_user_edits_to_existing_agent_to_agent_keys(tmp_path: Path) -> None:
+    config = replace(_build_openclaw_config(tmp_path), tool_mode="worker")
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps(
+            {
+                "tools": {
+                    "agentToAgent": {"enabled": True, "mode": "custom"},
+                    "deny": ["browser"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+    payload["tools"]["agentToAgent"]["mode"] = "strict"
+    config.config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    OpenClawRuntime(replace(config, tool_mode="full")).ensure_layout()
+
+    restored = json.loads(config.config_path.read_text(encoding="utf-8"))
+    assert restored["tools"]["agentToAgent"] == {"enabled": True, "mode": "strict"}
+
+
+def test_openclaw_full_tool_mode_preserves_deleted_agent_to_agent_keys(tmp_path: Path) -> None:
+    config = replace(_build_openclaw_config(tmp_path), tool_mode="worker")
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps(
+            {
+                "tools": {
+                    "agentToAgent": {"enabled": True, "mode": "custom", "scope": "full"},
+                    "deny": ["browser"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+    payload["tools"]["agentToAgent"].pop("mode")
+    config.config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    OpenClawRuntime(replace(config, tool_mode="full")).ensure_layout()
+
+    restored = json.loads(config.config_path.read_text(encoding="utf-8"))
+    assert restored["tools"]["agentToAgent"] == {"enabled": True, "scope": "full"}
+
+
+def test_openclaw_full_tool_mode_preserves_deleted_deny_entries(tmp_path: Path) -> None:
+    config = replace(_build_openclaw_config(tmp_path), tool_mode="worker")
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps(
+            {
+                "tools": {
+                    "agentToAgent": {"enabled": True, "mode": "custom"},
+                    "deny": ["browser", "shell"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+    payload["tools"]["deny"] = ["shell"]
+    config.config_path.write_text(json.dumps(payload), encoding="utf-8")
+    stat_result = config.config_path.stat()
+    os.utime(config.config_path, ns=(stat_result.st_atime_ns, stat_result.st_mtime_ns + 1))
+
+    OpenClawRuntime(replace(config, tool_mode="full")).ensure_layout()
+
+    restored = json.loads(config.config_path.read_text(encoding="utf-8"))
+    assert restored["tools"]["deny"] == ["shell"]
+
+
+def test_openclaw_full_tool_mode_preserves_explicit_worker_style_deny_entries(tmp_path: Path) -> None:
+    config = replace(_build_openclaw_config(tmp_path), tool_mode="worker")
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps(
+            {
+                "tools": {
+                    "agentToAgent": {"enabled": True, "mode": "custom"},
+                    "deny": ["browser"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+    payload["tools"]["deny"] = ["browser", "message"]
+    config.config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    OpenClawRuntime(replace(config, tool_mode="full")).ensure_layout()
+
+    restored = json.loads(config.config_path.read_text(encoding="utf-8"))
+    assert restored["tools"]["deny"] == ["browser", "message"]
+
+
+def test_openclaw_full_tool_mode_restores_agent_to_agent_when_only_deny_changes(tmp_path: Path) -> None:
+    config = replace(_build_openclaw_config(tmp_path), tool_mode="worker")
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps(
+            {
+                "tools": {
+                    "agentToAgent": {"enabled": True, "mode": "custom"},
+                    "deny": ["browser"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+    payload["tools"]["deny"].append("shell")
+    config.config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    OpenClawRuntime(replace(config, tool_mode="full")).ensure_layout()
+
+    restored = json.loads(config.config_path.read_text(encoding="utf-8"))
+    assert restored["tools"]["agentToAgent"] == {"enabled": True, "mode": "custom"}
+    assert restored["tools"]["deny"] == ["browser", "shell"]
+
+
+def test_openclaw_full_tool_mode_restores_original_agent_to_agent_after_format_only_rewrite(tmp_path: Path) -> None:
+    config = replace(_build_openclaw_config(tmp_path), tool_mode="worker")
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps(
+            {
+                "tools": {
+                    "agentToAgent": {"enabled": True, "mode": "custom"},
+                    "deny": ["browser"],
+                }
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    OpenClawRuntime(config).ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+    config.config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    OpenClawRuntime(replace(config, tool_mode="full")).ensure_layout()
+
+    restored = json.loads(config.config_path.read_text(encoding="utf-8"))
+    assert restored["tools"]["agentToAgent"] == {"enabled": True, "mode": "custom"}
+    assert restored["tools"]["deny"] == ["browser"]
+
+
+def test_openclaw_full_tool_mode_preserves_user_changes_across_worker_restart(tmp_path: Path) -> None:
+    config = replace(_build_openclaw_config(tmp_path), tool_mode="worker")
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps(
+            {
+                "tools": {
+                    "agentToAgent": {"enabled": True, "mode": "custom"},
+                    "deny": ["browser"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    worker_runtime = OpenClawRuntime(config)
+    worker_runtime.ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+    payload["tools"]["agentToAgent"]["notes"] = "keep-me"
+    payload["tools"]["deny"].append("shell")
+    config.config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    worker_runtime.ensure_layout()
+    OpenClawRuntime(replace(config, tool_mode="full")).ensure_layout()
+
+    restored = json.loads(config.config_path.read_text(encoding="utf-8"))
+    assert restored["tools"]["agentToAgent"] == {
+        "enabled": True,
+        "mode": "custom",
+        "notes": "keep-me",
+    }
+    assert restored["tools"]["deny"] == ["browser", "shell"]
+
+
+def test_openclaw_full_tool_mode_drops_worker_enabled_flag_when_backup_never_had_it(tmp_path: Path) -> None:
+    config = replace(_build_openclaw_config(tmp_path), tool_mode="worker")
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps(
+            {
+                "tools": {
+                    "agentToAgent": {"mode": "custom"},
+                    "deny": ["browser"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    worker_runtime = OpenClawRuntime(config)
+    worker_runtime.ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+    payload["tools"]["agentToAgent"]["notes"] = "keep-me"
+    config.config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    OpenClawRuntime(replace(config, tool_mode="full")).ensure_layout()
+
+    restored = json.loads(config.config_path.read_text(encoding="utf-8"))
+    assert restored["tools"]["agentToAgent"] == {
+        "mode": "custom",
+        "notes": "keep-me",
+    }
+
+
+def test_openclaw_full_tool_mode_restores_original_tools_after_unrelated_worker_edits(tmp_path: Path) -> None:
+    config = replace(_build_openclaw_config(tmp_path), tool_mode="worker")
+    config.config_path.parent.mkdir(parents=True, exist_ok=True)
+    config.config_path.write_text(
+        json.dumps(
+            {
+                "tools": {
+                    "agentToAgent": {"enabled": True, "mode": "custom"},
+                    "deny": ["browser"],
+                },
+                "agents": {"main": {"description": "before"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    worker_runtime = OpenClawRuntime(config)
+    worker_runtime.ensure_layout()
+
+    payload = json.loads(config.config_path.read_text(encoding="utf-8"))
+    payload["agents"]["main"]["description"] = "after"
+    config.config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    OpenClawRuntime(replace(config, tool_mode="full")).ensure_layout()
+
+    restored = json.loads(config.config_path.read_text(encoding="utf-8"))
+    assert restored["tools"]["agentToAgent"] == {"enabled": True, "mode": "custom"}
+    assert restored["tools"]["deny"] == ["browser"]
+    assert restored["agents"]["main"]["description"] == "after"

@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -5,6 +6,7 @@ from agents import FunctionTool, ModelSettings, StopAtTools, WebSearchTool
 from pydantic import BaseModel, Field
 
 from agency_swarm import Agent
+from agency_swarm.integrations.openclaw_model import build_openclaw_responses_model
 
 
 class TaskOutput(BaseModel):
@@ -167,6 +169,74 @@ def test_agent_initialization_guardrail_flag_aliases_and_failures() -> None:
     assert agent.raise_input_guardrail_error is False
 
 
+def test_agent_initialization_support_flags_override_defaults() -> None:
+    """Capability flags should persist when a plain Agent overrides them."""
+    agent = Agent(
+        name="RestrictedAgent",
+        instructions="Test",
+        supports_outbound_communication=False,
+        supports_framework_tool_wiring=False,
+    )
+
+    assert agent.supports_outbound_communication is False
+    assert agent.supports_framework_tool_wiring is False
+
+
+def test_agent_initialization_skips_framework_tool_wiring_when_disabled(tmp_path) -> None:
+    """Framework-managed tool folders should be ignored when tool wiring is disabled."""
+    tools_dir = tmp_path / "tools"
+    tools_dir.mkdir()
+    (tools_dir / "loaded_tool.py").write_text(
+        "from agents import function_tool\n\n@function_tool\ndef loaded_tool() -> str:\n    return 'loaded'\n",
+        encoding="utf-8",
+    )
+
+    agent = Agent(
+        name="RestrictedAgent",
+        instructions="Test",
+        tools_folder=str(tools_dir),
+        supports_framework_tool_wiring=False,
+    )
+
+    assert agent.tools == []
+
+
+def test_agent_initialization_keeps_explicit_files_folder_when_framework_tool_wiring_disabled(tmp_path) -> None:
+    """Explicit files_folder support should survive even when framework-managed tool wiring is disabled."""
+    files_dir = tmp_path / "docs_vs_abcdefghijklmnop"
+    files_dir.mkdir()
+
+    agent = Agent(
+        name="RestrictedAgent",
+        instructions="Test",
+        files_folder=str(files_dir),
+        supports_framework_tool_wiring=False,
+    )
+
+    assert agent._associated_vector_store_id == "vs_abcdefghijklmnop"
+    assert [tool.__class__.__name__ for tool in agent.tools] == ["FileSearchTool"]
+
+
+def test_agent_initialization_converts_explicit_mcp_servers_when_framework_tool_wiring_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    converted: list[str] = []
+
+    def _convert(agent: Agent) -> None:
+        converted.append(agent.name)
+
+    monkeypatch.setattr("agency_swarm.agent.core.convert_mcp_servers_to_tools", _convert)
+
+    Agent(
+        name="RestrictedAgent",
+        instructions="Test",
+        mcp_servers=[SimpleNamespace(name="demo")],
+        supports_framework_tool_wiring=False,
+    )
+
+    assert converted == ["RestrictedAgent"]
+
+
 def test_agent_initialization_with_all_parameters():
     """Test Agent initialization with all parameters including output_type."""
     tool1 = MagicMock(spec=FunctionTool)
@@ -266,6 +336,38 @@ def test_agent_initialization_model_settings_defaults_and_overrides():
     gpt5_agent = Agent(name="Gpt5", instructions="Test", model="gpt-5-mini")
     assert gpt5_agent.model_settings.reasoning is not None
     assert gpt5_agent.model_settings.reasoning.effort == "low"
+
+    provider_prefixed_gpt5_agent = Agent(name="ProviderPrefixedGpt5", instructions="Test", model="openai/gpt-5.4")
+    assert provider_prefixed_gpt5_agent.model_settings.reasoning is None
+    assert provider_prefixed_gpt5_agent.model_settings.verbosity is None
+
+
+@pytest.mark.parametrize("provider_model", ["openai/gpt-5.4", "azure/gpt-5.4"])
+def test_agent_initialization_model_objects_use_openclaw_default_settings_alias(
+    monkeypatch: pytest.MonkeyPatch,
+    provider_model: str,
+) -> None:
+    monkeypatch.setenv("OPENCLAW_PROVIDER_MODEL", provider_model)
+    model = build_openclaw_responses_model(base_url="http://127.0.0.1:18789/v1", api_key="test-key")
+
+    agent = Agent(name="UsageTrackedModel", instructions="Test", model=model)
+
+    assert agent.model_settings.reasoning is not None
+    assert agent.model_settings.reasoning.effort == "low"
+    assert agent.model_settings.verbosity == "low"
+
+
+def test_agent_initialization_model_objects_preserve_explicit_openclaw_alias_defaults() -> None:
+    model = build_openclaw_responses_model(
+        model="openclaw:custom",
+        base_url="http://127.0.0.1:18789/v1",
+        api_key="test-key",
+    )
+
+    agent = Agent(name="UsageTrackedModel", instructions="Test", model=model)
+
+    assert agent.model_settings.reasoning is None
+    assert agent.model_settings.verbosity is None
 
 
 def test_agent_initialization_adapts_basetool_type():
