@@ -435,6 +435,8 @@ The response includes `file_ids_map` with the uploaded file IDs:
 }
 ```
 
+When `file_urls` is used, Agency Swarm also prepends a `system` message for that turn that records the original source string for each attached file. That system message is included in `new_messages`, so if your client persists `new_messages` as chat history, later turns will keep the original attachment source URL or local path in model context.
+
 **Supported filetypes:** `.pdf`, `.jpeg`, `.jpg`, `.gif`, `.png`, `.c`, `.cs`, `.cpp`, `.csv`, `.html`, `.java`, `.json`, `.php`, `.py`, `.rb`, `.css`, `.js`, `.sh`, `.ts`, `.pkl`, `.tar`, `.xlsx`, `.xml`, `.zip`, `.doc`, `.docx`, `.md`, `.pptx`, `.tex`, `.txt`
 
 <Accordion title="Local file paths" defaultOpen={false}>
