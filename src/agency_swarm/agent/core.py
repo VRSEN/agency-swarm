@@ -41,8 +41,10 @@ from agency_swarm.agent.conversation_starters_cache import (
 )
 from agency_swarm.agent.execution_streaming import StreamingRunResponse
 from agency_swarm.agent.file_manager import AgentFileManager
+from agency_swarm.agent.system_reminders import prepare_agent_hooks, validate_system_reminders
 from agency_swarm.agent.tools import _attach_one_call_guard
 from agency_swarm.context import MasterContext
+from agency_swarm.reminders import SystemReminder
 from agency_swarm.tools.concurrency import ToolConcurrencyManager
 from agency_swarm.tools.mcp_manager import convert_mcp_servers_to_tools
 from agency_swarm.utils.dry_run import is_dry_run
@@ -89,6 +91,7 @@ class Agent(BaseAgent[MasterContext]):
     raise_input_guardrail_error: bool = False
     supports_outbound_communication: bool = True
     supports_framework_tool_wiring: bool = True
+    system_reminders: list[SystemReminder]
 
     # --- Internal State ---
     _associated_vector_store_id: str | None = None
@@ -134,6 +137,8 @@ class Agent(BaseAgent[MasterContext]):
             validation_attempts (int): Number of retries when an output guardrail trips. Defaults to 1.
             raise_input_guardrail_error (bool): Whether to raise input guardrail errors as exceptions.
                 Defaults to False.
+            system_reminders (list[SystemReminder] | None): Transient reminder configs injected before model calls.
+                Supports reminders after each new user message and after every N tool calls.
             handoff_reminder (str | None): Custom reminder for handoffs.
                 Defaults to `Transfer completed. You are {recipient_agent_name}. Please continue the task.`
 
@@ -189,6 +194,13 @@ class Agent(BaseAgent[MasterContext]):
 
         # Remove description from base_agent_params if it was added for Swarm Agent
         base_agent_params.pop("description", None)
+        system_reminders = validate_system_reminders(current_agent_params.get("system_reminders"))
+        user_hooks = base_agent_params.get("hooks")
+        prepared_hooks = prepare_agent_hooks(user_hooks, system_reminders)
+        if prepared_hooks is None:
+            base_agent_params.pop("hooks", None)
+        else:
+            base_agent_params["hooks"] = prepared_hooks
 
         # Initialize base agent
         super().__init__(**base_agent_params)
@@ -217,6 +229,7 @@ class Agent(BaseAgent[MasterContext]):
         self.supports_framework_tool_wiring = bool(
             current_agent_params.get("supports_framework_tool_wiring", self.supports_framework_tool_wiring)
         )
+        self.system_reminders = system_reminders
         self.handoff_reminder = current_agent_params.get("handoff_reminder")
 
         # Internal state
