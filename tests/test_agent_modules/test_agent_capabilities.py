@@ -122,3 +122,15 @@ def test_agent_with_all_capabilities() -> None:
         model_settings=ModelSettings(reasoning=Reasoning(effort="high")),
     )
     assert set(get_agent_capabilities(agent)) == {"tools", "reasoning", "file_search", "code_interpreter", "web_search"}
+
+
+def test_files_folder_capabilities_without_openai_side_effects(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("DRY_RUN", "1")
+    files = tmp_path / "files"
+    files.mkdir()
+    (files / "report.pdf").write_text("report", encoding="utf-8")
+    (files / "chart.png").write_bytes(b"png")
+
+    agent = Agent(name="FilesAgent", instructions="Test", files_folder=str(files))
+
+    assert {"file_search", "code_interpreter"} <= set(get_agent_capabilities(agent))

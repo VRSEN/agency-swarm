@@ -48,6 +48,7 @@ from agency_swarm import (
     RunContextWrapper,
 )
 from agency_swarm.agent.execution_stream_response import StreamingRunResponse
+from agency_swarm.integrations.fastapi_utils.dry_run import force_dry_run
 from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_urls
 from agency_swarm.integrations.fastapi_utils.logging_middleware import get_logs_endpoint_impl
 from agency_swarm.integrations.fastapi_utils.override_policy import (
@@ -782,7 +783,8 @@ def make_metadata_endpoint(
     async def handler(token: str = Depends(verify_token)):
         # Metadata must reflect current factory state for /connect and agent
         # selection flows; a startup snapshot goes stale.
-        agency_metadata = agency_factory(load_threads_callback=lambda: []).get_metadata()
+        with force_dry_run():
+            agency_metadata = agency_factory(load_threads_callback=lambda: []).get_metadata()
         metadata_with_version = dict(agency_metadata)
         agency_swarm_version = _get_agency_swarm_version()
         if agency_swarm_version is not None:

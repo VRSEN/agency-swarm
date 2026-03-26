@@ -1,12 +1,19 @@
 """Utility functions for working with model configurations."""
 
 import logging
+from pathlib import Path
 from types import UnionType
 from typing import TYPE_CHECKING, Any, Protocol, Union, cast, get_args, get_origin
 
 from agents import FunctionTool, Model, Tool
 from agents.models.openai_chatcompletions import OpenAIChatCompletionsModel
 from agents.models.openai_responses import OpenAIResponsesModel
+
+from agency_swarm.agent.file_manager import (
+    CODE_INTERPRETER_FILE_EXTENSIONS,
+    FILE_SEARCH_FILE_EXTENSIONS,
+    IMAGE_FILE_EXTENSIONS,
+)
 
 if TYPE_CHECKING:
     from agency_swarm.agent.core import Agent
@@ -155,7 +162,37 @@ def get_agent_capabilities(agent: "Agent") -> list[str]:
         if tool_name not in capabilities:
             capabilities.append(tool_name)
 
+    for tool_name in _detect_files_folder_capabilities(agent):
+        if tool_name not in capabilities:
+            capabilities.append(tool_name)
+
     return capabilities
+
+
+def _detect_files_folder_capabilities(agent: "Agent") -> list[str]:
+    path = getattr(agent, "files_folder_path", None)
+    if not isinstance(path, Path) or not path.exists() or not path.is_dir():
+        return []
+
+    has_code = False
+    has_search = False
+    for file in path.rglob("*"):
+        if not file.is_file():
+            continue
+        ext = file.suffix.lower()
+        if not has_code and ext in CODE_INTERPRETER_FILE_EXTENSIONS + IMAGE_FILE_EXTENSIONS:
+            has_code = True
+        if not has_search and ext in FILE_SEARCH_FILE_EXTENSIONS:
+            has_search = True
+        if has_code and has_search:
+            break
+
+    result: list[str] = []
+    if has_code:
+        result.append("code_interpreter")
+    if has_search:
+        result.append("file_search")
+    return result
 
 
 class _ModelWithName(Protocol):
