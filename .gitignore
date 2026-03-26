@@ -185,5 +185,6 @@ debug_agency_data.json
 
 .taskmaster/
 .agency_swarm/
+.claude/worktrees/
 
 work_context.md
