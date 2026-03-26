@@ -176,7 +176,7 @@ def _detect_files_folder_capabilities(agent: "Agent") -> list[str]:
 
     has_code = False
     has_search = False
-    for file in path.rglob("*"):
+    for file in path.iterdir():
         if not file.is_file():
             continue
         ext = file.suffix.lower()

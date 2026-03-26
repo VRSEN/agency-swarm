@@ -61,7 +61,8 @@ def run_fastapi(
         from fastapi import FastAPI
         from fastapi.middleware.cors import CORSMiddleware
 
-        from .fastapi_utils.dry_run import force_dry_run
+        from agency_swarm.utils.dry_run import force_dry_run
+
         from .fastapi_utils.endpoint_handlers import (
             ActiveRunRegistry,
             exception_handler,

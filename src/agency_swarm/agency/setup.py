@@ -2,7 +2,6 @@
 import dataclasses
 import inspect
 import logging
-import os
 import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -18,6 +17,7 @@ from agency_swarm.agent.core import Agent
 from agency_swarm.tools import BaseTool, ToolFactory
 from agency_swarm.tools.mcp_manager import convert_mcp_servers_to_tools
 from agency_swarm.tools.send_message import Handoff, SendMessage, SendMessageHandoff
+from agency_swarm.utils.dry_run import is_dry_run
 from agency_swarm.utils.files import get_external_caller_directory
 
 logger = logging.getLogger(__name__)
@@ -356,8 +356,7 @@ def _apply_shared_files(agency: "Agency") -> None:
         return
 
     # Skip side-effectful OpenAI file/vector-store setup when DRY_RUN is enabled
-    dry_run_env = os.getenv("DRY_RUN", "")
-    if str(dry_run_env).strip().lower() in {"1", "true", "yes", "on"}:
+    if is_dry_run():
         logger.debug("DRY_RUN enabled; skipping shared files processing")
         return
 
