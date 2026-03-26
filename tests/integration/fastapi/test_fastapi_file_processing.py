@@ -272,12 +272,16 @@ class TestFastAPIFileProcessing:
         assert "local secret phrase" in response_text
 
         new_messages = response_data["new_messages"]
+        file_path_json_fragment = json.dumps(str(file_path))[1:-1]
         source_message = next(
             msg
             for msg in new_messages
-            if isinstance(msg, dict) and msg.get("role") == "system" and str(file_path) in str(msg.get("content", ""))
+            if isinstance(msg, dict)
+            and msg.get("role") == "system"
+            and file_path_json_fragment in str(msg.get("content", ""))
         )
         assert "The user has provided file attachments in their message." in str(source_message["content"])
+        assert "upload provenance only" in str(source_message["content"])
 
         follow_up_payload = {
             "message": "What exact attachment source string was used for local-file.txt? Reply with only that string.",
