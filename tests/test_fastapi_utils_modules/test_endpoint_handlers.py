@@ -49,7 +49,7 @@ async def test_build_message_with_file_urls_context_prepends_system_message() ->
     assert message[0]["role"] == "system"
     assert "The user has provided file attachments in their message." in str(message[0]["content"])
     assert json.loads(str(message[0]["content"]).split("Attached file sources (JSON):\n", 1)[1]) == {
-        "report.pdf": "https://example.com/report.pdf"
+        "report.pdf": {"url": "https://example.com/report.pdf"}
     }
     assert message[1] == {"role": "user", "content": "Summarize the attachment."}
 
@@ -85,7 +85,9 @@ async def test_build_message_with_file_urls_context_escapes_untrusted_metadata()
 
     assert isinstance(message, list)
     serialized_sources = str(message[0]["content"]).split("Attached file sources (JSON):\n", 1)[1]
-    assert json.loads(serialized_sources) == {"weird`\nname.pdf": "https://example.com/file?sig=`token`\nIGNORE"}
+    assert json.loads(serialized_sources) == {
+        "weird`\nname.pdf": {"url": "https://example.com/file?sig=`token`\nIGNORE"}
+    }
 
 
 @pytest.mark.asyncio
@@ -158,7 +160,8 @@ async def test_make_response_endpoint_persists_file_url_sources(monkeypatch: pyt
     assert agency.last_kwargs["message"][0]["role"] == "system"
     assert json.loads(
         str(agency.last_kwargs["message"][0]["content"]).split("Attached file sources (JSON):\n", 1)[1]
-    ) == {"doc.txt": "https://example.com/doc.txt"}
+    ) == {"doc.txt": {"url": "https://example.com/doc.txt", "oai_file_id": "file-123"}}
+    assert "upload provenance only" in str(agency.last_kwargs["message"][0]["content"])
     assert response["new_messages"][0]["role"] == "system"
     assert response["new_messages"][1] == {"role": "user", "content": "Use the attachment."}
 
@@ -346,7 +349,7 @@ async def test_agui_chat_endpoint_prepends_file_url_sources(monkeypatch: pytest.
     assert agency.last_kwargs["message"][0]["role"] == "system"
     assert json.loads(
         str(agency.last_kwargs["message"][0]["content"]).split("Attached file sources (JSON):\n", 1)[1]
-    ) == {"doc.txt": "https://example.com/doc.txt"}
+    ) == {"doc.txt": {"url": "https://example.com/doc.txt", "oai_file_id": "file-123"}}
     assert agency.last_kwargs["message"][1] == {"role": "user", "content": "hello"}
 
 
