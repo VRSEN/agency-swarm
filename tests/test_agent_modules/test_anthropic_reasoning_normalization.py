@@ -43,6 +43,17 @@ class TestAnthropicReasoningNormalization:
         assert ms.reasoning is not None
         assert ms.reasoning.summary is None
 
+    def test_litellm_anthropic_prefix_detected(self):
+        """Models with 'litellm/anthropic/' prefix should be detected."""
+        kwargs = _make_kwargs(
+            "litellm/anthropic/claude-sonnet-4-20250514",
+            Reasoning(effort="low", summary="auto"),
+        )
+        apply_framework_defaults(kwargs)
+        ms: ModelSettings = kwargs["model_settings"]
+        assert ms.reasoning is not None
+        assert ms.reasoning.summary is None
+
     def test_claude_prefix_detected(self):
         """Models starting with 'claude' (no provider prefix) should be detected."""
         kwargs = _make_kwargs(

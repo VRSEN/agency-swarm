@@ -69,13 +69,14 @@ def is_reasoning_model(model: str | Model | None) -> bool:
 def is_anthropic_model(model: str | Model | None) -> bool:
     """Determine if a model is an Anthropic/Claude model.
 
-    Matches models specified with the ``anthropic/`` LiteLLM provider prefix
-    or whose base name starts with ``claude``.
+    Matches models specified with the ``anthropic/`` or ``litellm/anthropic/``
+    LiteLLM provider prefix, or whose base name starts with ``claude``.
 
     Parameters
     ----------
     model : str | Model | None
-        The model identifier (e.g., "anthropic/claude-sonnet-4-20250514", "claude-3-opus")
+        The model identifier (e.g., "anthropic/claude-sonnet-4-20250514",
+        "litellm/anthropic/claude-sonnet-4-20250514", "claude-3-opus")
 
     Returns
     -------
@@ -94,7 +95,7 @@ def is_anthropic_model(model: str | Model | None) -> bool:
     if not model_name:
         return False
     lower = model_name.lower()
-    return lower.startswith("anthropic/") or lower.startswith("claude")
+    return "anthropic/" in lower or lower.startswith("claude")
 
 
 def get_agent_capabilities(agent: "Agent") -> list[str]:
