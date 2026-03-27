@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -8,10 +9,22 @@ from openai import AsyncOpenAI
 from agency_swarm import Agency, Agent
 from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
 
+logger = logging.getLogger(__name__)
+
 
 def get_allowed_dirs_for_metadata(allowed_local_dirs: Sequence[str | Path]) -> list[str]:
-    """Return all configured allowlist entries as resolved absolute paths."""
-    return [str(Path(entry).expanduser().resolve()) for entry in allowed_local_dirs]
+    """Return only usable local upload directories for metadata responses."""
+    normalized: list[str] = []
+    for entry in allowed_local_dirs:
+        path = Path(entry).expanduser().resolve()
+        if not path.exists():
+            logger.warning("Allowed directory not found (skipping metadata entry): %s", entry)
+            continue
+        if not path.is_dir():
+            logger.warning("Allowed path is not a directory (skipping metadata entry): %s", entry)
+            continue
+        normalized.append(str(path))
+    return normalized
 
 
 @dataclass(frozen=True)
