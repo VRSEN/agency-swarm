@@ -269,7 +269,6 @@ Do not grow files past the 500-line cap. Prefer extracting focused modules. If y
 - Avoid tests that create a false sense of security; we discourage unit tests that do not reflect real behavior.
 - Retire unit tests that mask gaps in real behavior; prefer integration coverage that exercises the full agent/tool flow before trusting functionality.
 - For high-level, cross-module, or runtime behavior, prefer integration or E2E coverage repo-wide; do not add unit tests when the real behavior is proxy wiring, auth selection, streaming, persistence, workspace layout, or other end-to-end flow.
-- OpenClaw behavior is integration/E2E-only unless the test is for a tiny pure helper with no runtime semantics; do not use unit tests or mock-heavy tests for OpenClaw proxy, FastAPI attach, auth, streaming, persistence, workspace, or runtime behavior.
 - Remove dead code when it is in scope.
 - Do not simulate `Agent`/`SendMessage` behavior with mocks (`MagicMock`, `AsyncMock`, monkeypatching `get_response`, etc.). Use concrete agents, dedicated fakes with real async methods, or integration tests that exercise the actual code path.
 
