@@ -13,6 +13,8 @@ North Star: keep the user's general intent and direction clear; if literal words
 ## AGENTS.md Maintenance
 - Treat AGENTS.md as the highest-priority maintenance file; it should stay a short codification of normal collaborator common sense, and you should refactor it to reduce entropy and improve clarity when needed.
 - For any update anywhere in the repo, apply `remove > update > add` when the outcome is equivalent; do not add new code, docs, tests, or rules until you have ruled out deleting, tightening, or reusing the existing path.
+- Visual QA: for UI, image, screenshot, and logo work, use [$vision-review](/Users/nick/.codex/skills/vision-review/SKILL.md), inspect original-resolution cropped evidence, and keep iterating until no visible defect remains or you can name the exact blocker.
+- OpenAI image detail: when using the OpenAI API for visual review, set `detail: "high"`; official docs currently expose only `high`, `low`, and `auto`.
 
 Begin each task after reviewing this readiness checklist:
 - When a request has multiple things to consider or more than a single straightforward action, use the plan/todo tool and break the work into at least 10 concrete items when practical.
