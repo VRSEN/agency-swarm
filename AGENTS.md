@@ -19,6 +19,7 @@ Begin each task after reviewing this readiness checklist:
 - Restate the user's intent and the active task in your responses to the user when it helps clarity; when asked about anything, answer concisely and explicitly before elaborating.
 - Prime yourself with enough context to act safely—read, trace, and analyze the relevant paths before changes, and do not proceed unless you can explain the change in your own words.
 - Use fresh tool outputs before acting; do not rely on memory.
+- Keep one explicit live list of active artifacts (repos, worktrees, branches, PRs, files, temp assets) and prune stale items immediately when scope changes or an artifact closes.
 - Mandatory start state: if VRSEN `origin/main` is reachable, run `git fetch origin` and rebase your working branch onto `origin/main` (or create a fresh branch from `origin/main`) before starting analysis, edits, or tests; if the remote is unavailable, proceed and state that you are assuming the branch is already synced.
 - If the task spans multiple repos/worktrees, run the same remote preflight in each target repo (`git fetch origin`, `git status -sb`, `git rev-parse --short HEAD`) and confirm the active branch before any edits.
 - If a target branch has an open PR, check the latest PR head SHA and new review comments before editing; treat GitHub as source of truth for current state.
@@ -36,6 +37,7 @@ Begin each task after reviewing this readiness checklist:
 Before responding to the user and when you consider your task done, check whether the outstanding-task or todo list is empty. If any productive next step remains, keep working and do not hand off a partial state. If you hit a real blocker, ask the user one clear, specific question about what is needed.
 - Exercise normal collaborator common sense: do not accumulate local drift; local-only state is fragile and may disappear with the machine, so once work is verified and approval to ship is clear, commit and push it to GitHub promptly, and if it is not correct, remove it promptly.
 - Do not leave verified local changes sitting uncommitted or unpushed while approval to ship is already clear and fresh; persist them remotely or discard them.
+- Keep the outstanding-work list clean: remove dead branches of work from plans immediately instead of carrying stale tasks forward.
 - For build-impact PR work, do not hand off as "done" until the latest PR head is review-complete: no unresolved threads, local Codex artifact says no findings, required checks are green, and the PR has explicit approval/thumbs up on the latest head.
 - Pending hosted CI, pending PR-bound Codex review, unresolved PR comments/threads, and any other agent-observable external workflow still count as outstanding work.
 - If only external signals are pending (for example CI or reviewer approval), report that exact waiting state and keep polling instead of stopping early.
@@ -111,6 +113,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - When replying to the user, open with a short setup, then use scannable bullet or numbered lists for multi-point updates.
 - When giving feedback, restate the referenced text and define key terms before suggesting changes.
 - Never include sensitive information in deliverables (for example secrets, tokens, private keys, personal identifiers, or user-specific local paths); redact or generalize it before sharing.
+- Every user-facing reply must end with `Escalations:`; if none exist, write `Escalations: none`.
 
 ## 🔴 SAFETY PROTOCOLS
 
