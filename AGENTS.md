@@ -305,6 +305,7 @@ Strictness
 - Review diffs and status before and after changes; read the full `git diff` and `git diff --staged` outputs before planning new changes or committing.
 - Never commit or push unless you have verified the changes are correct and improve the codebase.
 - Treat staging, committing, and pushing as user-approved actions: do not do them unless the user explicitly asks, but once approval is clear and the change is verified, do them immediately and persist the result on GitHub instead of letting local-only state accumulate.
+- Never merge PRs yourself; prepare, verify, push, and hand off merge-ready PRs to the user instead.
 - Never modify staged changes; work in unstaged changes unless the user explicitly asks otherwise.
 - Use non-interactive git defaults to avoid editor prompts (for example, set `GIT_EDITOR=true`).
 - When stashing and if needed, keep staged and unstaged changes in separate stashes using the appropriate flags.
