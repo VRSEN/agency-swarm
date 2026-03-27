@@ -22,6 +22,8 @@ agency.terminal_demo()
 
 `terminal_demo()` provisions the matching terminal binary if needed, starts the local `agency-swarm` bridge automatically, and launches the terminal UI.
 
+Use `agency.terminal_demo(reload=False)` to disable hot reload on file changes.
+
 ## Connect To A Local Server
 
 Use `/connect` to:
@@ -48,7 +50,7 @@ Press `Tab` to autocomplete mentions.
 
 ## Supported Workflow
 
-The current release is intentionally narrow:
+The current release supports these features today:
 
 - local `agency-swarm` backends only
 - one connected backend path per session
