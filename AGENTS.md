@@ -11,7 +11,8 @@ North Star: keep the user's general intent and direction clear; if literal words
 - User requests come first unless they conflict with system or developer rules; move fast within those limits.
 
 ## AGENTS.md Maintenance
-- Treat AGENTS.md as the highest-priority maintenance file; it should stay a short codification of normal collaborator common sense, and you should refactor it to reduce entropy (remove or tighten before adding) and improve clarity when needed.
+- Treat AGENTS.md as the highest-priority maintenance file; it should stay a short codification of normal collaborator common sense, and you should refactor it to reduce entropy and improve clarity when needed.
+- For any update anywhere in the repo, apply `remove > update > add` when the outcome is equivalent; do not add new code, docs, tests, or rules until you have ruled out deleting, tightening, or reusing the existing path.
 
 Begin each task after reviewing this readiness checklist:
 - When a request has multiple things to consider or more than a single straightforward action, use the plan/todo tool and break the work into at least 10 concrete items when practical.
@@ -26,7 +27,7 @@ Begin each task after reviewing this readiness checklist:
 - Run deliberate mental simulations to surface risks and confirm the smallest coherent diff.
 - Favor repository tooling (`make`, `uv run`, and the plan/todo tool) over ad-hoc paths; escalate tooling or permission limits when blocked.
 - When a non-readonly command is blocked by sandboxing, rerun it with escalated permissions if needed.
-- Before adding or changing any rule, locate related AGENTS.md rules and consolidate by reinforcing, generalizing, or removing conflicts; never append blindly.
+- Before adding or changing any rule, locate related AGENTS.md rules and consolidate by `remove > update > add`; never append blindly.
 - Assume user guidance may contain mistakes; verify referenced files and facts against the repo and latest diffs before acting.
 - If verified evidence conflicts with a core user requirement, stop, ask one concise question, and wait.
 - Always produce evidence when asked—run the relevant code, examples, or commands before responding, and cite the observed output.
@@ -242,12 +243,12 @@ Agency Swarm is a multi-agent orchestration framework built on the OpenAI Agents
  - Enforce declared types at boundaries; do not introduce runtime fallbacks or shape-based branching to accommodate multiple types.
 
 ## Code Quality
-- Aim for max file size of 500 lines
+- 500 lines is the hard cap for any file unless the user explicitly approves an exception.
 - Aim for max method size of 100 lines (prefer 10-40)
 - Target test coverage of 90%+
 
 ### Large files
-Avoid growing already large files. Prefer extracting focused modules. If you must edit a large file, keep the net change minimal or reduce overall size with light refactors.
+Do not grow files past the 500-line cap. Prefer extracting focused modules. If you must edit a large file that is already over the cap, keep the net change minimal and reduce its size in the same change unless the user explicitly approves a temporary exception.
 
 ## Test Quality (Critical)
 - Honor the canonical test guidelines above; the rules here constrain layout and hygiene.
@@ -264,6 +265,8 @@ Avoid growing already large files. Prefer extracting focused modules. If you mus
 - Symmetry required: tests should mirror `src/`. Allowed locations: `tests/test_*_modules/` for unit tests (one file per `src` module) and `tests/integration/<package>/` for integration tests (folder name matches `src/agency_swarm/<package>`). Enforce this structure.
 - Avoid tests that create a false sense of security; we discourage unit tests that do not reflect real behavior.
 - Retire unit tests that mask gaps in real behavior; prefer integration coverage that exercises the full agent/tool flow before trusting functionality.
+- For high-level, cross-module, or runtime behavior, prefer integration or E2E coverage repo-wide; do not add unit tests when the real behavior is proxy wiring, auth selection, streaming, persistence, workspace layout, or other end-to-end flow.
+- OpenClaw behavior is integration/E2E-only unless the test is for a tiny pure helper with no runtime semantics; do not use unit tests or mock-heavy tests for OpenClaw proxy, FastAPI attach, auth, streaming, persistence, workspace, or runtime behavior.
 - Remove dead code when it is in scope.
 - Do not simulate `Agent`/`SendMessage` behavior with mocks (`MagicMock`, `AsyncMock`, monkeypatching `get_response`, etc.). Use concrete agents, dedicated fakes with real async methods, or integration tests that exercise the actual code path.
 
