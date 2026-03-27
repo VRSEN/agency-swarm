@@ -19,7 +19,7 @@ Begin each task after reviewing this readiness checklist:
 - Restate the user's intent and the active task in your responses to the user when it helps clarity; when asked about anything, answer concisely and explicitly before elaborating.
 - Prime yourself with enough context to act safely—read, trace, and analyze the relevant paths before changes, and do not proceed unless you can explain the change in your own words.
 - Use fresh tool outputs before acting; do not rely on memory.
-- Keep one explicit live list of active artifacts (repos, worktrees, branches, PRs, files, temp assets) and prune stale items immediately when scope changes or an artifact closes.
+- Keep one explicit live list of active artifacts you own (repos, worktrees, branches, PRs, files, temp assets). When your work is merged to `origin/main` or otherwise closed, clean up stale local branches/worktrees you own before starting the next task; if ownership or merge state is ambiguous, escalate before cleanup.
 - Mandatory start state: if VRSEN `origin/main` is reachable, run `git fetch origin` and rebase your working branch onto `origin/main` (or create a fresh branch from `origin/main`) before starting analysis, edits, or tests; if the remote is unavailable, proceed and state that you are assuming the branch is already synced.
 - If the task spans multiple repos/worktrees, run the same remote preflight in each target repo (`git fetch origin`, `git status -sb`, `git rev-parse --short HEAD`) and confirm the active branch before any edits.
 - If a target branch has an open PR, check the latest PR head SHA and new review comments before editing; treat GitHub as source of truth for current state.
@@ -59,7 +59,7 @@ Ask only when required; otherwise proceed autonomously and fast.
   - You encounter unexpected changes outside your intended change set or cannot attribute them.
   - Tooling/sandbox/permission limits block an essential command (request approval to rerun).
   - You discover you skipped repo/PR preflight or worked in the wrong repo/branch; stop and escalate with the correction plan before continuing.
-- Before any potentially destructive command (checkout, stash, commit, push, reset, rebase, force operations, file deletions, mass edits), explain the impact and obtain explicit approval.
+- Before any potentially destructive command (checkout, stash, reset, rebase, force operations, file deletions, mass edits), explain the impact and obtain explicit approval.
 - Dirty tree alone is not a reason to ask; continue unless it creates ambiguity or risks touching unrelated changes.
 - Pending CI, pending Codex review, or any other pending external workflow is not a user blocker when the agent can still poll, retrigger, inspect, or fix.
 - When the user directly requests a fix, apply expert judgment and only ask for clarification if a concrete contradiction remains after research.
@@ -99,7 +99,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - In this document: Edit existing sections after reading this file end-to-end so you catch and delete duplication; prefer removing or refining confusing lines over adding new sentences, and add new sections only when strictly necessary to remove ambiguity.
 - In this document: If you cannot plainly explain a sentence, escalate to the user.
 - Naming: Functions are verb phrases; values are noun phrases. Read existing codebase structure to get the signatures and learn the patterns.
-- Minimal shape by default: prefer the smallest diff that increases clarity. Remove artificial indirection (gratuitous wrappers, redundant layers) or dead code when it is in scope, and avoid speculative configuration.
+- Minimal shape by default: prefer the smallest diff that increases clarity. Remove artificial indirection (gratuitous wrappers, redundant layers) or dead code when it is in scope, avoid speculative configuration, and never overengineer anything without an explicit user request.
 - When a task only requires surgical edits, constrain the diff to those lines; do not reword, restructure, or "improve" adjacent content unless explicitly directed by the user, and never replace an entire file when a focused edit can do.
 - Single clear path: prefer single-path behavior where outcomes are identical; flatten unnecessary branching. Avoid optional fallbacks unless explicitly requested.
 
@@ -170,9 +170,9 @@ After each meaningful tool call or code edit, validate the result in 1-2 lines a
 - Adding silent fallbacks, legacy shims, or workarounds. Prefer explicit, strict APIs that fail fast and loudly when contracts aren’t met.
 
 ## 🔴 API KEYS
-- Pre-flight gate (real-LLM only): if planned validation includes integration tests/examples that call a real LLM, verify `OPENAI_API_KEY` from environment or workspace `.env` before editing or running tests; if missing/invalid, stop and report the blocker.
+- Pre-flight gate (real-LLM only): if planned validation includes integration tests/examples that call a real LLM, verify that the required provider credentials and access are usable from environment or workspace `.env` before editing or running tests; if credentials or any external provider access limit block the run, stop, report the blocker, and wait for explicit user permission before continuing with other work.
 - Scope limit: this gate does not apply to docs-only changes, pure unit tests, or integrations fully mocked/patched to avoid real LLM calls.
-- Before asking the user for any key, inspect environment and `.env` to confirm it is actually missing or invalid.
+- Before asking the user for any key or permission to continue, inspect environment and `.env` to confirm the blocker is real and external, not local misconfiguration.
 
 ## Common Commands
 `make format`  # Auto-format and apply safe lint fixes
@@ -316,6 +316,7 @@ Strictness
 ### PR Comment Review Loop (Mandatory for Local Coding Work)
 - If you are doing coding work locally (outside GitHub UI) for an open PR and you can post GitHub comments, you must run this loop:
   - Open the PR and resolve every correct active comment-thread finding.
+  - Launch subagents by default for independent sidecar review or bounded subtasks when they materially reduce risk or context load; keep the critical path local.
   - Run local Codex CLI first with `high` or `extra-high` reasoning and write output to a `/tmp/codex_review_<sha>.txt` artifact.
   - Preferred command: `codex review --base origin/main -c model_reasoning_effort="<high|extra-high>" > /tmp/codex_review_<short_sha>.txt 2>&1`.
   - Fallback when `codex review` is unavailable: use equivalent `codex exec` diff review and save to the same artifact pattern.
