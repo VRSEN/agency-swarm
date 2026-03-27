@@ -19,6 +19,15 @@ from agency_swarm import Agency, Agent
 from agency_swarm.utils.citation_extractor import extract_direct_file_citations_from_history
 
 
+def _skip_if_quota(err: Exception) -> None:
+    current: BaseException | None = err
+    while current:
+        text = str(current)
+        if "insufficient_quota" in text or "RateLimitError" in text:
+            pytest.skip("OpenAI quota unavailable for citation integration test")
+        current = current.__cause__ or current.__context__
+
+
 @pytest.mark.asyncio
 async def test_file_attachment_citation_extraction():
     """
@@ -81,16 +90,20 @@ async def test_file_attachment_citation_extraction():
 
             # Test direct file attachment with more explicit citation request
             # Adding multiple prompts that strongly encourage citation generation
-            result = await agency.get_response(
-                message=(
-                    "Please analyze the attached financial report. I need you to:\n"
-                    "1. Find and quote the EXACT revenue figure from the document\n"
-                    "2. Include the specific line from the document that contains '$8,456,789.12'\n"
-                    "3. Reference the document by citing the specific text\n"
-                    "Make sure to quote directly from the attached file."
-                ),
-                file_ids=[uploaded_file_id],
-            )
+            try:
+                result = await agency.get_response(
+                    message=(
+                        "Please analyze the attached financial report. I need you to:\n"
+                        "1. Find and quote the EXACT revenue figure from the document\n"
+                        "2. Include the specific line from the document that contains '$8,456,789.12'\n"
+                        "3. Reference the document by citing the specific text\n"
+                        "Make sure to quote directly from the attached file."
+                    ),
+                    file_ids=[uploaded_file_id],
+                )
+            except Exception as err:
+                _skip_if_quota(err)
+                raise
 
             assert result is not None
             assert result.final_output is not None
@@ -200,9 +213,13 @@ async def test_file_attachment_vs_vector_store_citation_distinction():
         await asyncio.sleep(2)
 
         # Test vector store approach
-        vector_result = await vector_agency.get_response(
-            "Please find and quote the exact ID mentioned in the documents."
-        )
+        try:
+            vector_result = await vector_agency.get_response(
+                "Please find and quote the exact ID mentioned in the documents."
+            )
+        except Exception as err:
+            _skip_if_quota(err)
+            raise
         vector_history = vector_agency.thread_manager.get_conversation_history("VectorAgent", None)
 
         vector_search_results = [
@@ -215,10 +232,14 @@ async def test_file_attachment_vs_vector_store_citation_distinction():
         with open(attachment_file, "rb") as f:
             uploaded_file = attachment_agent.client_sync.files.create(file=f, purpose="assistants")
         file_id = uploaded_file.id
-        attachment_result = await attachment_agency.get_response(
-            "Please analyze the attached file and tell me the exact ID mentioned. Quote the specific text.",
-            file_ids=[file_id],
-        )
+        try:
+            attachment_result = await attachment_agency.get_response(
+                "Please analyze the attached file and tell me the exact ID mentioned. Quote the specific text.",
+                file_ids=[file_id],
+            )
+        except Exception as err:
+            _skip_if_quota(err)
+            raise
         attachment_history = attachment_agency.thread_manager.get_conversation_history("AttachmentAgent", None)
 
         # Use centralized utility for citation extraction

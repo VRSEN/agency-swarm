@@ -1,7 +1,5 @@
 """Integration tests for DRY_RUN behavior in FastAPI integration."""
 
-import os
-
 import pytest
 
 pytest.importorskip("fastapi.testclient")
