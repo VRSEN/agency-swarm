@@ -418,7 +418,8 @@ async def test_code_interpreter_tool(real_openai_client: AsyncOpenAI, tmp_path: 
         code_interpreter_agent = Agent(
             name="CodeInterpreterAgent",
             instructions="""You are an agent that can read and execute code using CodeInterpreter tool.""",
-            model_settings=ModelSettings(temperature=0.0),
+            model_settings=ModelSettings(temperature=0.0, tool_choice="required"),
+            tool_use_behavior="stop_on_first_tool",
             files_folder=tmp_dir,
         )
         code_interpreter_agent._openai_client = real_openai_client
