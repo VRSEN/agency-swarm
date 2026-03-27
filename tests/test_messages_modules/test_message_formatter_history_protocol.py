@@ -13,7 +13,7 @@ def _make_chat_agent(name: str) -> Agent:
     return Agent(
         name=name,
         instructions="Test",
-        model=OpenAIChatCompletionsModel(model="gpt-5", openai_client=client),
+        model=OpenAIChatCompletionsModel(model="gpt-5.4-mini", openai_client=client),
     )
 
 
@@ -22,7 +22,7 @@ def _make_responses_agent(name: str) -> Agent:
     return Agent(
         name=name,
         instructions="Test",
-        model=OpenAIResponsesModel(model="gpt-5", openai_client=client),
+        model=OpenAIResponsesModel(model="gpt-5.4-mini", openai_client=client),
     )
 
 
@@ -74,7 +74,7 @@ def test_prepare_history_for_runner_allows_compatible_histories() -> None:
                 "agent": "Coordinator",
                 "callerAgent": None,
             },
-            lambda name: _make_litellm_agent(name, "openai/gpt-5-mini"),
+            lambda name: _make_litellm_agent(name, "openai/gpt-5.4-mini"),
         ),
         (
             {

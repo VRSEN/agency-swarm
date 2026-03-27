@@ -85,9 +85,9 @@ class TestCreateAgentTemplate:
         assert 'instructions="./instructions.md"' in agent_content
         assert 'files_folder="./files"' in agent_content
         assert 'tools_folder="./tools"' in agent_content
-        assert 'model="gpt-5.4"' in agent_content  # Updated default model
+        assert 'model="gpt-5.4-mini"' in agent_content  # Updated default model
         assert "ModelSettings(" in agent_content
-        # gpt-5.4 is a reasoning model - no temperature
+        # gpt-5.4-mini is a reasoning model - no temperature
         assert "temperature=" not in agent_content
 
     def test_instructions_file_content(self, tmp_path: Path) -> None:
@@ -362,7 +362,7 @@ class TestCreateAgentTemplate:
             create_agent_template(
                 agent_name=agent_name,
                 agent_description=agent_description,
-                model="gpt-5-mini",
+                model="gpt-5.4-mini",
                 reasoning="high",
                 path=str(tmp_path),
             )
@@ -375,7 +375,7 @@ class TestCreateAgentTemplate:
 
         # Should have reasoning import and parameter with summary for GPT-5
         assert "from openai.types.shared import Reasoning" in agent_content
-        assert 'model="gpt-5-mini"' in agent_content
+        assert 'model="gpt-5.4-mini"' in agent_content
         assert 'reasoning=Reasoning(effort="high", summary="auto")' in agent_content
         # Should NOT have temperature
         assert "temperature=" not in agent_content
@@ -389,7 +389,7 @@ class TestCreateAgentTemplate:
             create_agent_template(
                 agent_name=agent_name,
                 agent_description=agent_description,
-                model="gpt-5-mini",
+                model="gpt-5.4-mini",
                 temperature=0.7,
                 reasoning="medium",
                 path=str(tmp_path),
@@ -399,7 +399,7 @@ class TestCreateAgentTemplate:
 
         # Check error message was printed
         captured = capsys.readouterr()
-        assert "ERROR: Reasoning models (like gpt-5-mini) do not support the temperature parameter" in captured.out
+        assert "ERROR: Reasoning models (like gpt-5.4-mini) do not support the temperature parameter" in captured.out
         assert "Temperature parameter will be ignored" in captured.out
 
         # Agent should still be created successfully
@@ -515,7 +515,7 @@ class TestCreateAgentTemplate:
         assert (
             create_agent_template(
                 agent_name=agent_name,
-                model="gpt-5-mini",
+                model="gpt-5.4-mini",
                 reasoning="high",
                 path=str(tmp_path),
             )

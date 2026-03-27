@@ -152,8 +152,8 @@ async def test_full_streaming_flow_hardcoded_sequence(
         main_model = LitellmModel(model=ANTHROPIC_MODEL_NAME)
         helper_model = LitellmModel(model=ANTHROPIC_MODEL_NAME)
     else:
-        main_model = "gpt-5-mini"
-        helper_model = "gpt-5-mini"
+        main_model = "gpt-5.4-mini"
+        helper_model = "gpt-5.4-mini"
 
     main = Agent(
         name="MainAgent",
@@ -341,7 +341,7 @@ async def test_nested_delegation_streaming() -> None:
             "Then use send_message to ask AgentB to process and analyze data. "
             "Finally respond with 'Complete'."
         ),
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
         tools=[],
     )
 
@@ -354,7 +354,7 @@ async def test_nested_delegation_streaming() -> None:
             "Then use process_data tool with the response. "
             "Finally respond 'Processed'."
         ),
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
         model_settings=ModelSettings(tool_choice="required"),
         tools=[process_data],
     )
@@ -363,7 +363,7 @@ async def test_nested_delegation_streaming() -> None:
         name="AgentC",
         description="Risk analyzer",
         instructions="When asked: use analyze_risk tool and respond 'Risk analyzed'.",
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
         model_settings=ModelSettings(tool_choice="required"),
         tools=[analyze_risk],
     )

@@ -10,7 +10,7 @@ async def test_stream_cached_items_preserves_handoff_output_type() -> None:
     agent = Agent(
         name="StreamAgent",
         instructions="You are helpful.",
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
     )
     items = [
         {
@@ -32,7 +32,7 @@ async def test_stream_cached_items_emits_response_envelope_for_tool_calls() -> N
     agent = Agent(
         name="StreamAgent",
         instructions="You are helpful.",
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
     )
     items = [
         {
@@ -58,7 +58,7 @@ async def test_stream_cached_items_emits_reasoning_summary_only_once() -> None:
     agent = Agent(
         name="StreamAgent",
         instructions="You are helpful.",
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
     )
     items = [
         {

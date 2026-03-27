@@ -71,7 +71,7 @@ def create_agency(load_threads_callback=None):
         files_folder=_prepare_runtime_files_folder(),
         include_search_results=True,
         tools=[WebSearchTool()],
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
         model_settings=ModelSettings(reasoning=Reasoning(effort="low", summary="auto")),
     )
 
@@ -81,7 +81,7 @@ def create_agency(load_threads_callback=None):
         description="Handles all math queries using CalculationTool.",
         instructions="You are MathAgent. Use CalculationTool for arithmetic questions.",
         tools=[CalculationTool],
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
         model_settings=ModelSettings(reasoning=Reasoning(effort="high", summary="auto")),
     )
 

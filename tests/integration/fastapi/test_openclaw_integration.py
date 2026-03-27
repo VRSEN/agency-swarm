@@ -44,7 +44,7 @@ def _build_openclaw_config(tmp_path: Path) -> OpenClawIntegrationConfig:
         startup_timeout_seconds=5.0,
         proxy_timeout_seconds=30.0,
         default_model="openclaw:main",
-        provider_model="openai/gpt-5.4",
+        provider_model="openai/gpt-5.4-mini",
         gateway_command="openclaw gateway",
         tool_mode="full",
     )
@@ -64,7 +64,7 @@ def test_openclaw_config_manual_construction_defaults_to_full_tool_mode(tmp_path
         startup_timeout_seconds=5.0,
         proxy_timeout_seconds=30.0,
         default_model="openclaw:main",
-        provider_model="openai/gpt-5.4",
+        provider_model="openai/gpt-5.4-mini",
         gateway_command="openclaw gateway",
     )
 
@@ -193,7 +193,7 @@ def test_openclaw_proxy_filters_request_keys_and_normalizes_payload(
     }
     assert "include" not in forwarded
     assert "parallel_tool_calls" not in forwarded
-    assert forwarded["model"] == "openai/gpt-5.4"
+    assert forwarded["model"] == "openai/gpt-5.4-mini"
     assert forwarded["input"] == [
         {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hello"}]}
     ]
@@ -1166,7 +1166,7 @@ def test_attach_openclaw_to_fastapi_does_not_register_gateway_port_as_proxy_url(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.delenv("OPENCLAW_DEFAULT_MODEL", raising=False)
-    monkeypatch.setenv("OPENCLAW_PROVIDER_MODEL", "openai/gpt-5.4")
+    monkeypatch.setenv("OPENCLAW_PROVIDER_MODEL", "openai/gpt-5.4-mini")
     monkeypatch.delenv("OPENCLAW_PROXY_BASE_URL", raising=False)
     monkeypatch.delenv("OPENCLAW_PROXY_HOST", raising=False)
     monkeypatch.setenv("OPENCLAW_PROXY_PORT", "8000")
@@ -1202,7 +1202,7 @@ def test_attach_openclaw_to_fastapi_rejects_conflicting_current_app_defaults(
     second_config = replace(
         _build_openclaw_config(tmp_path / "second"),
         default_model="openclaw:second",
-        provider_model="openai/gpt-5.4",
+        provider_model="openai/gpt-5.4-mini",
     )
 
     attach_openclaw_to_fastapi(FastAPI(), first_config)
@@ -1237,7 +1237,7 @@ def test_attach_openclaw_to_fastapi_rolls_back_defaults_on_partial_registration_
     config = replace(
         _build_openclaw_config(tmp_path),
         default_model="openclaw:new",
-        provider_model="openai/gpt-5.4",
+        provider_model="openai/gpt-5.4-mini",
     )
 
     with pytest.raises(ValueError, match="Conflicting"):
@@ -1273,7 +1273,7 @@ def test_attach_openclaw_to_fastapi_distinct_apps_coexist_without_explicit_proxy
     second_config = replace(
         _build_openclaw_config(tmp_path / "second"),
         default_model="openclaw:second",
-        provider_model="openai/gpt-5.4",
+        provider_model="openai/gpt-5.4-mini",
     )
 
     app1 = FastAPI()
@@ -1314,7 +1314,7 @@ def test_attach_openclaw_to_fastapi_releases_current_app_defaults_when_app_is_di
     second_config = replace(
         _build_openclaw_config(tmp_path / "second"),
         default_model="openclaw:second",
-        provider_model="openai/gpt-5.4",
+        provider_model="openai/gpt-5.4-mini",
     )
     attach_openclaw_to_fastapi(FastAPI(), second_config)
 
@@ -1341,7 +1341,7 @@ def test_attach_openclaw_to_fastapi_keeps_distinct_current_app_defaults_separate
         _build_openclaw_config(tmp_path / "second"),
         port=9000,
         default_model="openclaw:second",
-        provider_model="openai/gpt-5.4",
+        provider_model="openai/gpt-5.4-mini",
     )
     attach_openclaw_to_fastapi(second_app, second_config)
 
@@ -1368,14 +1368,14 @@ def test_attach_openclaw_to_fastapi_uses_current_app_defaults_for_public_proxy_u
         _build_openclaw_config(tmp_path),
         port=9000,
         default_model="openclaw:custom",
-        provider_model="openai/gpt-5.4",
+        provider_model="openai/gpt-5.4-mini",
     )
     attach_openclaw_to_fastapi(app, config)
 
     model = build_openclaw_responses_model(base_url="https://worker.example/openclaw/v1")
 
     assert model.model == "openclaw:custom"
-    assert get_usage_tracking_model_name(model) == "openai/gpt-5.4"
+    assert get_usage_tracking_model_name(model) == "openai/gpt-5.4-mini"
     assert model._client.api_key == "app-token"
 
 
@@ -1383,7 +1383,7 @@ def test_attach_openclaw_to_fastapi_does_not_treat_other_public_proxy_urls_as_cu
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.delenv("OPENCLAW_DEFAULT_MODEL", raising=False)
-    monkeypatch.setenv("OPENCLAW_PROVIDER_MODEL", "openai/gpt-5.4")
+    monkeypatch.setenv("OPENCLAW_PROVIDER_MODEL", "openai/gpt-5.4-mini")
     monkeypatch.setenv("OPENCLAW_PROXY_BASE_URL", "https://external.example/openclaw/v1")
     monkeypatch.setenv("APP_TOKEN", "app-token")
     monkeypatch.setenv("OPENCLAW_PROXY_API_KEY", "proxy-token")
@@ -1446,7 +1446,7 @@ def test_build_openclaw_responses_model_preserves_explicit_nondefault_alias_meta
     monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULT_PATTERNS", [], raising=False)
     openclaw_mod.openclaw_model.register_current_app_openclaw_defaults(
         default_model="openclaw:main",
-        provider_model="openai/gpt-5.4",
+        provider_model="openai/gpt-5.4-mini",
         base_url="https://app.example/openclaw/v1",
     )
 
@@ -1780,7 +1780,7 @@ def test_openclaw_ensure_layout_normalizes_existing_non_dict_config_sections(tmp
     saved = json.loads(config.config_path.read_text(encoding="utf-8"))
     assert saved["gateway"]["auth"]["mode"] == "token"
     assert saved["gateway"]["http"]["endpoints"]["responses"]["enabled"] is True
-    assert saved["agents"]["defaults"]["model"] == {"primary": "openai/gpt-5.4"}
+    assert saved["agents"]["defaults"]["model"] == {"primary": "openai/gpt-5.4-mini"}
     assert saved["agents"]["defaults"]["workspace"] == str(config.workspace_dir)
 
 

@@ -8,5 +8,5 @@ portfolio_manager = Agent(
     ),
     instructions="./instructions.md",
     tools_folder="./tools",
-    model="gpt-5-mini",
+    model="gpt-5.4-mini",
 )

@@ -25,7 +25,7 @@ async def main() -> None:
 
     research_agent = Agent(
         name="ResearchAgent",
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
         instructions=(
             "You are a helpful assistant. Search OpenAI resources only and return a short summary "
             "for developers in 3 bullet points."

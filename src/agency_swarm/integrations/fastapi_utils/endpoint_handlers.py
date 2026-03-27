@@ -846,7 +846,7 @@ async def generate_chat_name(
     if len(formatted_messages) > 1000:
         formatted_messages = "HISTORY TRUNCATED TO 1000 CHARACTERS:\n" + formatted_messages[:1000]
 
-    model = OpenAIResponsesModel(model="gpt-5-nano", openai_client=client)
+    model = OpenAIResponsesModel(model="gpt-5.4-mini", openai_client=client)
 
     name_agent = Agent(
         name="NameGenerator",

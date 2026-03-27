@@ -23,7 +23,7 @@ def test_openclaw_agent_auto_builds_responses_model(monkeypatch: pytest.MonkeyPa
     monkeypatch.delenv("OPENCLAW_PROXY_BASE_URL", raising=False)
     monkeypatch.delenv("OPENCLAW_PROXY_PORT", raising=False)
     monkeypatch.delenv("PORT", raising=False)
-    monkeypatch.setenv("OPENCLAW_PROVIDER_MODEL", "openai/gpt-5.4")
+    monkeypatch.setenv("OPENCLAW_PROVIDER_MODEL", "openai/gpt-5.4-mini")
 
     agent = OpenClawAgent(
         name="OpenClawWorker",
@@ -34,7 +34,7 @@ def test_openclaw_agent_auto_builds_responses_model(monkeypatch: pytest.MonkeyPa
     assert isinstance(agent.model, OpenAIResponsesModel)
     assert agent.model.model == "openclaw:main"
     assert get_model_name(agent.model) == "openclaw:main"
-    assert get_usage_tracking_model_name(agent.model) == "openai/gpt-5.4"
+    assert get_usage_tracking_model_name(agent.model) == "openai/gpt-5.4-mini"
     assert str(agent.model._client.base_url) == "http://127.0.0.1:8000/openclaw/v1/"
     assert agent.supports_outbound_communication is False
     assert agent.model_settings.reasoning is not None
@@ -159,7 +159,7 @@ def test_build_openclaw_responses_model_keeps_public_alias_for_external_usage_wh
 def test_build_openclaw_responses_model_keeps_public_alias_for_remote_worker_usage_when_provider_env_is_set(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("OPENCLAW_PROVIDER_MODEL", "openai/gpt-5.4")
+    monkeypatch.setenv("OPENCLAW_PROVIDER_MODEL", "openai/gpt-5.4-mini")
 
     model = build_openclaw_responses_model(base_url="https://remote.example/openclaw/v1", api_key="external-token")
 
@@ -237,7 +237,7 @@ def test_openclaw_agent_treats_localhost_proxy_aliases_as_current_app_proxy(
     model = build_openclaw_responses_model(base_url="http://localhost:8000/openclaw/v1")
 
     assert model._client.api_key == "app-token"
-    assert get_usage_tracking_model_name(model) == "openai/gpt-5.4"
+    assert get_usage_tracking_model_name(model) == "openai/gpt-5.4-mini"
 
 
 def test_openclaw_agent_uses_app_token_for_explicit_same_app_proxy_url_when_one_current_app_proxy_is_registered(
@@ -250,7 +250,7 @@ def test_openclaw_agent_uses_app_token_for_explicit_same_app_proxy_url_when_one_
     monkeypatch.setattr(openclaw_model_mod, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
     register_current_app_openclaw_defaults(
         default_model="openclaw:custom",
-        provider_model="openai/gpt-5.4",
+        provider_model="openai/gpt-5.4-mini",
         base_url="http://127.0.0.1:9000/openclaw/v1",
     )
 
@@ -305,7 +305,7 @@ def test_openclaw_agent_rejects_manual_handoffs() -> None:
         name="Recipient",
         description="Recipient",
         instructions="Return the result.",
-        model="gpt-5.4",
+        model="gpt-5.4-mini",
     )
 
     with pytest.raises(TypeError, match="does not accept manual handoffs"):
@@ -357,7 +357,7 @@ def test_openclaw_agent_skips_shared_tool_wiring() -> None:
         name="Coordinator",
         description="Coordinator",
         instructions="Coordinate the work.",
-        model="gpt-5.4",
+        model="gpt-5.4-mini",
     )
 
     agency = Agency(
@@ -399,7 +399,7 @@ def test_openclaw_agent_cannot_register_subagent() -> None:
         name="Recipient",
         description="Recipient",
         instructions="Return the result.",
-        model="gpt-5.4",
+        model="gpt-5.4-mini",
     )
 
     with pytest.raises(ValueError, match="cannot register subagents because it is configured as receive-only"):
@@ -416,7 +416,7 @@ def test_openclaw_agent_cannot_be_sender_in_communication_flows() -> None:
         name="Specialist",
         description="Specialist",
         instructions="Return the result.",
-        model="gpt-5.4",
+        model="gpt-5.4-mini",
     )
 
     with pytest.raises(ValueError, match="cannot be the sender in communication_flows"):

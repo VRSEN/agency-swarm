@@ -11,7 +11,7 @@ async def test_agency_get_response_persists_messages(tmp_path, monkeypatch) -> N
     agent = Agent(
         name="ResponseAgent",
         instructions="Reply with a short greeting.",
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
     )
     agency = Agency(agent)
 
@@ -33,7 +33,7 @@ async def test_agency_get_response_stream_persists_messages(tmp_path, monkeypatc
     agent = Agent(
         name="StreamAgent",
         instructions="Reply with a short greeting.",
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
     )
     agency = Agency(agent)
 

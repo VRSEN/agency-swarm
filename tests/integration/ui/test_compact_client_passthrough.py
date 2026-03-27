@@ -97,13 +97,13 @@ async def test_compact_uses_entry_agent_client_sync_and_model_passthrough():
 async def test_compact_omits_reasoning_param_for_openai_model():
     """Compact omits reasoning even for OpenAI models (simpler, safe default)."""
     fake_client = _FakeClient()
-    agent = _real_agent_with_client(name="Coordinator", model="gpt-5-mini", client=fake_client)
+    agent = _real_agent_with_client(name="Coordinator", model="gpt-5.4-mini", client=fake_client)
     agency = _Agency(agent)
 
     await TerminalDemoLauncher.compact_thread(agency, [])
 
     last = fake_client.calls[-1]
-    assert last["model"] == "gpt-5-mini"
+    assert last["model"] == "gpt-5.4-mini"
     assert last["reasoning"] is None
 
 

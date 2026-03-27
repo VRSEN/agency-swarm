@@ -26,7 +26,7 @@ def coordinator_agent():
             "For any user question about the user, call `transfer_to_DataAgent`. Always use the handoff tool to answer."
         ),
         model_settings=ModelSettings(tool_choice="required"),
-        model=LitellmModel(model="openai/gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
+        model=LitellmModel(model="openai/gpt-5.4-mini", api_key=os.getenv("OPENAI_API_KEY")),
     )
 
 
@@ -39,7 +39,7 @@ def worker_agent():
             "Always use the tool to answer."
         ),
         model_settings=ModelSettings(tool_choice="required"),
-        model=LitellmModel(model="openai/gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
+        model=LitellmModel(model="openai/gpt-5.4-mini", api_key=os.getenv("OPENAI_API_KEY")),
     )
 
 
@@ -49,7 +49,7 @@ def data_agent():
         name="DataAgent",
         instructions="User name is John Doe. User age is 30. Answer with just the facts.",
         description="Has information about the user.",
-        model=LitellmModel(model="openai/gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")),
+        model=LitellmModel(model="openai/gpt-5.4-mini", api_key=os.getenv("OPENAI_API_KEY")),
     )
 
 

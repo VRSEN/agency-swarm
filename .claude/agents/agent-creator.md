@@ -46,7 +46,7 @@ agent_name = Agent(
     description="[Agent role from PRD]",
     instructions="./instructions.md",
     tools_folder="./tools",
-    model="gpt-5",
+    model="gpt-5.4-mini",
     model_settings=ModelSettings(
         max_tokens=25000,
     ),

@@ -56,12 +56,12 @@ def basic_agents() -> tuple[Agent, Agent]:
     agent_a = Agent(
         name="AgentA",
         instructions="You are Agent A. Use file_search when asked about documents.",
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
     )
     agent_b = Agent(
         name="AgentB",
         instructions="You are Agent B. Use file_search when asked about documents.",
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
     )
     return agent_a, agent_b
 
@@ -71,12 +71,12 @@ def _create_fresh_agents() -> tuple[Agent, Agent]:
     agent_a = Agent(
         name="AgentA",
         instructions="You are Agent A. Use file_search when asked about documents.",
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
     )
     agent_b = Agent(
         name="AgentB",
         instructions="You are Agent B. Use file_search when asked about documents.",
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
     )
     return agent_a, agent_b
 

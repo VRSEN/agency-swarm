@@ -52,7 +52,7 @@ def create_multimodal_agency() -> Agency:
         instructions="Call LoadShowcaseImage when asked for the latest gallery image. "
         "Use LoadReferenceReport when a supporting document is requested.",
         tools=[LoadShowcaseImage, LoadReferenceReport],
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
     )
     return Agency(gallery_agent)
 

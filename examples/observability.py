@@ -62,21 +62,21 @@ def create_agency() -> Agency:
         name="CEO",
         instructions="You are the CEO. NEVER execute tasks yourself. Instead, DELEGATE all tasks: coding tasks to Developer and data analysis to DataAnalyst.",
         description="Manages projects and coordinates between team members",
-        model="gpt-5.4",
+        model="gpt-5.4-mini",
     )
 
     developer = Agent(
         name="Developer",
         instructions="You are the Developer. Solve coding problems by implementing solutions and writing code.",
         description="Implements technical solutions and writes code",
-        model="gpt-5.4",
+        model="gpt-5.4-mini",
     )
 
     analyst = Agent(
         name="DataAnalyst",
         instructions="You are the Data Analyst. Analyze data and provide insights. Always use analyze_dataset in your response to process the dataset.",
         description="Analyzes data and provides insights",
-        model="gpt-5.4",
+        model="gpt-5.4-mini",
         tools=[analyze_dataset],
     )
 

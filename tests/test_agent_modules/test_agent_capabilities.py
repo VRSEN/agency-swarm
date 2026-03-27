@@ -77,7 +77,7 @@ def test_reasoning_capability_from_model_or_settings() -> None:
     cases: list[tuple[Agent, bool]] = [
         (Agent(name="O1Agent", instructions="Test", model="o1-preview"), True),
         (Agent(name="O3Agent", instructions="Test", model="o3"), True),
-        (Agent(name="Gpt5Agent", instructions="Test", model="gpt-5-mini"), True),
+        (Agent(name="Gpt5Agent", instructions="Test", model="gpt-5.4-mini"), True),
         (Agent(name="NonReasoningAgent", instructions="Test", model="gpt-4.1"), False),
         (
             Agent(
@@ -99,7 +99,7 @@ def test_capabilities_order_and_uniqueness() -> None:
     agent = Agent(
         name="OrderedAgent",
         instructions="Test",
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
         tools=[WebSearchTool(), SampleTool, CodeInterpreterTool(tool_config=CodeInterpreter())],
     )
     capabilities = get_agent_capabilities(agent)
@@ -112,7 +112,7 @@ def test_agent_with_all_capabilities() -> None:
     agent = Agent(
         name="FullAgent",
         instructions="Test",
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
         tools=[
             SampleTool,
             FileSearchTool(vector_store_ids=["vs_123"]),

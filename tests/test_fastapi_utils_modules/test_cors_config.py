@@ -7,7 +7,7 @@ from agency_swarm.integrations.fastapi import run_fastapi
 
 @pytest.fixture
 def dummy_agency():
-    agent = Agent(name="TestAgent", model="gpt-5-mini")
+    agent = Agent(name="TestAgent", model="gpt-5.4-mini")
     return {"test": lambda **kwargs: Agency(agent)}
 
 

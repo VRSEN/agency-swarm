@@ -56,7 +56,7 @@ def input_guardrail_agent() -> Agent:
     return Agent(
         name="InputGuardrailAgent",
         instructions="You are a helpful assistant.",
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
         input_guardrails=[require_support_prefix],
         raise_input_guardrail_error=False,
     )
@@ -73,7 +73,7 @@ def input_guardrail_agency_factory():
         agent = Agent(
             name="InputGuardrailAgent",
             instructions="You are a helpful assistant.",
-            model="gpt-5-mini",
+            model="gpt-5.4-mini",
             input_guardrails=[require_support_prefix],
             raise_input_guardrail_error=False,
         )
@@ -87,7 +87,7 @@ def output_guardrail_agent() -> Agent:
     return Agent(
         name="OutputGuardrailAgent",
         instructions=("You are a helpful assistant. Respond with exactly 'foo@example.com' and nothing else."),
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
         output_guardrails=[forbid_email_output],
         validation_attempts=1,
     )
@@ -103,7 +103,7 @@ def named_wrapper_guardrail_agent() -> Agent:
     return Agent(
         name="NamedWrapperGuardrailAgent",
         instructions="You are a helpful assistant.",
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
         input_guardrails=[guardrail_wrapper],
         raise_input_guardrail_error=False,
     )
@@ -284,14 +284,14 @@ async def test_input_guardrail_streaming_suppresses_subagent_calls():
     helper_agent = Agent(
         name="HelperAgent",
         instructions="Call helper_action immediately with the user input.",
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
         tools=[helper_action],
     )
 
     parent_agent = Agent(
         name="ParentAgent",
         instructions="Use send_message to ask HelperAgent to process the input.",
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
         input_guardrails=[require_support_prefix],
         raise_input_guardrail_error=False,
     )
