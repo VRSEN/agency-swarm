@@ -119,7 +119,7 @@ def test_build_openclaw_responses_model_preserves_explicit_nondefault_alias_meta
     monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULT_PATTERNS", [], raising=False)
     openclaw_mod.openclaw_model.register_current_app_openclaw_defaults(
         default_model="openclaw:main",
-        provider_model="openai/gpt-5.4",
+        provider_model="openai/gpt-5.4-mini",
         base_url="https://app.example/openclaw/v1",
     )
 

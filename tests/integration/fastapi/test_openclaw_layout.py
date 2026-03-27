@@ -250,5 +250,5 @@ def test_openclaw_ensure_layout_normalizes_existing_non_dict_config_sections(tmp
     saved = json.loads(config.config_path.read_text(encoding="utf-8"))
     assert saved["gateway"]["auth"]["mode"] == "token"
     assert saved["gateway"]["http"]["endpoints"]["responses"]["enabled"] is True
-    assert saved["agents"]["defaults"]["model"] == {"primary": "openai/gpt-5.4"}
+    assert saved["agents"]["defaults"]["model"] == {"primary": "openai/gpt-5.4-mini"}
     assert saved["agents"]["defaults"]["workspace"] == str(config.workspace_dir)

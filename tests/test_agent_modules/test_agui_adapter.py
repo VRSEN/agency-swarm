@@ -1,5 +1,7 @@
+import dataclasses
 import json
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 

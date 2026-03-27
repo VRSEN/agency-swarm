@@ -13,7 +13,7 @@ class TestCreateAgentTemplateReasoning:
             create_agent_template(
                 agent_name="Smart Agent",
                 agent_description="Uses reasoning capabilities",
-                model="gpt-5-mini",
+                model="gpt-5.4-mini",
                 reasoning="high",
                 path=str(tmp_path),
             )
@@ -22,7 +22,7 @@ class TestCreateAgentTemplateReasoning:
 
         agent_content = (tmp_path / "smart_agent" / "smart_agent.py").read_text(encoding="utf-8")
         assert "from openai.types.shared import Reasoning" in agent_content
-        assert 'model="gpt-5-mini"' in agent_content
+        assert 'model="gpt-5.4-mini"' in agent_content
         assert 'reasoning=Reasoning(effort="high", summary="auto")' in agent_content
         assert "temperature=" not in agent_content
 
@@ -32,7 +32,7 @@ class TestCreateAgentTemplateReasoning:
             create_agent_template(
                 agent_name="Bad Agent",
                 agent_description="Test error handling",
-                model="gpt-5-mini",
+                model="gpt-5.4-mini",
                 temperature=0.7,
                 reasoning="medium",
                 path=str(tmp_path),
@@ -41,7 +41,7 @@ class TestCreateAgentTemplateReasoning:
         )
 
         captured = capsys.readouterr()
-        assert "ERROR: Reasoning models (like gpt-5-mini) do not support the temperature parameter" in captured.out
+        assert "ERROR: Reasoning models (like gpt-5.4-mini) do not support the temperature parameter" in captured.out
         assert "Temperature parameter will be ignored" in captured.out
 
         agent_content = (tmp_path / "bad_agent" / "bad_agent.py").read_text(encoding="utf-8")
@@ -117,7 +117,7 @@ class TestCreateAgentTemplateReasoning:
         assert (
             create_agent_template(
                 agent_name="GPT5 Agent",
-                model="gpt-5-mini",
+                model="gpt-5.4-mini",
                 reasoning="high",
                 path=str(tmp_path),
             )
