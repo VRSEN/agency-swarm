@@ -64,9 +64,9 @@ Ask only when required; otherwise proceed autonomously and fast.
 - For drastic changes (wide refactors, file moves/deletes, policy edits, behavior-affecting modifications), always get a confirmation before proceeding.
 - When asking, include a clear description, one precise question, and minimal options; after negative feedback or a protocol breach, tighten approvals (present minimal options and wait for explicit approval; re-run Step 1 before and after edits).
 
-## 🔴 TESTS, EXAMPLES & DOCS ARE KEY EVIDENCE
+## 🔴 TESTS & DOCS ARE KEY EVIDENCE
 
-Default to test-driven development. For docs-only or formatting-only edits, validate with a linter instead of tests. Update docs and examples when behavior or APIs change, and make sure they match the code. When judging correctness or quality, run the smallest high-signal test or command first; pick evidence that reduces uncertainty fastest and do not assume.
+Default to test-driven development. For docs-only or formatting-only edits, validate with a linter instead of tests. Update docs and examples when behavior or APIs change, and make sure they match the code. When judging correctness or quality, run the smallest high-signal test or command first; pick evidence that reduces uncertainty fastest and do not assume. Examples are for manual verification and documentation, not for automated test coverage.
 
 ## 🛡️ GUARDIANSHIP OF THE CODEBASE (HIGHEST PRIORITY)
 
@@ -159,7 +159,7 @@ After each meaningful tool call or code edit, validate the result in 1-2 lines a
 
 
 ### 🔴 PROHIBITED PRACTICES
-- Ending your work without minimal validation when applicable (running relevant tests and examples selectively)
+- Ending your work without minimal validation when applicable (running relevant tests or linters selectively)
 - Misstating test outcomes
 - Skipping key workflow safety steps without a reason
 - Stopping in a non-terminal external wait state that you can still observe or advance yourself
@@ -167,7 +167,7 @@ After each meaningful tool call or code edit, validate the result in 1-2 lines a
 - Adding silent fallbacks, legacy shims, or workarounds. Prefer explicit, strict APIs that fail fast and loudly when contracts aren’t met.
 
 ## 🔴 API KEYS
-- Pre-flight gate (real-LLM only): if planned validation includes integration tests/examples that call a real LLM, verify `OPENAI_API_KEY` from environment or workspace `.env` before editing or running tests; if missing/invalid, stop and report the blocker.
+- Pre-flight gate (real-LLM only): if planned validation includes integration tests or manual example runs that call a real LLM, verify `OPENAI_API_KEY` from environment or workspace `.env` before editing or running them; if missing/invalid, stop and report the blocker.
 - Scope limit: this gate does not apply to docs-only changes, pure unit tests, or integrations fully mocked/patched to avoid real LLM calls.
 - Before asking the user for any key, inspect environment and `.env` to confirm it is actually missing or invalid.
 
@@ -181,8 +181,9 @@ After each meaningful tool call or code edit, validate the result in 1-2 lines a
 - For long-running commands (ci, coverage), use Bash tool with timeout=600000 (10 minutes)
 
 ### Example Runs
-- Run non-interactive examples from /examples directory. Never run examples/interactive/* directly as they require user input. You can run equivalent non-interactive code snippets for that purpose.
-- MANDATORY: Run 100% of code you touch. If you modify an example, run it. If you modify a module, run its tests. For provider-specific integrations (for example LiteLLM), run the full related integration suite and examples when required keys are available; do not treat key-enabled skips as acceptable coverage.
+- Use examples for manual verification only when they are the clearest way to prove behavior.
+- Never add automated tests that import or assert against files under `/examples`; cover the underlying production modules instead.
+- Never run `examples/interactive/*` directly in unattended validation. Use non-interactive code paths or focused module tests instead.
 
 ### Test Guidelines (Canonical)
 - Shared rules:
@@ -303,6 +304,7 @@ Strictness
 - Review diffs and status before and after changes; read the full `git diff` and `git diff --staged` outputs before planning new changes or committing.
 - Never commit or push unless you have verified the changes are correct and improve the codebase.
 - Treat staging, committing, and pushing as user-approved actions: do not do them unless the user explicitly asks, but once approval is clear and the change is verified, do them immediately and persist the result on GitHub instead of letting local-only state accumulate.
+- Agents must never merge pull requests. Only the user decides when a PR is merged. Agents may open, update, and validate PRs, but must stop short of merging unless the user explicitly changes this rule.
 - Never modify staged changes; work in unstaged changes unless the user explicitly asks otherwise.
 - Use non-interactive git defaults to avoid editor prompts (for example, set `GIT_EDITOR=true`).
 - When stashing and if needed, keep staged and unstaged changes in separate stashes using the appropriate flags.
