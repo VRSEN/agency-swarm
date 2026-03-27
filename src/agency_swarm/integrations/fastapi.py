@@ -61,6 +61,8 @@ def run_fastapi(
         from fastapi import FastAPI
         from fastapi.middleware.cors import CORSMiddleware
 
+        from agency_swarm.utils.dry_run import force_dry_run
+
         from .fastapi_utils.endpoint_handlers import (
             ActiveRunRegistry,
             exception_handler,
@@ -149,7 +151,8 @@ def run_fastapi(
             agency_names.append(agency_name)
 
             # Store agent instances for easy lookup
-            preview_instance = agency_factory(load_threads_callback=lambda: [])
+            with force_dry_run():
+                preview_instance = agency_factory(load_threads_callback=lambda: [])
             AGENT_INSTANCES: dict[str, Agent] = dict(preview_instance.agents.items())
             AgencyRequest = add_agent_validator(BaseRequest, AGENT_INSTANCES)
             if enable_agui:

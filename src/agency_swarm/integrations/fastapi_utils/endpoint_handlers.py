@@ -60,6 +60,7 @@ from agency_swarm.messages import MessageFilter, MessageFormatter
 from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
 from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
 from agency_swarm.ui.core.agui_adapter import AguiAdapter
+from agency_swarm.utils.dry_run import force_dry_run
 from agency_swarm.utils.serialization import serialize
 from agency_swarm.utils.usage_tracking import (
     calculate_usage_with_cost,
@@ -782,7 +783,8 @@ def make_metadata_endpoint(
     async def handler(token: str = Depends(verify_token)):
         # Metadata must reflect current factory state for /connect and agent
         # selection flows; a startup snapshot goes stale.
-        agency_metadata = agency_factory(load_threads_callback=lambda: []).get_metadata()
+        with force_dry_run():
+            agency_metadata = agency_factory(load_threads_callback=lambda: []).get_metadata()
         metadata_with_version = dict(agency_metadata)
         agency_swarm_version = _get_agency_swarm_version()
         if agency_swarm_version is not None:

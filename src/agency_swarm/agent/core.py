@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 from pathlib import Path
 from typing import Annotated, Any, TypeVar
 
@@ -46,6 +45,7 @@ from agency_swarm.agent.tools import _attach_one_call_guard
 from agency_swarm.context import MasterContext
 from agency_swarm.tools.concurrency import ToolConcurrencyManager
 from agency_swarm.tools.mcp_manager import convert_mcp_servers_to_tools
+from agency_swarm.utils.dry_run import is_dry_run
 
 from .context_types import AgencyContext as AgencyContext, AgentRuntimeState
 
@@ -249,9 +249,7 @@ class Agent(BaseAgent[MasterContext]):
         self.file_manager.read_instructions()
         # Explicit files_folder support must keep working even when framework-managed tool wiring is disabled.
         # Skip side-effectful OpenAI file/vector-store setup when DRY_RUN is enabled.
-        _dry_run_env = os.getenv("DRY_RUN", "")
-        _DRY_RUN = str(_dry_run_env).strip().lower() in {"1", "true", "yes", "on"}
-        if not _DRY_RUN:
+        if not is_dry_run():
             self.file_manager.parse_files_folder_for_vs_id()
         if self.supports_framework_tool_wiring:
             parse_schemas(self)

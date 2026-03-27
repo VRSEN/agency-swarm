@@ -6,6 +6,7 @@ pytest.importorskip("fastapi.testclient")
 from fastapi.testclient import TestClient
 
 from agency_swarm import Agency, Agent, function_tool, run_fastapi
+from agency_swarm.agent.file_manager import AgentFileManager
 
 
 @pytest.fixture
@@ -78,3 +79,33 @@ def test_dry_run_metadata_includes_tools(monkeypatch, agency_factory_with_tool):
     tool_res = client.post("/tool/add_one", json={"x": 1})
     assert tool_res.status_code == 200
     assert tool_res.json()["response"] == 2
+
+
+def test_fastapi_setup_and_metadata_force_dry_run_for_files_folder(monkeypatch, tmp_path):
+    files = tmp_path / "files"
+    files.mkdir()
+    (files / "report.pdf").write_text("report", encoding="utf-8")
+    (files / "chart.png").write_bytes(b"png")
+
+    def record(self):
+        raise AssertionError("parse_files_folder_for_vs_id should not run during FastAPI setup or metadata")
+
+    monkeypatch.delenv("DRY_RUN", raising=False)
+    monkeypatch.setattr(AgentFileManager, "parse_files_folder_for_vs_id", record)
+
+    def create_agency(load_threads_callback=None, save_threads_callback=None):
+        agent = Agent(name="FileAgent", instructions="Test", files_folder=str(files))
+        return Agency(
+            agent,
+            load_threads_callback=load_threads_callback,
+            save_threads_callback=save_threads_callback,
+        )
+
+    app = run_fastapi(agencies={"test_agency": create_agency}, return_app=True, app_token_env="")
+    client = TestClient(app)
+
+    res = client.get("/test_agency/get_metadata")
+    assert res.status_code == 200
+    payload = res.json()
+    node = next(n for n in payload["nodes"] if n["id"] == "FileAgent")
+    assert {"file_search", "code_interpreter"} <= set(node["data"]["capabilities"])
