@@ -250,7 +250,7 @@ def test_metadata_includes_tool_input_schema():
 
 
 def test_metadata_includes_missing_allowed_dirs(tmp_path, agency_factory):
-    """Missing allowed local file directories should still appear in metadata."""
+    """Missing allowed local file directories should be omitted from metadata."""
     missing_dir = tmp_path / "missing-uploads"
 
     app = run_fastapi(
@@ -265,11 +265,11 @@ def test_metadata_includes_missing_allowed_dirs(tmp_path, agency_factory):
     assert response.status_code == 200
     payload = response.json()
 
-    assert payload["allowed_local_file_dirs"] == [str(missing_dir)]
+    assert payload["allowed_local_file_dirs"] == []
 
 
 def test_metadata_includes_non_directory_allowed_dirs(tmp_path, agency_factory):
-    """Non-directory allowlist entries should appear in metadata as configured."""
+    """Non-directory allowlist entries should be omitted from metadata."""
     file_entry = tmp_path / "not-a-directory.txt"
     file_entry.write_text("x", encoding="utf-8")
 
@@ -285,11 +285,11 @@ def test_metadata_includes_non_directory_allowed_dirs(tmp_path, agency_factory):
     assert response.status_code == 200
     payload = response.json()
 
-    assert payload["allowed_local_file_dirs"] == [str(file_entry)]
+    assert payload["allowed_local_file_dirs"] == []
 
 
 def test_metadata_preserves_configured_allowlist_strings(tmp_path, monkeypatch, agency_factory):
-    """Metadata should return configured allowlist strings without resolving home paths."""
+    """Metadata should return only usable allowlist directories as resolved paths."""
     fake_home = tmp_path / "fake-home"
     allowed_dir = fake_home / "uploads"
     allowed_dir.mkdir(parents=True, exist_ok=True)
@@ -307,7 +307,7 @@ def test_metadata_preserves_configured_allowlist_strings(tmp_path, monkeypatch, 
     assert response.status_code == 200
     payload = response.json()
 
-    assert payload["allowed_local_file_dirs"] == ["~/uploads"]
+    assert payload["allowed_local_file_dirs"] == [str(allowed_dir.resolve())]
 
 
 def test_tool_endpoint_handles_nested_schema():
