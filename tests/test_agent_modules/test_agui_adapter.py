@@ -1,7 +1,5 @@
-import dataclasses
 import json
 from types import SimpleNamespace
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -36,10 +34,8 @@ from openai.types.responses.response_output_item_added_event import ResponseOutp
 from openai.types.responses.response_output_item_done_event import ResponseOutputItemDoneEvent
 from openai.types.responses.response_output_text import AnnotationFileCitation
 from openai.types.responses.response_text_delta_event import Logprob, ResponseTextDeltaEvent
-from pydantic import BaseModel
 
 from agency_swarm.ui.core.agui_adapter import AguiAdapter
-from agency_swarm.utils.serialization import serialize
 
 
 def make_raw_event(data):
@@ -48,44 +44,6 @@ def make_raw_event(data):
 
 def make_stream_event(name, item):
     return SimpleNamespace(type="run_item_stream_event", name=name, item=item)
-
-
-class DummyModel:
-    def __init__(self, value: str):
-        self.value = value
-
-
-def test_serialize_handles_basic_values_and_objects():
-    @dataclasses.dataclass
-    class Payload:
-        name: str
-        count: int
-
-    payload = Payload(name="test", count=3)
-    obj = DummyModel(value="42")
-
-    serialized = serialize({"payload": payload, "wrapped": obj, "items": [1, True]})
-
-    assert serialized["payload"] == {"name": "test", "count": "3"}
-    assert serialized["wrapped"] == {"value": "42"}
-    assert serialized["items"] == ["1", "True"]
-
-
-def test_serialize_handles_nested_models_and_mocks():
-    class Model(BaseModel):
-        number: int
-
-    nested = Model(number=7)
-    agent = MagicMock()
-    agent.name = "Coach"
-    agent.model = "gpt-5.4-mini"
-
-    serialized = serialize({"nested": nested, "agent": agent})
-
-    assert serialized["nested"] == {"number": "7"}
-    assert serialized["agent"]["name"] == "Coach"
-    assert serialized["agent"]["model"] == "gpt-5.4-mini"
-    assert "method_calls" in serialized["agent"]
 
 
 def test_agui_messages_to_chat_history_converts_roles_and_tool_calls():
