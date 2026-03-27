@@ -185,7 +185,7 @@ After each meaningful tool call or code edit, validate the result in 1-2 lines a
 
 ### Example Runs
 - Run non-interactive examples from /examples directory. Never run examples/interactive/* directly as they require user input. You can run equivalent non-interactive code snippets for that purpose.
-- MANDATORY: Run 100% of code you touch. If you modify an example, run it. If you modify a module, run its tests. For provider-specific integrations (for example LiteLLM), run the full related integration suite and examples when required keys are available; do not treat key-enabled skips as acceptable coverage.
+- MANDATORY: Run 100% of the related behavior you touch before commit. If you modify an example, run it. If you modify a module, run its tests. If the change affects a user flow, integration, or runtime path, run the tests, examples, or manual harnesses needed to prove that path locally before commit. For provider-specific integrations (for example LiteLLM), run the full related integration suite and examples when required keys are available; do not treat key-enabled skips as acceptable coverage.
 
 ### Test Guidelines (Canonical)
 - Shared rules:
@@ -304,7 +304,7 @@ Strictness
 
 ## Git Practices
 - Review diffs and status before and after changes; read the full `git diff` and `git diff --staged` outputs before planning new changes or committing.
-- Never commit or push unless you have verified the changes are correct and improve the codebase.
+- Never commit or push unless you have verified locally that the changes are correct and that 100% of the related touched behavior has been run locally and verified through tests, examples, or manual harnesses as appropriate for that path.
 - Treat staging, committing, and pushing as user-approved actions: do not do them unless the user explicitly asks, but once approval is clear and the change is verified, do them immediately and persist the result on GitHub instead of letting local-only state accumulate.
 - Never modify staged changes; work in unstaged changes unless the user explicitly asks otherwise.
 - Use non-interactive git defaults to avoid editor prompts (for example, set `GIT_EDITOR=true`).
