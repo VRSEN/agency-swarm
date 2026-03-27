@@ -35,7 +35,7 @@ class _FakeStream:
 class _FakeAgent:
     def __init__(self, name: str, stream_events: list[SimpleNamespace] | None = None) -> None:
         self.name = name
-        self.model = "gpt-5-mini"
+        self.model = "gpt-5.4-mini"
         self.raise_input_guardrail_error = False
         self._stream_events = stream_events or []
 

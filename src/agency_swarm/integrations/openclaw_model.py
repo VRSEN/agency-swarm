@@ -12,7 +12,7 @@ from openai import AsyncOpenAI
 
 DEFAULT_OPENCLAW_MODEL = "openclaw:main"
 DEFAULT_OPENCLAW_PROXY_API_PATH = "/openclaw/v1"
-DEFAULT_OPENCLAW_PROVIDER_MODEL = "openai/gpt-5.4"
+DEFAULT_OPENCLAW_PROVIDER_MODEL = "openai/gpt-5.4-mini"
 DEFAULT_OPENCLAW_LOCAL_GATEWAY_TOKEN = "openclaw-local-token"
 
 

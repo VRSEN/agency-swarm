@@ -9,7 +9,7 @@ from agency_swarm.agent.agent_flow import AgentFlow
 
 
 def _agent(name: str) -> Agent:
-    return Agent(name=name, instructions=f"Instructions for {name}", model="gpt-5-mini")
+    return Agent(name=name, instructions=f"Instructions for {name}", model="gpt-5.4-mini")
 
 
 def test_agent_flow_gt_rejects_non_agent() -> None:

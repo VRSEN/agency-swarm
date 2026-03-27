@@ -242,7 +242,7 @@ class OpenClawIntegrationConfig:
             startup_timeout_seconds=float(os.getenv("OPENCLAW_STARTUP_TIMEOUT_SECONDS", "60")),
             proxy_timeout_seconds=float(os.getenv("OPENCLAW_PROXY_TIMEOUT_SECONDS", "120")),
             default_model=os.getenv("OPENCLAW_DEFAULT_MODEL", DEFAULT_OPENCLAW_MODEL),
-            provider_model=os.getenv("OPENCLAW_PROVIDER_MODEL", "openai/gpt-5.4"),
+            provider_model=os.getenv("OPENCLAW_PROVIDER_MODEL", "openai/gpt-5.4-mini"),
             gateway_command=gateway_command,
             profile=os.getenv("OPENCLAW_PROFILE"),
             tool_mode=_read_openclaw_tool_mode_env(),

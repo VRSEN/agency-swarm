@@ -70,7 +70,7 @@ def test_main_create_agent_template_success(monkeypatch: pytest.MonkeyPatch) -> 
             "--description",
             "Analyzes data",
             "--model",
-            "gpt-5-mini",
+            "gpt-5.4-mini",
             "--reasoning",
             "high",
             "--max-tokens",
@@ -90,7 +90,7 @@ def test_main_create_agent_template_success(monkeypatch: pytest.MonkeyPatch) -> 
     assert captured_kwargs == {
         "agent_name": "Data Analyst",
         "agent_description": "Analyzes data",
-        "model": "gpt-5-mini",
+        "model": "gpt-5.4-mini",
         "reasoning": "high",
         "max_tokens": 100,
         "temperature": 0.2,

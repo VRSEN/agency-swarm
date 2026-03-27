@@ -19,8 +19,8 @@ async def test_concurrent_messages_to_same_agent():
     Concurrent sends to the same recipient should trigger the pending-recipient guard.
     """
     gate = asyncio.Event()
-    sender = Agent(name="Coordinator", instructions="Coordinate tasks", model="gpt-5-mini")
-    recipient = Agent(name="Worker", instructions="Handle tasks", model="gpt-5-mini")
+    sender = Agent(name="Coordinator", instructions="Coordinate tasks", model="gpt-5.4-mini")
+    recipient = Agent(name="Worker", instructions="Handle tasks", model="gpt-5.4-mini")
 
     async def waiting_response(self, **_kwargs):
         await gate.wait()
@@ -67,9 +67,9 @@ async def test_messages_to_different_agents():
     """
     gate = asyncio.Event()
     started = 0
-    sender = Agent(name="Coordinator", instructions="Coordinate tasks", model="gpt-5-mini")
-    recipient_one = Agent(name="Worker1", instructions="Handle tasks", model="gpt-5-mini")
-    recipient_two = Agent(name="Worker2", instructions="Handle tasks", model="gpt-5-mini")
+    sender = Agent(name="Coordinator", instructions="Coordinate tasks", model="gpt-5.4-mini")
+    recipient_one = Agent(name="Worker1", instructions="Handle tasks", model="gpt-5.4-mini")
+    recipient_two = Agent(name="Worker2", instructions="Handle tasks", model="gpt-5.4-mini")
 
     async def waiting_response(self, **_kwargs):
         nonlocal started
@@ -135,8 +135,8 @@ async def test_pending_guard_is_isolated_between_agencies_that_share_agents():
     """A pending send in one agency should not block the same recipient in another agency."""
     gate = asyncio.Event()
     first_call_pending = {"value": False}
-    sender = Agent(name="Coordinator", instructions="Coordinate tasks", model="gpt-5-mini")
-    recipient = Agent(name="Worker", instructions="Handle tasks", model="gpt-5-mini")
+    sender = Agent(name="Coordinator", instructions="Coordinate tasks", model="gpt-5.4-mini")
+    recipient = Agent(name="Worker", instructions="Handle tasks", model="gpt-5.4-mini")
 
     async def waiting_response(self, **_kwargs):
         if not first_call_pending["value"]:

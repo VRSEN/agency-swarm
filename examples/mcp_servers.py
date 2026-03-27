@@ -68,7 +68,7 @@ mcp_agent_local = Agent(
     name="local_MCP_Agent",
     instructions="You are a helpful assistant",
     description="Helpful assistant",
-    model="gpt-5.4",
+    model="gpt-5.4-mini",
     mcp_servers=[stdio_server],  # <- local mcp server
 )
 
@@ -101,7 +101,7 @@ async def public_mcp_server_example():
         name="public_MCP_Agent",
         instructions="You are a helpful assistant",
         description="Helpful assistant",
-        model="gpt-5.4",
+        model="gpt-5.4-mini",
         tools=[
             HostedMCPTool(  # <- public mcp server (requires ngrok)
                 tool_config={

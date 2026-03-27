@@ -118,7 +118,7 @@ def test_extract_usage_from_run_result_extracts_reasoning_and_sums_subagent_reas
 
     run_result = _make_run_result(usage=main_usage)
     typing.cast(_HasSubAgentResponsesWithModel, run_result)._sub_agent_responses_with_model = [
-        ("gpt-5-mini", ModelResponse(output=[], usage=sub_usage, response_id=None))
+        ("gpt-5.4-mini", ModelResponse(output=[], usage=sub_usage, response_id=None))
     ]
 
     stats = extract_usage_from_run_result(run_result)
@@ -470,13 +470,17 @@ def test_calculate_openai_cost_handles_cached_and_reasoning_tokens() -> None:
     assert calculate_openai_cost("missing", 1, 1, pricing_data=pricing_data) == 0.0
 
 
-def test_bundled_pricing_supports_gpt_5_4_defaults() -> None:
+def test_bundled_pricing_supports_gpt_5_4_and_mini_defaults() -> None:
     pricing_data = load_pricing_data()
 
     assert get_model_pricing("gpt-5.4", pricing_data) is not None
     assert get_model_pricing("openai/gpt-5.4", pricing_data) == pricing_data["gpt-5.4"]
     assert calculate_openai_cost("gpt-5.4", 1000, 1000, pricing_data=pricing_data) > 0.0
     assert calculate_openai_cost("openai/gpt-5.4", 1000, 1000, pricing_data=pricing_data) > 0.0
+    assert get_model_pricing("gpt-5.4-mini", pricing_data) is not None
+    assert get_model_pricing("openai/gpt-5.4-mini", pricing_data) == pricing_data["gpt-5.4-mini"]
+    assert calculate_openai_cost("gpt-5.4-mini", 1000, 1000, pricing_data=pricing_data) > 0.0
+    assert calculate_openai_cost("openai/gpt-5.4-mini", 1000, 1000, pricing_data=pricing_data) > 0.0
 
 
 def test_extract_usage_from_run_result_skips_malformed_subagent_entries() -> None:
@@ -570,8 +574,8 @@ def test_format_usage_for_display_includes_optional_fields() -> None:
         audio_tokens=1,
     )
 
-    formatted = format_usage_for_display(usage_stats, model_name="gpt-5-mini")
-    assert "Model: gpt-5-mini" in formatted
+    formatted = format_usage_for_display(usage_stats, model_name="gpt-5.4-mini")
+    assert "Model: gpt-5.4-mini" in formatted
     assert "Requests: 2" in formatted
     assert "Cached: 3" in formatted
     assert "Reasoning: 2" in formatted

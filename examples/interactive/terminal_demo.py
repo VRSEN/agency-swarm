@@ -73,7 +73,7 @@ def create_demo_agency() -> Agency:
         files_folder=_files(),
         include_search_results=True,
         tools=[WebSearchTool()],
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
         model_settings=ModelSettings(reasoning=Reasoning(effort="low", summary="auto")),
         conversation_starters=[
             "Tell me about daily_revenue_report.pdf.",
@@ -88,7 +88,7 @@ def create_demo_agency() -> Agency:
         description="Handles arithmetic and calculation-heavy requests.",
         instructions="You are MathAgent. Use the calculate tool for arithmetic questions.",
         tools=[calculate],
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
         model_settings=ModelSettings(reasoning=Reasoning(effort="high", summary="auto")),
     )
 

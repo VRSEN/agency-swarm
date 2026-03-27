@@ -55,7 +55,7 @@ def _build_agency(*tool_types: type[BaseTool]) -> Agency:
             "When a matching attachment tool exists, call it immediately instead of asking for confirmation."
         ),
         tools=list(tool_types),
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
     )
     return Agency(agent)
 

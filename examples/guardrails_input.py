@@ -28,7 +28,7 @@ guardrail_agent = Agent(
         "Treat questions about account access, billing, and troubleshooting as relevant. "
         "Flag any other unrelated requests as irrelevant."
     ),
-    model="gpt-5-nano",
+    model="gpt-5.4-mini",
     model_settings=ModelSettings(reasoning=Reasoning(effort="minimal")),
     output_type=RelevanceDecision,
 )
@@ -64,7 +64,7 @@ support_agent = Agent(
         "You help customers resolve account, billing, and troubleshooting issues. "
         "Be concise and always offer a clear next step."
     ),
-    model="gpt-5-mini",
+    model="gpt-5.4-mini",
     model_settings=ModelSettings(reasoning=Reasoning(effort="minimal")),
     input_guardrails=[require_support_topic],
     raise_input_guardrail_error=False,  # non-strict mode: guidance returned as assistant message

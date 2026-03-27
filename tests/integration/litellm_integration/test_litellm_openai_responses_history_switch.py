@@ -41,7 +41,7 @@ def _build_agent(*, model: str | LitellmModel) -> Agent:
 
 def test_litellm_history_replays_into_openai_responses_provider() -> None:
     litellm_agency = Agency(
-        _build_agent(model=LitellmModel(model="openai/gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")))
+        _build_agent(model=LitellmModel(model="openai/gpt-5.4-mini", api_key=os.getenv("OPENAI_API_KEY")))
     )
     litellm_agency.get_response_sync(message="Find my user id.")
 
@@ -58,7 +58,7 @@ def test_litellm_history_replays_into_openai_responses_provider() -> None:
     ), "Expected LiteLLM function_call items to persist replay IDs as id == call_id."
 
     responses_agency = Agency(
-        _build_agent(model="gpt-5-mini"),
+        _build_agent(model="gpt-5.4-mini"),
         load_threads_callback=lambda: copy.deepcopy(persisted_history),
     )
     responses_agency.get_response_sync(message="Use the tool again and report my id.")
@@ -75,7 +75,7 @@ def test_litellm_history_replays_into_openai_responses_provider() -> None:
 @pytest.mark.asyncio
 async def test_litellm_stream_history_replays_into_openai_responses_provider() -> None:
     litellm_agency = Agency(
-        _build_agent(model=LitellmModel(model="openai/gpt-5-mini", api_key=os.getenv("OPENAI_API_KEY")))
+        _build_agent(model=LitellmModel(model="openai/gpt-5.4-mini", api_key=os.getenv("OPENAI_API_KEY")))
     )
     stream = litellm_agency.get_response_stream(message="Find my user id.")
     async for _ in stream:
@@ -90,7 +90,7 @@ async def test_litellm_stream_history_replays_into_openai_responses_provider() -
     ), "Expected streamed LiteLLM function_call items to persist replay IDs as id == call_id."
 
     responses_agency = Agency(
-        _build_agent(model="gpt-5-mini"),
+        _build_agent(model="gpt-5.4-mini"),
         load_threads_callback=lambda: copy.deepcopy(persisted_history),
     )
     await responses_agency.get_response(message="Use the tool again and report my id.")

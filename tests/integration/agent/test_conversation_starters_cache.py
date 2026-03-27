@@ -28,7 +28,7 @@ async def test_conversation_starter_cache_reuse_without_llm(tmp_path, monkeypatc
     agent = Agent(
         name="StarterAgent",
         instructions="You are helpful.",
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
         conversation_starters=[starter],
         cache_conversation_starters=True,
     )
@@ -61,7 +61,7 @@ async def test_conversation_starter_cache_reuse_without_llm(tmp_path, monkeypatc
     agent_cached = Agent(
         name="StarterAgent",
         instructions="You are helpful.",
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
         conversation_starters=[starter],
         cache_conversation_starters=True,
     )
@@ -120,7 +120,7 @@ async def test_conversation_starter_cache_reuse_stream_without_llm(tmp_path, mon
     agent = Agent(
         name="StarterAgent",
         instructions="You are helpful.",
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
         conversation_starters=[starter],
         cache_conversation_starters=True,
     )
@@ -157,7 +157,7 @@ async def test_conversation_starter_cache_skips_with_context_override(tmp_path, 
     agent = Agent(
         name="StarterAgent",
         instructions="You are helpful.",
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
         conversation_starters=[starter],
         cache_conversation_starters=True,
     )
@@ -180,7 +180,7 @@ async def test_conversation_starter_cache_skips_stream_with_context_override(tmp
     agent = Agent(
         name="StarterAgent",
         instructions="You are helpful.",
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
         conversation_starters=[starter],
         cache_conversation_starters=True,
     )
@@ -212,7 +212,7 @@ async def test_conversation_starter_cache_skips_on_shared_instructions_change(tm
     agent = Agent(
         name="StarterAgent",
         instructions="You are helpful.",
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
         conversation_starters=[starter],
         cache_conversation_starters=True,
     )
@@ -236,7 +236,7 @@ async def test_conversation_starter_cache_populates_for_agency_tools(tmp_path, m
     ceo = Agent(
         name="CEO",
         instructions="Always use send_message to ask the Worker for weather.",
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
         conversation_starters=starters,
         cache_conversation_starters=True,
     )
@@ -244,7 +244,7 @@ async def test_conversation_starter_cache_populates_for_agency_tools(tmp_path, m
         name="Worker",
         instructions="Provide weather using get_weather.",
         tools=[get_weather],
-        model="gpt-5-mini",
+        model="gpt-5.4-mini",
     )
     Agency(ceo, communication_flows=[(ceo > worker)], name="TerminalDemoAgency")
 

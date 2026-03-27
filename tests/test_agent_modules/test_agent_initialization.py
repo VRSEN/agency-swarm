@@ -278,7 +278,7 @@ def test_agent_initialization_with_all_parameters():
             agent = Agent(
                 name="CompleteAgent",
                 instructions="Complete agent with all params",
-                model="gpt-5-mini",
+                model="gpt-5.4-mini",
                 tools=[tool1],
                 output_type=TaskOutput,
                 files_folder=str(temp_dir),  # Use temporary directory
@@ -287,7 +287,7 @@ def test_agent_initialization_with_all_parameters():
 
         assert agent.name == "CompleteAgent"
         assert agent.instructions == "Complete agent with all params"
-        assert agent.model == "gpt-5-mini"
+        assert agent.model == "gpt-5.4-mini"
         assert len(agent.tools) == 2
         assert agent.tools[0] == tool1
         assert agent.tools[1].__class__.__name__ == "FileSearchTool"
@@ -309,15 +309,15 @@ def test_agent_instruction_loading_variants(tmp_path):
     instruction_file.write_text(instruction_content)
 
     # Absolute path
-    agent = Agent(name="TestAgent", instructions=str(instruction_file), model="gpt-5-mini")
+    agent = Agent(name="TestAgent", instructions=str(instruction_file), model="gpt-5.4-mini")
     assert agent.instructions == instruction_content
 
     # Relative path resolved from caller directory
-    relative_agent = Agent(name="TestAgent", instructions="../data/files/instructions.md", model="gpt-5-mini")
+    relative_agent = Agent(name="TestAgent", instructions="../data/files/instructions.md", model="gpt-5.4-mini")
     assert relative_agent.instructions == "Test instructions"
 
     instruction_text = "Direct instruction text, not a file path"
-    agent = Agent(name="TestAgent", instructions=instruction_text, model="gpt-5-mini")
+    agent = Agent(name="TestAgent", instructions=instruction_text, model="gpt-5.4-mini")
     assert agent.instructions == instruction_text
 
 
@@ -333,16 +333,16 @@ def test_agent_initialization_model_settings_defaults_and_overrides():
     )
     assert explicit_agent.model_settings.truncation == "disabled"
 
-    gpt5_agent = Agent(name="Gpt5", instructions="Test", model="gpt-5-mini")
+    gpt5_agent = Agent(name="Gpt5", instructions="Test", model="gpt-5.4-mini")
     assert gpt5_agent.model_settings.reasoning is not None
     assert gpt5_agent.model_settings.reasoning.effort == "low"
 
-    provider_prefixed_gpt5_agent = Agent(name="ProviderPrefixedGpt5", instructions="Test", model="openai/gpt-5.4")
+    provider_prefixed_gpt5_agent = Agent(name="ProviderPrefixedGpt5", instructions="Test", model="openai/gpt-5.4-mini")
     assert provider_prefixed_gpt5_agent.model_settings.reasoning is None
     assert provider_prefixed_gpt5_agent.model_settings.verbosity is None
 
 
-@pytest.mark.parametrize("provider_model", ["openai/gpt-5.4", "azure/gpt-5.4"])
+@pytest.mark.parametrize("provider_model", ["openai/gpt-5.4-mini", "azure/gpt-5.4-mini"])
 def test_agent_initialization_model_objects_use_openclaw_default_settings_alias(
     monkeypatch: pytest.MonkeyPatch,
     provider_model: str,

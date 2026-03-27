@@ -83,7 +83,7 @@ class TestFastAPIFileProcessing:
                 alternative text. If multiple phrases appear, include them all exactly as written.
                 """,
                 description="Agent that processes and analyzes file content",
-                model="gpt-5-mini",
+                model="gpt-5.4-mini",
             )
 
             return Agency(

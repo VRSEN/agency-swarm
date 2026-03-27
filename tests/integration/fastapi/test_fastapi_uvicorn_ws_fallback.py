@@ -6,7 +6,7 @@ from agency_swarm import Agency, Agent, run_fastapi
 
 
 def _create_agency(load_threads_callback=None, save_threads_callback=None) -> Agency:
-    agent = Agent(name="FallbackAgent", instructions="Test fallback behavior.", model="gpt-5-mini")
+    agent = Agent(name="FallbackAgent", instructions="Test fallback behavior.", model="gpt-5.4-mini")
     return Agency(
         agent,
         load_threads_callback=load_threads_callback,

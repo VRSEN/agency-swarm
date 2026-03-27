@@ -112,7 +112,7 @@ guardrail_agent = Agent(
         "Treat questions about account access, billing, and troubleshooting as relevant. "
         "Flag any unrelated requests as irrelevant."
     ),
-    model="gpt-5-nano",
+    model="gpt-5.4-mini",
     model_settings=ModelSettings(reasoning=Reasoning(effort="minimal")),
     output_type=RelevanceDecision,
 )
@@ -135,7 +135,7 @@ async def require_support_topic(
 support_agent = Agent(
     name="CustomerSupportAgent",
     instructions="You help customers resolve account, billing, and troubleshooting issues.",
-    model="gpt-5-mini",
+    model="gpt-5.4-mini",
     input_guardrails=[require_support_topic],
     raise_input_guardrail_error=False,  # Non-strict mode: guidance returned as assistant message
 )

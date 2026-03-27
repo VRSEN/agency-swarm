@@ -352,16 +352,14 @@ async def test_download_file_cleans_up_tmp_on_http_error(tmp_path: Path) -> None
     assert leftover == [], f"Temp file was not cleaned up: {leftover}"
 
     # Verify no fd was leaked by ensuring all fds in the dir are closeable
-    open_fds_in_dir = [
-        fd for fd in range(3, 1024)
-        if _fd_points_to_dir(fd, str(tmp_path))
-    ]
+    open_fds_in_dir = [fd for fd in range(3, 1024) if _fd_points_to_dir(fd, str(tmp_path))]
     assert open_fds_in_dir == [], f"Leaked file descriptors pointing to tmp_path: {open_fds_in_dir}"
 
 
 def _fd_points_to_dir(fd: int, directory: str) -> bool:
     try:
         import os
+
         stat = os.fstat(fd)
         path = Path(directory)
         # Check if any file in the dir matches this inode (Unix only)
