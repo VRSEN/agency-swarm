@@ -20,6 +20,7 @@ from agency_swarm.utils.citation_extractor import extract_direct_file_citations_
 
 
 def _skip_if_quota(err: Exception) -> None:
+    """Skip quota-sensitive integration tests when the provider account is exhausted."""
     current: BaseException | None = err
     while current:
         text = str(current)
