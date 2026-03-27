@@ -47,7 +47,7 @@ agent_name = Agent(
     instructions="./instructions.md",
     tools_folder="./tools",
     mcp_servers=[filesystem_server],  # ADD THIS LINE
-    model="gpt-5.4-mini",
+    model="gpt-5.4",
     model_settings=ModelSettings(
         max_tokens=25000,
     ),
