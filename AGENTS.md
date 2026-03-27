@@ -181,9 +181,9 @@ After each meaningful tool call or code edit, validate the result in 1-2 lines a
 - For long-running commands (ci, coverage), use Bash tool with timeout=600000 (10 minutes)
 
 ### Example Runs
-- Use examples for manual verification only when they are the clearest way to prove behavior.
+- Run non-interactive examples from `/examples` when they are the clearest manual verification path. Never run `examples/interactive/*` directly in unattended validation; use equivalent non-interactive code paths or snippets instead.
+- If you modify an example, run it manually. If you modify a production module, validate it with the proper module or integration tests.
 - Never add automated tests that import or assert against files under `/examples`; cover the underlying production modules instead.
-- Never run `examples/interactive/*` directly in unattended validation. Use non-interactive code paths or focused module tests instead.
 
 ### Test Guidelines (Canonical)
 - Shared rules:
