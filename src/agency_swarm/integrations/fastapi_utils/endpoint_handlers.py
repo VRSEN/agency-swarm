@@ -10,7 +10,7 @@ from collections.abc import AsyncGenerator, Callable, Sequence
 from dataclasses import dataclass, field
 from importlib import metadata
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 from weakref import WeakKeyDictionary
 
 from ag_ui.core import EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
@@ -262,6 +262,13 @@ def _build_file_upload_client(
     return RequestOverridePolicy(config).build_file_upload_client(agency, recipient_agent=recipient_agent)
 
 
+def _extract_previous_response_id_from_chat_history(chat_history: list[dict[str, Any]] | None) -> str | None:
+    """Return the latest response_id carried in client-provided chat history."""
+    if not chat_history:
+        return None
+    return MessageFormatter.extract_previous_response_id(cast(list[TResponseInputItem], chat_history))
+
+
 # Non‑streaming response endpoint
 def make_response_endpoint(
     request_model,
@@ -270,6 +277,7 @@ def make_response_endpoint(
     allowed_local_dirs: Sequence[str | Path] | None = None,
 ):
     async def handler(request: request_model, token: str = Depends(verify_token)):
+        previous_response_id = _extract_previous_response_id_from_chat_history(request.chat_history)
         if request.chat_history is not None:
             # Chat history is now a flat list
             def load_callback() -> list:
@@ -319,6 +327,7 @@ def make_response_endpoint(
                 context_override=request.user_context,
                 additional_instructions=request.additional_instructions,
                 file_ids=combined_file_ids,
+                previous_response_id=previous_response_id,
             )
             # Get only new messages added during this request
             all_messages = agency_instance.thread_manager.get_all_messages()
@@ -365,6 +374,7 @@ def make_stream_endpoint(
         request: request_model,
         token: str = Depends(verify_token),
     ):
+        previous_response_id = _extract_previous_response_id_from_chat_history(request.chat_history)
         if request.chat_history is not None:
             # Chat history is now a flat list
             def load_callback() -> list:
@@ -453,6 +463,7 @@ def make_stream_endpoint(
                     context_override=request.user_context,
                     additional_instructions=request.additional_instructions,
                     file_ids=combined_file_ids,
+                    previous_response_id=previous_response_id,
                 )
 
                 active_run = ActiveRun(
