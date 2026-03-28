@@ -266,6 +266,7 @@ class MessageFormatter:
         agent_run_id: str | None = None,
         parent_run_id: str | None = None,
         run_trace_id: str | None = None,
+        include_saved_history: bool = True,
     ) -> list[TResponseInputItem]:
         """Prepare conversation history for the runner."""
         # Get thread manager from context (required)
@@ -305,9 +306,10 @@ class MessageFormatter:
 
         # Get relevant conversation history for this agent pair
         full_history = thread_manager.get_conversation_history(agent.name, sender_name)
+        runner_source = full_history if include_saved_history else messages_to_save
 
         # Prepare history for runner (sanitize and ensure content safety)
-        history_for_runner = MessageFormatter.sanitize_tool_calls_in_history(full_history)  # type: ignore[arg-type]
+        history_for_runner = MessageFormatter.sanitize_tool_calls_in_history(runner_source)  # type: ignore[arg-type]
         history_for_runner = MessageFormatter.ensure_tool_calls_content_safety(history_for_runner)
         # Strip agency metadata before sending to OpenAI
         history_for_runner = MessageFormatter.strip_agency_metadata(history_for_runner)
