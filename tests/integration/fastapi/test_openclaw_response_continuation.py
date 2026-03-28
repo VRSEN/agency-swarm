@@ -244,6 +244,17 @@ async def test_response_endpoint_replays_previous_response_id_from_chat_history(
 
 
 @pytest.mark.asyncio
+async def test_agency_get_response_does_not_replay_previous_response_id_from_persisted_history() -> None:
+    model = _TrackingResponsesModel()
+    agency = _build_agency_factory(model)()
+
+    await agency.get_response(message="hi")
+    await agency.get_response(message="again")
+
+    assert model.seen_previous_response_ids == [None, None]
+
+
+@pytest.mark.asyncio
 async def test_stream_endpoint_replays_previous_response_id_from_chat_history() -> None:
     model = _TrackingResponsesModel()
     handler = make_stream_endpoint(BaseRequest, _build_agency_factory(model), lambda: None, ActiveRunRegistry())
@@ -265,3 +276,17 @@ async def test_stream_endpoint_replays_previous_response_id_from_chat_history() 
     _second_chunks = [chunk async for chunk in second_response.body_iterator]
 
     assert model.seen_previous_response_ids == [None, first_response_id]
+
+
+@pytest.mark.asyncio
+async def test_agency_stream_does_not_replay_previous_response_id_from_persisted_history() -> None:
+    model = _TrackingResponsesModel()
+    agency = _build_agency_factory(model)()
+
+    first_stream = agency.get_response_stream(message="hi")
+    _first_events = [event async for event in first_stream]
+
+    second_stream = agency.get_response_stream(message="again")
+    _second_events = [event async for event in second_stream]
+
+    assert model.seen_previous_response_ids == [None, None]
