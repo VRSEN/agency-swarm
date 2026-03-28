@@ -70,6 +70,20 @@ def get_default_settings_model_name(model: str | Model | None) -> str | None:
     return get_model_name(model)
 
 
+def supports_previous_response_id(model: str | Model | None) -> bool:
+    """Return True when the model is expected to resume server-side state from previous_response_id."""
+    if isinstance(model, OpenAIResponsesModel):
+        return True
+    if isinstance(model, OpenAIChatCompletionsModel):
+        return False
+    if isinstance(model, str):
+        if "/" in model:
+            prefix, _rest = model.split("/", 1)
+            return prefix == "openai"
+        return ":" not in model
+    return False
+
+
 def is_reasoning_model(model: str | Model | None) -> bool:
     """Determine if a model supports reasoning capabilities.
 

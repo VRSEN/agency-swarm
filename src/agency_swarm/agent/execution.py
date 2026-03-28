@@ -49,7 +49,7 @@ from agency_swarm.messages import (
 )
 from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
 from agency_swarm.utils.citation_extractor import extract_direct_file_annotations
-from agency_swarm.utils.model_utils import get_usage_tracking_model_name
+from agency_swarm.utils.model_utils import get_usage_tracking_model_name, supports_previous_response_id
 
 if TYPE_CHECKING:
     from agents.items import ModelResponse
@@ -132,6 +132,9 @@ class Execution:
             previous_response_id = kwargs.get("previous_response_id")
             if not isinstance(previous_response_id, str) or not previous_response_id:
                 previous_response_id = None
+            use_server_side_response_continuation = previous_response_id is not None and supports_previous_response_id(
+                self.agent.model
+            )
 
             # Prepare history for runner, persisting initiating messages with agent_run_id and parent_run_id
             history_for_runner = MessageFormatter.prepare_history_for_runner(
@@ -142,7 +145,7 @@ class Execution:
                 agent_run_id=current_agent_run_id,
                 parent_run_id=parent_run_id,
                 run_trace_id=run_trace_id,
-                include_saved_history=previous_response_id is None,
+                include_saved_history=not use_server_side_response_continuation,
             )
             logger.debug(f"Running agent '{self.agent.name}' with history length {len(history_for_runner)}")
 
@@ -178,6 +181,7 @@ class Execution:
                 sender_name is None
                 and cacheable_starters
                 and is_first_message
+                and not use_server_side_response_continuation
                 and is_simple_text_message(processed_current_message_items)
                 and not additional_instructions  # Skip cache when per-run instructions provided
                 and not has_user_context_override  # Skip cache when per-run context provided
@@ -224,6 +228,7 @@ class Execution:
                     run_config_override=run_config_override
                     or RunConfig(workflow_name=agency_name, trace_id=run_trace_id),
                     kwargs=kwargs,
+                    include_saved_history=not use_server_side_response_continuation,
                     current_agent_run_id=current_agent_run_id,
                     parent_run_id=parent_run_id,
                     run_trace_id=run_trace_id,
@@ -490,6 +495,9 @@ class Execution:
                 previous_response_id = kwargs.get("previous_response_id")
                 if not isinstance(previous_response_id, str) or not previous_response_id:
                     previous_response_id = None
+                use_server_side_response_continuation = (
+                    previous_response_id is not None and supports_previous_response_id(self.agent.model)
+                )
 
                 history_for_runner = MessageFormatter.prepare_history_for_runner(
                     processed_current_message_items,
@@ -499,7 +507,7 @@ class Execution:
                     agent_run_id=current_agent_run_id,
                     parent_run_id=parent_run_id,
                     run_trace_id=run_trace_id,
-                    include_saved_history=previous_response_id is None,
+                    include_saved_history=not use_server_side_response_continuation,
                 )
 
                 logger.debug(
@@ -522,6 +530,7 @@ class Execution:
                     sender_name is None
                     and cacheable_starters
                     and is_first_message
+                    and not use_server_side_response_continuation
                     and is_simple_text_message(processed_current_message_items)
                     and not additional_instructions  # Skip cache when per-run instructions provided
                     and not has_user_context_override  # Skip cache when per-run context provided
@@ -622,6 +631,7 @@ class Execution:
                     run_config_override=run_config_override
                     or RunConfig(workflow_name=agency_name, trace_id=run_trace_id),
                     kwargs=kwargs,
+                    include_saved_history=not use_server_side_response_continuation,
                     current_agent_run_id=current_agent_run_id,
                     parent_run_id=parent_run_id,
                     run_trace_id=run_trace_id,

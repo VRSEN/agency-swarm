@@ -1,5 +1,6 @@
 import warnings
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from agents import ModelSettings, RunConfig, RunHooks, RunResult, TResponseInputItem
@@ -88,6 +89,15 @@ class CapturingAgent(Agent):
             parent_run_id=parent_run_id,
             **kwargs,
         )
+
+
+class _DummyStream:
+    async def stream_events(self):
+        if False:
+            yield None
+
+    def cancel(self):
+        return None
 
 
 @pytest.fixture
@@ -222,6 +232,41 @@ async def test_agency_get_response_stream_with_hooks(mock_agent):
     assert stream.final_result is not None
     assert stream.final_result.final_output == "Test response"
     assert saved_messages
+
+
+@pytest.mark.asyncio
+@patch("agency_swarm.agent.execution_helpers.Runner.run", new_callable=AsyncMock)
+async def test_agency_get_response_uses_current_turn_only_for_openai_previous_response_id(mock_runner_run):
+    agent = Agent(name="OpenAIAgent", instructions="Test", model="gpt-5.4-mini")
+    agency = Agency(agent)
+    mock_runner_run.return_value = MagicMock(new_items=[], final_output="OK")
+
+    await agency.get_response("hi")
+    await agency.get_response("again", previous_response_id="resp_1")
+
+    second_input = mock_runner_run.await_args_list[1].kwargs["input"]
+    assert len(second_input) == 1
+    assert second_input[0]["role"] == "user"
+    assert second_input[0]["content"] == "again"
+
+
+@pytest.mark.asyncio
+@patch("agency_swarm.agent.execution_streaming.Runner.run_streamed")
+async def test_agency_get_response_stream_uses_current_turn_only_for_openai_previous_response_id(mock_run_streamed):
+    agent = Agent(name="OpenAIStreamAgent", instructions="Test", model="gpt-5.4-mini")
+    agency = Agency(agent)
+    mock_run_streamed.return_value = _DummyStream()
+
+    first_stream = agency.get_response_stream("hi")
+    _first_events = [event async for event in first_stream]
+
+    second_stream = agency.get_response_stream("again", previous_response_id="resp_1")
+    _second_events = [event async for event in second_stream]
+
+    second_input = mock_run_streamed.call_args_list[1].kwargs["input"]
+    assert len(second_input) == 1
+    assert second_input[0]["role"] == "user"
+    assert second_input[0]["content"] == "again"
 
 
 @pytest.mark.asyncio

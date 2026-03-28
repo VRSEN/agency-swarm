@@ -95,6 +95,7 @@ async def run_with_guardrails(
     hooks_override: RunHooks | None,
     run_config_override: RunConfig | None,
     kwargs: dict[str, Any],
+    include_saved_history: bool,
     current_agent_run_id: str,
     parent_run_id: str | None,
     run_trace_id: str,
@@ -125,6 +126,8 @@ async def run_with_guardrails(
                 current_agent_run_id=current_agent_run_id,
                 exception=e,
                 include_assistant=True,
+                history_for_retry=history_for_runner,
+                include_saved_history=include_saved_history,
             )
             if attempts_remaining <= 0:
                 raise e
@@ -149,6 +152,8 @@ async def run_with_guardrails(
                 current_agent_run_id=current_agent_run_id,
                 exception=e,
                 include_assistant=False,
+                history_for_retry=history_for_runner,
+                include_saved_history=include_saved_history,
             )
             if not raise_input_guardrail_error:
                 from agents import RunContextWrapper  # local import to avoid cycle
