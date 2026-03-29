@@ -173,7 +173,7 @@ agency.copilot_demo()
 
 Terminal:
 ```python
-agency.terminal_demo()
+agency.tui()
 ```
 
 On first run, Agency Swarm downloads the matching terminal binary automatically and reuses it on later runs.

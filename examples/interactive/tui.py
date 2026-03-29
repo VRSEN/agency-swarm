@@ -1,7 +1,7 @@
 """
-Agency Swarm terminal demo.
+Agency Swarm TUI example.
 
-This example is the main product-style demo for `agency.terminal_demo()`.
+This example is the main product-style demo for `agency.tui()`.
 It intentionally exercises the same important surfaces as the richer FastAPI
 example:
 
@@ -60,7 +60,7 @@ def calculate(a: float, b: float, operation: Literal["add", "subtract", "multipl
 
 
 def create_demo_agency() -> Agency:
-    """Create a richer terminal demo agency for manual QA."""
+    """Create a richer TUI demo agency for manual QA."""
     support = Agent(
         name="UserSupportAgent",
         description="Receives user requests and coordinates reasoning, search, and file work.",
@@ -97,9 +97,9 @@ def create_demo_agency() -> Agency:
         math,
         communication_flows=[(support, math, Handoff)],
         shared_instructions="Demonstrate reasoning, web search, file search, and handoffs.",
-        name="TerminalDemoAgency",
+        name="TuiDemoAgency",
     )
 
 
 if __name__ == "__main__":
-    create_demo_agency().terminal_demo(show_reasoning=True)
+    create_demo_agency().tui(show_reasoning=True)

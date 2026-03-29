@@ -14,7 +14,7 @@ Pre-requisites:
 3. Install litellm[proxy] separatelly by running `pip install 'litellm[proxy]'`
 
 Run the agency by running `python examples/third_party_models.py`
-This will open a terminal demo of an startup validation agency with 3 agents:
+This will open the TUI for a startup validation agency with 3 agents:
 1. strategy_agent - gpt agent coordinates and summarizes work of other agents.
 2. market_research_agent - gemini agent that performs market research and competitive analysis.
 3. technical_agent - claude agent that designs system architecture, generates MVP code, and provides technical implementation based on validated business requirements.
@@ -129,4 +129,4 @@ agency = Agency(
 )
 
 if __name__ == "__main__":
-    agency.terminal_demo()
+    agency.tui()

@@ -77,26 +77,26 @@ print(result.final_output)
 ## Track Usage and Cost
 
 <Tip>
-Use the `/cost` command in the terminal demo to see the current session usage and cost.
+Use the `/cost` command in the TUI to see the current session usage and cost.
 </Tip>
 
-![Terminal demo `/cost` output showing session usage and cost](/images/cost.png)
+![TUI `/cost` output showing session usage and cost](/images/cost.png)
 
 To understand what's inside the `usage` object, see [Observability](/additional-features/observability#usage-payload).
 
 If you're running your agency as an HTTP API, see [Serving Agencies as APIs](/additional-features/fastapi-integration).
 
-## Terminal Version
+## Terminal UI
 
-To run the agency directly from your terminal, use the `terminal_demo` method:
+To run the agency directly from your terminal, use the `tui` method:
 
 ```python
-agency.terminal_demo()
+agency.tui()
 ```
 
 On first run, `agency-swarm` downloads the matching `agent-swarm-cli` binary automatically, caches it locally, starts the local bridge, and opens the terminal UI.
 
-Use `agency.terminal_demo(reload=False)` if you want to turn off hot reload on file changes.
+Use `agency.tui(reload=False)` if you want to turn off hot reload on file changes.
 
 For the full terminal workflow, see [Agent Swarm CLI](/core-framework/agencies/agent-swarm-cli).
 
@@ -104,6 +104,6 @@ For the full terminal workflow, see [Agent Swarm CLI](/core-framework/agencies/a
 When using the terminal to run the agency, you can send messages directly to any top-level agent by using the "mentions" feature. To do this, start your message with the agent's name preceded by an @ symbol (for example, `@Developer I want you to build me a website`). This directs your message to the specified agent instead of the CEO. You can also press the tab key to autocomplete the agent's name.
 </Tip>
 
-`terminal_demo(show_reasoning=False)` is not supported in the new TUI yet.
+`tui(show_reasoning=False)` is not supported in the new TUI yet.
 
 **Implementation:** `src/agency_swarm/ui/demos/opencode.py`

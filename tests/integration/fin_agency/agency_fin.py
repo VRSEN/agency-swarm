@@ -46,4 +46,4 @@ if __name__ == "__main__":
     # asyncio.run(main())
 
     # run in terminal
-    agency.terminal_demo()
+    agency.tui()

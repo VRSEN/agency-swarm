@@ -36,7 +36,7 @@ _BIN_ENV = "AGENTSWARM_BIN"
 _ARGS_ENV = "AGENCY_SWARM_OPENCODE_ARGS"
 _HOST = "127.0.0.1"
 _MODEL = "agency-swarm/default"
-_CLI_VERSION = "1.2.28"
+_CLI_VERSION = "1.2.29"
 _CLI_REGISTRY = "https://registry.npmjs.org"
 _LOCK_AGE = 300
 _LOCK_WAIT = 30
@@ -78,7 +78,7 @@ class _Server:
 def start_terminal(agency, show_reasoning: bool | None = None, reload: bool = True) -> None:
     """Launch the Agent Swarm CLI terminal for a live agency instance."""
     if show_reasoning is False:
-        raise NotImplementedError("terminal_demo(show_reasoning=False) is not supported in the new TUI yet.")
+        raise NotImplementedError("tui(show_reasoning=False) is not supported in the new TUI yet.")
 
     if reload and not os.environ.get(_RELOAD_CHILD_ENV):
         script_path = _get_caller_script_path()

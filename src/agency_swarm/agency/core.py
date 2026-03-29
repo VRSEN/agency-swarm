@@ -422,7 +422,7 @@ class Agency:
 
         return visualize(self, output_file, include_tools, open_browser)
 
-    def terminal_demo(self, show_reasoning: bool | None = None, reload: bool = True) -> None:
+    def tui(self, show_reasoning: bool | None = None, reload: bool = True) -> None:
         """
         Run the terminal UI for the agency.
 
@@ -430,9 +430,16 @@ class Agency:
             show_reasoning: Whether to show reasoning output. Auto-detected if None.
             reload: If True, watch for file changes and automatically restart on changes.
         """
-        from .visualization import terminal_demo
+        from .visualization import tui
 
-        return terminal_demo(self, show_reasoning=show_reasoning, reload=reload)
+        return tui(self, show_reasoning=show_reasoning, reload=reload)
+
+    def terminal_demo(self, show_reasoning: bool | None = None, reload: bool = True) -> None:
+        """
+        Backward-compatible alias for `tui()`.
+        """
+
+        return self.tui(show_reasoning=show_reasoning, reload=reload)
 
     def copilot_demo(
         self,

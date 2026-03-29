@@ -68,7 +68,7 @@ def get_weather(location: str) -> str:
 
 
 def create_demo_agency():
-    """Create a demo agency for terminal demo"""
+    """Create a demo agency for the TUI."""
 
     ceo = Agent(
         name="CEO",

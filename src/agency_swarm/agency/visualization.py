@@ -169,7 +169,7 @@ def visualize(
     )
 
 
-def terminal_demo(agency: "Agency", show_reasoning: bool | None = None, reload: bool = True) -> None:
+def tui(agency: "Agency", show_reasoning: bool | None = None, reload: bool = True) -> None:
     """
     Run the terminal UI for the agency.
 
@@ -179,6 +179,13 @@ def terminal_demo(agency: "Agency", show_reasoning: bool | None = None, reload: 
         reload: If True, watch for file changes and automatically restart on changes.
     """
     start_terminal(agency, show_reasoning=show_reasoning, reload=reload)
+
+
+def terminal_demo(agency: "Agency", show_reasoning: bool | None = None, reload: bool = True) -> None:
+    """
+    Backward-compatible alias for `tui()`.
+    """
+    tui(agency, show_reasoning=show_reasoning, reload=reload)
 
 
 def copilot_demo(

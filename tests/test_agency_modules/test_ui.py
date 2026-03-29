@@ -255,6 +255,24 @@ class TestHTMLVisualizationGenerator:
         mock_generate.assert_called_once()
 
 
+class TestAgencyTUI:
+    """Test terminal UI entry points on Agency."""
+
+    def test_tui_delegates_to_visualization(self, sample_agency):
+        """Agency.tui should delegate to the visualization entry point."""
+        with patch("agency_swarm.agency.visualization.tui") as mock_tui:
+            sample_agency.tui(show_reasoning=True, reload=False)
+
+        mock_tui.assert_called_once_with(sample_agency, show_reasoning=True, reload=False)
+
+    def test_terminal_demo_alias_delegates_to_tui(self, sample_agency):
+        """Agency.terminal_demo should remain a compatibility alias for tui."""
+        with patch.object(sample_agency, "tui") as mock_tui:
+            sample_agency.terminal_demo(show_reasoning=True, reload=False)
+
+        mock_tui.assert_called_once_with(show_reasoning=True, reload=False)
+
+
 class TestAgencyVisualizationIntegration:
     """Test Agency class visualization methods."""
 

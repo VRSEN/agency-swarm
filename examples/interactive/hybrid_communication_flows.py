@@ -22,7 +22,7 @@ The agency demonstrates a real-world software development workflow:
 
 Run this example with: python examples/hybrid_communication_flows.py
 
-It will open a terminal demo of the agency, where you can interact with the agency.
+It will open the TUI for the agency, where you can interact with the agency.
 Ask ProjectManager to implement a new feature with code quality review and security audit.
 For example, you can use the following input query:
 '''
@@ -150,4 +150,4 @@ agency = Agency(
 
 
 if __name__ == "__main__":
-    agency.terminal_demo()
+    agency.tui()

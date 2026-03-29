@@ -1,43 +1,34 @@
 ---
 title: "Agent Swarm CLI"
-description: "Use the built-in terminal UI for agency-swarm without a second manual install."
+description: "Launch the built-in terminal UI with one Python call."
 icon: "terminal"
 ---
 
-`agent-swarm-cli` is the terminal UI binary used by `agency-swarm`.
+`agent-swarm-cli` is the terminal UI binary used by `agency-swarm`. The preview below shows the current `tui()` startup screen.
 
-It gives you one canonical flow:
+![Agent Swarm CLI startup screen](/images/agent-swarm-cli-preview.png)
+
+It gives you one released flow:
 
 1. Install `agency-swarm` in Python.
-2. Call `agency.terminal_demo()`.
+2. Call `agency.tui()`.
 3. On first run, `agency-swarm` downloads the matching terminal UI binary automatically.
 4. The binary is cached locally and reused on later runs.
 5. The backend bridge starts automatically, then the terminal UI opens.
 
-## Use With `terminal_demo()`
+## Start The TUI
 
 ```python
-agency.terminal_demo()
+agency.tui()
 ```
 
-`terminal_demo()` provisions the matching terminal binary if needed, starts the local `agency-swarm` bridge automatically, and launches the terminal UI.
+`tui()` provisions the matching terminal binary if needed, starts the local `agency-swarm` bridge automatically, and launches the terminal UI.
 
-Use `agency.terminal_demo(reload=False)` to disable hot reload on file changes.
-
-## Connect To A Local Server
-
-Use `/connect` to:
-
-- pick a local server such as `http://127.0.0.1:8000`
-- add another local port manually
-- store or clear an Agency token for authenticated servers
-- refresh server availability while the dialog is open
-
-This is the advanced path for attaching to another already running local `agency-swarm` server. The default `terminal_demo()` path starts its own local bridge automatically.
+Use `agency.tui(reload=False)` to disable hot reload on file changes.
 
 ## Choose Agencies And Agents
 
-Use `/agents` after connecting.
+Use `/agents` inside the TUI.
 
 The CLI reads live metadata from the selected `agency-swarm` server and groups the available agents by agency.
 
@@ -66,7 +57,7 @@ These commands and modes are intentionally unavailable in the current terminal w
 - `/commit`
 - docs mode
 
-`terminal_demo(show_reasoning=False)` is not supported in the new TUI yet.
+`tui(show_reasoning=False)` is not supported in the new TUI yet.
 
 ## Related Pages
 
