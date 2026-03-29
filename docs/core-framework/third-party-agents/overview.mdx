@@ -1,0 +1,37 @@
+---
+title: "Third-Party Agents"
+description: "Bring external agent runtimes into Agency Swarm."
+icon: "plug"
+---
+
+Agency Swarm supports importing third-party agents that are not built as normal Agency Swarm Python agents.
+
+Use this section when you want Agency Swarm to stay in charge of orchestration, while another runtime handles one specialized part of the work.
+
+<CardGroup cols={2}>
+  <Card title="OpenClawAgent" icon="lobster" href="/core-framework/third-party-agents/openclaw-agent">
+    Use an OpenClaw worker inside an Agency Swarm agency.
+  </Card>
+  <Card title="Third-Party Models" icon="server" href="/additional-features/third-party-models">
+    Use other model providers when you only need a different model backend.
+  </Card>
+</CardGroup>
+
+## When To Use Third-Party Agents
+
+Use this path when:
+
+- You already have a separate agent runtime
+- You want Agency Swarm to delegate work to that runtime
+- You do not want to rebuild that runtime as a normal Agency Swarm agent
+
+## What Agency Swarm Still Handles
+
+- Top-level orchestration
+- Communication flows
+- FastAPI or app integration
+- Frontend event flow
+
+## Available Guides
+
+- [OpenClawAgent](/core-framework/third-party-agents/openclaw-agent)
