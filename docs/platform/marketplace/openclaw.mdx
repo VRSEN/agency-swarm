@@ -41,19 +41,18 @@ On Agent Swarm, you can launch it from a ready template and chat with it inside 
   <Step title="Add your AI provider secrets">
     Default deploy: add `OPENAI_API_KEY` in **Secrets Vault** before you deploy.
 
-    If you later switch away from the default OpenAI GPT-5.4 setup, add the matching provider secret for that model too.
-
-    Optional advanced settings:
-
-    - `OPENCLAW_PROVIDER_MODEL` only if you want a different provider or model
-    - `ANTHROPIC_API_KEY` only if you switch to an Anthropic model
-    - `OPENCLAW_GATEWAY_TOKEN` only if you want to override the internal gateway token
+    Only add extra settings if you are intentionally changing the default model or provider.
   </Step>
 
   <Step title="Fill the onboarding form">
-    Choose the assistant name, describe what it should help with, and add any extra instructions you want before deploy.
+    Keep this form short.
 
-    ![Marketplace onboarding form example](/images/platform/onboarding_form.png)
+    Start with only:
+
+    - the assistant name
+    - one short instruction about what it should help with
+
+    You can refine behavior later through the OpenClaw workspace files after deploy.
   </Step>
 
   <Step title="Deploy and chat">
@@ -113,4 +112,4 @@ Review [OpenClaw Security](https://docs.openclaw.ai/gateway/security) before you
 
 ## Want To Use It In Code?
 
-If you want to use OpenClaw inside your own Agency Swarm code, continue with [OpenClawAgent](/core-framework/agents/openclaw-agent).
+If you want to use OpenClaw inside your own Agency Swarm code, continue with [OpenClawAgent](/core-framework/third-party-agents/openclaw-agent).

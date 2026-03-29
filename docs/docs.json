@@ -75,8 +75,15 @@
                 "pages": [
                   "core-framework/agents/overview",
                   "core-framework/agents/built-in-tools",
-                  "core-framework/agents/advanced-configuration",
-                  "core-framework/agents/openclaw-agent"
+                  "core-framework/agents/advanced-configuration"
+                ]
+              },
+              {
+                "group": "Third-Party Agents",
+                "icon": "plug",
+                "pages": [
+                  "core-framework/third-party-agents/overview",
+                  "core-framework/third-party-agents/openclaw-agent"
                 ]
               },
               {
