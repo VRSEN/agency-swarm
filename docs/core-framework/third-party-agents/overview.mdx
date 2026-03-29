@@ -7,32 +7,8 @@ icon: "plug"
 Agency Swarm can import agents that run outside the normal Agency Swarm Python stack.
 Use this section when you want Agency Swarm to stay in charge of orchestration, but hand one part of the work to another agent runtime.
 
-## Start Here
-
-Pick one guide and follow it end to end:
-
-<CardGroup cols={2}>
+<CardGroup cols={1}>
   <Card title="OpenClawAgent" icon="lobster" href="/core-framework/third-party-agents/openclaw-agent">
     Use OpenClaw as a delegated worker inside an Agency Swarm agency.
   </Card>
-  <Card title="Third-Party Models" icon="server" href="/additional-features/third-party-models">
-    Use this if you only need a different model provider, not a separate agent runtime.
-  </Card>
 </CardGroup>
-
-## Use Third-Party Agents When
-
-- You already have an agent runtime you want to keep
-- You want Agency Swarm to coordinate the broader workflow
-- You want to delegate one specialized part of the work to that external runtime
-
-## What Agency Swarm Still Handles
-
-- Agent-to-agent orchestration
-- Communication flows
-- FastAPI and app integration
-- Frontend event flow
-
-<Note>
-If you only want to switch model providers, use [Third-Party Models](/additional-features/third-party-models). Use this section only when you are importing a separate agent runtime.
-</Note>

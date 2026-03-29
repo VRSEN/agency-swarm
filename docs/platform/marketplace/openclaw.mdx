@@ -41,7 +41,13 @@ On Agent Swarm, you can launch it from a ready template and chat with it inside 
   <Step title="Add your AI provider secrets">
     Default deploy: add `OPENAI_API_KEY` in **Secrets Vault** before you deploy.
 
-    Only add extra settings if you are intentionally changing the default model or provider.
+    If you later switch away from the default OpenAI GPT-5.4 setup, add the matching provider secret for that model too.
+
+    Optional advanced settings:
+
+    - `OPENCLAW_PROVIDER_MODEL` only if you want a different provider or model
+    - `ANTHROPIC_API_KEY` only if you switch to an Anthropic model
+    - `OPENCLAW_GATEWAY_TOKEN` only if you want to override the internal gateway token
   </Step>
 
   <Step title="Fill the onboarding form">
