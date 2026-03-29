@@ -1,37 +1,38 @@
 ---
 title: "Third-Party Agents"
-description: "Bring external agent runtimes into Agency Swarm."
+description: "Import external agent runtimes into Agency Swarm."
 icon: "plug"
 ---
 
-Agency Swarm supports importing third-party agents that are not built as normal Agency Swarm Python agents.
+Agency Swarm can import agents that run outside the normal Agency Swarm Python stack.
+Use this section when you want Agency Swarm to stay in charge of orchestration, but hand one part of the work to another agent runtime.
 
-Use this section when you want Agency Swarm to stay in charge of orchestration, while another runtime handles one specialized part of the work.
+## Start Here
+
+Pick one guide and follow it end to end:
 
 <CardGroup cols={2}>
   <Card title="OpenClawAgent" icon="lobster" href="/core-framework/third-party-agents/openclaw-agent">
-    Use an OpenClaw worker inside an Agency Swarm agency.
+    Use OpenClaw as a delegated worker inside an Agency Swarm agency.
   </Card>
   <Card title="Third-Party Models" icon="server" href="/additional-features/third-party-models">
-    Use other model providers when you only need a different model backend.
+    Use this if you only need a different model provider, not a separate agent runtime.
   </Card>
 </CardGroup>
 
-## When To Use Third-Party Agents
+## Use Third-Party Agents When
 
-Use this path when:
-
-- You already have a separate agent runtime
-- You want Agency Swarm to delegate work to that runtime
-- You do not want to rebuild that runtime as a normal Agency Swarm agent
+- You already have an agent runtime you want to keep
+- You want Agency Swarm to coordinate the broader workflow
+- You want to delegate one specialized part of the work to that external runtime
 
 ## What Agency Swarm Still Handles
 
-- Top-level orchestration
+- Agent-to-agent orchestration
 - Communication flows
-- FastAPI or app integration
+- FastAPI and app integration
 - Frontend event flow
 
-## Available Guides
-
-- [OpenClawAgent](/core-framework/third-party-agents/openclaw-agent)
+<Note>
+If you only want to switch model providers, use [Third-Party Models](/additional-features/third-party-models). Use this section only when you are importing a separate agent runtime.
+</Note>

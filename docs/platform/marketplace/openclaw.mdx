@@ -45,13 +45,14 @@ On Agent Swarm, you can launch it from a ready template and chat with it inside 
   </Step>
 
   <Step title="Fill the onboarding form">
-    Keep this form short.
+    Keep this form as short as possible.
 
     Start with only:
 
     - the assistant name
     - one short instruction about what it should help with
 
+    Do not add long role descriptions, multi-step rules, or extra setup text here unless the deploy truly needs it.
     You can refine behavior later through the OpenClaw workspace files after deploy.
   </Step>
 
@@ -91,6 +92,10 @@ To replace them:
 
 <Note>
 If OpenClaw starts behaving strangely, check both the onboarding instructions and the workspace files. They are both part of the final behavior.
+</Note>
+
+<Note>
+The onboarding form is not the place for a long system prompt. Start with the minimum required text, then move the real customization into the workspace files after deploy.
 </Note>
 
 <Note>
