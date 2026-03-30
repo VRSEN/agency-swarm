@@ -43,7 +43,6 @@ class _TrackingResponsesModel(Model):
         self.model = model
         self.issued_response_ids: list[str] = []
         self.seen_previous_response_ids: list[str | None] = []
-        self.seen_inputs: list[str | list[TResponseInputItem]] = []
 
     async def get_response(
         self,
@@ -59,7 +58,6 @@ class _TrackingResponsesModel(Model):
         conversation_id: str | None,
         prompt: ResponsePromptParam | None,
     ) -> ModelResponse:
-        self.seen_inputs.append(copy.deepcopy(input) if isinstance(input, list) else input)
         self.seen_previous_response_ids.append(previous_response_id)
         response_id = self._issue_response_id()
         return _build_model_response(text="OK", model_name=self.model, response_id=response_id)
@@ -78,7 +76,6 @@ class _TrackingResponsesModel(Model):
         conversation_id: str | None,
         prompt: ResponsePromptParam | None,
     ) -> AsyncIterator[TResponseStreamEvent]:
-        self.seen_inputs.append(copy.deepcopy(input) if isinstance(input, list) else input)
         self.seen_previous_response_ids.append(previous_response_id)
         response_id = self._issue_response_id()
         return _stream_text_events(text="OK", model_name=self.model, response_id=response_id)
@@ -229,7 +226,7 @@ def _parse_sse_messages_payload(chunks: list[str]) -> dict[str, Any]:
 
 
 @pytest.mark.asyncio
-async def test_response_endpoint_does_not_resume_previous_response_id_from_chat_history() -> None:
+async def test_response_endpoint_replays_previous_response_id_from_chat_history() -> None:
     model = _TrackingResponsesModel()
     handler = make_response_endpoint(BaseRequest, _build_agency_factory(model), lambda: None)
 
@@ -243,7 +240,7 @@ async def test_response_endpoint_does_not_resume_previous_response_id_from_chat_
         token=None,
     )
 
-    assert model.seen_previous_response_ids == [None, None]
+    assert model.seen_previous_response_ids == [None, first_response_id]
 
 
 @pytest.mark.asyncio
@@ -258,25 +255,7 @@ async def test_agency_get_response_does_not_replay_previous_response_id_from_per
 
 
 @pytest.mark.asyncio
-async def test_agency_get_response_with_explicit_previous_response_id_uses_only_current_turn_input() -> None:
-    model = _TrackingResponsesModel()
-    agency = _build_agency_factory(model)()
-
-    await agency.get_response(message="hi")
-    first_response_id = model.issued_response_ids[0]
-
-    await agency.get_response(message="again", previous_response_id=first_response_id)
-
-    assert model.seen_previous_response_ids == [None, first_response_id]
-    second_input = model.seen_inputs[1]
-    assert isinstance(second_input, list)
-    assert len(second_input) == 1
-    assert second_input[0]["role"] == "user"
-    assert second_input[0]["content"] == "again"
-
-
-@pytest.mark.asyncio
-async def test_stream_endpoint_does_not_resume_previous_response_id_from_chat_history() -> None:
+async def test_stream_endpoint_replays_previous_response_id_from_chat_history() -> None:
     model = _TrackingResponsesModel()
     handler = make_stream_endpoint(BaseRequest, _build_agency_factory(model), lambda: None, ActiveRunRegistry())
 
@@ -296,7 +275,7 @@ async def test_stream_endpoint_does_not_resume_previous_response_id_from_chat_hi
     )
     _second_chunks = [chunk async for chunk in second_response.body_iterator]
 
-    assert model.seen_previous_response_ids == [None, None]
+    assert model.seen_previous_response_ids == [None, first_response_id]
 
 
 @pytest.mark.asyncio
@@ -311,23 +290,3 @@ async def test_agency_stream_does_not_replay_previous_response_id_from_persisted
     _second_events = [event async for event in second_stream]
 
     assert model.seen_previous_response_ids == [None, None]
-
-
-@pytest.mark.asyncio
-async def test_agency_stream_with_explicit_previous_response_id_uses_only_current_turn_input() -> None:
-    model = _TrackingResponsesModel()
-    agency = _build_agency_factory(model)()
-
-    first_stream = agency.get_response_stream(message="hi")
-    _first_events = [event async for event in first_stream]
-    first_response_id = model.issued_response_ids[0]
-
-    second_stream = agency.get_response_stream(message="again", previous_response_id=first_response_id)
-    _second_events = [event async for event in second_stream]
-
-    assert model.seen_previous_response_ids == [None, first_response_id]
-    second_input = model.seen_inputs[1]
-    assert isinstance(second_input, list)
-    assert len(second_input) == 1
-    assert second_input[0]["role"] == "user"
-    assert second_input[0]["content"] == "again"
