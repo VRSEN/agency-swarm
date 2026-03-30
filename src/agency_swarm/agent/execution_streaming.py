@@ -123,7 +123,6 @@ def perform_streamed_run(
     *,
     agent: "Agent",
     history_for_runner: list[TResponseInputItem],
-    previous_response_id: str | None,
     master_context_for_run: MasterContext,
     hooks_override: RunHooks | None,
     run_config_override: RunConfig | None,
@@ -137,7 +136,6 @@ def perform_streamed_run(
         hooks=hooks_override,
         run_config=run_config_override or RunConfig(),
         max_turns=kwargs.get("max_turns", 1000000),
-        previous_response_id=previous_response_id,
     )
 
 
@@ -145,7 +143,6 @@ def run_stream_with_guardrails(
     *,
     agent: "Agent",
     initial_history_for_runner: list[TResponseInputItem],
-    previous_response_id: str | None,
     master_context_for_run: MasterContext,
     sender_name: str | None,
     agency_context: "AgencyContext | None",
@@ -234,7 +231,6 @@ def run_stream_with_guardrails(
                         local_result = perform_streamed_run(
                             agent=agent,
                             history_for_runner=history_for_runner,
-                            previous_response_id=previous_response_id,
                             master_context_for_run=master_context_for_run,
                             hooks_override=hooks_override,
                             run_config_override=run_config_override,

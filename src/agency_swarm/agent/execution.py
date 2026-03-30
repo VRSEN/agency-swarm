@@ -129,10 +129,6 @@ class Execution:
                 except Exception:
                     initial_saved_count = 0
             is_first_message = initial_saved_count == 0
-            previous_response_id = None
-            if agency_context and agency_context.thread_manager:
-                previous_history = agency_context.thread_manager.get_conversation_history(self.agent.name, sender_name)
-                previous_response_id = MessageFormatter.extract_previous_response_id(previous_history)
 
             # Prepare history for runner, persisting initiating messages with agent_run_id and parent_run_id
             history_for_runner = MessageFormatter.prepare_history_for_runner(
@@ -216,7 +212,6 @@ class Execution:
                 run_result, master_context_for_run = await run_with_guardrails(
                     agent=self.agent,
                     history_for_runner=history_for_runner,
-                    previous_response_id=previous_response_id,
                     master_context_for_run=master_context_for_run,
                     sender_name=sender_name,
                     agency_context=agency_context,
@@ -288,7 +283,6 @@ class Execution:
             # Always save response items (both user and agent-to-agent calls)
             if agency_context and agency_context.thread_manager and run_result.new_items:
                 items_to_save: list[TResponseInputItem] = []
-                latest_response_id = run_result.last_response_id
                 logger.debug(f"Preparing to save {len(run_result.new_items)} new items from RunResult")
 
                 # Only extract hosted tool results if hosted tools were actually used
@@ -320,7 +314,6 @@ class Execution:
                             item_dict,
                             agent=current_agent_name,
                             caller_agent=sender_name,
-                            response_id=latest_response_id,
                             agent_run_id=current_agent_run_id,
                             parent_run_id=parent_run_id,
                             run_trace_id=run_trace_id,
@@ -487,12 +480,6 @@ class Execution:
                     except Exception:
                         initial_saved_count = 0
                 is_first_message = initial_saved_count == 0
-                previous_response_id = None
-                if agency_context and agency_context.thread_manager:
-                    previous_history = agency_context.thread_manager.get_conversation_history(
-                        self.agent.name, sender_name
-                    )
-                    previous_response_id = MessageFormatter.extract_previous_response_id(previous_history)
 
                 history_for_runner = MessageFormatter.prepare_history_for_runner(
                     processed_current_message_items,
@@ -616,7 +603,6 @@ class Execution:
                 stream_handle = run_stream_with_guardrails(
                     agent=self.agent,
                     initial_history_for_runner=history_for_runner,
-                    previous_response_id=previous_response_id,
                     master_context_for_run=master_context_for_run,
                     sender_name=sender_name,
                     agency_context=agency_context,
