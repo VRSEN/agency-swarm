@@ -152,7 +152,6 @@ def run_stream_with_guardrails(
     hooks_override: RunHooks | None,
     run_config_override: RunConfig | None,
     kwargs: dict[str, Any],
-    include_saved_history: bool,
     current_agent_run_id: str,
     parent_run_id: str | None,
     run_trace_id: str,
@@ -328,8 +327,6 @@ def run_stream_with_guardrails(
                             current_agent_run_id=current_agent_run_id,
                             exception=e,
                             include_assistant=False,
-                            history_for_retry=history_for_runner,
-                            include_saved_history=include_saved_history,
                         )
                         exception_guardrail_guidance = guidance_text
                     except Exception:
@@ -529,8 +526,6 @@ def run_stream_with_guardrails(
                     current_agent_run_id=current_agent_run_id,
                     exception=guardrail_exception,
                     include_assistant=False,
-                    history_for_retry=history_for_runner,
-                    include_saved_history=include_saved_history,
                 )
                 continue
             except asyncio.CancelledError:

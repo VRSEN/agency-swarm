@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
 from agents import (
     InputGuardrailTripwireTriggered,
@@ -79,8 +79,6 @@ def append_guardrail_feedback(
     current_agent_run_id: str,
     exception: BaseException,
     include_assistant: bool,
-    history_for_retry: list[TResponseInputItem],
-    include_saved_history: bool,
 ) -> list[TResponseInputItem]:
     """Persist guardrail feedback messages and rebuild history for retry.
 
@@ -91,8 +89,8 @@ def append_guardrail_feedback(
     assistant_output, guidance_text = extract_guardrail_texts(exception)
     history_protocol = MessageFormatter.resolve_history_protocol(agent)
 
-    to_persist: list[TResponseInputItem] = []
     if agency_context and agency_context.thread_manager:
+        to_persist: list[TResponseInputItem] = []
         if include_assistant:
             for item in assistant_output:
                 to_persist.append(
@@ -139,23 +137,6 @@ def append_guardrail_feedback(
 
         agency_context.thread_manager.add_messages(to_persist)  # type: ignore[arg-type]
 
-    if not include_saved_history:
-        retry_items: list[dict[str, Any]] = []
-        for msg in to_persist:
-            if isinstance(msg, dict):
-                retry_items.append(cast(dict[str, Any], msg))
-        retry_tail = MessageFormatter.strip_agency_metadata(retry_items)
-        history: list[dict[str, Any]] = (
-            cast(
-                list[dict[str, Any]],
-                [msg for msg in history_for_retry if isinstance(msg, dict)],
-            )
-            + retry_tail
-        )
-        history = MessageFormatter.sanitize_tool_calls_in_history(history)
-        history = MessageFormatter.ensure_tool_calls_content_safety(history)
-        return MessageFormatter.sanitize_replayed_tool_item_ids(history)  # type: ignore[return-value]
-
     # Rebuild full history for retry using persisted messages
     return MessageFormatter.prepare_history_for_runner(
         [],
@@ -165,5 +146,4 @@ def append_guardrail_feedback(
         agent_run_id=current_agent_run_id,
         parent_run_id=parent_run_id,
         run_trace_id=run_trace_id,
-        include_saved_history=True,
     )
