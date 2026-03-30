@@ -280,7 +280,6 @@ def _persist_streamed_items(
     )
 
     items_to_save: list[TResponseInputItem] = []
-    latest_response_id = streaming_result.last_response_id
     current_agent_name = agent.name
     current_agent_run_id = fallback_agent_run_id
 
@@ -363,7 +362,6 @@ def _persist_streamed_items(
             item_payload,
             agent=current_agent_name,
             caller_agent=caller_name,
-            response_id=latest_response_id,
             agent_run_id=current_agent_run_id,
             parent_run_id=parent_run_id,
             run_trace_id=run_trace_id,

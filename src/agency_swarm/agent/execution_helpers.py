@@ -48,7 +48,6 @@ async def perform_single_run(
     *,
     agent: "Agent",
     history_for_runner: list[TResponseInputItem],
-    previous_response_id: str | None,
     master_context_for_run: MasterContext,
     hooks_override: RunHooks | None,
     run_config_override: RunConfig | None,
@@ -76,7 +75,6 @@ async def perform_single_run(
             hooks=hooks_override,
             run_config=run_config_override or RunConfig(),
             max_turns=kwargs.get("max_turns", 1000000),
-            previous_response_id=previous_response_id,
         )
     return result
 
@@ -88,7 +86,6 @@ async def run_with_guardrails(
     *,
     agent: "Agent",
     history_for_runner: list[TResponseInputItem],
-    previous_response_id: str | None,
     master_context_for_run: MasterContext,
     sender_name: str | None,
     agency_context: "AgencyContext | None",
@@ -108,7 +105,6 @@ async def run_with_guardrails(
             run_result = await perform_single_run(
                 agent=agent,
                 history_for_runner=history_for_runner,
-                previous_response_id=previous_response_id,
                 master_context_for_run=master_context_for_run,
                 hooks_override=hooks_override,
                 run_config_override=run_config_override,

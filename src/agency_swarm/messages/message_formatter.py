@@ -43,7 +43,6 @@ class MessageFormatter:
         "callerAgent",
         "timestamp",
         "citations",
-        "response_id",
         "agent_run_id",
         "parent_run_id",
         "message_origin",
@@ -72,17 +71,6 @@ class MessageFormatter:
                 if candidate is not None:
                     return MessageFormatter.resolve_history_protocol(candidate)
         return MessageFormatter.resolve_history_protocol(default_agent)
-
-    @staticmethod
-    def extract_previous_response_id(history: list[TResponseInputItem]) -> str | None:
-        """Return the latest stored Responses API response ID from persisted history."""
-        for message in reversed(history):
-            if not isinstance(message, dict):
-                continue
-            response_id = message.get("response_id")
-            if isinstance(response_id, str) and response_id:
-                return response_id
-        return None
 
     @staticmethod
     def _resolve_history_protocol_from_model(model: Any) -> str:
@@ -203,7 +191,6 @@ class MessageFormatter:
         message: TResponseInputItem,
         agent: str,
         caller_agent: str | None = None,
-        response_id: str | None = None,
         agent_run_id: str | None = None,
         parent_run_id: str | None = None,
         run_trace_id: str | None = None,
@@ -228,8 +215,6 @@ class MessageFormatter:
         modified_message = message.copy()  # type: ignore[arg-type]
         modified_message["agent"] = agent  # type: ignore[typeddict-unknown-key]
         modified_message["callerAgent"] = caller_agent  # type: ignore[typeddict-unknown-key]
-        if response_id is not None:
-            modified_message["response_id"] = response_id  # type: ignore[typeddict-unknown-key]
         if agent_run_id is not None:
             modified_message["agent_run_id"] = agent_run_id  # type: ignore[typeddict-unknown-key]
         if parent_run_id is not None:

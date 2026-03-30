@@ -113,7 +113,6 @@ async def test_stream_endpoint_streamed_chunks_normalize_fake_item_ids(
         def __init__(self, input_history: list[dict[str, Any]], agent: Agent) -> None:
             self._input_history = list(input_history)
             self.final_output = "A"
-            self.last_response_id = None
             self.new_items = [
                 MessageOutputItem(
                     raw_item=ResponseOutputMessage(
