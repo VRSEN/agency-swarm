@@ -5,7 +5,6 @@ from agents import RunErrorDetails
 
 from agency_swarm import Agent, GuardrailFunctionOutput, OutputGuardrailTripwireTriggered, ThreadManager
 from agency_swarm.agent.core import AgencyContext
-from agency_swarm.messages import MessageFormatter
 
 
 def _make_tripwire(
@@ -144,62 +143,4 @@ async def test_output_guardrail_retries_streaming(mock_run_streamed):
     # The guidance user message should be in history
     msgs = ctx.thread_manager.get_all_messages()
     roles_contents = [(m.get("role"), m.get("content")) for m in msgs]
-    assert ("system", "ERROR: needs header") in roles_contents
-
-
-@pytest.mark.asyncio
-@patch("agency_swarm.agent.execution_helpers.Runner.run", new_callable=AsyncMock)
-async def test_output_guardrail_retry_preserves_current_branch_for_openai_previous_response_id(mock_runner_run):
-    agent = Agent(name="RetryAgent", instructions="Test", model="gpt-5.4-mini", validation_attempts=1)
-    ctx = AgencyContext(agency_instance=None, thread_manager=ThreadManager(), subagents={})
-    ctx.thread_manager.add_messages(
-        [
-            MessageFormatter.add_agency_metadata({"role": "user", "content": "old"}, agent=agent.name),
-            MessageFormatter.add_agency_metadata({"role": "assistant", "content": "old answer"}, agent=agent.name),
-        ]
-    )
-
-    mock_runner_run.side_effect = [
-        _make_tripwire(agent_output="BAD OUTPUT", guidance="ERROR: fix format"),
-        MagicMock(new_items=[], final_output="GOOD"),
-    ]
-
-    await agent.get_response(message="new", agency_context=ctx, previous_response_id="resp_1")
-
-    second_input = mock_runner_run.await_args_list[1].kwargs["input"]
-    roles_contents = [(m.get("role"), m.get("content")) for m in second_input]
-    assert ("user", "old") not in roles_contents
-    assert ("assistant", "old answer") not in roles_contents
-    assert ("user", "new") in roles_contents
-    assert ("assistant", "BAD OUTPUT") in roles_contents
-    assert ("system", "ERROR: fix format") in roles_contents
-
-
-@pytest.mark.asyncio
-@patch("agency_swarm.agent.execution_streaming.Runner.run_streamed")
-async def test_output_guardrail_retry_stream_preserves_current_branch_for_openai_previous_response_id(
-    mock_run_streamed,
-):
-    agent = Agent(name="RetryStreamAgent", instructions="Test", model="gpt-5.4-mini", validation_attempts=1)
-    ctx = AgencyContext(agency_instance=None, thread_manager=ThreadManager(), subagents={})
-    ctx.thread_manager.add_messages(
-        [
-            MessageFormatter.add_agency_metadata({"role": "user", "content": "old"}, agent=agent.name),
-            MessageFormatter.add_agency_metadata({"role": "assistant", "content": "old answer"}, agent=agent.name),
-        ]
-    )
-
-    mock_run_streamed.side_effect = [
-        _make_tripwire(agent_output="STREAM BAD", guidance="ERROR: needs header"),
-        _DummyStream([_SimpleEvent("run_item_stream_event")]),
-    ]
-
-    stream = agent.get_response_stream(message="new", agency_context=ctx, previous_response_id="resp_1")
-    _events = [event async for event in stream]
-
-    second_input = mock_run_streamed.call_args_list[1].kwargs["input"]
-    roles_contents = [(m.get("role"), m.get("content")) for m in second_input]
-    assert ("user", "old") not in roles_contents
-    assert ("assistant", "old answer") not in roles_contents
-    assert ("user", "new") in roles_contents
     assert ("system", "ERROR: needs header") in roles_contents

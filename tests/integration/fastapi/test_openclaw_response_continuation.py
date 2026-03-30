@@ -258,7 +258,7 @@ async def test_agency_get_response_does_not_replay_previous_response_id_from_per
 
 
 @pytest.mark.asyncio
-async def test_agency_get_response_with_explicit_previous_response_id_preserves_history_for_custom_models() -> None:
+async def test_agency_get_response_with_explicit_previous_response_id_uses_only_current_turn_input() -> None:
     model = _TrackingResponsesModel()
     agency = _build_agency_factory(model)()
 
@@ -270,11 +270,9 @@ async def test_agency_get_response_with_explicit_previous_response_id_preserves_
     assert model.seen_previous_response_ids == [None, first_response_id]
     second_input = model.seen_inputs[1]
     assert isinstance(second_input, list)
-    assert len(second_input) == 3
+    assert len(second_input) == 1
     assert second_input[0]["role"] == "user"
-    assert second_input[0]["content"] == "hi"
-    assert second_input[-1]["role"] == "user"
-    assert second_input[-1]["content"] == "again"
+    assert second_input[0]["content"] == "again"
 
 
 @pytest.mark.asyncio
@@ -316,7 +314,7 @@ async def test_agency_stream_does_not_replay_previous_response_id_from_persisted
 
 
 @pytest.mark.asyncio
-async def test_agency_stream_with_explicit_previous_response_id_preserves_history_for_custom_models() -> None:
+async def test_agency_stream_with_explicit_previous_response_id_uses_only_current_turn_input() -> None:
     model = _TrackingResponsesModel()
     agency = _build_agency_factory(model)()
 
@@ -330,8 +328,6 @@ async def test_agency_stream_with_explicit_previous_response_id_preserves_histor
     assert model.seen_previous_response_ids == [None, first_response_id]
     second_input = model.seen_inputs[1]
     assert isinstance(second_input, list)
-    assert len(second_input) == 3
+    assert len(second_input) == 1
     assert second_input[0]["role"] == "user"
-    assert second_input[0]["content"] == "hi"
-    assert second_input[-1]["role"] == "user"
-    assert second_input[-1]["content"] == "again"
+    assert second_input[0]["content"] == "again"

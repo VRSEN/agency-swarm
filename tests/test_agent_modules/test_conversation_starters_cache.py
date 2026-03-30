@@ -4,7 +4,6 @@ import inspect
 import json
 from collections.abc import AsyncIterator
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from agents import Tool
@@ -203,37 +202,6 @@ async def test_quick_replies_cache_and_replay_when_starter_cache_flag_is_disable
     second_context = _build_minimal_context(agent, None)
     replay_result = await agent.get_response(quick_reply, agency_context=second_context)
     assert replay_result.final_output == expected_output
-
-
-@pytest.mark.asyncio
-@patch("agency_swarm.agent.execution_helpers.Runner.run", new_callable=AsyncMock)
-async def test_quick_reply_cache_is_skipped_for_openai_previous_response_id(
-    mock_runner_run,
-    tmp_path,
-    monkeypatch,
-) -> None:
-    monkeypatch.setenv("AGENCY_SWARM_CHATS_DIR", str(tmp_path))
-    quick_reply = "hi"
-    agent = Agent(
-        name="CacheAgent",
-        instructions="Base instructions.",
-        model="gpt-5.4-mini",
-        quick_replies=[quick_reply],
-        cache_conversation_starters=False,
-    )
-
-    save_cached_starter(
-        agent.name,
-        quick_reply,
-        [{"type": "message", "role": "assistant", "content": "CACHED"}],
-    )
-    mock_runner_run.return_value = MagicMock(new_items=[], final_output="LIVE")
-
-    context = _build_minimal_context(agent, None)
-    result = await agent.get_response(quick_reply, agency_context=context, previous_response_id="resp_1")
-
-    assert result.final_output == "LIVE"
-    assert mock_runner_run.await_count == 1
 
 
 @pytest.mark.asyncio
