@@ -43,6 +43,7 @@ class MessageFormatter:
         "callerAgent",
         "timestamp",
         "citations",
+        "response_id",
         "agent_run_id",
         "parent_run_id",
         "message_origin",
