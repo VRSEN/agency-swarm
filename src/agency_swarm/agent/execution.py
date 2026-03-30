@@ -129,9 +129,10 @@ class Execution:
                 except Exception:
                     initial_saved_count = 0
             is_first_message = initial_saved_count == 0
-            previous_response_id = kwargs.get("previous_response_id")
-            if not isinstance(previous_response_id, str) or not previous_response_id:
-                previous_response_id = None
+            previous_response_id = None
+            if agency_context and agency_context.thread_manager:
+                previous_history = agency_context.thread_manager.get_conversation_history(self.agent.name, sender_name)
+                previous_response_id = MessageFormatter.extract_previous_response_id(previous_history)
 
             # Prepare history for runner, persisting initiating messages with agent_run_id and parent_run_id
             history_for_runner = MessageFormatter.prepare_history_for_runner(
@@ -486,9 +487,12 @@ class Execution:
                     except Exception:
                         initial_saved_count = 0
                 is_first_message = initial_saved_count == 0
-                previous_response_id = kwargs.get("previous_response_id")
-                if not isinstance(previous_response_id, str) or not previous_response_id:
-                    previous_response_id = None
+                previous_response_id = None
+                if agency_context and agency_context.thread_manager:
+                    previous_history = agency_context.thread_manager.get_conversation_history(
+                        self.agent.name, sender_name
+                    )
+                    previous_response_id = MessageFormatter.extract_previous_response_id(previous_history)
 
                 history_for_runner = MessageFormatter.prepare_history_for_runner(
                     processed_current_message_items,
