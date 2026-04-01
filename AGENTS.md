@@ -177,9 +177,9 @@ After each meaningful tool call or code edit, validate the result in 1-2 lines a
 - Adding silent fallbacks, legacy shims, or workarounds. Prefer explicit, strict APIs that fail fast and loudly when contracts aren’t met.
 
 ## 🔴 API KEYS
-- Pre-flight gate (real-LLM only): if planned validation includes integration tests/examples that call a real LLM, verify that the required provider credentials and access are usable from environment or workspace `.env` before editing or running tests; if credentials or any external provider access limit block the run, stop, report the blocker, and wait for explicit user permission before continuing with other work.
+- Pre-flight gate (real-LLM only): if planned validation includes integration tests/examples that call a real LLM, verify that the required provider credentials and access are usable from environment, the current workspace `.env`, or the related base-repo/worktree `.env` files that plausibly supply those credentials before editing or running tests. If usable credentials still cannot be confirmed, treat that as a blocking issue, stop, report the blocker, and wait for explicit user permission before continuing with other work.
 - Scope limit: this gate does not apply to docs-only changes, pure unit tests, or integrations fully mocked/patched to avoid real LLM calls.
-- Before asking the user for any key or permission to continue, inspect environment and `.env` to confirm the blocker is real and external, not local misconfiguration.
+- Before asking the user for any key or permission to continue, inspect environment and the relevant `.env` locations to confirm the blocker is real and external, not local misconfiguration.
 
 ## Common Commands
 `make format`  # Auto-format and apply safe lint fixes
@@ -235,6 +235,7 @@ Agency Swarm is a multi-agent orchestration framework built on the OpenAI Agents
 
 ### Documentation Rules
 - Documentation writing and updates must follow `.cursor/rules/writing-docs.mdc` for formatting, components, links, and page metadata.
+- Docs are the main value of this repository. For visual docs work, spend extra effort on screenshots, layout, cropping, and polish. When OpenAI vision settings are controllable, use GPT-5.4 with `detail=original`.
 - Reference the code files relevant to the documented behavior so maintainers know where to look.
 - Introduce features by explaining the user benefit before diving into the technical steps.
 - Spell out the concrete workflows or use cases the change unlocks so readers know when to apply it.
