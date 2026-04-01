@@ -176,7 +176,7 @@ Terminal:
 agency.tui()
 ```
 
-On first run, Agency Swarm downloads the matching terminal binary automatically and reuses it on later runs.
+On first run, Agency Swarm downloads the matching terminal app automatically and reuses it on later runs.
 
 See the terminal workflow guide: https://agency-swarm.ai/core-framework/agencies/agent-swarm-cli
 

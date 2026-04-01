@@ -4,7 +4,7 @@ description: "Launch the built-in terminal UI with one Python call."
 icon: "terminal"
 ---
 
-`agentswarm-cli` is the npm package that provides the Agent Swarm CLI terminal app used by `agency-swarm`. The preview below shows the current `tui()` startup screen.
+Agent Swarm CLI is the built-in terminal app for `agency-swarm`. The preview below shows the current `tui()` startup screen.
 
 ![Agent Swarm CLI startup screen](/images/agent-swarm-cli-preview.png)
 
@@ -14,7 +14,7 @@ Use one command:
 agency.tui()
 ```
 
-`tui()` downloads the matching terminal binary on first run, caches it locally, starts the local `agency-swarm` bridge, and opens the TUI.
+`tui()` downloads the matching terminal app on first run, caches it locally, and opens the TUI for your current agency.
 
 Use `agency.tui(reload=False)` to disable hot reload on file changes.
 
@@ -36,9 +36,9 @@ The picker reads live metadata from the running `agency-swarm` backend and group
 Use `Tab` to autocomplete agent mentions in the prompt box.
 
 <Accordion title="Optional: reconnect to another local agency server" defaultOpen={false}>
-`agency.tui()` already starts the local Agency Swarm bridge for the current Python process.
+`agency.tui()` already opens the TUI for the current local agency.
 
-The extra connection flow is only for the case where you want the CLI to switch to a different local `agency-swarm` server after startup.
+The extra connection flow is only for the case where you want the TUI to switch to a different local `agency-swarm` server after startup.
 
 In that case, use `/connect` inside the TUI and point it at the other local server.
 </Accordion>
