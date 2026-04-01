@@ -44,8 +44,15 @@ Press `Tab` to autocomplete mentions.
 The current release supports these features today:
 
 - local `agency-swarm` backends only
-- one connected backend path per session
-- `/connect`, `/agents`, mentions, streaming events, exports, undo/redo, and `/compact`
+- `/agents`, mentions, streaming events, exports, undo/redo, and `/compact`
+
+<Accordion title="Optional: reconnect to another local agency server" defaultOpen={false}>
+`agency.tui()` already starts the local Agency Swarm bridge for the current Python process.
+
+The extra connection flow is only for the case where you want the CLI to switch to a different local `agency-swarm` server after startup.
+
+In that case, use `/connect` inside the TUI and point it at the other local server.
+</Accordion>
 
 ## Current Limitations
 
