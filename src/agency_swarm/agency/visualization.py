@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING, Any
 
 from agents import FunctionTool
 
+from agency_swarm.ui.demos.agentswarm_cli import start_tui
 from agency_swarm.ui.demos.copilot import CopilotDemoLauncher
-from agency_swarm.ui.demos.opencode import start_terminal
 from agency_swarm.ui.generators.html_generator import HTMLVisualizationGenerator
 from agency_swarm.utils.model_utils import get_agent_capabilities
 
@@ -178,7 +178,7 @@ def tui(agency: "Agency", show_reasoning: bool | None = None, reload: bool = Tru
         show_reasoning: Whether to show reasoning output. `False` is not supported in the new TUI yet.
         reload: If True, watch for file changes and automatically restart on changes.
     """
-    start_terminal(agency, show_reasoning=show_reasoning, reload=reload)
+    start_tui(agency, show_reasoning=show_reasoning, reload=reload)
 
 
 def terminal_demo(agency: "Agency", show_reasoning: bool | None = None, reload: bool = True) -> None:

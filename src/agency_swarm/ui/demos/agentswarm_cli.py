@@ -75,7 +75,7 @@ class _Server:
         self.thread.join(timeout=5)
 
 
-def start_terminal(agency, show_reasoning: bool | None = None, reload: bool = True) -> None:
+def start_tui(agency, show_reasoning: bool | None = None, reload: bool = True) -> None:
     """Launch the Agent Swarm CLI terminal for a live agency instance."""
     if show_reasoning is False:
         raise NotImplementedError("tui(show_reasoning=False) is not supported in the new TUI yet.")
