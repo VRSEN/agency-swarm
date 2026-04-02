@@ -21,7 +21,7 @@ This directory contains runnable examples demonstrating key features of Agency S
 
 ## User Interfaces
 - **`agency_visualization.py`** – Interactive HTML visualization
-- **`interactive/tui.py`** – Terminal UI chat interface (downloads the matching terminal app automatically on first run)
+- **`interactive/tui.py`** – Terminal UI chat interface (sets up the matching terminal app automatically on first run and shows a short setup message)
 - **`interactive/copilot_demo.py`** – Copilot UI chat interface
 
 ## Integration & External Services

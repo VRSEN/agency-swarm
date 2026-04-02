@@ -40,6 +40,8 @@ _CLI_VERSION = "1.2.34"
 _CLI_REGISTRY = "https://registry.npmjs.org"
 _LOCK_AGE = 300
 _LOCK_WAIT = 30
+_SETUP_MESSAGE = "Setting up Agent Swarm CLI for first run. This can take up to a minute depending on your network..."
+_SETUP_COMPLETE_MESSAGE = "Agent Swarm CLI setup complete."
 
 
 @dataclass(frozen=True)
@@ -229,7 +231,9 @@ def _ensure_cli() -> Path:
         if path.exists():
             _chmod(path)
             return path
+        _notify_setup(_SETUP_MESSAGE)
         _install(pkg, root, path)
+        _notify_setup(_SETUP_COMPLETE_MESSAGE)
     return path
 
 
@@ -341,6 +345,10 @@ def _musl() -> bool:
 def _chmod(path: Path) -> None:
     if os.name != "nt":
         path.chmod(0o755)
+
+
+def _notify_setup(message: str) -> None:
+    print(message, file=sys.stderr, flush=True)
 
 
 @contextmanager

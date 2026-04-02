@@ -190,3 +190,25 @@ def test_agentswarm_cli_tui_downloads_platform_cli(monkeypatch, tmp_path):
         "https://registry.npmjs.org/agent-swarm-cli-darwin-arm64/1.2.27-test",
         "https://registry.npmjs.org/agent-swarm-cli-darwin-arm64/-/pkg.tgz",
     ]
+
+
+def test_agentswarm_cli_tui_notifies_on_first_run(monkeypatch, tmp_path):
+    root = tmp_path / "cache"
+    notices: list[str] = []
+
+    monkeypatch.setattr(agentswarm_cli_demo, "_cache", lambda: root)
+    monkeypatch.setattr(
+        agentswarm_cli_demo,
+        "_package",
+        lambda: agentswarm_cli_demo._Package("agent-swarm-cli-darwin-arm64", "agency"),
+    )
+    monkeypatch.setattr(agentswarm_cli_demo, "_install", lambda pkg, install_root, path: path.write_text("ok"))
+    monkeypatch.setattr(agentswarm_cli_demo, "_notify_setup", notices.append)
+
+    path = agentswarm_cli_demo._ensure_cli()
+
+    assert path.read_text() == "ok"
+    assert notices == [
+        agentswarm_cli_demo._SETUP_MESSAGE,
+        agentswarm_cli_demo._SETUP_COMPLETE_MESSAGE,
+    ]
