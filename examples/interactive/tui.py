@@ -70,7 +70,7 @@ def create_demo_agency() -> Agency:
             "math-heavy work to MathAgent. When files contain charts, reports, or data, use the "
             "available file/code tools to inspect them before answering."
         ),
-        files_folder=_files(),
+        # files_folder=_files(),
         include_search_results=True,
         tools=[WebSearchTool()],
         model="gpt-5.4-mini",

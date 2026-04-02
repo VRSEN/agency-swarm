@@ -94,7 +94,7 @@ To run the agency directly from your terminal, use the `tui` method:
 agency.tui()
 ```
 
-On first run, `agency-swarm` downloads the matching `agent-swarm-cli` binary automatically, caches it locally, starts the local bridge, and opens the terminal UI.
+On first run, `agency-swarm` sets up the terminal app automatically, caches it locally, shows a short setup message, and opens the terminal UI for your current agency.
 
 Use `agency.tui(reload=False)` if you want to turn off hot reload on file changes.
 
@@ -105,5 +105,3 @@ When using the terminal to run the agency, you can send messages directly to any
 </Tip>
 
 `tui(show_reasoning=False)` is not supported in the new TUI yet.
-
-**Implementation:** `src/agency_swarm/ui/demos/opencode.py`

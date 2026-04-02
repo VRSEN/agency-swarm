@@ -4,48 +4,44 @@ description: "Launch the built-in terminal UI with one Python call."
 icon: "terminal"
 ---
 
-`agent-swarm-cli` is the terminal UI binary used by `agency-swarm`. The preview below shows the current `tui()` startup screen.
+Agent Swarm CLI is the built-in terminal app for `agency-swarm`. The preview below shows the current `tui()` startup screen.
 
 ![Agent Swarm CLI startup screen](/images/agent-swarm-cli-preview.png)
 
-It gives you one released flow:
-
-1. Install `agency-swarm` in Python.
-2. Call `agency.tui()`.
-3. On first run, `agency-swarm` downloads the matching terminal UI binary automatically.
-4. The binary is cached locally and reused on later runs.
-5. The backend bridge starts automatically, then the terminal UI opens.
-
-## Start The TUI
+Use one command:
 
 ```python
 agency.tui()
 ```
 
-`tui()` provisions the matching terminal binary if needed, starts the local `agency-swarm` bridge automatically, and launches the terminal UI.
+`tui()` sets up the terminal app on first run, caches it locally, shows a short setup message, and opens the TUI for your current agency.
 
 Use `agency.tui(reload=False)` to disable hot reload on file changes.
 
+## What You Can Do
+
+- start the TUI with one Python call
+- switch between agencies and agents with `/agents`
+- send prompts with mentions such as `@Developer fix the failing integration test`
+- stream responses, export sessions, undo or redo, and use `/compact`
+
 ## Choose Agencies And Agents
 
-Use `/agents` inside the TUI.
+Use `/agents` to open the target picker.
 
-The CLI reads live metadata from the selected `agency-swarm` server and groups the available agents by agency.
+![Agent Swarm CLI agent picker](/images/agent-swarm-cli-agent-selection.png)
 
-You can also direct a prompt with mentions:
+The picker reads live metadata from the running `agency-swarm` backend and groups agents by agency.
 
-- `@Developer investigate the failing integration test`
-- `@SupportAgent summarize the uploaded PDF`
+Use `Tab` to autocomplete agent mentions in the prompt box.
 
-Press `Tab` to autocomplete mentions.
+<Accordion title="Optional: reconnect to another local agency server" defaultOpen={false}>
+`agency.tui()` already opens the TUI for the current local agency.
 
-## Supported Workflow
+The extra connection flow is only for the case where you want the TUI to switch to a different local `agency-swarm` server after startup.
 
-The current release supports these features today:
-
-- local `agency-swarm` backends only
-- one connected backend path per session
-- `/connect`, `/agents`, mentions, streaming events, exports, undo/redo, and `/compact`
+In that case, use `/connect` inside the TUI and point it at the other local server.
+</Accordion>
 
 ## Current Limitations
 
