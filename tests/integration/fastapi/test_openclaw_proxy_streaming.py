@@ -18,9 +18,12 @@ from tests.integration.fastapi._openclaw_test_support import _build_openclaw_con
 
 
 def _reserve_free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("127.0.0.1", 0))
-        return int(sock.getsockname()[1])
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind(("127.0.0.1", 0))
+            return int(sock.getsockname()[1])
+    except PermissionError as exc:
+        pytest.skip(f"loopback bind unavailable in this environment: {exc}")
 
 
 class _OpenClawResponsesStubHandler(BaseHTTPRequestHandler):
@@ -87,7 +90,10 @@ def openclaw_upstream_server() -> str:
     handler = _OpenClawResponsesStubHandler
     handler.mode = "success"
     handler.requests_seen = []
-    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    try:
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    except PermissionError as exc:
+        pytest.skip(f"loopback bind unavailable in this environment: {exc}")
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     host, port = server.server_address
