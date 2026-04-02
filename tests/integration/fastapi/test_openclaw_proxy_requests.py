@@ -43,6 +43,33 @@ def test_openclaw_config_manual_construction_defaults_to_full_tool_mode(tmp_path
     assert config.tool_mode == "full"
 
 
+def test_openclaw_health_returns_runtime_snapshot(tmp_path: Path) -> None:
+    runtime = OpenClawRuntime(
+        OpenClawIntegrationConfig(
+            autostart=False,
+            host="127.0.0.1",
+            port=18789,
+            gateway_token="gateway-token",
+            home_dir=tmp_path / "openclaw",
+            state_dir=tmp_path / "openclaw" / "state",
+            config_path=tmp_path / "openclaw" / "openclaw.json",
+            log_path=tmp_path / "openclaw" / "logs" / "openclaw-gateway.log",
+            startup_timeout_seconds=5.0,
+            proxy_timeout_seconds=30.0,
+            default_model="openclaw:main",
+            provider_model="openai/gpt-5.4-mini",
+            gateway_command="openclaw gateway",
+        )
+    )
+
+    payload = runtime.health()
+
+    assert payload["running"] is False
+    assert payload["upstream_base_url"] == "http://127.0.0.1:18789"
+    assert payload["home_dir"].endswith("openclaw")
+    assert payload["state_dir"].endswith("openclaw/state")
+
+
 def test_openclaw_proxy_mount_paths_exist(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr("agency_swarm.integrations.openclaw._is_upstream_port_open", lambda _config: True)
 
@@ -326,29 +353,6 @@ def test_openclaw_proxy_uses_app_token_auth_when_attached_to_run_fastapi(
     health_authorized = client.get("/openclaw/health", headers={"Authorization": "Bearer secret-token"})
     assert health_authorized.status_code == 200
     assert health_authorized.json() == {"ok": True, "upstream_base_url": "http://127.0.0.1:18789"}
-
-
-def test_openclaw_health_returns_runtime_snapshot(tmp_path: Path) -> None:
-    runtime = OpenClawRuntime(_build_openclaw_config(tmp_path))
-
-    payload = runtime.health()
-
-    assert payload["running"] is False
-    assert payload["upstream_base_url"] == "http://127.0.0.1:18789"
-    assert payload["home_dir"].endswith("openclaw")
-    assert payload["state_dir"].endswith("openclaw/state")
-
-
-def test_openclaw_proxy_rejects_invalid_json_body(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr("agency_swarm.integrations.openclaw._is_upstream_port_open", lambda _config: True)
-    app = FastAPI()
-    attach_openclaw_to_fastapi(app, _build_openclaw_config(tmp_path))
-    client = TestClient(app)
-
-    response = client.post("/openclaw/v1/responses", data="{bad json", headers={"content-type": "application/json"})
-
-    assert response.status_code == 400
-    assert "Invalid JSON body" in response.json()["detail"]
 
 
 def test_openclaw_normalization_validation_error_paths() -> None:

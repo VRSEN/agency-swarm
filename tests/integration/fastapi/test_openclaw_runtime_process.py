@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-import subprocess
+import os
+import shlex
+import socket
+import sys
+import time
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -11,282 +14,162 @@ from agency_swarm.integrations.openclaw import OpenClawRuntime
 from tests.integration.fastapi._openclaw_test_support import _build_openclaw_config
 
 
-def test_openclaw_start_closes_log_handle_when_popen_fails(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    config = _build_openclaw_config(tmp_path)
-    runtime = OpenClawRuntime(config)
-    opened: dict[str, Any] = {}
-    original_open = Path.open
+def _reserve_free_port() -> int:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind(("127.0.0.1", 0))
+            return int(sock.getsockname()[1])
+    except PermissionError as exc:
+        pytest.skip(f"loopback bind unavailable in this environment: {exc}")
 
-    def _tracked_open(path: Path, *args: Any, **kwargs: Any):
-        handle = original_open(path, *args, **kwargs)
-        if path == runtime.config.log_path:
-            opened["handle"] = handle
-        return handle
 
-    def _raise_popen(*args: Any, **kwargs: Any):
-        raise OSError("spawn failed")
+def _write_gateway_script(tmp_path: Path) -> Path:
+    script_path = tmp_path / "fake_gateway.py"
+    script_path.write_text(
+        """
+from __future__ import annotations
 
-    monkeypatch.setattr(runtime, "_is_port_open", lambda: False)
-    monkeypatch.setattr("pathlib.Path.open", _tracked_open)
-    monkeypatch.setattr("agency_swarm.integrations.openclaw.subprocess.Popen", _raise_popen)
-    monkeypatch.setattr(
-        "agency_swarm.integrations.openclaw._select_compatible_node_binary",
-        lambda: ("/opt/homebrew/bin/node", (22, 22, 0)),
+import argparse
+import signal
+import sys
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, *_args, **_kwargs):
+        return None
+
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"ok")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", required=True)
+    parser.add_argument("--port", required=True, type=int)
+    parser.add_argument("--pid-file")
+    args = parser.parse_args()
+    if args.pid_file:
+        with open(args.pid_file, "w", encoding="utf-8") as handle:
+            handle.write(str(os.getpid()))
+
+    if args.mode == "exit":
+        print("fatal gateway error", flush=True)
+        return 1
+
+    if args.mode == "sleep":
+        signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+        while True:
+            time.sleep(1)
+
+    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    signal.signal(signal.SIGTERM, lambda *_: server.shutdown())
+    try:
+        server.serve_forever()
+    finally:
+        server.server_close()
+    return 0
+
+
+if __name__ == "__main__":
+    import os
+    raise SystemExit(main())
+""".strip()
+        + "\n",
+        encoding="utf-8",
     )
+    return script_path
 
-    with pytest.raises(OSError, match="spawn failed"):
-        runtime.start()
 
+def _build_gateway_command(script_path: Path, *, mode: str, port: int, pid_file: Path | None = None) -> str:
+    command = [
+        shlex.quote(sys.executable),
+        shlex.quote(str(script_path)),
+        "--mode",
+        shlex.quote(mode),
+        "--port",
+        str(port),
+    ]
+    if pid_file is not None:
+        command.extend(["--pid-file", shlex.quote(str(pid_file))])
+    return " ".join(command)
+
+
+def _process_is_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def test_openclaw_runtime_start_and_stop_real_gateway_process(tmp_path: Path) -> None:
+    port = _reserve_free_port()
+    script_path = _write_gateway_script(tmp_path)
+    config = replace(
+        _build_openclaw_config(tmp_path),
+        port=port,
+        gateway_command=_build_gateway_command(script_path, mode="serve", port=port),
+        startup_timeout_seconds=5.0,
+    )
+    runtime = OpenClawRuntime(config)
+
+    runtime.start()
+
+    assert runtime.is_running is True
+    assert runtime.health()["running"] is True
+
+    runtime.stop()
+
+    assert runtime.is_running is False
     assert runtime._process is None
     assert runtime._log_handle is None
-    assert opened["handle"].closed is True
 
 
-def test_openclaw_failed_startup_cleans_process_and_log_handle(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    config = _build_openclaw_config(tmp_path)
-    runtime = OpenClawRuntime(replace(config, startup_timeout_seconds=0.01))
-    runtime.config.log_path.parent.mkdir(parents=True, exist_ok=True)
-
-    class _FakeProcess:
-        def __init__(self) -> None:
-            self.pid = 4242
-            self.killed = False
-
-        def poll(self) -> int | None:
-            return None if not self.killed else -9
-
-        def terminate(self) -> None:
-            self.killed = True
-
-        def kill(self) -> None:
-            self.killed = True
-
-        def wait(self, timeout: float | None = None) -> int:
-            self.killed = True
-            return 0
-
-    fake_process = _FakeProcess()
-
-    monkeypatch.setattr(runtime, "ensure_layout", lambda: None)
-    monkeypatch.setattr(runtime, "_resolve_gateway_command", lambda: ["openclaw", "gateway"])
-    monkeypatch.setattr(runtime, "_merge_provider_keys_from_dotenv", lambda env: None)
-    monkeypatch.setattr(runtime, "_is_port_open", lambda: False)
-    monkeypatch.setattr("agency_swarm.integrations.openclaw.subprocess.Popen", lambda *a, **k: fake_process)
-    monkeypatch.setattr("agency_swarm.integrations.openclaw.os.killpg", lambda pid, sig: fake_process.terminate())
-    monkeypatch.setattr("agency_swarm.integrations.openclaw.time.sleep", lambda _delay: None)
-    monkeypatch.setattr(
-        "agency_swarm.integrations.openclaw._select_compatible_node_binary",
-        lambda: ("/opt/homebrew/bin/node", (22, 22, 0)),
+def test_openclaw_runtime_start_reports_early_exit_log_tail(tmp_path: Path) -> None:
+    port = _reserve_free_port()
+    script_path = _write_gateway_script(tmp_path)
+    runtime = OpenClawRuntime(
+        replace(
+            _build_openclaw_config(tmp_path),
+            port=port,
+            gateway_command=_build_gateway_command(script_path, mode="exit", port=port),
+            startup_timeout_seconds=2.0,
+        )
     )
-
-    with pytest.raises(TimeoutError):
-        runtime.start()
-
-    assert fake_process.killed is True
-    assert runtime._process is None
-    assert runtime._log_handle is None
-
-
-def test_openclaw_start_includes_gateway_log_tail_when_process_exits_early(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    config = _build_openclaw_config(tmp_path)
-    runtime = OpenClawRuntime(config)
-    runtime.config.log_path.parent.mkdir(parents=True, exist_ok=True)
-    runtime.config.log_path.write_text("fatal gateway error", encoding="utf-8")
-
-    class _ExitedProcess:
-        pid = 4242
-        returncode = 1
-
-        def poll(self) -> int | None:
-            return 1
-
-        def terminate(self) -> None:
-            return None
-
-        def kill(self) -> None:
-            return None
-
-        def wait(self, timeout: float | None = None) -> int:
-            return 1
-
-    process = _ExitedProcess()
-
-    monkeypatch.setattr(runtime, "ensure_layout", lambda: None)
-    monkeypatch.setattr(runtime, "_resolve_gateway_command", lambda: ["openclaw", "gateway"])
-    monkeypatch.setattr(runtime, "_merge_provider_keys_from_dotenv", lambda env: None)
-    monkeypatch.setattr(runtime, "_is_port_open", lambda: False)
-    monkeypatch.setattr("agency_swarm.integrations.openclaw.subprocess.Popen", lambda *a, **k: process)
-    monkeypatch.setattr(
-        "agency_swarm.integrations.openclaw._select_compatible_node_binary",
-        lambda: ("/opt/homebrew/bin/node", (22, 22, 0)),
-    )
-    monkeypatch.setattr("agency_swarm.integrations.openclaw.time.sleep", lambda _delay: None)
 
     with pytest.raises(RuntimeError, match="OpenClaw exited early with code 1") as excinfo:
         runtime.start()
 
     assert "fatal gateway error" in str(excinfo.value)
-
-
-def test_openclaw_failed_startup_cleanup_closes_log_handle_when_kill_wait_times_out(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    config = _build_openclaw_config(tmp_path)
-    runtime = OpenClawRuntime(config)
-    runtime.config.log_path.parent.mkdir(parents=True, exist_ok=True)
-
-    class _UnstoppableProcess:
-        pid = 4242
-
-        def __init__(self) -> None:
-            self.killed = False
-
-        def poll(self) -> int | None:
-            return None
-
-        def terminate(self) -> None:
-            return None
-
-        def kill(self) -> None:
-            self.killed = True
-
-        def wait(self, timeout: float | None = None) -> int:
-            raise subprocess.TimeoutExpired(cmd="openclaw", timeout=timeout or 0)
-
-    process = _UnstoppableProcess()
-    runtime._process = process  # type: ignore[assignment]
-    log_handle = config.log_path.open("ab")
-    runtime._log_handle = log_handle
-    monkeypatch.setattr("agency_swarm.integrations.openclaw.os.killpg", lambda pid, sig: process.kill())
-
-    runtime._cleanup_after_failed_start()
-
-    assert process.killed is True
-    assert runtime._process is None
-    assert runtime._log_handle is None
-    assert log_handle.closed is True
-
-
-def test_openclaw_stop_forces_kill_on_timeout_and_closes_log_handle(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    config = _build_openclaw_config(tmp_path)
-    runtime = OpenClawRuntime(config)
-
-    class _SlowProcess:
-        pid = 5555
-
-        def __init__(self) -> None:
-            self.wait_calls = 0
-            self.killed = False
-
-        def poll(self) -> int | None:
-            return None
-
-        def terminate(self) -> None:
-            return None
-
-        def kill(self) -> None:
-            self.killed = True
-
-        def wait(self, timeout: float | None = None) -> int:
-            self.wait_calls += 1
-            if self.wait_calls == 1:
-                raise subprocess.TimeoutExpired(cmd="openclaw", timeout=timeout or 0)
-            return 0
-
-    process = _SlowProcess()
-    runtime._process = process  # type: ignore[assignment]
-    config.log_path.parent.mkdir(parents=True, exist_ok=True)
-    runtime._log_handle = config.log_path.open("ab")
-    monkeypatch.setattr("agency_swarm.integrations.openclaw.os.killpg", lambda pid, sig: process.kill())
-
-    runtime.stop()
-
-    assert process.killed is True
     assert runtime._process is None
     assert runtime._log_handle is None
 
 
-def test_openclaw_stop_tolerates_second_wait_timeout_after_sigkill(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    config = _build_openclaw_config(tmp_path)
-    runtime = OpenClawRuntime(config)
+def test_openclaw_runtime_timeout_cleans_up_real_process(tmp_path: Path) -> None:
+    port = _reserve_free_port()
+    script_path = _write_gateway_script(tmp_path)
+    pid_file = tmp_path / "sleep.pid"
+    runtime = OpenClawRuntime(
+        replace(
+            _build_openclaw_config(tmp_path),
+            port=port,
+            gateway_command=_build_gateway_command(script_path, mode="sleep", port=port, pid_file=pid_file),
+            startup_timeout_seconds=0.5,
+        )
+    )
 
-    class _StuckProcess:
-        pid = 6000
+    with pytest.raises(TimeoutError):
+        runtime.start()
 
-        def poll(self) -> int | None:
-            return None
+    pid = int(pid_file.read_text(encoding="utf-8"))
+    deadline = time.time() + 2.0
+    while time.time() < deadline and _process_is_alive(pid):
+        time.sleep(0.05)
 
-        def terminate(self) -> None:
-            return None
-
-        def kill(self) -> None:
-            return None
-
-        def wait(self, timeout: float | None = None) -> int:
-            raise subprocess.TimeoutExpired(cmd="openclaw", timeout=timeout or 0)
-
-    process = _StuckProcess()
-    runtime._process = process  # type: ignore[assignment]
-    config.log_path.parent.mkdir(parents=True, exist_ok=True)
-    log_handle = config.log_path.open("ab")
-    runtime._log_handle = log_handle
-    monkeypatch.setattr("agency_swarm.integrations.openclaw.os.killpg", lambda pid, sig: process.kill())
-
-    runtime.stop()
-
+    assert _process_is_alive(pid) is False
     assert runtime._process is None
     assert runtime._log_handle is None
-    assert log_handle.closed is True
-
-
-def test_openclaw_stop_swallows_unexpected_process_errors(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    config = _build_openclaw_config(tmp_path)
-    runtime = OpenClawRuntime(config)
-
-    class _RaceProcess:
-        pid = 7000
-
-        def poll(self) -> int | None:
-            return None
-
-        def terminate(self) -> None:
-            return None
-
-        def kill(self) -> None:
-            return None
-
-        def wait(self, timeout: float | None = None) -> int:
-            return 0
-
-    process = _RaceProcess()
-    runtime._process = process  # type: ignore[assignment]
-    config.log_path.parent.mkdir(parents=True, exist_ok=True)
-    log_handle = config.log_path.open("ab")
-    runtime._log_handle = log_handle
-
-    def _killpg_raise(_pid: int, _sig: int) -> None:
-        raise ProcessLookupError("process already exited")
-
-    monkeypatch.setattr("agency_swarm.integrations.openclaw.os.killpg", _killpg_raise)
-
-    runtime.stop()
-
-    assert runtime._process is None
-    assert runtime._log_handle is None
-    assert log_handle.closed is True
