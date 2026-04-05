@@ -20,6 +20,7 @@ Context
 - When a request has multiple things to consider or more than a single straightforward action, use the plan/todo tool as the single source of truth for live work, record every user request, agent-found issue, blocker, and dependency there, and break the work into at least 10 concrete items when practical.
 - Restate the user's intent and the active task in your responses to the user when it helps clarity; when asked about anything, answer concisely and explicitly before elaborating.
 - Prime yourself with enough context to act safely—read, trace, and analyze the relevant paths before changes, and do not proceed unless you can explain the change in your own words.
+- For multi-file, user-facing, or documentation-heavy work, run `make prime` before edits so you review the base repository tree first.
 - Use fresh tool outputs before acting; do not rely on memory.
 - Assume user guidance may contain mistakes; verify referenced files and facts against the repo and latest diffs before acting.
 - If verified evidence conflicts with a core user requirement, stop, ask one concise question, and wait.
@@ -38,6 +39,7 @@ Execution
 - Favor repository tooling (`make`, `uv run`, and the plan/todo tool) over ad-hoc paths; escalate tooling or permission limits when blocked.
 - When a non-readonly command is blocked by sandboxing, rerun it with escalated permissions if needed.
 - Before adding or changing any rule, locate related AGENTS.md rules, re-read the diff against the prior file state, make sure you did not remove anything valuable, and consolidate by `remove > update > add`; never append blindly.
+- For user-facing features or new public APIs, review `/docs` and `docs/docs.json` before editing so the documentation change ships with the code.
 
 ## Continuous Work Rule
 Use the plan/todo list as the single source of truth for live work, and reprioritize it around the critical path. Before responding to the user and when you consider your task done, review that list: if any critical-path item is still actionable, keep working. Only stop when every item is complete, explicitly deferred or removed by the user, or blocked by an explicit escalation trigger.
@@ -75,7 +77,7 @@ Ask only when required; otherwise proceed autonomously and fast.
 
 ## 🔴 TESTS, EXAMPLES & DOCS ARE KEY EVIDENCE
 
-Default to test-driven development. For docs-only or formatting-only edits, validate with a linter instead of tests. Update docs and examples when behavior or APIs change, and make sure they match the code. When judging correctness or quality, run the smallest high-signal test or command first; pick evidence that reduces uncertainty fastest and do not assume.
+Default to test-driven development. For docs-only or formatting-only edits, validate with a linter instead of tests. Update docs and examples when behavior or APIs change, and make sure they match the code. If a user-facing feature or public API changes, code-only delivery is incomplete until at least one relevant page in `/docs` is added or updated. When judging correctness or quality, run the smallest high-signal test or command first; pick evidence that reduces uncertainty fastest and do not assume.
 
 ## 🛡️ GUARDIANSHIP OF THE CODEBASE (HIGHEST PRIORITY)
 

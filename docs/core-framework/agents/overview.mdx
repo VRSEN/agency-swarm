@@ -77,6 +77,7 @@ In agency swarm, to create an agent, you need to instantiate the `Agent` class.
 | Validation Attempts *(optional)* | `validation_attempts` | Number of retries when an output guardrail trips. Default: `1` |
 | Raise Input Guardrail Error *(optional)* | `raise_input_guardrail_error` | If set to `True`, input guardrail errors raise an exception. If set to `False`, the guardrail message is returned as the agent's response. Default: `False` |
 | Handoff Reminder *(optional)* | `handoff_reminder` | Replaces the default handoff reminder system message with a given string. Default: "Transfer completed. You are [recipient_agent_name]. Please continue the task." |
+| Memory *(optional)* | `memory` | Enables durable memory for this agent when the owning agency has memory configured. Use `True` for the default behavior or pass `AgentMemoryConfig(...)` for finer control. Default: `None`. |
 | Include Search Results *(optional)* | `include_search_results` | Include search results in FileSearchTool output for citation extraction. Default: `False` |
 | Include Web Search Sources *(optional)* | `include_web_search_sources` | Include source URLs from WebSearchTool calls. Default: `True` |
 | Conversation Starters *(optional)* | `conversation_starters` | List of short user prompts for UIs. Each starter must be a non-empty string. Default: `None` |
