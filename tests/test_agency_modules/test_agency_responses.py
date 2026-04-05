@@ -394,6 +394,30 @@ async def test_agency_get_response_preserves_override_memory_manager(mock_agent)
 
 
 @pytest.mark.asyncio
+async def test_agency_get_response_uses_override_memory_identity_by_default(mock_agent) -> None:
+    agency = Agency(mock_agent, name="support", memory_folder="/tmp/agency-memory")
+    isolated_context = agency.get_agent_context("MockAgent", thread_manager_override=ThreadManager())
+    isolated_context.memory_identity = MemoryIdentity(
+        user_id="user-override",
+        agency_id="support",
+        session_id="chat-override",
+    )
+
+    await agency.get_response(
+        "Test message",
+        "MockAgent",
+        agency_context_override=isolated_context,
+    )
+
+    assert mock_agent.last_agency_context is not None
+    assert mock_agent.last_agency_context.memory_identity == MemoryIdentity(
+        user_id="user-override",
+        agency_id="support",
+        session_id="chat-override",
+    )
+
+
+@pytest.mark.asyncio
 async def test_agency_get_response_stream_uses_agency_context_override_thread_manager(mock_agent):
     """Streaming entrypoints should respect a run-scoped agency context override."""
     agency = Agency(mock_agent)

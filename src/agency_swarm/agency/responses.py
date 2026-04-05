@@ -307,8 +307,9 @@ def _resolve_agency_context(
             memory_identity=agency_context_override.memory_identity,
             memory_manager=agency_context_override.memory_manager,
         )
+    effective_memory_identity = memory_identity or agency_context.memory_identity
     agency_context.memory_identity = agency.normalize_memory_identity(
-        memory_identity,
+        effective_memory_identity,
         user_id=user_id,
         session_id=session_id,
     )

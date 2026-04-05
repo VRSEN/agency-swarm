@@ -5,11 +5,18 @@ import json
 import threading
 import time
 import uuid
+from contextlib import contextmanager
 from dataclasses import asdict
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .types import MemoryWriteJob
+
+fcntl_module: Any | None
+try:
+    import fcntl as fcntl_module
+except ImportError:  # pragma: no cover - Windows fallback
+    fcntl_module = None
 
 if TYPE_CHECKING:
     from .manager import MemoryManager
@@ -26,6 +33,7 @@ class DurableMemoryQueue:
         self._journal_path.parent.mkdir(parents=True, exist_ok=True)
         self._manager = manager
         self._lock = _get_journal_lock(self._journal_path)
+        self._process_lock_path = self._journal_path.with_suffix(".lock")
         self._start_lock = threading.Lock()
         self._loop: asyncio.AbstractEventLoop | None = None
         self._queue: asyncio.Queue[MemoryWriteJob | None] | None = None
@@ -128,19 +136,20 @@ class DurableMemoryQueue:
 
     def _upsert_job(self, job: MemoryWriteJob) -> None:
         with self._lock:
-            jobs = self._load_jobs()
-            serialized = _serialize_job(job)
-            jobs = [payload for payload in jobs if payload.get("status") not in {"done"}]
-            for index, payload in enumerate(jobs):
-                if payload["job_id"] == job.job_id:
-                    jobs[index] = serialized
-                    break
-            else:
-                jobs.append(serialized)
-            jobs = [payload for payload in jobs if payload.get("status") not in {"done"}]
-            temp_path = self._journal_path.with_suffix(".tmp")
-            temp_path.write_text(json.dumps(jobs, indent=2), encoding="utf-8")
-            temp_path.replace(self._journal_path)
+            with _acquire_process_lock(self._process_lock_path):
+                jobs = self._load_jobs()
+                serialized = _serialize_job(job)
+                jobs = [payload for payload in jobs if payload.get("status") not in {"done"}]
+                for index, payload in enumerate(jobs):
+                    if payload["job_id"] == job.job_id:
+                        jobs[index] = serialized
+                        break
+                else:
+                    jobs.append(serialized)
+                jobs = [payload for payload in jobs if payload.get("status") not in {"done"}]
+                temp_path = self._journal_path.with_suffix(".tmp")
+                temp_path.write_text(json.dumps(jobs, indent=2), encoding="utf-8")
+                temp_path.replace(self._journal_path)
 
     async def _drain_and_stop(self) -> None:
         if self._queue is None:
@@ -161,6 +170,7 @@ def _get_journal_lock(path: Path) -> threading.Lock:
 
 def _serialize_job(job: MemoryWriteJob) -> dict:
     payload = asdict(job)
+    payload["request"]["context_snapshot"] = []
     payload["enqueued_at"] = int(time.time())
     return payload
 
@@ -190,3 +200,18 @@ def _deserialize_job(payload: dict) -> MemoryWriteJob:
         attempts=int(payload.get("attempts", 0)),
         error=payload.get("error"),
     )
+
+
+@contextmanager
+def _acquire_process_lock(lock_path: Path):
+    if fcntl_module is None:
+        yield
+        return
+
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+", encoding="utf-8") as handle:
+        fcntl_module.flock(handle.fileno(), fcntl_module.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl_module.flock(handle.fileno(), fcntl_module.LOCK_UN)

@@ -277,6 +277,44 @@ def test_memory_queue_prunes_completed_jobs_from_journal(tmp_path: Path) -> None
         queue.close()
 
 
+def test_memory_queue_does_not_persist_context_snapshot_in_journal(tmp_path: Path) -> None:
+    class WaitingManager:
+        async def process_job(self, job: MemoryWriteJob) -> None:
+            await asyncio.sleep(0.2)
+
+    queue = DurableMemoryQueue(journal_path=tmp_path / "jobs.json", manager=WaitingManager())  # type: ignore[arg-type]
+    try:
+        queue.enqueue(
+            MemoryWriteJob(
+                job_id="memjob_snapshot",
+                request=MemoryWriteRequest(
+                    operation=MemoryOperation.SAVE,
+                    content="remember this",
+                    rationale="useful preference",
+                    scope=MemoryScope.AGENCY,
+                    memory_type=MemoryType.SYSTEM,
+                    source_agent="Support",
+                    memory_identity=MemoryIdentity(agency_id="agency-1"),
+                    context_snapshot=[{"role": "user", "content": "secret"}],
+                ),
+                provider_names=["markdown"],
+            )
+        )
+
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if queue._journal_path.exists():
+                payload = json.loads(queue._journal_path.read_text(encoding="utf-8"))
+                if payload:
+                    assert payload[0]["request"]["context_snapshot"] == []
+                    break
+            time.sleep(0.05)
+        else:
+            pytest.fail("memory journal did not capture queued job")
+    finally:
+        queue.close()
+
+
 def test_memory_queue_dead_letters_terminal_failures(tmp_path: Path) -> None:
     class FailingManager:
         async def process_job(self, job: MemoryWriteJob) -> None:

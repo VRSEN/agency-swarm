@@ -6,7 +6,7 @@ import textwrap
 from pathlib import Path
 
 import agency_swarm
-from agency_swarm import Agency, Agent
+from agency_swarm import Agency, Agent, Memory
 from agency_swarm.agency.helpers import run_fastapi as helpers_run_fastapi
 from agency_swarm.tools import SendMessage
 
@@ -72,6 +72,27 @@ def test_run_fastapi_creates_new_agency_instance(mocker):
 
     assert load_called, "load_threads_callback was not invoked"
     assert new_agency is not agency, "Factory should create a new Agency instance"
+
+
+def test_run_fastapi_factory_deep_copies_memory_config(mocker, tmp_path: Path):
+    agent = Agent(name="HelperAgent", instructions="test", model="gpt-5.4-mini")
+    agency = Agency(agent, memory=Memory.markdown(folder=tmp_path / "memory"))
+
+    captured = {}
+
+    def fake_run_fastapi(*, agencies=None, **kwargs):
+        captured["factory"] = agencies["agency"]
+        return None
+
+    mocker.patch("agency_swarm.integrations.fastapi.run_fastapi", side_effect=fake_run_fastapi)
+
+    helpers_run_fastapi(agency)
+    factory = captured["factory"]
+    cloned_agency = factory()
+
+    assert cloned_agency.memory is not agency.memory
+    assert cloned_agency.memory.providers is not agency.memory.providers
+    assert cloned_agency.memory.providers == agency.memory.providers
 
 
 class CustomSendMessage(SendMessage):

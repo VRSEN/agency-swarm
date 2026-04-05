@@ -416,6 +416,10 @@ class Agency:
                 agent's instructions for this run only.
             memory_identity (MemoryIdentity | None, optional): Durable memory identity for this run. This is kept
                 separate from `user_context` and is used for scoped system recall and memory tools.
+            user_id (str | None, optional): Convenience durable-memory user scope for this run. Use this instead of
+                `memory_identity.user_id` for the common case.
+            session_id (str | None, optional): Convenience durable-memory session scope for this run. Use this instead
+                of `memory_identity.session_id` for the common case.
             **kwargs: Additional arguments passed down to `get_response_stream` and `run_streamed`.
 
         Returns:
