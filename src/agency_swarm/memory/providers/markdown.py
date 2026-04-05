@@ -158,7 +158,8 @@ class MarkdownMemoryProvider(MemoryProvider):
             except ValueError:
                 continue
             file_path = self._resolve_path(scope.value, memory_type.value, owner_id)
-            records.extend(self._read_records(file_path))
+            with _acquire_file_lock(file_path):
+                records.extend(self._read_records(file_path))
         return records
 
     def _resolve_path(self, scope: str, memory_type: str, owner_id: str) -> Path:
@@ -229,6 +230,10 @@ class MarkdownMemoryProvider(MemoryProvider):
                 raise ValueError(f"malformed metadata line: {line}")
             values[key] = value
 
+        metadata = json.loads(values.get("metadata", "{}"))
+        if not isinstance(metadata, dict):
+            raise ValueError("record metadata must be a JSON object")
+
         return MemoryRecord(
             record_id=record_id,
             provider_name=values["provider"],
@@ -237,7 +242,7 @@ class MarkdownMemoryProvider(MemoryProvider):
             owner_id=values["owner_id"],
             title=values.get("title"),
             content=content.strip(),
-            metadata=json.loads(values.get("metadata", "{}")),
+            metadata=metadata,
         )
 
 

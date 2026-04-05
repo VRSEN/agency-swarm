@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 _JOURNAL_LOCKS: dict[Path, threading.Lock] = {}
 _JOURNAL_LOCKS_GUARD = threading.Lock()
+_MAX_JOB_ATTEMPTS = 5
 
 
 class DurableMemoryQueue:
@@ -25,6 +26,7 @@ class DurableMemoryQueue:
         self._journal_path.parent.mkdir(parents=True, exist_ok=True)
         self._manager = manager
         self._lock = _get_journal_lock(self._journal_path)
+        self._start_lock = threading.Lock()
         self._loop: asyncio.AbstractEventLoop | None = None
         self._queue: asyncio.Queue[MemoryWriteJob | None] | None = None
         self._thread: threading.Thread | None = None
@@ -57,12 +59,13 @@ class DurableMemoryQueue:
     def _ensure_started(self) -> None:
         if self._closed:
             raise RuntimeError("memory queue is closed")
-        if self._thread is not None:
-            return
-        self._loop = asyncio.new_event_loop()
-        self._queue = asyncio.Queue()
-        self._thread = threading.Thread(target=self._run_loop, name="memory-writer", daemon=True)
-        self._thread.start()
+        with self._start_lock:
+            if self._thread is not None:
+                return
+            self._loop = asyncio.new_event_loop()
+            self._queue = asyncio.Queue()
+            self._thread = threading.Thread(target=self._run_loop, name="memory-writer", daemon=True)
+            self._thread.start()
 
     def _run_loop(self) -> None:
         if self._loop is None:
@@ -90,6 +93,10 @@ class DurableMemoryQueue:
                 job.status = "failed"
                 job.error = str(exc)
                 self._upsert_job(job)
+                if job.attempts >= _MAX_JOB_ATTEMPTS:
+                    job.status = "dead_letter"
+                    self._upsert_job(job)
+                    continue
                 await asyncio.sleep(min(2**job.attempts, 30))
                 job.status = "queued"
                 self._upsert_job(job)
@@ -123,12 +130,14 @@ class DurableMemoryQueue:
         with self._lock:
             jobs = self._load_jobs()
             serialized = _serialize_job(job)
+            jobs = [payload for payload in jobs if payload.get("status") not in {"done"}]
             for index, payload in enumerate(jobs):
                 if payload["job_id"] == job.job_id:
                     jobs[index] = serialized
                     break
             else:
                 jobs.append(serialized)
+            jobs = [payload for payload in jobs if payload.get("status") not in {"done"}]
             temp_path = self._journal_path.with_suffix(".tmp")
             temp_path.write_text(json.dumps(jobs, indent=2), encoding="utf-8")
             temp_path.replace(self._journal_path)

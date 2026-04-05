@@ -128,6 +128,7 @@ class MemoryManager:
         provider_names = self._resolve_provider_names(
             providers or list(self.config.agentic_sources),
             capability="agentic_search",
+            allowed_names=set(self.config.agentic_sources),
         )
         results: list[MemoryRecord] = []
         for provider_name in provider_names:
@@ -159,10 +160,11 @@ class MemoryManager:
             return decision
         if not decision.allows_scope(request.scope) or not decision.allows_type(request.memory_type):
             return MemoryPermissionDecision.deny()
+        allowed_write_targets = cast(list[str], [self.config.write_provider] if self.config.write_provider else [])
         provider_names = self._resolve_provider_names(
-            request.requested_providers
-            or cast(list[str], [self.config.write_provider] if self.config.write_provider else []),
+            request.requested_providers or allowed_write_targets,
             capability="write",
+            allowed_names=set(allowed_write_targets),
         )
         resolved_provider_names = [name for name in provider_names if decision.allows_provider(name)]
         if not resolved_provider_names:
@@ -264,10 +266,13 @@ class MemoryManager:
         provider_names: list[str],
         *,
         capability: str,
+        allowed_names: set[str] | None = None,
     ) -> list[str]:
         resolved: list[str] = []
         for provider_name in provider_names:
             capabilities = self._provider_capabilities(provider_name)
+            if allowed_names is not None and provider_name not in allowed_names:
+                raise ValueError(f"Memory provider '{provider_name}' is not enabled for {capability}")
             if not getattr(capabilities, capability):
                 raise ValueError(f"Memory provider '{provider_name}' does not support {capability}")
             resolved.append(provider_name)

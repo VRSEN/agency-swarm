@@ -4,7 +4,6 @@ import contextvars
 import logging
 import threading
 from concurrent.futures import Future
-from copy import copy
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
@@ -291,9 +290,23 @@ def _resolve_agency_context(
     session_id: str | None,
 ) -> "AgencyContext":
     """Return the run-scoped agency context with durable-memory state applied."""
-    agency_context = (
-        copy(agency_context_override) if agency_context_override is not None else get_agent_context(agency, agent_name)
-    )
+    if agency_context_override is None:
+        agency_context = get_agent_context(agency, agent_name)
+    else:
+        from agency_swarm.agent.context_types import AgencyContext
+
+        # Keep the live thread manager and runtime state for this run, but isolate
+        # the top-level memory fields so caller-owned overrides stay unchanged.
+        agency_context = AgencyContext(
+            agency_instance=agency_context_override.agency_instance,
+            thread_manager=agency_context_override.thread_manager,
+            runtime_state=agency_context_override.runtime_state,
+            load_threads_callback=agency_context_override.load_threads_callback,
+            save_threads_callback=agency_context_override.save_threads_callback,
+            shared_instructions=agency_context_override.shared_instructions,
+            memory_identity=agency_context_override.memory_identity,
+            memory_manager=agency_context_override.memory_manager,
+        )
     agency_context.memory_identity = agency.normalize_memory_identity(
         memory_identity,
         user_id=user_id,

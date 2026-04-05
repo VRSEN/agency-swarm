@@ -348,6 +348,28 @@ async def test_agency_get_response_does_not_mutate_agency_context_override_memor
 
 
 @pytest.mark.asyncio
+async def test_agency_get_response_sync_uses_agency_context_override_thread_manager(mock_agent) -> None:
+    agency = Agency(mock_agent)
+    isolated_thread_manager = ThreadManager()
+    isolated_context = agency.get_agent_context("MockAgent", thread_manager_override=isolated_thread_manager)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        result = agency.get_response_sync(
+            "Test message",
+            "MockAgent",
+            agency_context_override=isolated_context,
+        )
+
+    assert result.final_output == "Test response"
+    assert mock_agent.last_agency_context is not isolated_context
+    assert mock_agent.last_agency_context is not None
+    assert mock_agent.last_agency_context.thread_manager is isolated_thread_manager
+    assert isolated_thread_manager.get_all_messages()
+    assert agency.thread_manager.get_all_messages() == []
+
+
+@pytest.mark.asyncio
 async def test_agency_get_response_stream_uses_agency_context_override_thread_manager(mock_agent):
     """Streaming entrypoints should respect a run-scoped agency context override."""
     agency = Agency(mock_agent)
