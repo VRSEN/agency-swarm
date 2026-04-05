@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -230,6 +231,37 @@ async def test_default_permission_resolver_denies_writes(markdown_config: Memory
         )
         assert decision.mode.value == "deny"
         assert not Path(markdown_config.journal_path).exists()
+    finally:
+        manager.close()
+
+
+@pytest.mark.asyncio
+async def test_permission_resolver_accepts_non_coroutine_awaitables(markdown_config: MemoryConfig) -> None:
+    loop = asyncio.get_running_loop()
+
+    def permission_resolver(*_args, **_kwargs) -> asyncio.Future[MemoryPermissionDecision]:
+        future: asyncio.Future[MemoryPermissionDecision] = loop.create_future()
+        future.set_result(MemoryPermissionDecision.allow())
+        return future
+
+    config = replace(markdown_config, permission_resolver=permission_resolver)
+    manager = MemoryManager(config)
+    try:
+        decision = await manager.request_write(
+            request=MemoryWriteRequest(
+                operation=MemoryOperation.SAVE,
+                content="Remember this",
+                rationale="User preference",
+                scope=MemoryScope.USER,
+                memory_type=MemoryType.SYSTEM,
+                source_agent="Support",
+                memory_identity=MemoryIdentity(user_id="user-1", agency_id="agency-1"),
+                context_snapshot=[],
+            ),
+            runtime_context=None,
+            agent_config=AgentMemoryConfig(),
+        )
+        assert decision.mode.value == "allow"
     finally:
         manager.close()
 

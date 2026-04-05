@@ -78,7 +78,10 @@ class RunAgentInputCustom(RunAgentInput):
     )
     user_id: str | None = Field(
         default=None,
-        description="Convenience durable-memory user scope for this run.",
+        description=(
+            "Convenience durable-memory user scope for this run. Bind this value from trusted server-side "
+            "identity checks; do not trust raw client input for cross-user memory isolation."
+        ),
     )
     session_id: str | None = Field(
         default=None,
@@ -86,7 +89,10 @@ class RunAgentInputCustom(RunAgentInput):
     )
     memory_identity: MemoryIdentity | None = Field(
         default=None,
-        description="Advanced durable memory identity override for this run. This is separate from user_context.",
+        description=(
+            "Advanced durable memory identity override for this run. This is separate from user_context. "
+            "Bind identity fields server-side when requests can come from untrusted clients."
+        ),
     )
     file_ids: list[str] | None = None
     file_urls: dict[str, str] | None = Field(
@@ -131,7 +137,10 @@ class BaseRequest(BaseModel):
     )
     user_id: str | None = Field(
         default=None,
-        description="Convenience durable-memory user scope for this run.",
+        description=(
+            "Convenience durable-memory user scope for this run. Bind this value from trusted server-side "
+            "identity checks; do not trust raw client input for cross-user memory isolation."
+        ),
     )
     session_id: str | None = Field(
         default=None,
@@ -139,7 +148,10 @@ class BaseRequest(BaseModel):
     )
     memory_identity: MemoryIdentity | None = Field(
         default=None,
-        description="Advanced durable memory identity override for this run. This is separate from user_context.",
+        description=(
+            "Advanced durable memory identity override for this run. This is separate from user_context. "
+            "Bind identity fields server-side when requests can come from untrusted clients."
+        ),
     )
     generate_chat_name: bool | None = Field(
         default=False, description="Generate a fitting chat name for the user input."
