@@ -38,11 +38,18 @@ class MemoryManager:
         self.config = config
         self.providers = self._build_providers(config.providers)
         self._validate_config()
+        self._atexit_registered = False
         journal_path = Path(config.journal_path or ".agency_swarm/memory/jobs.json")
         self.queue = DurableMemoryQueue(journal_path=journal_path, manager=self)
 
     def close(self) -> None:
         self.queue.close()
+
+    def mark_atexit_registered(self) -> bool:
+        if self._atexit_registered:
+            return False
+        self._atexit_registered = True
+        return True
 
     def validate_run(
         self,
