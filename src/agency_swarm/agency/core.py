@@ -97,6 +97,7 @@ class Agency:
         user_context: dict[str, Any] | None = None,
         memory: MemoryConfig | None = None,
         memory_folder: str | os.PathLike[str] | None = None,
+        _memory_manager: MemoryManager | None = None,
     ):
         """
         Initializes the Agency object.
@@ -173,7 +174,14 @@ class Agency:
         self.send_message_tool_class = send_message_tool_class
         if memory is not None and memory_folder is not None:
             raise ValueError("Use either memory or memory_folder, not both.")
-        self.memory = memory or (MemoryConfig.markdown(folder=memory_folder) if memory_folder else None)
+        configured_memory = memory or (MemoryConfig.markdown(folder=memory_folder) if memory_folder else None)
+        if (
+            _memory_manager is not None
+            and configured_memory is not None
+            and configured_memory is not _memory_manager.config
+        ):
+            raise ValueError("Provided _memory_manager must match the agency memory configuration.")
+        self.memory = _memory_manager.config if _memory_manager is not None else configured_memory
         self.shared_tools = shared_tools
         self.shared_tools_folder = shared_tools_folder
         self.shared_files_folder = shared_files_folder
@@ -192,7 +200,7 @@ class Agency:
         self._agent_runtime_state = {}
         self._load_threads_callback = load_threads_callback
         self._save_threads_callback = save_threads_callback
-        self.memory_manager = MemoryManager(self.memory) if self.memory else None
+        self.memory_manager = _memory_manager or (MemoryManager(self.memory) if self.memory else None)
         initialize_agent_runtime_state(self)
         self._starter_cache_warmup_started = False
 

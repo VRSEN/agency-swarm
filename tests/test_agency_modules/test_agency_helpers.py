@@ -74,7 +74,7 @@ def test_run_fastapi_creates_new_agency_instance(mocker):
     assert new_agency is not agency, "Factory should create a new Agency instance"
 
 
-def test_run_fastapi_factory_deep_copies_memory_config(mocker, tmp_path: Path):
+def test_run_fastapi_factory_reuses_memory_manager(mocker, tmp_path: Path):
     agent = Agent(name="HelperAgent", instructions="test", model="gpt-5.4-mini")
     agency = Agency(agent, memory=Memory.markdown(folder=tmp_path / "memory"))
 
@@ -90,9 +90,8 @@ def test_run_fastapi_factory_deep_copies_memory_config(mocker, tmp_path: Path):
     factory = captured["factory"]
     cloned_agency = factory()
 
-    assert cloned_agency.memory is not agency.memory
-    assert cloned_agency.memory.providers is not agency.memory.providers
-    assert cloned_agency.memory.providers == agency.memory.providers
+    assert cloned_agency.memory is agency.memory
+    assert cloned_agency.memory_manager is agency.memory_manager
 
 
 def test_run_fastapi_forwards_memory_identity_security_options(mocker):
