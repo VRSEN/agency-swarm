@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from openai import AsyncOpenAI
+from openai.types.vector_store_search_params import ComparisonFilter
 
 from agency_swarm.memory.provider import MemoryProvider
 from agency_swarm.memory.types import (
@@ -20,13 +21,17 @@ class OpenAIFileSearchMemoryProvider(MemoryProvider):
         name: str,
         vector_store_ids: list[str],
         scope: MemoryScope = MemoryScope.AGENT,
+        owner_attribute_key: str | None = None,
         client: AsyncOpenAI | None = None,
     ):
         if not vector_store_ids:
             raise ValueError("OpenAIFileSearchMemoryProvider requires at least one vector_store_id")
+        if scope is MemoryScope.USER and not owner_attribute_key:
+            raise ValueError("User-scoped OpenAI file search memory requires owner_attribute_key")
         self.name = name
         self.vector_store_ids = list(vector_store_ids)
         self.scope = scope
+        self.owner_attribute_key = owner_attribute_key
         self.client = client or AsyncOpenAI()
         self.capabilities = MemoryProviderCapabilities(
             system_recall=False,
@@ -61,11 +66,24 @@ class OpenAIFileSearchMemoryProvider(MemoryProvider):
         owner_id = memory_identity.resolve_scope_owner(self.scope, agent_name=agent_name)
         results: list[MemoryRecord] = []
         for vector_store_id in self.vector_store_ids:
-            page = await self.client.vector_stores.search(
-                vector_store_id=vector_store_id,
-                query=query,
-                max_num_results=limit,
-            )
+            if self.owner_attribute_key:
+                filters: ComparisonFilter = {
+                    "type": "eq",
+                    "key": self.owner_attribute_key,
+                    "value": owner_id,
+                }
+                page = await self.client.vector_stores.search(
+                    vector_store_id=vector_store_id,
+                    query=query,
+                    filters=filters,
+                    max_num_results=limit,
+                )
+            else:
+                page = await self.client.vector_stores.search(
+                    vector_store_id=vector_store_id,
+                    query=query,
+                    max_num_results=limit,
+                )
             for item in page.data:
                 content_text = "\n".join(result.text or "" for result in getattr(item, "content", []))
                 results.append(

@@ -5,6 +5,7 @@ import logging
 import re
 import threading
 from pathlib import Path
+from urllib.parse import quote
 
 from agency_swarm.memory.provider import MemoryProvider
 from agency_swarm.memory.types import (
@@ -152,9 +153,9 @@ class MarkdownMemoryProvider(MemoryProvider):
     def _resolve_path(self, scope: str, memory_type: str, owner_id: str) -> Path:
         return Path(
             self.path_template.format(
-                scope=scope,
-                memory_type=memory_type,
-                owner_id=owner_id,
+                scope=_sanitize_path_component(scope),
+                memory_type=_sanitize_path_component(memory_type),
+                owner_id=_sanitize_path_component(owner_id),
             )
         )
 
@@ -237,3 +238,7 @@ def _get_file_lock(path: Path) -> threading.Lock:
             lock = threading.Lock()
             _FILE_LOCKS[resolved] = lock
         return lock
+
+
+def _sanitize_path_component(value: str) -> str:
+    return quote(value, safe="")

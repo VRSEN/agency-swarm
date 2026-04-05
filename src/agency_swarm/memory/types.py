@@ -1,27 +1,27 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class MemoryScope(str, Enum):
+class MemoryScope(StrEnum):
     USER = "user"
     AGENT = "agent"
     AGENCY = "agency"
 
 
-class MemoryType(str, Enum):
+class MemoryType(StrEnum):
     SYSTEM = "system"
     AGENTIC = "agentic"
 
 
-class MemoryOperation(str, Enum):
+class MemoryOperation(StrEnum):
     SAVE = "save"
     DELETE = "delete"
 
 
-class MemoryPermissionMode(str, Enum):
+class MemoryPermissionMode(StrEnum):
     DENY = "deny"
     ALLOW = "allow"
     REQUIRE_APPROVAL = "require_approval"

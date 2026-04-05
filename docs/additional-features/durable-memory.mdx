@@ -134,6 +134,10 @@ agency = Agency(
 - It cannot be the write provider.
 - Each provider instance is bound to one scope. Use separate provider configs if you need separate user, agent, or agency vector stores.
 
+<Note>
+If you use `scope=MemoryScope.USER`, set `owner_attribute_key` and make sure your vector-store files include that attribute. Agency Swarm uses that attribute filter to prevent cross-user retrieval from shared vector stores.
+</Note>
+
 ## Advanced Composition
 
 Use the raw `providers=[...]` form only when you want to combine multiple backends in one config.
