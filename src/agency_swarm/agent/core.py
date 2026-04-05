@@ -43,6 +43,8 @@ from agency_swarm.agent.execution_streaming import StreamingRunResponse
 from agency_swarm.agent.file_manager import AgentFileManager
 from agency_swarm.agent.tools import _attach_one_call_guard
 from agency_swarm.context import MasterContext
+from agency_swarm.memory import AgentMemoryConfig
+from agency_swarm.memory.tools import build_request_memory_write_tool, build_search_memory_tool
 from agency_swarm.tools.concurrency import ToolConcurrencyManager
 from agency_swarm.tools.mcp_manager import convert_mcp_servers_to_tools
 from agency_swarm.utils.dry_run import is_dry_run
@@ -101,6 +103,7 @@ class Agent(BaseAgent[MasterContext]):
     _conversation_starters_cache: dict[str, Any]
     _conversation_starters_fingerprint: str | None
     _conversation_starters_warmup_started: bool
+    memory: AgentMemoryConfig | None
 
     # --- SDK Agent Compatibility ---
     # Re-declare attributes from BaseAgent for clarity and potential overrides
@@ -136,6 +139,8 @@ class Agent(BaseAgent[MasterContext]):
                 Defaults to False.
             handoff_reminder (str | None): Custom reminder for handoffs.
                 Defaults to `Transfer completed. You are {recipient_agent_name}. Please continue the task.`
+            memory (bool | AgentMemoryConfig | None): Per-agent durable memory controls. Set `True` to enable the
+                default durable-memory behavior for this agent when the owning agency has memory configured.
 
         ## OpenAI Agents SDK Parameters:
             prompt (Prompt | DynamicPromptFunction | None): Dynamic prompt configuration.
@@ -218,6 +223,14 @@ class Agent(BaseAgent[MasterContext]):
             current_agent_params.get("supports_framework_tool_wiring", self.supports_framework_tool_wiring)
         )
         self.handoff_reminder = current_agent_params.get("handoff_reminder")
+        memory_config = current_agent_params.get("memory")
+        if memory_config is True:
+            memory_config = AgentMemoryConfig()
+        elif memory_config is False:
+            memory_config = None
+        elif memory_config is not None and not isinstance(memory_config, AgentMemoryConfig):
+            raise TypeError("memory must be an AgentMemoryConfig instance")
+        self.memory = memory_config
 
         # Internal state
         self._openai_client = None
@@ -254,6 +267,7 @@ class Agent(BaseAgent[MasterContext]):
         if self.supports_framework_tool_wiring:
             parse_schemas(self)
             load_tools_from_folder(self)
+            self._configure_memory_tools()
 
         # Wrap input guardrails
         wrap_input_guardrails(self)
@@ -302,6 +316,15 @@ class Agent(BaseAgent[MasterContext]):
     def tool_concurrency_manager(self) -> ToolConcurrencyManager:
         """Provides access to the agent's tool concurrency manager."""
         return self._tool_concurrency_manager
+
+    def _configure_memory_tools(self) -> None:
+        """Attach durable memory tools when memory is enabled for this agent."""
+        if self.memory is None:
+            return
+        if self.memory.enable_search_tool:
+            self.add_tool(build_search_memory_tool())
+        if self.memory.enable_write_tool:
+            self.add_tool(build_request_memory_write_tool())
 
     @property
     def throw_input_guardrail_error(self) -> bool:
@@ -613,6 +636,8 @@ class Agent(BaseAgent[MasterContext]):
             load_threads_callback=None,
             save_threads_callback=None,
             shared_instructions=shared_instructions,
+            memory_identity=None,
+            memory_manager=None,
         )
 
 

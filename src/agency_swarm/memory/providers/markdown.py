@@ -1,0 +1,239 @@
+from __future__ import annotations
+
+import json
+import logging
+import re
+import threading
+from pathlib import Path
+
+from agency_swarm.memory.provider import MemoryProvider
+from agency_swarm.memory.types import (
+    CanonicalMemoryWrite,
+    MemoryIdentity,
+    MemoryProviderCapabilities,
+    MemoryRecord,
+    MemoryScope,
+    MemoryType,
+)
+
+logger = logging.getLogger(__name__)
+
+_DOCUMENT_HEADER = "# Durable Memory\n\n<!-- agency-swarm-memory-v1 -->\n"
+_RECORD_PATTERN = re.compile(
+    r"<!-- memory-record-start -->\n(?P<body>.*?)\n<!-- memory-record-end -->",
+    re.DOTALL,
+)
+_FILE_LOCKS: dict[Path, threading.Lock] = {}
+_FILE_LOCKS_GUARD = threading.Lock()
+
+
+class MarkdownMemoryProvider(MemoryProvider):
+    def __init__(self, *, name: str, path_template: str):
+        self.name = name
+        self.path_template = path_template
+        self.capabilities = MemoryProviderCapabilities(
+            system_recall=True,
+            agentic_search=True,
+            write=True,
+            delete=True,
+        )
+
+    async def recall_system(
+        self,
+        *,
+        memory_identity: MemoryIdentity,
+        agent_name: str,
+        scopes: tuple[MemoryScope, ...],
+        limit: int,
+    ) -> list[MemoryRecord]:
+        records = await self._load_records(
+            memory_identity=memory_identity,
+            agent_name=agent_name,
+            scopes=scopes,
+            memory_type=MemoryType.SYSTEM,
+        )
+        return records[:limit]
+
+    async def search_agentic(
+        self,
+        *,
+        query: str,
+        memory_identity: MemoryIdentity,
+        agent_name: str,
+        scopes: tuple[MemoryScope, ...],
+        limit: int,
+    ) -> list[MemoryRecord]:
+        records = await self._load_records(
+            memory_identity=memory_identity,
+            agent_name=agent_name,
+            scopes=scopes,
+            memory_type=MemoryType.AGENTIC,
+        )
+        if not query.strip():
+            return records[:limit]
+        lowered = query.lower()
+        matches = [
+            record for record in records if lowered in record.content.lower() or lowered in (record.title or "").lower()
+        ]
+        return matches[:limit]
+
+    async def apply_write(
+        self,
+        *,
+        write: CanonicalMemoryWrite,
+        memory_identity: MemoryIdentity,
+        agent_name: str,
+    ) -> MemoryRecord:
+        owner_id = memory_identity.resolve_scope_owner(write.scope, agent_name=agent_name)
+        file_path = self._resolve_path(write.scope.value, write.memory_type.value, owner_id)
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_lock = _get_file_lock(file_path)
+        with file_lock:
+            records = self._read_records(file_path)
+
+            new_record = MemoryRecord(
+                record_id=write.record_id,
+                provider_name=self.name,
+                scope=write.scope,
+                memory_type=write.memory_type,
+                owner_id=owner_id,
+                title=write.title,
+                content=write.content,
+                metadata=dict(write.metadata),
+            )
+
+            updated = False
+            for index, record in enumerate(records):
+                if record.record_id == write.record_id:
+                    records[index] = new_record
+                    updated = True
+                    break
+            if not updated:
+                records.append(new_record)
+
+            self._write_records(file_path, records)
+            return new_record
+
+    async def delete_record(self, *, record_id: str, memory_identity: MemoryIdentity, agent_name: str) -> None:
+        for scope in MemoryScope:
+            for memory_type in MemoryType:
+                try:
+                    owner_id = memory_identity.resolve_scope_owner(scope, agent_name=agent_name)
+                except ValueError:
+                    continue
+                file_path = self._resolve_path(scope.value, memory_type.value, owner_id)
+                file_lock = _get_file_lock(file_path)
+                with file_lock:
+                    records = self._read_records(file_path)
+                    filtered = [record for record in records if record.record_id != record_id]
+                    if len(filtered) == len(records):
+                        continue
+                    self._write_records(file_path, filtered)
+                    return
+
+    async def _load_records(
+        self,
+        *,
+        memory_identity: MemoryIdentity,
+        agent_name: str,
+        scopes: tuple[MemoryScope, ...],
+        memory_type: MemoryType,
+    ) -> list[MemoryRecord]:
+        records: list[MemoryRecord] = []
+        for scope in scopes:
+            try:
+                owner_id = memory_identity.resolve_scope_owner(scope, agent_name=agent_name)
+            except ValueError:
+                continue
+            file_path = self._resolve_path(scope.value, memory_type.value, owner_id)
+            records.extend(self._read_records(file_path))
+        return records
+
+    def _resolve_path(self, scope: str, memory_type: str, owner_id: str) -> Path:
+        return Path(
+            self.path_template.format(
+                scope=scope,
+                memory_type=memory_type,
+                owner_id=owner_id,
+            )
+        )
+
+    def _read_records(self, file_path: Path) -> list[MemoryRecord]:
+        if not file_path.exists():
+            return []
+        text = file_path.read_text(encoding="utf-8").strip()
+        if not text:
+            return []
+
+        records: list[MemoryRecord] = []
+        for match in _RECORD_PATTERN.finditer(text):
+            try:
+                records.append(self._parse_record(match.group("body")))
+            except ValueError as exc:
+                logger.warning("Skipping malformed markdown memory record in %s: %s", file_path, exc)
+        return records
+
+    def _write_records(self, file_path: Path, records: list[MemoryRecord]) -> None:
+        body = _DOCUMENT_HEADER
+        if records:
+            body += "\n\n".join(self._render_record(record) for record in records) + "\n"
+        temp_path = file_path.with_suffix(f"{file_path.suffix}.tmp")
+        temp_path.write_text(body, encoding="utf-8")
+        temp_path.replace(file_path)
+
+    def _render_record(self, record: MemoryRecord) -> str:
+        title = record.title or "Untitled memory"
+        metadata_text = json.dumps(record.metadata, sort_keys=True, ensure_ascii=True)
+        return "\n".join(
+            [
+                "<!-- memory-record-start -->",
+                f"## {record.record_id}",
+                f"title: {title}",
+                f"provider: {record.provider_name}",
+                f"scope: {record.scope.value}",
+                f"memory_type: {record.memory_type.value}",
+                f"owner_id: {record.owner_id}",
+                f"metadata: {metadata_text}",
+                "",
+                record.content.strip(),
+                "<!-- memory-record-end -->",
+            ]
+        )
+
+    def _parse_record(self, body: str) -> MemoryRecord:
+        metadata_block, separator, content = body.partition("\n\n")
+        if not separator:
+            raise ValueError("record body is missing content separator")
+
+        lines = metadata_block.splitlines()
+        if not lines or not lines[0].startswith("## "):
+            raise ValueError("record body is missing record heading")
+
+        record_id = lines[0][3:].strip()
+        values: dict[str, str] = {}
+        for line in lines[1:]:
+            key, sep, value = line.partition(": ")
+            if not sep:
+                raise ValueError(f"malformed metadata line: {line}")
+            values[key] = value
+
+        return MemoryRecord(
+            record_id=record_id,
+            provider_name=values["provider"],
+            scope=MemoryScope(values["scope"]),
+            memory_type=MemoryType(values["memory_type"]),
+            owner_id=values["owner_id"],
+            title=values.get("title"),
+            content=content.strip(),
+            metadata=json.loads(values.get("metadata", "{}")),
+        )
+
+
+def _get_file_lock(path: Path) -> threading.Lock:
+    resolved = path.resolve()
+    with _FILE_LOCKS_GUARD:
+        lock = _FILE_LOCKS.get(resolved)
+        if lock is None:
+            lock = threading.Lock()
+            _FILE_LOCKS[resolved] = lock
+        return lock

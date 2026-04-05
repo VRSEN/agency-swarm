@@ -319,6 +319,9 @@ def make_response_endpoint(
                 context_override=request.user_context,
                 additional_instructions=request.additional_instructions,
                 file_ids=combined_file_ids,
+                memory_identity=request.memory_identity,
+                user_id=request.user_id,
+                session_id=request.session_id,
             )
             # Get only new messages added during this request
             all_messages = agency_instance.thread_manager.get_all_messages()
@@ -453,6 +456,9 @@ def make_stream_endpoint(
                     context_override=request.user_context,
                     additional_instructions=request.additional_instructions,
                     file_ids=combined_file_ids,
+                    memory_identity=request.memory_identity,
+                    user_id=request.user_id,
+                    session_id=request.session_id,
                 )
 
                 active_run = ActiveRun(
@@ -722,6 +728,9 @@ def make_agui_chat_endpoint(
                     context_override=request.user_context,
                     additional_instructions=request.additional_instructions,
                     file_ids=combined_file_ids or None,
+                    memory_identity=request.memory_identity,
+                    user_id=request.user_id,
+                    session_id=request.session_id,
                 ):
                     agui_event = agui_adapter.openai_to_agui_events(
                         event,

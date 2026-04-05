@@ -4,8 +4,10 @@ from typing import Any
 import pytest
 from agents import ModelSettings, RunConfig, RunHooks, RunResult, TResponseInputItem
 
-from agency_swarm import Agency, Agent
+from agency_swarm import Agency, Agent, MemoryConfig
 from agency_swarm.agent.context_types import AgencyContext
+from agency_swarm.utils.thread import ThreadManager
+from agency_swarm.memory import AgentMemoryConfig, MemoryIdentity
 from agency_swarm.utils.thread import ThreadManager
 from tests.deterministic_model import DeterministicModel
 
@@ -113,6 +115,37 @@ async def test_agency_get_response_basic(mock_agent):
     result = await agency.get_response("Test message", "MockAgent")
 
     assert result.final_output == "Test response"
+
+
+@pytest.mark.asyncio
+async def test_agency_get_response_builds_memory_identity_from_flat_fields() -> None:
+    agent = CapturingAgent("MemoryAgent", response_text="Memory response")
+    agent.memory = AgentMemoryConfig()
+    agency = Agency(agent, name="support", memory_folder="/tmp/agency-memory")
+
+    result = await agency.get_response(
+        "Test message",
+        "MemoryAgent",
+        user_id="user-1",
+        session_id="chat-1",
+    )
+
+    assert result.final_output == "Memory response"
+    assert agent.last_agency_context is not None
+    assert agent.last_agency_context.memory_identity == MemoryIdentity(
+        user_id="user-1",
+        agency_id="support",
+        session_id="chat-1",
+    )
+
+
+def test_agency_memory_folder_conflicts_with_memory_config(mock_agent) -> None:
+    with pytest.raises(ValueError, match="Use either memory or memory_folder"):
+        Agency(
+            mock_agent,
+            memory_folder="/tmp/agency-memory",
+            memory=MemoryConfig.mem0(),
+        )
 
 
 @pytest.mark.asyncio

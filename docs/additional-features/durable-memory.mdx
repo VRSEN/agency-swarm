@@ -1,0 +1,240 @@
+---
+title: "Durable Memory"
+description: "Give agents durable, portable context across sessions without bloating prompts."
+icon: "brain"
+---
+
+Durable memory gives Agency Swarm agents a long-term memory layer that stays separate from thread history. The goal is simple: keep important context across sessions without dumping old chats back into every prompt.
+
+## What This Feature Is
+
+- Start with simple, configurable markdown files.
+- Keep the storage location under your control.
+- Use `/mnt/...` in containers when you want persistence across restarts.
+- Support multiple providers behind one abstraction.
+- Split memory into two types: `system` and `agentic`.
+- Scope memory to `user`, `agent`, or `agency`.
+
+<Note>
+Agency Swarm does not force a built-in agency vector database on you. Markdown, Mem0, and OpenAI file search fit behind the same memory abstraction, and you stay in control of which backend is the source of truth.
+</Note>
+
+## Start Simple
+
+Start with markdown first. It is the easiest setup, it is human-readable, and it matches the original design goal for this feature.
+
+```python
+from agency_swarm import Agency, Agent
+
+support = Agent(
+    name="Support",
+    instructions="You help customers.",
+    model="gpt-5-mini",
+    memory=True,
+)
+
+agency = Agency(
+    support,
+    name="support_agency",
+    memory_folder="/mnt/agency-memory",
+)
+
+result = await agency.get_response(
+    "Help this customer with their billing question.",
+    user_id="user_123",
+)
+```
+
+<Note>
+`user_id` and `session_id` are the simple public API. `memory_identity` is the advanced override.
+
+- `user_context` is shared runtime data for the current run.
+- Durable memory identity stays separate from `user_context`.
+</Note>
+
+## Mental Model
+
+### Memory Types
+
+- `system` memory is recalled before the run and injected into instructions for that run only.
+- `agentic` memory is searched or updated through tools during the run.
+
+### Memory Scopes
+
+- `agency` memory is shared across the whole agency.
+- `agent` memory is scoped to one agent name.
+- `user` memory is scoped to one `user_id`.
+
+<Note>
+If you enable `user` scope, pass a `user_id` on every run. The framework fails fast when that ID is missing.
+</Note>
+
+## Pick the Right Provider
+
+Use the simplest provider that solves the problem.
+
+| Provider | Best for | System recall | Agentic search | Writes |
+| --- | --- | --- | --- | --- |
+| Markdown | Default source of truth | Yes | Yes | Yes |
+| Mem0 | Managed memory backend | Yes | Yes | Yes |
+| OpenAI file search | Retrieval over existing vector stores | No | Yes | No |
+
+### Markdown
+
+Use markdown when you want the default, user-controlled path.
+
+```python
+agency = Agency(
+    support,
+    memory_folder="/mnt/agency-memory",
+)
+```
+
+- The framework manages one markdown file per `{scope, memory_type, owner_id}` under that root folder.
+- You control the root path.
+- The files stay readable and editable by humans.
+
+### Mem0
+
+Use Mem0 when you want a managed backend behind the same Agency Swarm abstraction.
+
+```python
+from agency_swarm import Memory
+from mem0 import Memory as Mem0Client
+
+agency = Agency(
+    support,
+    memory=Memory.mem0(client=Mem0Client()),
+)
+```
+
+- `user` scope maps to `user_id`.
+- `agent` scope maps to the current agent name.
+- `agency` scope is stored in metadata and filtered explicitly.
+
+### OpenAI File Search
+
+Use OpenAI file search when you already have vector stores and want retrieval, not canonical storage.
+
+```python
+from agency_swarm import Memory, MemoryScope
+
+agency = Agency(
+    support,
+    memory=Memory.openai_file_search(
+        vector_store_ids=["vs_123"],
+        scope=MemoryScope.AGENT,
+    ),
+)
+```
+
+- This provider is retrieval-only in v1.
+- It supports `search_memory`.
+- It cannot be the system-memory source.
+- It cannot be the write provider.
+- Each provider instance is bound to one scope. Use separate provider configs if you need separate user, agent, or agency vector stores.
+
+## Advanced Composition
+
+Use the raw `providers=[...]` form only when you want to combine multiple backends in one config.
+
+This is the main example where the low-level constructor is justified: markdown stays the source of truth, while OpenAI file search acts as an extra retrieval index.
+
+```python
+from agency_swarm import (
+    MarkdownMemoryProviderConfig,
+    MemoryConfig,
+    MemoryScope,
+    OpenAIFileSearchMemoryProviderConfig,
+)
+
+agency = Agency(
+    support,
+    memory=MemoryConfig(
+        providers=[
+            MarkdownMemoryProviderConfig.from_folder("/mnt/agency-memory"),
+            OpenAIFileSearchMemoryProviderConfig(
+                vector_store_ids=["vs_123"],
+                scope=MemoryScope.AGENT,
+            ),
+        ],
+        system_sources=("markdown",),
+        agentic_sources=("markdown", "openai_file_search"),
+        write_provider="markdown",
+    ),
+)
+```
+
+## Use the Built-In Tools
+
+When an agent opts into memory with `memory=True` or `memory=AgentMemoryConfig(...)`, it gets two tools:
+
+- `search_memory(query, scopes?, providers?, limit?)`
+- `request_memory_write(operation, content, rationale, scope, memory_type, providers?)`
+
+`request_memory_write` does not write directly. It queues a background job, runs the internal memory writer pipeline, and then applies the validated write to the configured provider.
+
+## Permission and Consent
+
+Memory writes are denied by default. Add a `permission_resolver` when you want to allow them.
+
+```python
+from agency_swarm import Memory, MemoryPermissionDecision, MemoryScope, MemoryType
+
+
+async def allow_user_system_memories(request, memory_identity, runtime_context):
+    if request.scope is not MemoryScope.USER:
+        return MemoryPermissionDecision.deny()
+    if request.memory_type is not MemoryType.SYSTEM:
+        return MemoryPermissionDecision.deny()
+    return MemoryPermissionDecision.allow(providers={"markdown"})
+
+
+memory = Memory.markdown(permission_resolver=allow_user_system_memories)
+```
+
+This is the place to enforce your consent or approval rules.
+
+## FastAPI Requests
+
+When you use [FastAPI Integration](/additional-features/fastapi-integration), pass `user_id` and `session_id` as top-level request fields for the common case.
+
+```json
+{
+  "message": "Help this customer",
+  "recipient_agent": "Support",
+  "user_context": {
+    "locale": "en-US"
+  },
+  "user_id": "user_123",
+  "session_id": "chat_456"
+}
+```
+
+Use `memory_identity` only when you need the advanced override.
+
+## Important Rules
+
+<Accordion title="Durable memory rules" defaultOpen={false}>
+  - Durable memory is separate from thread history.
+  - System memory is injected into runtime instructions only. It is not added back into saved chat history.
+  - `memory_identity` is the advanced override. It stays separate from `user_context`.
+  - OpenAI file search is agentic retrieval only in v1.
+  - Writes go through the internal memory writer pipeline and a durable background queue.
+  - Every write-capable provider must support deletion by record ID for future revocation flows.
+</Accordion>
+
+## Implementation Reference
+
+Key files for maintainers:
+
+- [Memory manager](https://github.com/VRSEN/agency-swarm/blob/main/src/agency_swarm/memory/manager.py)
+- [Markdown provider](https://github.com/VRSEN/agency-swarm/blob/main/src/agency_swarm/memory/providers/markdown.py)
+- [Agency runtime wiring](https://github.com/VRSEN/agency-swarm/blob/main/src/agency_swarm/agency/core.py)
+- [Execution-time system recall](https://github.com/VRSEN/agency-swarm/blob/main/src/agency_swarm/agent/execution_helpers.py)
+
+Related pages:
+
+- [Agency Context](/additional-features/agency-context)
+- [FastAPI Integration](/additional-features/fastapi-integration)
+- [API Reference](/references/api)

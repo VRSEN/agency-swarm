@@ -216,6 +216,7 @@ class SendMessage(FunctionTool):
                 self.user_context = user_context
                 self._agent_runtime_state = runtime_state_map
                 self.shared_instructions = shared_instructions_from_context
+                self.memory = None
 
         # Since we're using send_message tool, we're always in an agency context
         agency_instance = MinimalAgency(wrapper.context.agents, wrapper.context.user_context, agency_runtime_map)
@@ -241,6 +242,8 @@ class SendMessage(FunctionTool):
             load_threads_callback=None,
             save_threads_callback=None,
             shared_instructions=shared_instructions_from_context,
+            memory_identity=wrapper.context.memory_identity,
+            memory_manager=wrapper.context.memory_manager,
         )
 
     async def on_invoke_tool(self, wrapper: RunContextWrapper[MasterContext], arguments_json_string: str) -> str:

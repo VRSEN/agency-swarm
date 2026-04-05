@@ -18,6 +18,8 @@ pip install "agency-swarm[fastapi]"
 
 You can expose your agencies and tools as API endpoints using the `run_fastapi()` function.
 
+If you use durable memory, pass `user_id` and `session_id` as top-level request fields. Use `memory_identity` only for advanced overrides, and keep it separate from `user_context`.
+
 ### Example: Create an API endpoint for a single agency
 
 ```python

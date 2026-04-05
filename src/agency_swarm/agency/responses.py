@@ -15,6 +15,7 @@ from agents import RunConfig, RunHooks, RunResult, TResponseInputItem
 
 from agency_swarm.agent.core import Agent
 from agency_swarm.agent.execution_streaming import StreamingRunResponse
+from agency_swarm.memory import MemoryIdentity
 from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
 
 from .helpers import get_agent_context, resolve_agent
@@ -32,6 +33,9 @@ async def get_response(
     file_ids: list[str] | None = None,
     additional_instructions: str | None = None,
     agency_context_override: "AgencyContext | None" = None,
+    memory_identity: MemoryIdentity | None = None,
+    user_id: str | None = None,
+    session_id: str | None = None,
     **kwargs: Any,
 ) -> RunResult:
     """
@@ -82,7 +86,14 @@ async def get_response(
     effective_hooks = hooks_override or agency.persistence_hooks
 
     # Get agency context for the target agent (stateless context passing)
-    agency_context = agency_context_override or get_agent_context(agency, target_agent.name)
+    agency_context = _resolve_agency_context(
+        agency,
+        target_agent.name,
+        agency_context_override=agency_context_override,
+        memory_identity=memory_identity,
+        user_id=user_id,
+        session_id=session_id,
+    )
 
     # On handoffs all servers need to be initialized to be used
     await attach_persistent_mcp_servers(agency)
@@ -110,6 +121,9 @@ def get_response_sync(
     file_ids: list[str] | None = None,
     additional_instructions: str | None = None,
     agency_context_override: "AgencyContext | None" = None,
+    memory_identity: MemoryIdentity | None = None,
+    user_id: str | None = None,
+    session_id: str | None = None,
     **kwargs: Any,
 ) -> RunResult:
     """Synchronous wrapper around :meth:`get_response`."""
@@ -125,6 +139,9 @@ def get_response_sync(
             run_config=run_config,
             file_ids=file_ids,
             additional_instructions=additional_instructions,
+            memory_identity=memory_identity,
+            user_id=user_id,
+            session_id=session_id,
             **kwargs,
         )
 
@@ -163,6 +180,9 @@ def get_response_stream(
     file_ids: list[str] | None = None,
     additional_instructions: str | None = None,
     agency_context_override: "AgencyContext | None" = None,
+    memory_identity: MemoryIdentity | None = None,
+    user_id: str | None = None,
+    session_id: str | None = None,
     **kwargs: Any,
 ) -> StreamingRunResponse:
     """
@@ -218,7 +238,14 @@ def get_response_stream(
                 enhanced_context = context_override.copy() if context_override else {}
                 enhanced_context["streaming_context"] = streaming_context
 
-                agency_context = agency_context_override or get_agent_context(agency, target_agent.name)
+                agency_context = _resolve_agency_context(
+                    agency,
+                    target_agent.name,
+                    agency_context_override=agency_context_override,
+                    memory_identity=memory_identity,
+                    user_id=user_id,
+                    session_id=session_id,
+                )
 
                 await attach_persistent_mcp_servers(agency)
 
@@ -251,3 +278,23 @@ def get_response_stream(
 
     wrapper = StreamingRunResponse(_agency_stream())
     return wrapper
+
+
+def _resolve_agency_context(
+    agency: "Agency",
+    agent_name: str,
+    *,
+    agency_context_override: "AgencyContext | None",
+    memory_identity: MemoryIdentity | None,
+    user_id: str | None,
+    session_id: str | None,
+) -> "AgencyContext":
+    """Return the run-scoped agency context with durable-memory state applied."""
+    agency_context = agency_context_override or get_agent_context(agency, agent_name)
+    agency_context.memory_identity = agency.normalize_memory_identity(
+        memory_identity,
+        user_id=user_id,
+        session_id=session_id,
+    )
+    agency_context.memory_manager = agency.memory_manager
+    return agency_context

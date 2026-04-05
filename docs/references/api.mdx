@@ -26,6 +26,8 @@ class Agency:
         load_threads_callback: ThreadLoadCallback | None = None,
         save_threads_callback: ThreadSaveCallback | None = None,
         user_context: dict[str, Any] | None = None,
+        memory: MemoryConfig | None = None,
+        memory_folder: str | os.PathLike[str] | None = None,
     ):
         """
         Initialize an Agency instance.
@@ -43,6 +45,8 @@ class Agency:
             load_threads_callback: Callable used to load persisted conversation threads
             save_threads_callback: Callable used to save conversation threads
             user_context: Initial shared context accessible to all agents
+            memory: Durable memory configuration for advanced setups
+            memory_folder: Simple markdown-backed durable memory root folder
         """
 ```
 
@@ -83,6 +87,9 @@ async def get_response(
     file_ids: list[str] | None = None,
     additional_instructions: str | None = None,
     agency_context_override: AgencyContext | None = None,
+    memory_identity: MemoryIdentity | None = None,
+    user_id: str | None = None,
+    session_id: str | None = None,
     **kwargs: Any,
 ) -> RunResult:
     """
@@ -97,6 +104,9 @@ async def get_response(
         file_ids: Additional file IDs for the agent run
         additional_instructions: Additional instructions for this run only
         agency_context_override: Run-scoped agency context override (for example, isolated thread history)
+        memory_identity: Advanced durable memory identity override
+        user_id: Convenience durable-memory user scope for this run
+        session_id: Convenience durable-memory session scope for this run
         **kwargs: Additional arguments passed to the target agent's get_response
 
     Returns:
@@ -115,6 +125,9 @@ def get_response_sync(
     file_ids: list[str] | None = None,
     additional_instructions: str | None = None,
     agency_context_override: AgencyContext | None = None,
+    memory_identity: MemoryIdentity | None = None,
+    user_id: str | None = None,
+    session_id: str | None = None,
     **kwargs: Any,
 ) -> RunResult:
     """
@@ -129,6 +142,9 @@ def get_response_sync(
         file_ids: Additional file IDs for the agent run
         additional_instructions: Additional instructions for this run only
         agency_context_override: Run-scoped agency context override (for example, isolated thread history)
+        memory_identity: Advanced durable memory identity override
+        user_id: Convenience durable-memory user scope for this run
+        session_id: Convenience durable-memory session scope for this run
         **kwargs: Additional arguments passed to the target agent's get_response
 
     Returns:
@@ -147,6 +163,9 @@ def get_response_stream(
     file_ids: list[str] | None = None,
     additional_instructions: str | None = None,
     agency_context_override: AgencyContext | None = None,
+    memory_identity: MemoryIdentity | None = None,
+    user_id: str | None = None,
+    session_id: str | None = None,
     **kwargs: Any,
 ) -> StreamingRunResponse:
     """
@@ -161,6 +180,9 @@ def get_response_stream(
         file_ids: Additional file IDs for the agent run
         additional_instructions: Additional instructions for this run only
         agency_context_override: Run-scoped agency context override (for example, isolated thread history)
+        memory_identity: Advanced durable memory identity override
+        user_id: Convenience durable-memory user scope for this run
+        session_id: Convenience durable-memory session scope for this run
         **kwargs: Additional arguments passed to get_response_stream
 
     Returns:

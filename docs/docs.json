@@ -103,6 +103,7 @@
             "group": "Additional Features",
             "pages": [
               "additional-features/agency-context",
+              "additional-features/durable-memory",
               "additional-features/few-shot-examples",
               {
                 "group": "Guardrails",

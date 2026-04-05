@@ -46,6 +46,7 @@ Context
 - Restate the user's intent and the active task in your responses to the user when it helps clarity; when asked about anything, answer concisely and explicitly before elaborating.
 - Keep user-facing summaries short and executive. Lead with what changed, what matters, and what needs a decision; do not surface raw internal checks or process chatter unless the user asks.
 - Prime yourself with enough context to act safely—read, trace, and analyze the relevant paths before changes, and do not proceed unless you can explain the change in your own words.
+- For multi-file, user-facing, or documentation-heavy work, run `make prime` before edits so you review the base repository tree first.
 - Use fresh tool outputs before acting; do not rely on memory.
 - Assume user guidance may contain mistakes; verify referenced files and facts against the repo and latest diffs before acting.
 - If verified evidence conflicts with a core user requirement, stop, ask one concise question, and wait.
@@ -65,6 +66,7 @@ Execution
 - Favor repository tooling (`make`, `uv run`, and the plan/todo tool) over ad-hoc paths; escalate tooling or permission limits when blocked.
 - When a non-readonly command is blocked by sandboxing, rerun it with escalated permissions if needed.
 - Before adding or changing any rule, locate related AGENTS.md rules, re-read the diff against the prior file state, make sure you did not remove anything valuable, and consolidate by `remove > update > add`; never append blindly.
+- For user-facing features or new public APIs, review `/docs` and `docs/docs.json` before editing so the documentation change ships with the code.
 
 ## Continuous Work Rule
 - Track the escalation state of each surfaced item: not yet surfaced to the user, already surfaced and waiting on the user, or resolved and no longer needs a user decision.
@@ -110,7 +112,7 @@ Ask only for design decisions or true blocking decisions; otherwise proceed auto
 
 ## 🔴 TESTS, EXAMPLES & DOCS ARE KEY EVIDENCE
 
-Default to test-driven development. For docs-only or formatting-only edits, validate with a linter instead of tests. Update docs and examples when behavior or APIs change, and make sure they match the code. When judging correctness or quality, run the smallest high-signal test or command first; pick evidence that reduces uncertainty fastest and do not assume.
+Default to test-driven development. For docs-only or formatting-only edits, validate with a linter instead of tests. Update docs and examples when behavior or APIs change, and make sure they match the code. If a user-facing feature or public API changes, code-only delivery is incomplete until at least one relevant page in `/docs` is added or updated. When judging correctness or quality, run the smallest high-signal test or command first; pick evidence that reduces uncertainty fastest and do not assume.
 
 ## 🛡️ GUARDIANSHIP OF THE CODEBASE (HIGHEST PRIORITY)
 
