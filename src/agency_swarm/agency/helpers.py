@@ -37,6 +37,8 @@ def run_fastapi(
     app_token_env: str = "APP_TOKEN",
     cors_origins: list[str] | None = None,
     enable_agui: bool = False,
+    allow_client_memory_identity: bool = False,
+    memory_identity_resolver: Callable[[Any | None, Any], Any | None] | None = None,
 ) -> None:
     """Serve this agency via the FastAPI integration.
 
@@ -47,6 +49,12 @@ def run_fastapi(
     cors_origins : list[str] | None
         Optional list of allowed CORS origins passed through to
         :func:`run_fastapi`.
+    allow_client_memory_identity : bool
+        Trust raw durable-memory identity values from request bodies.
+        Leave this disabled for browser or third-party clients.
+    memory_identity_resolver : Callable[[Any | None, Any], Any | None] | None
+        Optional server-side hook that binds durable-memory identity from
+        trusted request state.
     """
     from agency_swarm.integrations.fastapi import run_fastapi as run_fastapi_server
 
@@ -57,6 +65,8 @@ def run_fastapi(
         app_token_env=app_token_env,
         cors_origins=cors_origins,
         enable_agui=enable_agui,
+        allow_client_memory_identity=allow_client_memory_identity,
+        memory_identity_resolver=memory_identity_resolver,
     )
 
 

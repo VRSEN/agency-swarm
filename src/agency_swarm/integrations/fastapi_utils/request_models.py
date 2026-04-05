@@ -80,7 +80,7 @@ class RunAgentInputCustom(RunAgentInput):
         default=None,
         description=(
             "Convenience durable-memory user scope for this run. Bind this value from trusted server-side "
-            "identity checks; do not trust raw client input for cross-user memory isolation."
+            "identity checks; run_fastapi blocks raw client-supplied durable-memory identity by default."
         ),
     )
     session_id: str | None = Field(
@@ -91,7 +91,8 @@ class RunAgentInputCustom(RunAgentInput):
         default=None,
         description=(
             "Advanced durable memory identity override for this run. This is separate from user_context. "
-            "Bind identity fields server-side when requests can come from untrusted clients."
+            "Bind identity fields server-side when requests can come from untrusted clients. "
+            "run_fastapi blocks raw client-supplied durable-memory identity by default."
         ),
     )
     file_ids: list[str] | None = None
@@ -139,7 +140,7 @@ class BaseRequest(BaseModel):
         default=None,
         description=(
             "Convenience durable-memory user scope for this run. Bind this value from trusted server-side "
-            "identity checks; do not trust raw client input for cross-user memory isolation."
+            "identity checks; run_fastapi blocks raw client-supplied durable-memory identity by default."
         ),
     )
     session_id: str | None = Field(
@@ -150,7 +151,8 @@ class BaseRequest(BaseModel):
         default=None,
         description=(
             "Advanced durable memory identity override for this run. This is separate from user_context. "
-            "Bind identity fields server-side when requests can come from untrusted clients."
+            "Bind identity fields server-side when requests can come from untrusted clients. "
+            "run_fastapi blocks raw client-supplied durable-memory identity by default."
         ),
     )
     generate_chat_name: bool | None = Field(

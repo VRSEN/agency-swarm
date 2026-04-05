@@ -18,10 +18,13 @@ pip install "agency-swarm[fastapi]"
 
 You can expose your agencies and tools as API endpoints using the `run_fastapi()` function.
 
-If you use durable memory, pass `user_id` and `session_id` as top-level request fields. Use `memory_identity` only for advanced overrides, and keep it separate from `user_context`.
+If you use durable memory, keep `user_id`, `session_id`, and `memory_identity` separate from `user_context`.
 
 <Warning>
-If your FastAPI server accepts requests from untrusted clients, bind `user_id` and `memory_identity` from authenticated server-side state. Do not let browsers or third-party callers choose durable-memory identity values directly.
+`run_fastapi()` blocks raw client-supplied durable-memory identity by default.
+
+- Use `memory_identity_resolver` to bind trusted durable-memory identity from your server auth/session layer.
+- Use `allow_client_memory_identity=True` only when the caller is fully trusted.
 </Warning>
 
 ### Example: Create an API endpoint for a single agency
@@ -39,6 +42,30 @@ agency = Agency(agent, name="test_agency")
 agency.run_fastapi()
 ```
 
+### Binding durable memory on the server
+
+Use `memory_identity_resolver` when your FastAPI app authenticates users and you want durable-memory reads to follow that trusted identity.
+
+```python
+from agency_swarm import Agency, Agent, MemoryIdentity
+
+
+def bind_memory_identity(http_request, _request):
+    user = http_request.state.user
+    return MemoryIdentity(
+        user_id=user.id,
+        agency_id="test_agency",
+        session_id=http_request.headers.get("x-session-id"),
+    )
+
+
+agency.run_fastapi(memory_identity_resolver=bind_memory_identity)
+```
+
+<Note>
+When `memory_identity_resolver` is present, raw client `user_id`, `session_id`, and `memory_identity` fields are ignored for durable-memory reads.
+</Note>
+
 <Accordion title="run_fastapi parameters" defaultOpen={false}>
 
 | Param | Type | Default | Description |
@@ -52,6 +79,8 @@ agency.run_fastapi()
 | `enable_logging` | boolean | `false` | Track requests and expose `/get_logs` at the server root. |
 | `logs_dir` | string | `"activity-logs"` | Folder for request logs when logging is enabled. |
 | `allowed_local_file_dirs` | list | `None` | Allowlist for local `file_urls`; paths outside the list are rejected. |
+| `allow_client_memory_identity` | boolean | `false` | Trust `user_id`, `session_id`, and `memory_identity` from raw HTTP bodies. Leave this off for browser or third-party clients. |
+| `memory_identity_resolver` | callable | `None` | Server-side hook for binding durable-memory identity from trusted request state. |
 
 </Accordion>
 

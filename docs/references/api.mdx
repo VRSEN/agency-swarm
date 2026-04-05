@@ -198,6 +198,8 @@ def run_fastapi(
     app_token_env: str = "APP_TOKEN",
     cors_origins: list[str] | None = None,
     enable_agui: bool = False,
+    allow_client_memory_identity: bool = False,
+    memory_identity_resolver = None,
 ):
     """
     Serve this agency via the FastAPI integration.
@@ -208,6 +210,8 @@ def run_fastapi(
         app_token_env: Environment variable name for authentication token
         cors_origins: List of allowed CORS origins
         enable_agui: Enable Agency UI interface
+        allow_client_memory_identity: Trust raw durable-memory identity from request bodies
+        memory_identity_resolver: Bind trusted durable-memory identity on the server
     """
 ```
 
