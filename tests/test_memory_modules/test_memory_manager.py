@@ -382,6 +382,37 @@ async def test_search_memory_rejects_unknown_provider(markdown_config: MemoryCon
 
 
 @pytest.mark.asyncio
+async def test_search_memory_rejects_provider_not_enabled_for_agentic_sources(tmp_path: Path) -> None:
+    manager = MemoryManager(
+        MemoryConfig(
+            providers=[
+                MarkdownMemoryProviderConfig.from_folder(tmp_path / "memory"),
+                OpenAIFileSearchMemoryProviderConfig(
+                    vector_store_ids=["vs_123"],
+                    client=_VectorStoreSearchClient(),
+                ),
+            ],
+            system_sources=("markdown",),
+            agentic_sources=("markdown",),
+            write_provider="markdown",
+            journal_path=tmp_path / "jobs.json",
+            normalizer=StaticMemoryNormalizer(),
+        )
+    )
+    try:
+        with pytest.raises(ValueError, match="Memory provider 'openai_file_search' is not enabled for agentic_search"):
+            await manager.search_memory(
+                query="pricing",
+                memory_identity=MemoryIdentity(agency_id="agency-1"),
+                agent_name="Support",
+                agent_config=AgentMemoryConfig(allowed_scopes=(MemoryScope.AGENCY,)),
+                providers=["openai_file_search"],
+            )
+    finally:
+        manager.close()
+
+
+@pytest.mark.asyncio
 async def test_request_write_rejects_unknown_provider(tmp_path: Path) -> None:
     async def allow_all(*_args, **_kwargs):
         return MemoryPermissionDecision.allow()
@@ -412,6 +443,46 @@ async def test_request_write_rejects_unknown_provider(tmp_path: Path) -> None:
                 agent_config=AgentMemoryConfig(allowed_scopes=(MemoryScope.AGENCY,)),
             )
         assert not (tmp_path / "jobs.json").exists()
+    finally:
+        manager.close()
+
+
+@pytest.mark.asyncio
+async def test_request_write_rejects_provider_not_enabled_for_write(tmp_path: Path) -> None:
+    async def allow_all(*_args, **_kwargs):
+        return MemoryPermissionDecision.allow()
+
+    manager = MemoryManager(
+        MemoryConfig(
+            providers=[
+                MarkdownMemoryProviderConfig.from_folder(tmp_path / "memory"),
+                Mem0MemoryProviderConfig(client=object()),
+            ],
+            system_sources=("markdown",),
+            agentic_sources=("markdown",),
+            write_provider="markdown",
+            journal_path=tmp_path / "jobs.json",
+            normalizer=StaticMemoryNormalizer(),
+            permission_resolver=allow_all,
+        )
+    )
+    try:
+        with pytest.raises(ValueError, match="Memory provider 'mem0' is not enabled for write"):
+            await manager.request_write(
+                request=MemoryWriteRequest(
+                    operation=MemoryOperation.SAVE,
+                    content="remember this",
+                    rationale="preference",
+                    scope=MemoryScope.AGENCY,
+                    memory_type=MemoryType.SYSTEM,
+                    source_agent="Support",
+                    memory_identity=MemoryIdentity(agency_id="agency-1"),
+                    context_snapshot=[],
+                    requested_providers=["mem0"],
+                ),
+                runtime_context=None,
+                agent_config=AgentMemoryConfig(allowed_scopes=(MemoryScope.AGENCY,)),
+            )
     finally:
         manager.close()
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import threading
 import time
 from pathlib import Path
@@ -22,6 +23,8 @@ from agency_swarm.memory import (
 )
 from agency_swarm.memory.normalizer import MemoryNormalizer
 from agency_swarm.memory.providers import markdown as markdown_provider
+from agency_swarm.memory.queue import _MAX_JOB_ATTEMPTS, DurableMemoryQueue
+from agency_swarm.memory.types import MemoryWriteJob
 
 
 class StaticMemoryNormalizer(MemoryNormalizer):
@@ -235,3 +238,79 @@ def test_markdown_file_lock_cache_keeps_borrowed_lock_entries(tmp_path: Path) ->
     finally:
         with markdown_provider._FILE_LOCKS_GUARD:
             markdown_provider._FILE_LOCKS.clear()
+
+
+def test_memory_queue_prunes_completed_jobs_from_journal(tmp_path: Path) -> None:
+    class SuccessfulManager:
+        async def process_job(self, job: MemoryWriteJob) -> None:
+            return None
+
+    queue = DurableMemoryQueue(journal_path=tmp_path / "jobs.json", manager=SuccessfulManager())  # type: ignore[arg-type]
+    try:
+        queue.enqueue(
+            MemoryWriteJob(
+                job_id="memjob_done",
+                request=MemoryWriteRequest(
+                    operation=MemoryOperation.SAVE,
+                    content="remember this",
+                    rationale="useful preference",
+                    scope=MemoryScope.AGENCY,
+                    memory_type=MemoryType.SYSTEM,
+                    source_agent="Support",
+                    memory_identity=MemoryIdentity(agency_id="agency-1"),
+                    context_snapshot=[],
+                ),
+                provider_names=["markdown"],
+            )
+        )
+
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if queue._journal_path.exists():
+                payload = json.loads(queue._journal_path.read_text(encoding="utf-8"))
+                if payload == []:
+                    break
+            time.sleep(0.05)
+        else:
+            pytest.fail("completed jobs were not pruned from the durable memory journal")
+    finally:
+        queue.close()
+
+
+def test_memory_queue_dead_letters_terminal_failures(tmp_path: Path) -> None:
+    class FailingManager:
+        async def process_job(self, job: MemoryWriteJob) -> None:
+            raise RuntimeError("boom")
+
+    queue = DurableMemoryQueue(journal_path=tmp_path / "jobs.json", manager=FailingManager())  # type: ignore[arg-type]
+    try:
+        queue.enqueue(
+            MemoryWriteJob(
+                job_id="memjob_dead",
+                request=MemoryWriteRequest(
+                    operation=MemoryOperation.SAVE,
+                    content="remember this",
+                    rationale="useful preference",
+                    scope=MemoryScope.AGENCY,
+                    memory_type=MemoryType.SYSTEM,
+                    source_agent="Support",
+                    memory_identity=MemoryIdentity(agency_id="agency-1"),
+                    context_snapshot=[],
+                ),
+                provider_names=["markdown"],
+                attempts=_MAX_JOB_ATTEMPTS - 1,
+            )
+        )
+
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if queue._journal_path.exists():
+                payload = json.loads(queue._journal_path.read_text(encoding="utf-8"))
+                if payload and payload[0]["status"] == "dead_letter":
+                    assert payload[0]["attempts"] == _MAX_JOB_ATTEMPTS
+                    break
+            time.sleep(0.05)
+        else:
+            pytest.fail("terminal memory queue failures were not marked dead_letter")
+    finally:
+        queue.close()
