@@ -4,6 +4,7 @@ import json
 import logging
 import re
 import threading
+from collections import OrderedDict
 from pathlib import Path
 from urllib.parse import quote
 
@@ -24,7 +25,8 @@ _RECORD_PATTERN = re.compile(
     r"<!-- memory-record-start -->\n(?P<body>.*?)\n<!-- memory-record-end -->",
     re.DOTALL,
 )
-_FILE_LOCKS: dict[Path, threading.Lock] = {}
+_MAX_FILE_LOCKS = 1024
+_FILE_LOCKS: OrderedDict[Path, threading.Lock] = OrderedDict()
 _FILE_LOCKS_GUARD = threading.Lock()
 
 
@@ -237,8 +239,20 @@ def _get_file_lock(path: Path) -> threading.Lock:
         if lock is None:
             lock = threading.Lock()
             _FILE_LOCKS[resolved] = lock
+        else:
+            _FILE_LOCKS.move_to_end(resolved)
+        _trim_file_locks()
         return lock
 
 
 def _sanitize_path_component(value: str) -> str:
     return quote(value, safe="")
+
+
+def _trim_file_locks() -> None:
+    while len(_FILE_LOCKS) > _MAX_FILE_LOCKS:
+        oldest_path, oldest_lock = next(iter(_FILE_LOCKS.items()))
+        if oldest_lock.locked():
+            _FILE_LOCKS.move_to_end(oldest_path)
+            break
+        _FILE_LOCKS.popitem(last=False)

@@ -4,6 +4,7 @@ import contextvars
 import logging
 import threading
 from concurrent.futures import Future
+from copy import copy
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
@@ -290,7 +291,9 @@ def _resolve_agency_context(
     session_id: str | None,
 ) -> "AgencyContext":
     """Return the run-scoped agency context with durable-memory state applied."""
-    agency_context = agency_context_override or get_agent_context(agency, agent_name)
+    agency_context = (
+        copy(agency_context_override) if agency_context_override is not None else get_agent_context(agency, agent_name)
+    )
     agency_context.memory_identity = agency.normalize_memory_identity(
         memory_identity,
         user_id=user_id,

@@ -143,6 +143,15 @@ def test_validate_run_requires_user_id_for_user_scope(markdown_config: MemoryCon
         manager.close()
 
 
+def test_memory_manager_marks_atexit_registration_once(markdown_config: MemoryConfig) -> None:
+    manager = MemoryManager(markdown_config)
+    try:
+        assert manager.mark_atexit_registered() is True
+        assert manager.mark_atexit_registered() is False
+    finally:
+        manager.close()
+
+
 def test_memory_manager_rejects_agentic_only_provider_as_system_source(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="cannot be used as a system memory source"):
         MemoryManager(

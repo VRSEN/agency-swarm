@@ -216,7 +216,7 @@ class Agency:
         # Register MCP shutdown at process exit so persistent servers are cleaned in scripts
         if default_mcp_manager.mark_atexit_registered():
             atexit.register(default_mcp_manager.shutdown_sync)
-        if self.memory_manager is not None:
+        if self.memory_manager is not None and self.memory_manager.mark_atexit_registered():
             atexit.register(self.memory_manager.close)
 
     def get_agent_context(
@@ -256,9 +256,9 @@ class Agency:
         if session_id is not None and memory_identity.session_id not in {None, session_id}:
             raise ValueError("session_id conflicts with memory_identity.session_id")
         return MemoryIdentity(
-            user_id=user_id or memory_identity.user_id,
+            user_id=user_id if user_id is not None else memory_identity.user_id,
             agency_id=memory_identity.agency_id or agency_id,
-            session_id=session_id or memory_identity.session_id,
+            session_id=session_id if session_id is not None else memory_identity.session_id,
         )
 
     def get_agent_memory_config(self, agent_name: str) -> AgentMemoryConfig | None:
