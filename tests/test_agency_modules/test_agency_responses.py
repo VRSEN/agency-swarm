@@ -6,7 +6,6 @@ from agents import ModelSettings, RunConfig, RunHooks, RunResult, TResponseInput
 
 from agency_swarm import Agency, Agent, MemoryConfig
 from agency_swarm.agent.context_types import AgencyContext
-from agency_swarm.utils.thread import ThreadManager
 from agency_swarm.memory import AgentMemoryConfig, MemoryIdentity
 from agency_swarm.utils.thread import ThreadManager
 from tests.deterministic_model import DeterministicModel

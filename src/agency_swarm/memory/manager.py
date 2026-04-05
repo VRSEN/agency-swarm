@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from .config import (
     AgentMemoryConfig,
@@ -118,12 +118,13 @@ class MemoryManager:
         resolved_scopes = scopes or self._resolve_scopes(
             agent_config.allowed_scopes if agent_config else tuple(MemoryScope)
         )
-        provider_names = providers or list(self.config.agentic_sources)
+        provider_names = self._resolve_provider_names(
+            providers or list(self.config.agentic_sources),
+            capability="agentic_search",
+        )
         results: list[MemoryRecord] = []
         for provider_name in provider_names:
             provider = self.providers[provider_name]
-            if not provider.capabilities.agentic_search:
-                continue
             provider_results = await provider.search_agentic(
                 query=query,
                 memory_identity=memory_identity,
@@ -151,8 +152,10 @@ class MemoryManager:
             return decision
         if not decision.allows_scope(request.scope) or not decision.allows_type(request.memory_type):
             return MemoryPermissionDecision.deny()
-        provider_names = request.requested_providers or (
-            [self.config.write_provider] if self.config.write_provider else []
+        provider_names = self._resolve_provider_names(
+            request.requested_providers
+            or cast(list[str], [self.config.write_provider] if self.config.write_provider else []),
+            capability="write",
         )
         resolved_provider_names = [name for name in provider_names if decision.allows_provider(name)]
         if not resolved_provider_names:
@@ -222,6 +225,7 @@ class MemoryManager:
                     name=provider_config.name,
                     vector_store_ids=provider_config.vector_store_ids,
                     scope=provider_config.scope,
+                    owner_attribute_key=provider_config.owner_attribute_key,
                     client=provider_config.client,
                 )
             else:
@@ -247,6 +251,20 @@ class MemoryManager:
         if provider_name not in self.providers:
             raise ValueError(f"Unknown memory provider '{provider_name}'")
         return self.providers[provider_name].capabilities
+
+    def _resolve_provider_names(
+        self,
+        provider_names: list[str],
+        *,
+        capability: str,
+    ) -> list[str]:
+        resolved: list[str] = []
+        for provider_name in provider_names:
+            capabilities = self._provider_capabilities(provider_name)
+            if not getattr(capabilities, capability):
+                raise ValueError(f"Memory provider '{provider_name}' does not support {capability}")
+            resolved.append(provider_name)
+        return resolved
 
     def _resolve_scopes(self, scopes: tuple[MemoryScope, ...]) -> tuple[MemoryScope, ...]:
         ordered: list[MemoryScope] = []

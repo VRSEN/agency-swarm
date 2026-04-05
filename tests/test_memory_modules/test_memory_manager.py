@@ -46,8 +46,25 @@ class StaticMemoryNormalizer(MemoryNormalizer):
 class _VectorStoreSearchClient:
     def __init__(self) -> None:
         self.vector_stores = self
+        self.calls: list[dict[str, object | None]] = []
 
-    async def search(self, *, vector_store_id: str, query: str, max_num_results: int):
+    async def search(
+        self,
+        *,
+        vector_store_id: str,
+        query: str,
+        filters=None,
+        max_num_results: int,
+    ):
+        self.calls.append(
+            {
+                "vector_store_id": vector_store_id,
+                "query": query,
+                "filters": filters,
+                "max_num_results": max_num_results,
+            }
+        )
+
         class _Result:
             def __init__(self) -> None:
                 self.file_id = f"{vector_store_id}-file"
@@ -98,6 +115,7 @@ def test_openai_file_search_shortcut_is_retrieval_only() -> None:
     config = MemoryConfig.openai_file_search(
         vector_store_ids=["vs_123"],
         scope=MemoryScope.USER,
+        owner_attribute_key="memory_owner",
         client=client,
     )
 
@@ -105,6 +123,7 @@ def test_openai_file_search_shortcut_is_retrieval_only() -> None:
     assert isinstance(config.providers[0], OpenAIFileSearchMemoryProviderConfig)
     assert config.providers[0].vector_store_ids == ["vs_123"]
     assert config.providers[0].scope is MemoryScope.USER
+    assert config.providers[0].owner_attribute_key == "memory_owner"
     assert config.providers[0].client is client
     assert config.system_sources == ()
     assert config.agentic_sources == ("openai_file_search",)
@@ -140,6 +159,44 @@ def test_memory_manager_rejects_agentic_only_provider_as_system_source(tmp_path:
                 journal_path=tmp_path / "jobs.json",
                 normalizer=StaticMemoryNormalizer(),
             )
+        )
+
+
+def test_memory_manager_rejects_user_scoped_openai_search_without_owner_attribute_key(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="requires owner_attribute_key"):
+        MemoryManager(
+            MemoryConfig(
+                providers=[
+                    OpenAIFileSearchMemoryProviderConfig(
+                        vector_store_ids=["vs_123"],
+                        scope=MemoryScope.USER,
+                        client=_VectorStoreSearchClient(),
+                    )
+                ],
+                system_sources=(),
+                agentic_sources=("openai_file_search",),
+                write_provider=None,
+                journal_path=tmp_path / "jobs.json",
+                normalizer=StaticMemoryNormalizer(),
+            )
+        )
+
+
+def test_agent_memory_config_rejects_search_tool_without_agentic_memory() -> None:
+    with pytest.raises(ValueError, match="enable_search_tool requires enable_agentic_memory=True"):
+        AgentMemoryConfig(
+            enable_agentic_memory=False,
+            enable_search_tool=True,
+            enable_write_tool=False,
+        )
+
+
+def test_agent_memory_config_rejects_write_tool_without_agentic_memory() -> None:
+    with pytest.raises(ValueError, match="enable_write_tool requires enable_agentic_memory=True"):
+        AgentMemoryConfig(
+            enable_agentic_memory=False,
+            enable_search_tool=False,
+            enable_write_tool=True,
         )
 
 
@@ -222,13 +279,15 @@ async def test_system_memory_recall_orders_scopes(markdown_config: MemoryConfig)
 
 @pytest.mark.asyncio
 async def test_openai_file_search_provider_serves_agentic_search(tmp_path: Path) -> None:
+    client = _VectorStoreSearchClient()
     manager = MemoryManager(
         MemoryConfig(
             providers=[
                 OpenAIFileSearchMemoryProviderConfig(
                     vector_store_ids=["vs_123"],
                     scope=MemoryScope.USER,
-                    client=_VectorStoreSearchClient(),
+                    owner_attribute_key="memory_owner",
+                    client=client,
                 )
             ],
             system_sources=(),
@@ -253,6 +312,65 @@ async def test_openai_file_search_provider_serves_agentic_search(tmp_path: Path)
         assert results[0].provider_name == "openai_file_search"
         assert results[0].scope is MemoryScope.USER
         assert results[0].owner_id == "user-1"
+        assert client.calls == [
+            {
+                "vector_store_id": "vs_123",
+                "query": "pricing",
+                "filters": {"type": "eq", "key": "memory_owner", "value": "user-1"},
+                "max_num_results": 5,
+            }
+        ]
+    finally:
+        manager.close()
+
+
+@pytest.mark.asyncio
+async def test_search_memory_rejects_unknown_provider(markdown_config: MemoryConfig) -> None:
+    manager = MemoryManager(markdown_config)
+    try:
+        with pytest.raises(ValueError, match="Unknown memory provider 'bogus'"):
+            await manager.search_memory(
+                query="pricing",
+                memory_identity=MemoryIdentity(agency_id="agency-1"),
+                agent_name="Support",
+                agent_config=AgentMemoryConfig(allowed_scopes=(MemoryScope.AGENCY,)),
+                providers=["bogus"],
+            )
+    finally:
+        manager.close()
+
+
+@pytest.mark.asyncio
+async def test_request_write_rejects_unknown_provider(tmp_path: Path) -> None:
+    async def allow_all(*_args, **_kwargs):
+        return MemoryPermissionDecision.allow()
+
+    manager = MemoryManager(
+        MemoryConfig.markdown(
+            folder=tmp_path,
+            journal_path=tmp_path / "jobs.json",
+            normalizer=StaticMemoryNormalizer(),
+            permission_resolver=allow_all,
+        )
+    )
+    try:
+        with pytest.raises(ValueError, match="Unknown memory provider 'bogus'"):
+            await manager.request_write(
+                request=MemoryWriteRequest(
+                    operation=MemoryOperation.SAVE,
+                    content="remember this",
+                    rationale="preference",
+                    scope=MemoryScope.AGENCY,
+                    memory_type=MemoryType.SYSTEM,
+                    source_agent="Support",
+                    memory_identity=MemoryIdentity(agency_id="agency-1"),
+                    context_snapshot=[],
+                    requested_providers=["bogus"],
+                ),
+                runtime_context=None,
+                agent_config=AgentMemoryConfig(allowed_scopes=(MemoryScope.AGENCY,)),
+            )
+        assert not (tmp_path / "jobs.json").exists()
     finally:
         manager.close()
 
@@ -265,6 +383,7 @@ async def test_openai_file_search_provider_skips_other_scopes(tmp_path: Path) ->
                 OpenAIFileSearchMemoryProviderConfig(
                     vector_store_ids=["vs_123"],
                     scope=MemoryScope.USER,
+                    owner_attribute_key="memory_owner",
                     client=_VectorStoreSearchClient(),
                 )
             ],

@@ -168,3 +168,49 @@ async def test_markdown_memory_handles_parallel_managers_sharing_a_journal(tmp_p
     finally:
         manager_one.close()
         manager_two.close()
+
+
+@pytest.mark.asyncio
+async def test_markdown_memory_sanitizes_owner_id_before_writing(tmp_path: Path) -> None:
+    sandbox = tmp_path / "sandbox"
+    config = MemoryConfig.markdown(
+        folder=sandbox / "memory",
+        journal_path=sandbox / "jobs.json",
+        normalizer=StaticMemoryNormalizer(),
+        permission_resolver=_allow_all,
+    )
+    identity = MemoryIdentity(user_id="../../../../escaped", agency_id="agency-1")
+
+    manager = MemoryManager(config)
+    try:
+        decision = await manager.request_write(
+            request=MemoryWriteRequest(
+                operation=MemoryOperation.SAVE,
+                content="User prefers weekly summaries",
+                rationale="Stable reporting preference",
+                scope=MemoryScope.USER,
+                memory_type=MemoryType.SYSTEM,
+                source_agent="Support",
+                memory_identity=identity,
+                context_snapshot=[],
+                record_id="mem_path_safe",
+            ),
+            runtime_context=None,
+            agent_config=AgentMemoryConfig(),
+        )
+        assert decision.mode.value == "allow"
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            files = list((sandbox / "memory").rglob("*.md"))
+            if files:
+                break
+            await asyncio.sleep(0.05)
+        else:
+            pytest.fail("timed out waiting for sanitized markdown memory file")
+
+        assert len(files) == 1
+        assert files[0].is_relative_to(sandbox / "memory")
+        assert not (tmp_path / "escaped.md").exists()
+        assert "escaped" in files[0].name
+    finally:
+        manager.close()

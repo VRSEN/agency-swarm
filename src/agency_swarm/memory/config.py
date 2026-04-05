@@ -50,6 +50,12 @@ class AgentMemoryConfig:
         MemoryScope.USER,
     )
 
+    def __post_init__(self) -> None:
+        if not self.enable_agentic_memory and self.enable_search_tool:
+            raise ValueError("enable_search_tool requires enable_agentic_memory=True")
+        if not self.enable_agentic_memory and self.enable_write_tool:
+            raise ValueError("enable_write_tool requires enable_agentic_memory=True")
+
 
 @dataclass(slots=True)
 class MarkdownMemoryProviderConfig:
@@ -73,6 +79,7 @@ class OpenAIFileSearchMemoryProviderConfig:
     name: str = "openai_file_search"
     vector_store_ids: list[str] = field(default_factory=list)
     scope: MemoryScope = MemoryScope.AGENT
+    owner_attribute_key: str | None = None
     client: Any | None = None
 
 
@@ -134,6 +141,7 @@ class MemoryConfig:
         *,
         vector_store_ids: list[str],
         scope: MemoryScope = MemoryScope.AGENT,
+        owner_attribute_key: str | None = None,
         client: Any | None = None,
         **options: Unpack[MemoryConfigOptions],
     ) -> MemoryConfig:
@@ -143,6 +151,7 @@ class MemoryConfig:
                 OpenAIFileSearchMemoryProviderConfig(
                     vector_store_ids=vector_store_ids,
                     scope=scope,
+                    owner_attribute_key=owner_attribute_key,
                     client=client,
                 )
             ],
