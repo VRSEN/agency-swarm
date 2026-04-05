@@ -5,6 +5,9 @@ import logging
 import re
 import threading
 from collections import OrderedDict
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
 
@@ -26,7 +29,15 @@ _RECORD_PATTERN = re.compile(
     re.DOTALL,
 )
 _MAX_FILE_LOCKS = 1024
-_FILE_LOCKS: OrderedDict[Path, threading.Lock] = OrderedDict()
+
+
+@dataclass
+class _TrackedFileLock:
+    lock: threading.Lock
+    borrowers: int = 0
+
+
+_FILE_LOCKS: OrderedDict[Path, _TrackedFileLock] = OrderedDict()
 _FILE_LOCKS_GUARD = threading.Lock()
 
 
@@ -90,8 +101,7 @@ class MarkdownMemoryProvider(MemoryProvider):
         owner_id = memory_identity.resolve_scope_owner(write.scope, agent_name=agent_name)
         file_path = self._resolve_path(write.scope.value, write.memory_type.value, owner_id)
         file_path.parent.mkdir(parents=True, exist_ok=True)
-        file_lock = _get_file_lock(file_path)
-        with file_lock:
+        with _acquire_file_lock(file_path):
             records = self._read_records(file_path)
 
             new_record = MemoryRecord(
@@ -125,8 +135,7 @@ class MarkdownMemoryProvider(MemoryProvider):
                 except ValueError:
                     continue
                 file_path = self._resolve_path(scope.value, memory_type.value, owner_id)
-                file_lock = _get_file_lock(file_path)
-                with file_lock:
+                with _acquire_file_lock(file_path):
                     records = self._read_records(file_path)
                     filtered = [record for record in records if record.record_id != record_id]
                     if len(filtered) == len(records):
@@ -232,17 +241,34 @@ class MarkdownMemoryProvider(MemoryProvider):
         )
 
 
-def _get_file_lock(path: Path) -> threading.Lock:
+@contextmanager
+def _borrow_file_lock(path: Path) -> Iterator[threading.Lock]:
     resolved = path.resolve()
     with _FILE_LOCKS_GUARD:
-        lock = _FILE_LOCKS.get(resolved)
-        if lock is None:
-            lock = threading.Lock()
-            _FILE_LOCKS[resolved] = lock
+        tracked_lock = _FILE_LOCKS.get(resolved)
+        if tracked_lock is None:
+            tracked_lock = _TrackedFileLock(lock=threading.Lock())
+            _FILE_LOCKS[resolved] = tracked_lock
         else:
             _FILE_LOCKS.move_to_end(resolved)
+        tracked_lock.borrowers += 1
         _trim_file_locks()
-        return lock
+        lock = tracked_lock.lock
+    try:
+        yield lock
+    finally:
+        with _FILE_LOCKS_GUARD:
+            current = _FILE_LOCKS.get(resolved)
+            if current is tracked_lock:
+                current.borrowers -= 1
+                _trim_file_locks()
+
+
+@contextmanager
+def _acquire_file_lock(path: Path) -> Iterator[None]:
+    with _borrow_file_lock(path) as lock:
+        with lock:
+            yield
 
 
 def _sanitize_path_component(value: str) -> str:
@@ -251,8 +277,8 @@ def _sanitize_path_component(value: str) -> str:
 
 def _trim_file_locks() -> None:
     while len(_FILE_LOCKS) > _MAX_FILE_LOCKS:
-        oldest_path, oldest_lock = next(iter(_FILE_LOCKS.items()))
-        if oldest_lock.locked():
+        oldest_path, tracked_lock = next(iter(_FILE_LOCKS.items()))
+        if tracked_lock.borrowers > 0 or tracked_lock.lock.locked():
             _FILE_LOCKS.move_to_end(oldest_path)
             break
         _FILE_LOCKS.popitem(last=False)

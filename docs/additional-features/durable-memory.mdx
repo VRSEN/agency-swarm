@@ -203,6 +203,10 @@ This is the place to enforce your consent or approval rules.
 
 When you use [FastAPI Integration](/additional-features/fastapi-integration), pass `user_id` and `session_id` as top-level request fields for the common case.
 
+<Warning>
+When requests come from browsers or other untrusted clients, bind `user_id` and `memory_identity` on the server after authentication. Do not trust raw client-supplied identity values for durable-memory reads.
+</Warning>
+
 ```json
 {
   "message": "Help this customer",

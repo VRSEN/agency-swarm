@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import asyncio
+import inspect
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -345,6 +345,6 @@ class MemoryManager:
 
 
 async def _maybe_await(value: Any) -> Any:
-    if asyncio.iscoroutine(value):
+    if inspect.isawaitable(value):
         return await value
     return value

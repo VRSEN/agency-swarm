@@ -21,6 +21,7 @@ from agency_swarm.memory import (
     MemoryWriteRequest,
 )
 from agency_swarm.memory.normalizer import MemoryNormalizer
+from agency_swarm.memory.providers import markdown as markdown_provider
 
 
 class StaticMemoryNormalizer(MemoryNormalizer):
@@ -214,3 +215,23 @@ async def test_markdown_memory_sanitizes_owner_id_before_writing(tmp_path: Path)
         assert "escaped" in files[0].name
     finally:
         manager.close()
+
+
+def test_markdown_file_lock_cache_keeps_borrowed_lock_entries(tmp_path: Path) -> None:
+    with markdown_provider._FILE_LOCKS_GUARD:
+        markdown_provider._FILE_LOCKS.clear()
+
+    target_path = tmp_path / "target.md"
+
+    try:
+        with markdown_provider._borrow_file_lock(target_path) as first_lock:
+            for index in range(markdown_provider._MAX_FILE_LOCKS + 10):
+                other_path = tmp_path / f"memory-{index}.md"
+                with markdown_provider._borrow_file_lock(other_path):
+                    pass
+
+            with markdown_provider._borrow_file_lock(target_path) as second_lock:
+                assert second_lock is first_lock
+    finally:
+        with markdown_provider._FILE_LOCKS_GUARD:
+            markdown_provider._FILE_LOCKS.clear()
