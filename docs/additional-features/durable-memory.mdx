@@ -178,6 +178,10 @@ When an agent opts into memory with `memory=True` or `memory=AgentMemoryConfig(.
 
 `request_memory_write` does not write directly. It queues a background job, runs the internal memory writer pipeline, and then applies the validated write to the configured provider.
 
+<Note>
+The durable-memory writer queue is process-local in v1. If you run multiple FastAPI workers, do not point them at the same memory journal path.
+</Note>
+
 ## Permission and Consent
 
 Memory writes are denied by default. Add a `permission_resolver` when you want to allow them.
@@ -198,6 +202,10 @@ memory = Memory.markdown(permission_resolver=allow_user_system_memories)
 ```
 
 This is the place to enforce your consent or approval rules.
+
+<Note>
+If you override `writer_model`, keep it inside the same trust boundary as your main model. The normalizer receives the requested memory content plus a bounded recent context snapshot so it can clean and deduplicate writes.
+</Note>
 
 ## FastAPI Requests
 

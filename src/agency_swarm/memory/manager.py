@@ -122,9 +122,13 @@ class MemoryManager:
             return []
         if agent_config and not agent_config.enable_agentic_memory:
             return []
-        resolved_scopes = scopes or self._resolve_scopes(
-            agent_config.allowed_scopes if agent_config else tuple(MemoryScope)
-        )
+        allowed_scopes = set(agent_config.allowed_scopes if agent_config else tuple(MemoryScope))
+        if scopes is None:
+            resolved_scopes = self._resolve_scopes(tuple(allowed_scopes))
+        else:
+            resolved_scopes = tuple(scope for scope in self._resolve_scopes(scopes) if scope in allowed_scopes)
+        if not resolved_scopes:
+            return []
         provider_names = self._resolve_provider_names(
             providers or list(self.config.agentic_sources),
             capability="agentic_search",

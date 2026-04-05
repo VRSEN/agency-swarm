@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import importlib
+import inspect
 from typing import Any
 
 from agency_swarm.memory.provider import MemoryProvider
@@ -36,7 +38,7 @@ class Mem0MemoryProvider(MemoryProvider):
         records: list[MemoryRecord] = []
         for scope in scopes:
             filters = _build_filters(scope, memory_identity, agent_name=agent_name)
-            payload = await self.client.search(query="system memory", filters=filters, limit=limit)
+            payload = await _call_client(self.client.search, query="system memory", filters=filters, limit=limit)
             records.extend(
                 _convert_search_results(
                     payload,
@@ -60,7 +62,7 @@ class Mem0MemoryProvider(MemoryProvider):
         records: list[MemoryRecord] = []
         for scope in scopes:
             filters = _build_filters(scope, memory_identity, agent_name=agent_name)
-            payload = await self.client.search(query=query, filters=filters, limit=limit)
+            payload = await _call_client(self.client.search, query=query, filters=filters, limit=limit)
             records.extend(
                 _convert_search_results(
                     payload,
@@ -80,7 +82,8 @@ class Mem0MemoryProvider(MemoryProvider):
         agent_name: str,
     ) -> MemoryRecord:
         owner_id = memory_identity.resolve_scope_owner(write.scope, agent_name=agent_name)
-        payload = await self.client.add(
+        payload = await _call_client(
+            self.client.add,
             messages=[{"role": "system", "content": write.content}],
             user_id=owner_id if write.scope is MemoryScope.USER else None,
             agent_id=agent_name if write.scope is MemoryScope.AGENT else None,
@@ -106,7 +109,7 @@ class Mem0MemoryProvider(MemoryProvider):
         )
 
     async def delete_record(self, *, record_id: str, memory_identity: MemoryIdentity, agent_name: str) -> None:
-        await self.client.delete(memory_id=record_id)
+        await _call_client(self.client.delete, memory_id=record_id)
 
 
 def _build_default_client() -> Any:
@@ -115,6 +118,12 @@ def _build_default_client() -> Any:
     if client_cls is None:
         raise ImportError("Mem0 provider requires the mem0 SDK to be installed")
     return client_cls()
+
+
+async def _call_client(method: Any, /, **kwargs: Any) -> Any:
+    if inspect.iscoroutinefunction(method):
+        return await method(**kwargs)
+    return await asyncio.to_thread(method, **kwargs)
 
 
 def _build_filters(scope: MemoryScope, memory_identity: MemoryIdentity, *, agent_name: str) -> dict[str, Any]:

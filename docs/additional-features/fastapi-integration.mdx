@@ -204,6 +204,10 @@ If you're using LiteLLM models and want usage in streaming responses, keep `incl
 Stream cancellation uses an in-memory registry per process. Use single-worker deployments (e.g., uvicorn `workers=1`) or sticky routing so cancel requests reach the same worker.
 </Note>
 
+<Note>
+Durable memory writes also use a process-local background queue in v1. If you enable durable memory, keep each worker on its own journal path or run a single FastAPI worker.
+</Note>
+
 ### Authentication
 
 Set the environment variable named by `app_token_env` (default `APP_TOKEN`) to require `Authorization: Bearer <token>` on every endpoint. When the variable is absent, authentication is disabled.

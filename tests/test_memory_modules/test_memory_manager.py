@@ -24,6 +24,7 @@ from agency_swarm.memory import (
     OpenAIFileSearchMemoryProviderConfig,
 )
 from agency_swarm.memory.normalizer import MemoryNormalizer
+from agency_swarm.memory.providers.mem0 import Mem0MemoryProvider
 
 
 class StaticMemoryNormalizer(MemoryNormalizer):
@@ -73,6 +74,24 @@ class _VectorStoreSearchClient:
                 self.content = [type("_Chunk", (), {"text": f"match for {query}"})()]
 
         return type("_Page", (), {"data": [_Result()]})()
+
+
+class _SyncMem0Client:
+    def __init__(self) -> None:
+        self.search_calls: list[dict[str, object | None]] = []
+        self.add_calls: list[dict[str, object | None]] = []
+        self.delete_calls: list[str] = []
+
+    def search(self, *, query: str, filters, limit: int):
+        self.search_calls.append({"query": query, "filters": filters, "limit": limit})
+        return [{"id": "mem_sync", "memory": f"sync match for {query}", "metadata": {"title": "Synced"}}]
+
+    def add(self, **kwargs):
+        self.add_calls.append(kwargs)
+        return {"id": "mem_sync_written"}
+
+    def delete(self, *, memory_id: str) -> None:
+        self.delete_calls.append(memory_id)
 
 
 @pytest.fixture
@@ -366,6 +385,44 @@ async def test_openai_file_search_provider_serves_agentic_search(tmp_path: Path)
 
 
 @pytest.mark.asyncio
+async def test_mem0_provider_supports_sync_clients() -> None:
+    client = _SyncMem0Client()
+    provider = Mem0MemoryProvider(name="mem0", client=client)
+    identity = MemoryIdentity(user_id="user-1", agency_id="agency-1")
+
+    recalled = await provider.recall_system(
+        memory_identity=identity,
+        agent_name="Support",
+        scopes=(MemoryScope.USER,),
+        limit=5,
+    )
+    assert recalled[0].content == "sync match for system memory"
+
+    written = await provider.apply_write(
+        write=CanonicalMemoryWrite(
+            record_id="mem_sync_written",
+            scope=MemoryScope.USER,
+            memory_type=MemoryType.SYSTEM,
+            title="Preference",
+            content="User prefers weekly summaries",
+        ),
+        memory_identity=identity,
+        agent_name="Support",
+    )
+    assert written.record_id == "mem_sync_written"
+
+    await provider.delete_record(
+        record_id="mem_sync_written",
+        memory_identity=identity,
+        agent_name="Support",
+    )
+
+    assert client.search_calls == [{"query": "system memory", "filters": {"user_id": "user-1"}, "limit": 5}]
+    assert client.add_calls[0]["user_id"] == "user-1"
+    assert client.delete_calls == ["mem_sync_written"]
+
+
+@pytest.mark.asyncio
 async def test_search_memory_rejects_unknown_provider(markdown_config: MemoryConfig) -> None:
     manager = MemoryManager(markdown_config)
     try:
@@ -377,6 +434,39 @@ async def test_search_memory_rejects_unknown_provider(markdown_config: MemoryCon
                 agent_config=AgentMemoryConfig(allowed_scopes=(MemoryScope.AGENCY,)),
                 providers=["bogus"],
             )
+    finally:
+        manager.close()
+
+
+@pytest.mark.asyncio
+async def test_search_memory_filters_requested_scopes_to_allowed_scopes(markdown_config: MemoryConfig) -> None:
+    manager = MemoryManager(markdown_config)
+    identity = MemoryIdentity(user_id="user-1", agency_id="agency-1")
+    provider = manager.providers["markdown"]
+    try:
+        await provider.apply_write(
+            write=CanonicalMemoryWrite(
+                record_id="user-memory",
+                scope=MemoryScope.USER,
+                memory_type=MemoryType.AGENTIC,
+                title="User memory",
+                content="User prefers weekly summaries",
+            ),
+            memory_identity=identity,
+            agent_name="Support",
+        )
+
+        results = await manager.search_memory(
+            query="weekly",
+            memory_identity=identity,
+            agent_name="Support",
+            agent_config=AgentMemoryConfig(
+                enable_system_memory=False,
+                allowed_scopes=(MemoryScope.AGENT,),
+            ),
+            scopes=(MemoryScope.USER,),
+        )
+        assert results == []
     finally:
         manager.close()
 

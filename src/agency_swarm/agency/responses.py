@@ -312,5 +312,6 @@ def _resolve_agency_context(
         user_id=user_id,
         session_id=session_id,
     )
-    agency_context.memory_manager = agency.memory_manager
+    if agency_context.memory_manager is None:
+        agency_context.memory_manager = agency.memory_manager
     return agency_context
