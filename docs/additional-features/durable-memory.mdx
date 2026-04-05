@@ -209,10 +209,13 @@ If you override `writer_model`, keep it inside the same trust boundary as your m
 
 ## FastAPI Requests
 
-When you use [FastAPI Integration](/additional-features/fastapi-integration), pass `user_id` and `session_id` as top-level request fields for the common case.
+When you use [FastAPI Integration](/additional-features/fastapi-integration), bind durable-memory identity on the server for untrusted clients.
 
 <Warning>
-When requests come from browsers or other untrusted clients, bind `user_id` and `memory_identity` on the server after authentication. Do not trust raw client-supplied identity values for durable-memory reads.
+`run_fastapi()` blocks raw client-supplied durable-memory identity by default.
+
+- Use `memory_identity_resolver` to bind trusted identity from your auth layer.
+- Use `allow_client_memory_identity=True` only for trusted callers.
 </Warning>
 
 ```json
