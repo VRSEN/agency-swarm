@@ -39,7 +39,7 @@ import sys
 # Path setup so the example can be run standalone
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from agency_swarm import Agency, Agent, ModelSettings, function_tool
 from agency_swarm.tools.send_message import Handoff, SendMessage
@@ -80,23 +80,20 @@ def vulnerability_scan(target: str) -> str:
 class SendMessageWithProjectContext(SendMessage):
     """SendMessage with project context tracking."""
 
-    class ExtraParams(BaseModel):
-        project_phase: str = Field(
-            description=(
-                "Current phase of the project (planning, development, testing, security_review, deployment). "
-                "This helps the recipient understand the urgency and focus area for their response."
-            )
-        )
-        priority_level: str = Field(
-            description=(
-                "Priority level of this task. Critical items need immediate attention, "
-                "high priority items should be completed within the day."
-            )
-        )
+    tool_name = "send_message_with_context"
 
-    def __init__(self, sender_agent: Agent, recipients: dict[str, Agent] | None = None) -> None:
-        super().__init__(sender_agent, recipients)
-        self.name = "send_message_with_context"
+    project_phase: str = Field(
+        description=(
+            "Current phase of the project (planning, development, testing, security_review, deployment). "
+            "This helps the recipient understand the urgency and focus area for their response."
+        )
+    )
+    priority_level: str = Field(
+        description=(
+            "Priority level of this task. Critical items need immediate attention, "
+            "high priority items should be completed within the day."
+        )
+    )
 
 
 project_manager = Agent(
