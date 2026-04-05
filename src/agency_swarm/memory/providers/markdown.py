@@ -24,8 +24,12 @@ from agency_swarm.memory.types import (
 logger = logging.getLogger(__name__)
 
 _DOCUMENT_HEADER = "# Durable Memory\n\n<!-- agency-swarm-memory-v1 -->\n"
+_RECORD_START_MARKER = "<!-- memory-record-start -->"
+_RECORD_END_MARKER = "<!-- memory-record-end -->"
+_ESCAPED_RECORD_START_MARKER = "&lt;!-- memory-record-start --&gt;"
+_ESCAPED_RECORD_END_MARKER = "&lt;!-- memory-record-end --&gt;"
 _RECORD_PATTERN = re.compile(
-    r"<!-- memory-record-start -->\n(?P<body>.*?)\n<!-- memory-record-end -->",
+    rf"{re.escape(_RECORD_START_MARKER)}\n(?P<body>.*?)\n{re.escape(_RECORD_END_MARKER)}",
     re.DOTALL,
 )
 _MAX_FILE_LOCKS = 1024
@@ -199,7 +203,7 @@ class MarkdownMemoryProvider(MemoryProvider):
         metadata_text = json.dumps(record.metadata, sort_keys=True, ensure_ascii=True)
         return "\n".join(
             [
-                "<!-- memory-record-start -->",
+                _RECORD_START_MARKER,
                 f"## {record.record_id}",
                 f"title: {title}",
                 f"provider: {record.provider_name}",
@@ -208,8 +212,8 @@ class MarkdownMemoryProvider(MemoryProvider):
                 f"owner_id: {record.owner_id}",
                 f"metadata: {metadata_text}",
                 "",
-                record.content.strip(),
-                "<!-- memory-record-end -->",
+                _escape_record_content(record.content.strip()),
+                _RECORD_END_MARKER,
             ]
         )
 
@@ -241,7 +245,7 @@ class MarkdownMemoryProvider(MemoryProvider):
             memory_type=MemoryType(values["memory_type"]),
             owner_id=values["owner_id"],
             title=values.get("title"),
-            content=content.strip(),
+            content=_unescape_record_content(content.strip()),
             metadata=metadata,
         )
 
@@ -278,6 +282,18 @@ def _acquire_file_lock(path: Path) -> Iterator[None]:
 
 def _sanitize_path_component(value: str) -> str:
     return quote(value, safe="")
+
+
+def _escape_record_content(content: str) -> str:
+    return content.replace(_RECORD_START_MARKER, _ESCAPED_RECORD_START_MARKER).replace(
+        _RECORD_END_MARKER, _ESCAPED_RECORD_END_MARKER
+    )
+
+
+def _unescape_record_content(content: str) -> str:
+    return content.replace(_ESCAPED_RECORD_START_MARKER, _RECORD_START_MARKER).replace(
+        _ESCAPED_RECORD_END_MARKER, _RECORD_END_MARKER
+    )
 
 
 def _trim_file_locks() -> None:

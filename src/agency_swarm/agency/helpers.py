@@ -95,7 +95,7 @@ def build_fastapi_agencies(agency: "Agency") -> dict[str, Callable[..., "Agency"
             load_threads_callback=load_threads_callback,
             save_threads_callback=save_threads_callback,
             user_context=deepcopy(agency.user_context),
-            memory=agency.memory,
+            memory=deepcopy(agency.memory),
         )
 
     return {agency.name or "agency": agency_factory}
