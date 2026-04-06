@@ -41,20 +41,20 @@ def test_agent_capabilities_case_table() -> None:
     hosted_mcp = HostedMCPTool(tool_config=Mcp(server_label="test", server_url="https://example.com"))
 
     cases: list[tuple[Agent, set[str]]] = [
-        (Agent(name="EmptyAgent", instructions="Test"), set()),
-        (Agent(name="BaseToolAgent", instructions="Test", tools=[SampleTool]), {"tools"}),
-        (Agent(name="FunctionToolAgent", instructions="Test", tools=[sample_function_tool]), {"tools"}),
+        (Agent(name="EmptyAgent", instructions="Test"), {"reasoning"}),
+        (Agent(name="BaseToolAgent", instructions="Test", tools=[SampleTool]), {"tools", "reasoning"}),
+        (Agent(name="FunctionToolAgent", instructions="Test", tools=[sample_function_tool]), {"tools", "reasoning"}),
         (
             Agent(name="HostedToolsAgent", instructions="Test", tools=[FileSearchTool(vector_store_ids=["vs_123"])]),
-            {"file_search"},
+            {"file_search", "reasoning"},
         ),
         (
             Agent(name="CodeAgent", instructions="Test", tools=[CodeInterpreterTool(tool_config=CodeInterpreter())]),
-            {"code_interpreter"},
+            {"code_interpreter", "reasoning"},
         ),
-        (Agent(name="WebAgent", instructions="Test", tools=[WebSearchTool()]), {"web_search"}),
-        (Agent(name="HostedMcpAgent", instructions="Test", tools=[hosted_mcp]), {"hosted_mcp"}),
-        (Agent(name="McpServerAgent", instructions="Test", mcp_servers=[mcp_server]), {"tools"}),
+        (Agent(name="WebAgent", instructions="Test", tools=[WebSearchTool()]), {"web_search", "reasoning"}),
+        (Agent(name="HostedMcpAgent", instructions="Test", tools=[hosted_mcp]), {"hosted_mcp", "reasoning"}),
+        (Agent(name="McpServerAgent", instructions="Test", mcp_servers=[mcp_server]), {"tools", "reasoning"}),
         (
             Agent(
                 name="MixedAgent",
@@ -65,7 +65,7 @@ def test_agent_capabilities_case_table() -> None:
                     CodeInterpreterTool(tool_config=CodeInterpreter()),
                 ],
             ),
-            {"tools", "file_search", "code_interpreter"},
+            {"tools", "file_search", "code_interpreter", "reasoning"},
         ),
     ]
     for agent, expected in cases:

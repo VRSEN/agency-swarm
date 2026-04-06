@@ -13,7 +13,6 @@ from functools import wraps
 from typing import TYPE_CHECKING, Any
 
 from agents import Agent as BaseAgent, GuardrailFunctionOutput, ModelSettings, RunContextWrapper
-from agents.models import get_default_model
 from agents.models.default_models import get_default_model_settings as get_sdk_default_model_settings
 
 from agency_swarm.agent.attachment_manager import AttachmentManager
@@ -27,6 +26,10 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _INPUT_GUARDRAIL_WRAPPED_ATTR = "_agency_swarm_input_guardrail_wrapped"
+
+# Override the Agents SDK default model (gpt-4.1) to prevent infinite tool-call
+# loops observed with that model in handoff workflows.
+FRAMEWORK_DEFAULT_MODEL = "gpt-5.4-mini"
 
 # Agency Swarm defaults applied when the SDK leaves a field unset
 # include_usage=True enables streaming usage tracking for LiteLLM models
@@ -212,7 +215,7 @@ def separate_kwargs(kwargs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
         base_agent_params.pop("handoff_description")
 
     if "model" not in base_agent_params:
-        base_agent_params["model"] = get_default_model()
+        base_agent_params["model"] = FRAMEWORK_DEFAULT_MODEL
 
     return base_agent_params, current_agent_params
 
