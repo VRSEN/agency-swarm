@@ -1,31 +1,62 @@
 ---
 title: "Agent Swarm CLI"
-description: "Launch the built-in terminal UI with one Python call."
+description: "Run a multi-agent workflow from your terminal."
 icon: "terminal"
 ---
 
-Agent Swarm CLI is the built-in terminal app for `agency-swarm`. The preview below shows the current `tui()` startup screen.
+Agent Swarm CLI is the built-in terminal app for `agency-swarm`.
+
+Use it when you want a terminal chat connected to your current agency instead of a custom script loop.
+
+It opens a keyboard-first terminal workflow for the agency you already defined in Python.
+
+## Quickstart
+
+If you already have an agency, this is the fastest path:
+
+<Steps>
+  <Step title="Install Agency Swarm">
+    ```bash
+    pip install agency-swarm
+    ```
+  </Step>
+  <Step title="Set your model credentials">
+    Set `OPENAI_API_KEY` in `.env` for the default setup, or follow [Third-Party Models](/additional-features/third-party-models) if you want Anthropic, Gemini, Grok, Azure OpenAI, or other compatible providers.
+  </Step>
+  <Step title="Add the TUI launch call">
+    Put this in your `agency.py` file:
+
+    ```python
+    if __name__ == "__main__":
+        agency.tui()
+    ```
+  </Step>
+  <Step title="Run your agency">
+    ```bash
+    python agency.py
+    ```
+  </Step>
+  <Step title="Complete first-run setup">
+    On first run, `agency-swarm` downloads the terminal app, caches it locally, shows a short setup message, and opens the TUI for your current agency.
+  </Step>
+</Steps>
 
 ![Agent Swarm CLI startup screen](/images/agent-swarm-cli-preview.png)
 
-Use one command:
-
-```python
-agency.tui()
-```
-
-`tui()` sets up the terminal app on first run, caches it locally, shows a short setup message, and opens the TUI for your current agency.
+If you do not have an agency yet, start with [From Scratch](/welcome/getting-started/from-scratch) or the [Starter Template](/welcome/getting-started/starter-template), then come back here to launch it in the terminal.
 
 Use `agency.tui(reload=False)` to disable hot reload on file changes.
 
-## What You Can Do
+## Why Use It
 
-- start the TUI with one Python call
-- switch between agencies and agents with `/agents`
-- send prompts with mentions such as `@Developer fix the failing integration test`
-- stream responses, export sessions, undo or redo, and use `/compact`
+Agent Swarm CLI is useful when you want to run an agency from your terminal without building a separate UI.
 
-## Choose Agencies And Agents
+- Run single-agent or multi-agent agencies from one terminal session
+- Route one message to a specific agent without leaving the chat
+- Stay close to your code, tools, and local project context
+- Use the same agency structure you already defined in Python
+
+## Route Work In Chat
 
 Use `/agents` to open the target picker.
 
@@ -33,7 +64,37 @@ Use `/agents` to open the target picker.
 
 The picker reads live metadata from the running `agency-swarm` backend and groups agents by agency.
 
+Use `@AgentName` to send a prompt directly to a specific top-level agent, for example `@Developer fix the failing integration test`.
+
 Use `Tab` to autocomplete agent mentions in the prompt box.
+
+## What You Get
+
+- a keyboard-first terminal workflow
+- session history, export, undo, redo, and `/compact`
+- one place to manage multi-agent chats instead of separate scripts
+- the same tools, communication flows, and shared context your agency already has
+
+## Files And Context
+
+The TUI runs your existing agency, not a separate demo format.
+
+That means your agents keep access to the tools, communication flows, and shared instructions you configured in code.
+
+If your agency uses `files_folder` or `shared_files_folder`, the same file search setup is available from the terminal workflow too.
+
+## Build Your Own Agency
+
+You do not need to build a custom UI first.
+
+Build or customize your agents in Python, then launch the same agency in the TUI.
+
+- Create a new agent scaffold with `agency-swarm create-agent-template`
+- Define tools, instructions, and files inside each agent folder
+- Connect agents in `agency.py`
+- Launch the result with `agency.tui()`
+
+For the full project structure, see [From Scratch](/welcome/getting-started/from-scratch).
 
 <Accordion title="Optional: reconnect to another local agency server" defaultOpen={false}>
 `agency.tui()` already opens the TUI for the current local agency.
@@ -45,7 +106,7 @@ In that case, use `/connect` inside the TUI and point it at the other local serv
 
 ## Current Limitations
 
-These commands and modes are intentionally unavailable in the current terminal workflow:
+These commands and modes are not supported in the current terminal workflow:
 
 - `/models`
 - `/editor`
@@ -53,10 +114,15 @@ These commands and modes are intentionally unavailable in the current terminal w
 - `/commit`
 - docs mode
 
+Use your Python config to choose models and providers, and use your normal editor or Git workflow for editing files and making commits.
+
 `tui(show_reasoning=False)` is not supported in the new TUI yet.
 
 ## Related Pages
 
+- [Installation](/welcome/installation)
+- [From Scratch](/welcome/getting-started/from-scratch)
+- [Third-Party Models](/additional-features/third-party-models)
 - [Running an Agency](/core-framework/agencies/running-agency)
 - [FastAPI Integration](/additional-features/fastapi-integration)
 - [API Reference](/references/api)
