@@ -16,6 +16,7 @@ from agents import Agent as BaseAgent, GuardrailFunctionOutput, ModelSettings, R
 from agents.models.default_models import get_default_model_settings as get_sdk_default_model_settings
 
 from agency_swarm.agent.attachment_manager import AttachmentManager
+from agency_swarm.agent.constants import FRAMEWORK_DEFAULT_MODEL
 from agency_swarm.agent.file_manager import AgentFileManager
 from agency_swarm.tools import BaseTool, ToolFactory
 from agency_swarm.utils.model_utils import get_default_settings_model_name
@@ -26,10 +27,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _INPUT_GUARDRAIL_WRAPPED_ATTR = "_agency_swarm_input_guardrail_wrapped"
-
-# Override the Agents SDK default model (gpt-4.1) to prevent infinite tool-call
-# loops observed with that model in handoff workflows.
-FRAMEWORK_DEFAULT_MODEL = "gpt-5.4-mini"
 
 # Agency Swarm defaults applied when the SDK leaves a field unset
 # include_usage=True enables streaming usage tracking for LiteLLM models
