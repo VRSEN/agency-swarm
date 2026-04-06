@@ -500,7 +500,11 @@ async def test_agent_vision_capabilities(real_openai_client: AsyncOpenAI, tmp_pa
     # Resolve paths relative to the project root
     project_root = Path(__file__).resolve().parents[3]  # Go up to project root
     test_images = [
-        (project_root / "examples/data/shapes_and_text.png", "How many shapes do you see in this image?", "three"),
+        (
+            project_root / "examples/data/shapes_and_text.png",
+            "How many shapes do you see in this image?",
+            ("three", "3"),
+        ),
         (project_root / "examples/data/shapes_and_text.png", "What text do you see in this image?", "VISION TEST 2024"),
     ]
 
@@ -551,12 +555,10 @@ async def test_agent_vision_capabilities(real_openai_client: AsyncOpenAI, tmp_pa
         assert response_result.final_output is not None
         print(f"Vision response for {image_path.name}: {response_result.final_output}")
 
-        # Use case-insensitive search for matching
+        # Use case-insensitive search for matching (accept any alternative)
         response_lower = response_result.final_output.lower()
-        expected_lower = expected_content.lower()
-
-        # With temperature=0, responses should be deterministic
-        content_found = expected_lower in response_lower
+        alternatives = (expected_content,) if isinstance(expected_content, str) else expected_content
+        content_found = any(alt.lower() in response_lower for alt in alternatives)
 
         assert content_found, (
             f"Expected content '{expected_content}' not found in vision response for {image_path.name}. "
