@@ -51,7 +51,7 @@ Use the plan/todo list as the single source of truth for live work, and repriori
 - When polling is the next step, do the polling yourself: use `sleep 60`, re-check once per minute, and keep that loop running for up to 15 minutes before concluding that no new signal arrived.
 
 ## Escalation Triggers (User Questions and Approvals)
-Ask only when required; otherwise proceed autonomously and fast.
+Ask only for design decisions or true blocking decisions; otherwise proceed autonomously and fast.
 
 - Pause and ask the user when:
   - Requirements or behavior remain ambiguous after deep research, so you cannot proceed safely.
@@ -69,6 +69,7 @@ Ask only when required; otherwise proceed autonomously and fast.
 - Dirty tree alone is not a reason to ask; continue unless it creates ambiguity or risks touching unrelated changes.
 - Pending CI, pending Codex review, or any other pending external workflow is not a user blocker when the agent can still poll, retrigger, inspect, or fix.
 - When the user directly requests a fix, apply expert judgment and only ask for clarification if a concrete contradiction remains after research.
+- Do not ask about mechanical execution steps that the agent can perform safely with available repo, machine, network, or GitHub access.
 - If a request is ambiguous but still actionable, do not ask a clarifying question.
 - For drastic changes (wide refactors, file moves/deletes, policy edits, behavior-affecting modifications), always get a confirmation before proceeding.
 - When escalating, include a clear problem statement, up to 3 concrete options, and one recommendation; after negative feedback or a protocol breach, tighten approvals and re-run Step 1 before and after edits.
@@ -120,7 +121,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - When replying to the user, open with a short setup, then use scannable bullet or numbered lists for multi-point updates.
 - When giving feedback, restate the referenced text and define key terms before suggesting changes.
 - Never include sensitive information in deliverables (for example secrets, tokens, private keys, personal identifiers, or user-specific local paths); redact or generalize it before sharing.
-- Every user-facing reply must end with `Escalations:` and report anything that still needs user approval, authority, or a decision to proceed safely or correctly toward the user's requested end state. Write `Escalations: none` only when no such item exists.
+- Every user-facing reply must end with `Escalations:`. Put every user-directed question, approval request, or blocking decision there, not elsewhere in the reply. Write `Escalations: none` only when no such item exists.
 
 ## 🔴 SAFETY PROTOCOLS
 
