@@ -79,7 +79,8 @@ async def test_make_response_endpoint_builds_upload_client_after_lease(monkeypat
 
     handler = make_response_endpoint(BaseRequest, _agency_factory, verify_token=lambda: None)
     response = await handler(
-        BaseRequest(
+        http_request=None,
+        request=BaseRequest(
             message="hello",
             file_urls={"doc.txt": "https://example.com/doc.txt"},
             client_config=ClientConfig(default_headers={"x-request-id": "req-1"}),
@@ -144,7 +145,10 @@ async def test_make_response_endpoint_serializes_singleton_agency_requests(monke
     # No client_config on the second request to verify mixed traffic is still serialized.
     request_b = BaseRequest(message="b")
 
-    await asyncio.gather(handler(request_a, token=None), handler(request_b, token=None))
+    await asyncio.gather(
+        handler(http_request=None, request=request_a, token=None),
+        handler(http_request=None, request=request_b, token=None),
+    )
 
     assert agency.max_in_flight == 1
 
@@ -199,7 +203,10 @@ async def test_make_response_endpoint_allows_concurrency_without_client_config(m
     request_a = BaseRequest(message="a")
     request_b = BaseRequest(message="b")
 
-    await asyncio.gather(handler(request_a, token=None), handler(request_b, token=None))
+    await asyncio.gather(
+        handler(http_request=None, request=request_a, token=None),
+        handler(http_request=None, request=request_b, token=None),
+    )
 
     assert agency.max_in_flight == 2
 
@@ -255,7 +262,7 @@ async def test_make_response_endpoint_does_not_release_unacquired_lock(monkeypat
     request = BaseRequest(message="a", client_config=ClientConfig(default_headers={"x-request": "a"}))
 
     with pytest.raises(RuntimeError, match="acquire failed"):
-        await handler(request, token=None)
+        await handler(http_request=None, request=request, token=None)
 
     assert released is False
 
@@ -455,11 +462,11 @@ async def test_make_response_endpoint_blocks_new_regular_requests_while_override
     request_override = BaseRequest(message="o", client_config=ClientConfig(default_headers={"x-request": "o"}))
     request_regular_b = BaseRequest(message="b")
 
-    regular_a_task = asyncio.create_task(handler(request_regular_a, token=None))
+    regular_a_task = asyncio.create_task(handler(http_request=None, request=request_regular_a, token=None))
     await asyncio.wait_for(agency.first_request_started.wait(), timeout=0.2)
-    override_task = asyncio.create_task(handler(request_override, token=None))
+    override_task = asyncio.create_task(handler(http_request=None, request=request_override, token=None))
     await asyncio.sleep(0)
-    regular_b_task = asyncio.create_task(handler(request_regular_b, token=None))
+    regular_b_task = asyncio.create_task(handler(http_request=None, request=request_regular_b, token=None))
     agency.allow_first_request_to_finish.set()
 
     await asyncio.gather(regular_a_task, override_task, regular_b_task)

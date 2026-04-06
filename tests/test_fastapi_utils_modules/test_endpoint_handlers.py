@@ -47,7 +47,7 @@ async def test_agui_file_urls_error_emits_lifecycle_events(tmp_path):
         file_ids=None,
     )
 
-    response = await handler(request, token=None)
+    response = await handler(http_request=None, request=request, token=None)
 
     chunks = [chunk async for chunk in response.body_iterator]
 
@@ -93,7 +93,7 @@ async def test_response_endpoint_rejects_client_memory_identity_by_default(monke
     )
 
     with pytest.raises(HTTPException, match="Client-supplied durable memory identity is disabled by default"):
-        await handler(BaseRequest(message="hi", user_id="victim-user"), token=None)
+        await handler(http_request=None, request=BaseRequest(message="hi", user_id="victim-user"), token=None)
 
 
 @pytest.mark.asyncio
@@ -134,7 +134,7 @@ async def test_response_endpoint_uses_server_bound_memory_identity(monkeypatch) 
         memory_identity_resolver=_resolve_memory_identity,
     )
 
-    response = await handler(BaseRequest(message="hi", user_id="attacker-user"), token=None)
+    response = await handler(http_request=None, request=BaseRequest(message="hi", user_id="attacker-user"), token=None)
 
     assert response["response"] == "ok"
     assert captured["memory_identity"] == MemoryIdentity(
