@@ -122,6 +122,8 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - Use 8th grade language in all user responses.
 - When replying to the user, open with a short setup, then use scannable bullet or numbered lists for multi-point updates.
 - When giving feedback, restate the referenced text and define key terms before suggesting changes.
+- Do not add dedicated `Validation` sections to user-facing replies or PR descriptions; if evidence matters, fold it into the main update in one short line.
+- Do not mention review-artifact file paths or artifact inventories in user-facing replies or PR descriptions unless the user explicitly asks for them.
 - Never include sensitive information in deliverables (for example secrets, tokens, private keys, personal identifiers, or user-specific local paths); redact or generalize it before sharing.
 - Every user-facing reply must end with `Escalations:` and report anything that still needs user approval, authority, or a decision to proceed safely or correctly toward the user's requested end state. Write `Escalations: none` only when no such item exists.
 
