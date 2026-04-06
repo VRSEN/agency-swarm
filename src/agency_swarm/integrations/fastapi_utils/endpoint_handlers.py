@@ -273,9 +273,9 @@ def make_response_endpoint(
     memory_identity_resolver: Callable[[Request | None, BaseModel], MemoryIdentity | None] | None = None,
 ):
     async def handler(
-        http_request: Request,
         request: request_model,
         token: str = Depends(verify_token),
+        http_request: Request = None,  # type: ignore[assignment]  # FastAPI injects Request; None default for direct calls in tests
     ):
         if request.chat_history is not None:
             # Chat history is now a flat list
@@ -641,9 +641,9 @@ def make_agui_chat_endpoint(
     memory_identity_resolver: Callable[[Request | None, BaseModel], MemoryIdentity | None] | None = None,
 ):
     async def handler(
-        http_request: Request,
         request: request_model,
         token: str = Depends(verify_token),
+        http_request: Request = None,  # type: ignore[assignment]  # FastAPI injects Request; None default for direct calls in tests
     ):
         """Accepts AG-UI `RunAgentInput`, returns an AG-UI event stream."""
 
