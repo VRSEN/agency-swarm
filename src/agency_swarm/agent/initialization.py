@@ -13,10 +13,10 @@ from functools import wraps
 from typing import TYPE_CHECKING, Any
 
 from agents import Agent as BaseAgent, GuardrailFunctionOutput, ModelSettings, RunContextWrapper
-from agents.models import get_default_model
 from agents.models.default_models import get_default_model_settings as get_sdk_default_model_settings
 
 from agency_swarm.agent.attachment_manager import AttachmentManager
+from agency_swarm.agent.constants import FRAMEWORK_DEFAULT_MODEL
 from agency_swarm.agent.file_manager import AgentFileManager
 from agency_swarm.tools import BaseTool, ToolFactory
 from agency_swarm.utils.model_utils import get_default_settings_model_name
@@ -212,7 +212,7 @@ def separate_kwargs(kwargs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
         base_agent_params.pop("handoff_description")
 
     if "model" not in base_agent_params:
-        base_agent_params["model"] = get_default_model()
+        base_agent_params["model"] = FRAMEWORK_DEFAULT_MODEL
 
     return base_agent_params, current_agent_params
 

@@ -15,7 +15,8 @@ def planner_agent_instance():
         instructions=(
             "You are a Planner. You will receive a task. Determine the steps. "
             "Delegate the execution step to the Worker agent using the send_message tool. "
-            "Ensure your message to the Worker clearly includes the full and exact task description you received."
+            "Ensure your message to the Worker clearly includes the full and exact task description you received. "
+            "After receiving the final result, relay it verbatim to the user including all task identifiers."
         ),
         model_settings=ModelSettings(temperature=0.0),
     )

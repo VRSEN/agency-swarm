@@ -132,7 +132,7 @@ def test_metadata_includes_agent_capabilities():
     assert hosted_agent is not None
     assert "capabilities" in hosted_agent["data"]
     capabilities = set(hosted_agent["data"]["capabilities"])
-    assert capabilities == {"file_search", "code_interpreter", "web_search"}
+    assert capabilities == {"file_search", "code_interpreter", "web_search", "reasoning"}
     assert "tools" not in capabilities
 
     reasoning_agent = next((n for n in nodes if n["id"] == "ReasoningAgent"), None)
@@ -150,7 +150,7 @@ def test_metadata_includes_agent_capabilities():
 
 
 def test_metadata_capabilities_empty_for_basic_agent():
-    """Agent with no special features has empty capabilities list."""
+    """Agent with no tools only reports reasoning from the default model."""
 
     def create_agency(load_threads_callback=None, save_threads_callback=None):
         agent = Agent(name="BasicAgent", instructions="Basic agent with no tools")
@@ -168,7 +168,7 @@ def test_metadata_capabilities_empty_for_basic_agent():
     basic_agent = next((n for n in nodes if n["id"] == "BasicAgent"), None)
     assert basic_agent is not None
     assert "capabilities" in basic_agent["data"]
-    assert basic_agent["data"]["capabilities"] == []
+    assert basic_agent["data"]["capabilities"] == ["reasoning"]
 
 
 def test_metadata_includes_allowed_local_file_dirs(tmp_path, agency_factory):
