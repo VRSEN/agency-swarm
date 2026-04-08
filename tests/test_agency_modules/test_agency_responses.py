@@ -4,8 +4,9 @@ from typing import Any
 import pytest
 from agents import ModelSettings, RunConfig, RunHooks, RunResult, TResponseInputItem
 
-from agency_swarm import Agency, Agent
+from agency_swarm import Agency, Agent, MemoryConfig
 from agency_swarm.agent.context_types import AgencyContext
+from agency_swarm.memory import AgentMemoryConfig, MemoryIdentity
 from agency_swarm.utils.thread import ThreadManager
 from tests.deterministic_model import DeterministicModel
 
@@ -113,6 +114,37 @@ async def test_agency_get_response_basic(mock_agent):
     result = await agency.get_response("Test message", "MockAgent")
 
     assert result.final_output == "Test response"
+
+
+@pytest.mark.asyncio
+async def test_agency_get_response_builds_memory_identity_from_flat_fields() -> None:
+    agent = CapturingAgent("MemoryAgent", response_text="Memory response")
+    agent.memory = AgentMemoryConfig()
+    agency = Agency(agent, name="support", memory_folder="/tmp/agency-memory")
+
+    result = await agency.get_response(
+        "Test message",
+        "MemoryAgent",
+        user_id="user-1",
+        session_id="chat-1",
+    )
+
+    assert result.final_output == "Memory response"
+    assert agent.last_agency_context is not None
+    assert agent.last_agency_context.memory_identity == MemoryIdentity(
+        user_id="user-1",
+        agency_id="support",
+        session_id="chat-1",
+    )
+
+
+def test_agency_memory_folder_conflicts_with_memory_config(mock_agent) -> None:
+    with pytest.raises(ValueError, match="Use either memory or memory_folder"):
+        Agency(
+            mock_agent,
+            memory_folder="/tmp/agency-memory",
+            memory=MemoryConfig.mem0(),
+        )
 
 
 @pytest.mark.asyncio
@@ -285,9 +317,104 @@ async def test_agency_get_response_uses_agency_context_override_thread_manager(m
     )
 
     assert result.final_output == "Test response"
-    assert mock_agent.last_agency_context is isolated_context
+    assert mock_agent.last_agency_context is not isolated_context
+    assert isolated_context.memory_identity is None
     assert isolated_thread_manager.get_all_messages()
     assert agency.thread_manager.get_all_messages() == []
+
+
+@pytest.mark.asyncio
+async def test_agency_get_response_does_not_mutate_agency_context_override_memory_state(mock_agent) -> None:
+    agency = Agency(mock_agent, name="support", memory_folder="/tmp/agency-memory")
+    isolated_context = agency.get_agent_context("MockAgent", thread_manager_override=ThreadManager())
+
+    await agency.get_response(
+        "Test message",
+        "MockAgent",
+        agency_context_override=isolated_context,
+        user_id="user-1",
+        session_id="chat-1",
+    )
+
+    assert isolated_context.memory_identity is None
+    assert mock_agent.last_agency_context is not None
+    assert mock_agent.last_agency_context is not isolated_context
+    assert mock_agent.last_agency_context.thread_manager is isolated_context.thread_manager
+    assert mock_agent.last_agency_context.memory_identity == MemoryIdentity(
+        user_id="user-1",
+        agency_id="support",
+        session_id="chat-1",
+    )
+
+
+@pytest.mark.asyncio
+async def test_agency_get_response_sync_uses_agency_context_override_thread_manager(mock_agent) -> None:
+    agency = Agency(mock_agent)
+    isolated_thread_manager = ThreadManager()
+    isolated_context = agency.get_agent_context("MockAgent", thread_manager_override=isolated_thread_manager)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        result = agency.get_response_sync(
+            "Test message",
+            "MockAgent",
+            agency_context_override=isolated_context,
+        )
+
+    assert result.final_output == "Test response"
+    assert mock_agent.last_agency_context is not isolated_context
+    assert mock_agent.last_agency_context is not None
+    assert mock_agent.last_agency_context.thread_manager is isolated_thread_manager
+    assert isolated_thread_manager.get_all_messages()
+    assert agency.thread_manager.get_all_messages() == []
+
+
+@pytest.mark.asyncio
+async def test_agency_get_response_preserves_override_memory_manager(mock_agent) -> None:
+    class StubMemoryManager:
+        def validate_run(self, **_kwargs) -> None:
+            return None
+
+        async def build_system_memory(self, **_kwargs) -> None:
+            return None
+
+    agency = Agency(mock_agent)
+    isolated_context = agency.get_agent_context("MockAgent", thread_manager_override=ThreadManager())
+    custom_memory_manager = StubMemoryManager()
+    isolated_context.memory_manager = custom_memory_manager
+
+    await agency.get_response(
+        "Test message",
+        "MockAgent",
+        agency_context_override=isolated_context,
+    )
+
+    assert mock_agent.last_agency_context is not None
+    assert mock_agent.last_agency_context.memory_manager is custom_memory_manager
+
+
+@pytest.mark.asyncio
+async def test_agency_get_response_uses_override_memory_identity_by_default(mock_agent) -> None:
+    agency = Agency(mock_agent, name="support", memory_folder="/tmp/agency-memory")
+    isolated_context = agency.get_agent_context("MockAgent", thread_manager_override=ThreadManager())
+    isolated_context.memory_identity = MemoryIdentity(
+        user_id="user-override",
+        agency_id="support",
+        session_id="chat-override",
+    )
+
+    await agency.get_response(
+        "Test message",
+        "MockAgent",
+        agency_context_override=isolated_context,
+    )
+
+    assert mock_agent.last_agency_context is not None
+    assert mock_agent.last_agency_context.memory_identity == MemoryIdentity(
+        user_id="user-override",
+        agency_id="support",
+        session_id="chat-override",
+    )
 
 
 @pytest.mark.asyncio
@@ -307,7 +434,8 @@ async def test_agency_get_response_stream_uses_agency_context_override_thread_ma
 
     assert stream.final_result is not None
     assert stream.final_result.final_output == "Test response"
-    assert mock_agent.last_agency_context is isolated_context
+    assert mock_agent.last_agency_context is not isolated_context
+    assert isolated_context.memory_identity is None
     assert isolated_thread_manager.get_all_messages()
     assert agency.thread_manager.get_all_messages() == []
 

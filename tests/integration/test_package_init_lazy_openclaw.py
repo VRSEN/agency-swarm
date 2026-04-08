@@ -99,3 +99,10 @@ print("ok")
 """
     )
     assert output == "ok"
+
+
+def test_memory_manager_is_available_from_root_package() -> None:
+    output = _run_inline(
+        "import agency_swarm; print(hasattr(agency_swarm, 'MemoryManager')); print(agency_swarm.MemoryManager.__name__)"
+    )
+    assert output.splitlines() == ["True", "MemoryManager"]

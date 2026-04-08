@@ -63,7 +63,8 @@ async def test_make_response_endpoint_applies_client_config_to_agent_client_sync
     handler = make_response_endpoint(BaseRequest, _agency_factory, verify_token=lambda: None)
 
     response = await handler(
-        BaseRequest(
+        http_request=None,
+        request=BaseRequest(
             message="hi",
             client_config=ClientConfig(api_key="sk-request-key", base_url="https://api.openai.com/v1"),
         ),
@@ -129,13 +130,14 @@ async def test_make_response_endpoint_restores_agent_client_sync_after_override(
     handler = make_response_endpoint(BaseRequest, _agency_factory, verify_token=lambda: None)
 
     await handler(
-        BaseRequest(
+        http_request=None,
+        request=BaseRequest(
             message="first",
             client_config=ClientConfig(api_key="sk-request-key", base_url="https://api.openai.com/v1"),
         ),
         token=None,
     )
-    await handler(BaseRequest(message="second"), token=None)
+    await handler(http_request=None, request=BaseRequest(message="second"), token=None)
 
     assert seen_api_keys == ["sk-request-key", "sk-env-default"]
 
@@ -184,7 +186,8 @@ async def test_make_response_endpoint_passes_request_client_to_chat_name_generat
 
     handler = make_response_endpoint(BaseRequest, _agency_factory, verify_token=lambda: None)
     response = await handler(
-        BaseRequest(
+        http_request=None,
+        request=BaseRequest(
             message="hello",
             generate_chat_name=True,
             client_config=ClientConfig(api_key="sk-request-key", base_url="https://api.openai.com/v1"),
@@ -259,7 +262,8 @@ async def test_make_response_endpoint_uses_existing_client_for_chat_name_headers
 
     handler = make_response_endpoint(BaseRequest, _agency_factory, verify_token=lambda: None)
     response = await handler(
-        BaseRequest(
+        http_request=None,
+        request=BaseRequest(
             message="hello",
             generate_chat_name=True,
             client_config=ClientConfig(default_headers={"x-request-id": "req-1"}),

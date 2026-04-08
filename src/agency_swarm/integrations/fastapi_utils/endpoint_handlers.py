@@ -56,6 +56,7 @@ from agency_swarm.integrations.fastapi_utils.override_policy import (
     get_allowed_dirs_for_metadata,
 )
 from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+from agency_swarm.memory import MemoryIdentity
 from agency_swarm.messages import MessageFilter, MessageFormatter
 from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
 from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
@@ -268,8 +269,14 @@ def make_response_endpoint(
     agency_factory: Callable[..., Agency],
     verify_token,
     allowed_local_dirs: Sequence[str | Path] | None = None,
+    allow_client_memory_identity: bool = False,
+    memory_identity_resolver: Callable[[Request | None, BaseModel], MemoryIdentity | None] | None = None,
 ):
-    async def handler(request: request_model, token: str = Depends(verify_token)):
+    async def handler(
+        http_request: Request,
+        request: request_model,
+        token: str = Depends(verify_token),
+    ):
         if request.chat_history is not None:
             # Chat history is now a flat list
             def load_callback() -> list:
@@ -309,6 +316,12 @@ def make_response_endpoint(
 
             # Attach persistent MCP servers and ensure connections before handling the request
             await attach_persistent_mcp_servers(agency_instance)
+            memory_identity, user_id, session_id = _resolve_request_memory_inputs(
+                request=request,
+                http_request=http_request,
+                allow_client_memory_identity=allow_client_memory_identity,
+                memory_identity_resolver=memory_identity_resolver,
+            )
 
             # Capture initial message count to identify new messages
             initial_message_count = len(agency_instance.thread_manager.get_all_messages())
@@ -319,6 +332,9 @@ def make_response_endpoint(
                 context_override=request.user_context,
                 additional_instructions=request.additional_instructions,
                 file_ids=combined_file_ids,
+                memory_identity=memory_identity,
+                user_id=user_id,
+                session_id=session_id,
             )
             # Get only new messages added during this request
             all_messages = agency_instance.thread_manager.get_all_messages()
@@ -359,6 +375,8 @@ def make_stream_endpoint(
     verify_token,
     run_registry: ActiveRunRegistry,
     allowed_local_dirs: Sequence[str | Path] | None = None,
+    allow_client_memory_identity: bool = False,
+    memory_identity_resolver: Callable[[Request | None, BaseModel], MemoryIdentity | None] | None = None,
 ):
     async def handler(
         http_request: Request,
@@ -443,6 +461,12 @@ def make_stream_endpoint(
         async def event_generator():
             # Capture initial message count to identify new messages
             initial_message_count = len(agency_instance.thread_manager.get_all_messages())
+            memory_identity, user_id, session_id = _resolve_request_memory_inputs(
+                request=request,
+                http_request=http_request,
+                allow_client_memory_identity=allow_client_memory_identity,
+                memory_identity_resolver=memory_identity_resolver,
+            )
 
             stream = None
             active_run: ActiveRun | None = None
@@ -453,6 +477,9 @@ def make_stream_endpoint(
                     context_override=request.user_context,
                     additional_instructions=request.additional_instructions,
                     file_ids=combined_file_ids,
+                    memory_identity=memory_identity,
+                    user_id=user_id,
+                    session_id=session_id,
                 )
 
                 active_run = ActiveRun(
@@ -610,8 +637,14 @@ def make_agui_chat_endpoint(
     agency_factory: Callable[..., Agency],
     verify_token,
     allowed_local_dirs: Sequence[str | Path] | None = None,
+    allow_client_memory_identity: bool = False,
+    memory_identity_resolver: Callable[[Request | None, BaseModel], MemoryIdentity | None] | None = None,
 ):
-    async def handler(request: request_model, token: str = Depends(verify_token)):
+    async def handler(
+        http_request: Request,
+        request: request_model,
+        token: str = Depends(verify_token),
+    ):
         """Accepts AG-UI `RunAgentInput`, returns an AG-UI event stream."""
 
         encoder = EventEncoder()
@@ -714,6 +747,12 @@ def make_agui_chat_endpoint(
             try:
                 # Create AguiAdapter instance with clean state for this request
                 agui_adapter = AguiAdapter()
+                memory_identity, user_id, session_id = _resolve_request_memory_inputs(
+                    request=request,
+                    http_request=http_request,
+                    allow_client_memory_identity=allow_client_memory_identity,
+                    memory_identity_resolver=memory_identity_resolver,
+                )
 
                 # Store in dict format to avoid converting to classes
                 snapshot_messages = [message.model_dump() for message in request.messages]
@@ -722,6 +761,9 @@ def make_agui_chat_endpoint(
                     context_override=request.user_context,
                     additional_instructions=request.additional_instructions,
                     file_ids=combined_file_ids or None,
+                    memory_identity=memory_identity,
+                    user_id=user_id,
+                    session_id=session_id,
                 ):
                     agui_event = agui_adapter.openai_to_agui_events(
                         event,
@@ -813,6 +855,36 @@ async def exception_handler(request, exc):
     if isinstance(exc, tuple):
         error_message = str(exc[1]) if len(exc) > 1 else str(exc[0])
     return JSONResponse(status_code=500, content={"error": error_message})
+
+
+def _resolve_request_memory_inputs(
+    *,
+    request: BaseModel,
+    http_request: Request | None,
+    allow_client_memory_identity: bool,
+    memory_identity_resolver: Callable[[Request | None, BaseModel], MemoryIdentity | None] | None,
+) -> tuple[MemoryIdentity | None, str | None, str | None]:
+    if memory_identity_resolver is not None:
+        trusted_identity = memory_identity_resolver(http_request, request)
+        return trusted_identity, None, None
+
+    user_id = getattr(request, "user_id", None)
+    session_id = getattr(request, "session_id", None)
+    memory_identity = getattr(request, "memory_identity", None)
+
+    if allow_client_memory_identity:
+        return memory_identity, user_id, session_id
+
+    if user_id is not None or session_id is not None or memory_identity is not None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Client-supplied durable memory identity is disabled by default for FastAPI. "
+                "Bind durable memory identity on the server with memory_identity_resolver, "
+                "or set allow_client_memory_identity=True only for trusted callers."
+            ),
+        )
+    return None, None, None
 
 
 async def generate_chat_name(

@@ -6,7 +6,7 @@ import textwrap
 from pathlib import Path
 
 import agency_swarm
-from agency_swarm import Agency, Agent
+from agency_swarm import Agency, Agent, Memory
 from agency_swarm.agency.helpers import run_fastapi as helpers_run_fastapi
 from agency_swarm.tools import SendMessage
 
@@ -72,6 +72,50 @@ def test_run_fastapi_creates_new_agency_instance(mocker):
 
     assert load_called, "load_threads_callback was not invoked"
     assert new_agency is not agency, "Factory should create a new Agency instance"
+
+
+def test_run_fastapi_factory_reuses_memory_manager(mocker, tmp_path: Path):
+    agent = Agent(name="HelperAgent", instructions="test", model="gpt-5.4-mini")
+    agency = Agency(agent, memory=Memory.markdown(folder=tmp_path / "memory"))
+
+    captured = {}
+
+    def fake_run_fastapi(*, agencies=None, **kwargs):
+        captured["factory"] = agencies["agency"]
+        return None
+
+    mocker.patch("agency_swarm.integrations.fastapi.run_fastapi", side_effect=fake_run_fastapi)
+
+    helpers_run_fastapi(agency)
+    factory = captured["factory"]
+    cloned_agency = factory()
+
+    assert cloned_agency.memory is agency.memory
+    assert cloned_agency.memory_manager is agency.memory_manager
+
+
+def test_run_fastapi_forwards_memory_identity_security_options(mocker):
+    agent = Agent(name="HelperAgent", instructions="test", model="gpt-5.4-mini")
+    agency = Agency(agent)
+    captured = {}
+
+    def _resolver(_http_request, _request):
+        return None
+
+    def fake_run_fastapi(**kwargs):
+        captured.update(kwargs)
+        return None
+
+    mocker.patch("agency_swarm.integrations.fastapi.run_fastapi", side_effect=fake_run_fastapi)
+
+    helpers_run_fastapi(
+        agency,
+        allow_client_memory_identity=True,
+        memory_identity_resolver=_resolver,
+    )
+
+    assert captured["allow_client_memory_identity"] is True
+    assert captured["memory_identity_resolver"] is _resolver
 
 
 class CustomSendMessage(SendMessage):

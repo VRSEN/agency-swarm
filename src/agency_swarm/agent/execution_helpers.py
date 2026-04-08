@@ -216,7 +216,10 @@ def _resolve_latest_shared_instructions(agency_context: "AgencyContext | None") 
 
 
 def prepare_master_context(
-    agent: "Agent", context_override: dict[str, Any] | None, agency_context: "AgencyContext | None" = None
+    agent: "Agent",
+    context_override: dict[str, Any] | None,
+    agency_context: "AgencyContext | None" = None,
+    sender_name: str | None = None,
 ) -> MasterContext:
     """Constructs the MasterContext for the current run."""
     if not agency_context or not agency_context.thread_manager:
@@ -228,12 +231,21 @@ def prepare_master_context(
 
     # For standalone agent usage (no agency), create minimal context
     if not agency_instance or not hasattr(agency_instance, "agents"):
+        if agency_context.memory_manager is not None:
+            agency_context.memory_manager.validate_run(
+                memory_identity=agency_context.memory_identity,
+                agent_name=agent.name,
+                agent_config=agent.memory,
+            )
         return MasterContext(
             thread_manager=thread_manager,
             agents={agent.name: agent},  # Only include self
             user_context=context_override or {},
             current_agent_name=agent.name,
+            current_sender_name=sender_name,
             shared_instructions=shared_instructions_for_run,
+            memory_identity=agency_context.memory_identity,
+            memory_manager=agency_context.memory_manager,
             agent_runtime_state={agent.name: AgentRuntimeState(agent.tool_concurrency_manager)},
         )
 
@@ -249,12 +261,22 @@ def prepare_master_context(
         except Exception:
             pass
 
+    if agency_context.memory_manager is not None:
+        agency_context.memory_manager.validate_run(
+            memory_identity=agency_context.memory_identity,
+            agent_name=agent.name,
+            agent_config=agent.memory,
+        )
+
     return MasterContext(
         thread_manager=thread_manager,
         agents=agency_instance.agents,
         user_context=user_context,
         current_agent_name=agent.name,
+        current_sender_name=sender_name,
         shared_instructions=shared_instructions_for_run,
+        memory_identity=agency_context.memory_identity,
+        memory_manager=agency_context.memory_manager,
         agent_runtime_state=runtime_state_map,
     )
 
@@ -289,7 +311,7 @@ def extract_hosted_tool_results_if_needed(
     return MessageFormatter.extract_hosted_tool_results(agent, run_items, caller_agent)
 
 
-def setup_execution(
+async def setup_execution(
     agent: "Agent",
     sender_name: str | None,
     agency_context: "AgencyContext | None",
@@ -305,6 +327,7 @@ def setup_execution(
 
     # Temporarily modify instructions if shared or additional instructions provided
     shared_instructions_text = _resolve_latest_shared_instructions(agency_context)
+    system_memory_text = await _build_system_memory_text(agent, agency_context)
 
     if additional_instructions and not isinstance(additional_instructions, str):
         raise ValueError("additional_instructions must be a string")
@@ -312,10 +335,12 @@ def setup_execution(
     additional_for_run: str | None = additional_instructions or None
 
     def build_combined_instructions(base_text: str | None) -> str | None:
-        """Compose the runtime instructions in the order: shared -> base -> additional."""
+        """Compose the runtime instructions in the order: shared -> memory -> base -> additional."""
         core_parts: list[str] = []
         if shared_instructions_text:
             core_parts.append(shared_instructions_text)
+        if system_memory_text:
+            core_parts.append(system_memory_text)
         if base_text:
             core_parts.append(base_text)
 
@@ -329,11 +354,12 @@ def setup_execution(
         return additional_for_run
 
     # Skip modification if nothing to add
-    if shared_instructions_text or additional_for_run:
+    if shared_instructions_text or system_memory_text or additional_for_run:
         logger.debug(
-            "Preparing combined instructions for agent '%s' (shared: %s, additional: %s)",
+            "Preparing combined instructions for agent '%s' (shared: %s, memory: %s, additional: %s)",
             agent.name,
             bool(shared_instructions_text),
+            bool(system_memory_text),
             bool(additional_for_run),
         )
 
@@ -387,6 +413,17 @@ def setup_execution(
     logger.info(f"Agent '{agent.name}' handling {method_name} from sender: {sender_name}")
 
     return original_instructions
+
+
+async def _build_system_memory_text(agent: "Agent", agency_context: "AgencyContext | None") -> str | None:
+    """Load system memory for the current run without persisting it into thread history."""
+    if agency_context is None or agency_context.memory_manager is None:
+        return None
+    return await agency_context.memory_manager.build_system_memory(
+        memory_identity=agency_context.memory_identity,
+        agent_name=agent.name,
+        agent_config=agent.memory,
+    )
 
 
 def _validate_agency_for_delegation(
