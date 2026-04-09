@@ -450,6 +450,42 @@ async def test_agency_get_response_adds_reminder_after_repeated_manual_switches(
 
 
 @pytest.mark.asyncio
+async def test_agency_get_response_adds_reminder_after_structured_switch_turn() -> None:
+    """Structured user inputs should keep reminder chaining on later switches."""
+    agent_a = CapturingAgent("AgentA")
+    agent_b = CapturingAgent("AgentB")
+    agent_c = CapturingAgent("AgentC")
+    agency = Agency(agent_a, agent_b, agent_c)
+
+    agency.thread_manager.add_messages(
+        [
+            {"role": "user", "content": "previous", "agent": "AgentB", "callerAgent": None},
+            {
+                "role": "system",
+                "content": "Transfer completed. You are AgentB. Please continue the task.",
+                "agent": "AgentB",
+                "callerAgent": "AgentA",
+                "message_origin": "handoff_reminder",
+            },
+            {"role": "assistant", "content": "done", "agent": "AgentB", "callerAgent": None},
+        ]
+    )
+
+    await agency.get_response(
+        [
+            {"role": "user", "content": "switch to AgentA"},
+            {"role": "user", "content": "keep the same structured payload"},
+        ],
+        recipient_agent="AgentA",
+    )
+    await agency.get_response("switch to AgentC", recipient_agent="AgentC")
+
+    assert isinstance(agent_c.last_message, list)
+    assert agent_c.last_message[0]["message_origin"] == "recipient_reminder"
+    assert agent_c.last_message[-1] == {"role": "user", "content": "switch to AgentC"}
+
+
+@pytest.mark.asyncio
 async def test_agency_get_response_stream_adds_recipient_switch_reminder_after_handoff() -> None:
     """Streaming path should prepend recipient_reminder under the same conditions."""
     agent_a = CapturingAgent("AgentA")
@@ -507,3 +543,49 @@ async def test_agency_get_response_stream_keeps_empty_input_guard_when_reminder_
     assert stream.final_result is None
     assert events == [{"type": "error", "content": "message cannot be empty"}]
     assert agent_a.last_message == "   "
+
+
+@pytest.mark.asyncio
+async def test_agency_get_response_ignores_descendant_handoff_reminders_from_other_runs() -> None:
+    """Child-run handoff reminders should not trigger user-thread recipient reminders."""
+    agent_a = CapturingAgent("AgentA")
+    agent_b = CapturingAgent("AgentB")
+    agency = Agency(agent_a, agent_b)
+
+    agency.thread_manager.add_messages(
+        [
+            {
+                "role": "user",
+                "content": "top-level request",
+                "agent": "AgentA",
+                "callerAgent": None,
+                "agent_run_id": "top-run",
+            },
+            {
+                "role": "assistant",
+                "content": "top-level response",
+                "agent": "AgentA",
+                "callerAgent": None,
+                "agent_run_id": "top-run",
+            },
+            {
+                "role": "system",
+                "content": "Transfer completed. You are Specialist. Please continue the task.",
+                "agent": "Specialist",
+                "callerAgent": "AgentA",
+                "agent_run_id": "child-run",
+                "message_origin": "handoff_reminder",
+            },
+            {
+                "role": "assistant",
+                "content": "child response",
+                "agent": "Specialist",
+                "callerAgent": "AgentA",
+                "agent_run_id": "child-run",
+            },
+        ]
+    )
+
+    await agency.get_response("new top-level switch", recipient_agent="AgentB")
+
+    assert agent_b.last_message == "new top-level switch"

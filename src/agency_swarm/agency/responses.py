@@ -26,6 +26,22 @@ _CONTROL_REMINDER_ORIGINS = frozenset({"handoff_reminder", "recipient_reminder"}
 
 def _get_last_user_call_messages(messages: list[TResponseInputItem]) -> list[TResponseInputItem]:
     """Return messages for the most recent user-initiated call and its leading control reminders."""
+    last_top_level_run_id: str | None = None
+    for message in reversed(messages):
+        if not isinstance(message, dict) or message.get("callerAgent") is not None:
+            continue
+        run_id = message.get("agent_run_id")
+        if isinstance(run_id, str) and run_id:
+            last_top_level_run_id = run_id
+            break
+
+    if last_top_level_run_id is not None:
+        return [
+            message
+            for message in messages
+            if isinstance(message, dict) and message.get("agent_run_id") == last_top_level_run_id
+        ]
+
     last_user_index = -1
     for index, message in enumerate(messages):
         if isinstance(message, dict) and message.get("role") == "user" and message.get("callerAgent") is None:
