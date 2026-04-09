@@ -360,7 +360,7 @@ async def test_agency_get_response_adds_recipient_switch_reminder_after_handoff(
                 "role": "system",
                 "content": "Transfer completed. You are AgentB. Please continue the task.",
                 "agent": "AgentB",
-                "callerAgent": "AgentA",
+                "callerAgent": None,
                 "message_origin": "handoff_reminder",
             },
             {"role": "assistant", "content": "done", "agent": "AgentB", "callerAgent": None},
@@ -402,7 +402,7 @@ async def test_agency_get_response_skips_recipient_switch_reminder_without_switc
                 "role": "system",
                 "content": "Transfer completed. You are AgentA. Please continue the task.",
                 "agent": "AgentA",
-                "callerAgent": "AgentB",
+                "callerAgent": None,
                 "message_origin": "handoff_reminder",
             },
             {"role": "assistant", "content": "done", "agent": "AgentA", "callerAgent": None},
@@ -427,7 +427,7 @@ async def test_agency_get_response_adds_reminder_after_repeated_manual_switches(
                 "role": "system",
                 "content": "Transfer completed. You are AgentB. Please continue the task.",
                 "agent": "AgentB",
-                "callerAgent": "AgentA",
+                "callerAgent": None,
                 "message_origin": "handoff_reminder",
             },
             {"role": "assistant", "content": "done", "agent": "AgentB", "callerAgent": None},
@@ -464,7 +464,7 @@ async def test_agency_get_response_adds_reminder_after_structured_switch_turn() 
                 "role": "system",
                 "content": "Transfer completed. You are AgentB. Please continue the task.",
                 "agent": "AgentB",
-                "callerAgent": "AgentA",
+                "callerAgent": None,
                 "message_origin": "handoff_reminder",
             },
             {"role": "assistant", "content": "done", "agent": "AgentB", "callerAgent": None},
@@ -569,7 +569,7 @@ async def test_agency_get_response_stream_adds_recipient_switch_reminder_after_h
                 "role": "system",
                 "content": "Transfer completed. You are AgentB. Please continue the task.",
                 "agent": "AgentB",
-                "callerAgent": "AgentA",
+                "callerAgent": None,
                 "message_origin": "handoff_reminder",
             },
             {"role": "assistant", "content": "done", "agent": "AgentB", "callerAgent": None},
@@ -659,3 +659,30 @@ async def test_agency_get_response_ignores_descendant_handoff_reminders_from_oth
     await agency.get_response("new top-level switch", recipient_agent="AgentB")
 
     assert agent_b.last_message == "new top-level switch"
+
+
+@pytest.mark.asyncio
+async def test_agency_get_response_ignores_legacy_child_handoff_reminders_without_run_ids() -> None:
+    """Legacy histories without run ids should only trust user-thread reminders."""
+    agent_a = CapturingAgent("AgentA")
+    agent_b = CapturingAgent("AgentB")
+    agency = Agency(agent_a, agent_b)
+
+    agency.thread_manager.add_messages(
+        [
+            {"role": "user", "content": "top-level request", "agent": "AgentA", "callerAgent": None},
+            {"role": "assistant", "content": "top-level response", "agent": "AgentA", "callerAgent": None},
+            {
+                "role": "system",
+                "content": "Transfer completed. You are Specialist. Please continue the task.",
+                "agent": "Specialist",
+                "callerAgent": "AgentA",
+                "message_origin": "handoff_reminder",
+            },
+            {"role": "assistant", "content": "child response", "agent": "Specialist", "callerAgent": "AgentA"},
+        ]
+    )
+
+    await agency.get_response("new legacy switch", recipient_agent="AgentB")
+
+    assert agent_b.last_message == "new legacy switch"

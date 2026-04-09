@@ -80,7 +80,11 @@ def _should_add_recipient_switch_reminder(
     used_control_reminder = any(
         isinstance(message, dict)
         and message.get("message_origin") in _CONTROL_REMINDER_ORIGINS
-        and (not top_level_run_ids or message.get("agent_run_id") in top_level_run_ids)
+        and (
+            message.get("agent_run_id") in top_level_run_ids
+            if top_level_run_ids
+            else message.get("callerAgent") is None
+        )
         for message in last_call_messages
     )
     if not used_control_reminder:
