@@ -21,6 +21,117 @@ from .helpers import get_agent_context, resolve_agent
 
 logger = logging.getLogger(__name__)
 
+_CONTROL_REMINDER_ORIGINS = frozenset({"handoff_reminder", "recipient_reminder"})
+
+
+def _get_last_user_call_messages(messages: list[TResponseInputItem]) -> list[TResponseInputItem]:
+    """Return messages for the most recent user-initiated call and its leading control reminders."""
+    last_user_index = -1
+    for index, message in enumerate(messages):
+        if isinstance(message, dict) and message.get("role") == "user" and message.get("callerAgent") is None:
+            last_user_index = index
+    if last_user_index < 0:
+        return []
+
+    start_index = last_user_index
+    run_id = None
+    last_user_message = messages[last_user_index]
+    if isinstance(last_user_message, dict):
+        candidate_run_id = last_user_message.get("agent_run_id")
+        if isinstance(candidate_run_id, str) and candidate_run_id:
+            run_id = candidate_run_id
+
+    while start_index > 0:
+        previous = messages[start_index - 1]
+        if not isinstance(previous, dict):
+            break
+
+        if run_id is not None and previous.get("agent_run_id") == run_id:
+            start_index -= 1
+            continue
+
+        if previous.get("message_origin") not in _CONTROL_REMINDER_ORIGINS:
+            break
+        start_index -= 1
+
+    return messages[start_index:]
+
+
+def _should_add_recipient_switch_reminder(
+    *,
+    agency_context: "AgencyContext | None",
+    target_agent_name: str,
+) -> bool:
+    """Return whether to prepend a recipient-switch reminder for this user turn."""
+    if agency_context is None or agency_context.thread_manager is None:
+        return False
+
+    last_call_messages = _get_last_user_call_messages(agency_context.thread_manager.get_all_messages())
+    if not last_call_messages:
+        return False
+
+    top_level_run_ids = {
+        run_id
+        for message in last_call_messages
+        if isinstance(message, dict)
+        and message.get("callerAgent") is None
+        and isinstance(run_id := message.get("agent_run_id"), str)
+    }
+    used_control_reminder = any(
+        isinstance(message, dict)
+        and message.get("message_origin") in _CONTROL_REMINDER_ORIGINS
+        and message.get("callerAgent") is None
+        and (
+            message.get("agent_run_id") in top_level_run_ids
+            if top_level_run_ids and message.get("agent_run_id") is not None
+            else True
+        )
+        for message in last_call_messages
+    )
+    if not used_control_reminder:
+        return False
+
+    for message in reversed(last_call_messages):
+        if isinstance(message, dict):
+            message_dict = cast(dict[str, Any], message)
+            if (
+                message_dict.get("role") == "assistant"
+                and message_dict.get("callerAgent") is None
+                and isinstance(message_dict.get("agent"), str)
+            ):
+                return cast(str, message_dict["agent"]) != target_agent_name
+
+    return True
+
+
+def _build_user_message_with_recipient_reminder(
+    message: str | list[TResponseInputItem],
+    *,
+    target_agent: Agent,
+) -> list[TResponseInputItem]:
+    """Return input items with a recipient-switch reminder prepended."""
+    description = (target_agent.description or "").strip()
+    reminder_content = f'User has switched recipient agent. You are "{target_agent.name}".'
+    if description:
+        reminder_content += f" Role: {description}"
+        if description[-1] not in ".!?":
+            reminder_content += "."
+    reminder_content += " Please continue the task."
+
+    reminder = cast(
+        TResponseInputItem,
+        {
+            "role": "system",
+            "content": reminder_content,
+            "message_origin": "recipient_reminder",
+        },
+    )
+
+    if isinstance(message, list):
+        return [reminder, *message]
+
+    return [reminder, cast(TResponseInputItem, {"role": "user", "content": message})]
+
 
 async def get_response(
     agency: "Agency",
@@ -87,8 +198,12 @@ async def get_response(
     # On handoffs all servers need to be initialized to be used
     await attach_persistent_mcp_servers(agency)
 
+    message_for_call: str | list[TResponseInputItem] = message
+    if _should_add_recipient_switch_reminder(agency_context=agency_context, target_agent_name=target_agent.name):
+        message_for_call = _build_user_message_with_recipient_reminder(message, target_agent=target_agent)
+
     return await target_agent.get_response(
-        message=message,
+        message=message_for_call,
         sender_name=None,
         context_override=context_override,
         hooks_override=effective_hooks,
@@ -222,8 +337,17 @@ def get_response_stream(
 
                 await attach_persistent_mcp_servers(agency)
 
+                message_for_call: str | list[TResponseInputItem] = message
+                if isinstance(message, str) and not message.strip():
+                    message_for_call = message
+                elif _should_add_recipient_switch_reminder(
+                    agency_context=agency_context,
+                    target_agent_name=target_agent.name,
+                ):
+                    message_for_call = _build_user_message_with_recipient_reminder(message, target_agent=target_agent)
+
                 primary_stream = target_agent.get_response_stream(
-                    message=message,
+                    message=message_for_call,
                     sender_name=None,
                     context_override=enhanced_context,
                     hooks_override=effective_hooks,
