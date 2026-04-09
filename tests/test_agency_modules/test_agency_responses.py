@@ -529,6 +529,33 @@ async def test_agency_get_response_adds_reminder_after_split_run_handoff_turn() 
 
 
 @pytest.mark.asyncio
+async def test_agency_get_response_adds_reminder_after_interrupted_handoff_turn() -> None:
+    """Manual switches should still refresh control when the prior handoff never answered."""
+    agent_a = CapturingAgent("AgentA")
+    agent_b = CapturingAgent("AgentB")
+    agency = Agency(agent_a, agent_b)
+
+    agency.thread_manager.add_messages(
+        [
+            {"role": "user", "content": "previous", "agent": "AgentA", "callerAgent": None},
+            {
+                "role": "system",
+                "content": "Transfer completed. You are AgentB. Please continue the task.",
+                "agent": "AgentA",
+                "callerAgent": None,
+                "message_origin": "handoff_reminder",
+            },
+        ]
+    )
+
+    await agency.get_response("switch to AgentB", recipient_agent="AgentB")
+
+    assert isinstance(agent_b.last_message, list)
+    assert agent_b.last_message[0]["message_origin"] == "recipient_reminder"
+    assert agent_b.last_message[-1] == {"role": "user", "content": "switch to AgentB"}
+
+
+@pytest.mark.asyncio
 async def test_agency_get_response_stream_adds_recipient_switch_reminder_after_handoff() -> None:
     """Streaming path should prepend recipient_reminder under the same conditions."""
     agent_a = CapturingAgent("AgentA")

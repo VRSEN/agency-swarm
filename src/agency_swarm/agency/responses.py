@@ -96,6 +96,16 @@ def _should_add_recipient_switch_reminder(
             ):
                 return cast(str, message_dict["agent"]) != target_agent_name
 
+    for message in reversed(last_call_messages):
+        if isinstance(message, dict):
+            message_dict = cast(dict[str, Any], message)
+            if (
+                message_dict.get("role") == "user"
+                and message_dict.get("callerAgent") is None
+                and isinstance(message_dict.get("agent"), str)
+            ):
+                return cast(str, message_dict["agent"]) != target_agent_name
+
     return False
 
 
