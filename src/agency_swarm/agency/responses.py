@@ -80,10 +80,11 @@ def _should_add_recipient_switch_reminder(
     used_control_reminder = any(
         isinstance(message, dict)
         and message.get("message_origin") in _CONTROL_REMINDER_ORIGINS
+        and message.get("callerAgent") is None
         and (
             message.get("agent_run_id") in top_level_run_ids
-            if top_level_run_ids
-            else message.get("callerAgent") is None
+            if top_level_run_ids and message.get("agent_run_id") is not None
+            else True
         )
         for message in last_call_messages
     )
@@ -100,17 +101,7 @@ def _should_add_recipient_switch_reminder(
             ):
                 return cast(str, message_dict["agent"]) != target_agent_name
 
-    for message in reversed(last_call_messages):
-        if isinstance(message, dict):
-            message_dict = cast(dict[str, Any], message)
-            if (
-                message_dict.get("role") == "user"
-                and message_dict.get("callerAgent") is None
-                and isinstance(message_dict.get("agent"), str)
-            ):
-                return cast(str, message_dict["agent"]) != target_agent_name
-
-    return False
+    return True
 
 
 def _build_user_message_with_recipient_reminder(
