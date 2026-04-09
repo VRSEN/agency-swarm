@@ -32,6 +32,7 @@ class CapturingAgent(Agent):
         self.last_context_override: dict[str, Any] | None = None
         self.last_hooks_override: RunHooks | None = None
         self.last_agency_context: AgencyContext | None = None
+        self.last_message: str | list[TResponseInputItem] | None = None
 
     async def get_response(
         self,
@@ -45,6 +46,7 @@ class CapturingAgent(Agent):
         agency_context: AgencyContext | None = None,
         **kwargs: Any,
     ) -> RunResult:
+        self.last_message = message
         self.last_context_override = context_override
         self.last_hooks_override = hooks_override
         self.last_agency_context = agency_context
@@ -73,6 +75,7 @@ class CapturingAgent(Agent):
         parent_run_id: str | None = None,
         **kwargs: Any,
     ):
+        self.last_message = message
         self.last_context_override = context_override
         self.last_hooks_override = hooks_override
         self.last_agency_context = agency_context
@@ -341,3 +344,97 @@ async def test_agent_communication_context_hooks_propagation(mock_agent, mock_ag
     assert saved_messages
     assert mock_agent.last_context_override is context_override
     assert mock_agent.last_hooks_override is hooks_override
+
+
+@pytest.mark.asyncio
+async def test_agency_get_response_adds_recipient_switch_reminder_after_handoff() -> None:
+    """Adds recipient_reminder when previous user call used handoff and target agent changed."""
+    agent_a = CapturingAgent("AgentA")
+    agent_b = CapturingAgent("AgentB")
+    agency = Agency(agent_a, agent_b)
+
+    agency.thread_manager.add_messages(
+        [
+            {"role": "user", "content": "previous", "agent": "AgentB", "callerAgent": None},
+            {
+                "role": "system",
+                "content": "Transfer completed. You are AgentB. Please continue the task.",
+                "agent": "AgentB",
+                "callerAgent": "AgentA",
+                "message_origin": "handoff_reminder",
+            },
+            {"role": "assistant", "content": "done", "agent": "AgentB", "callerAgent": None},
+        ]
+    )
+
+    await agency.get_response("new request", recipient_agent="AgentA")
+
+    assert isinstance(agent_a.last_message, list)
+    assert agent_a.last_message[0]["message_origin"] == "recipient_reminder"
+    assert agent_a.last_message[0]["content"] == (
+        'User has switched recipient agent. You are "AgentA". Role: You are a test agent.. Please continue the task.'
+    )
+    assert agent_a.last_message[1] == {"role": "user", "content": "new request"}
+
+
+@pytest.mark.asyncio
+async def test_agency_get_response_skips_recipient_switch_reminder_without_switch_or_handoff() -> None:
+    """Does not add recipient_reminder unless both handoff-use and recipient-switch are true."""
+    agent_a = CapturingAgent("AgentA")
+    agent_b = CapturingAgent("AgentB")
+    agency = Agency(agent_a, agent_b)
+
+    agency.thread_manager.add_messages(
+        [
+            {"role": "user", "content": "previous", "agent": "AgentA", "callerAgent": None},
+            {"role": "assistant", "content": "done", "agent": "AgentA", "callerAgent": None},
+        ]
+    )
+    await agency.get_response("new request", recipient_agent="AgentB")
+    assert isinstance(agent_b.last_message, str)
+
+    agency.thread_manager.clear()
+    agency.thread_manager.add_messages(
+        [
+            {"role": "user", "content": "previous", "agent": "AgentA", "callerAgent": None},
+            {
+                "role": "system",
+                "content": "Transfer completed. You are AgentA. Please continue the task.",
+                "agent": "AgentA",
+                "callerAgent": "AgentB",
+                "message_origin": "handoff_reminder",
+            },
+            {"role": "assistant", "content": "done", "agent": "AgentA", "callerAgent": None},
+        ]
+    )
+    await agency.get_response("same target", recipient_agent="AgentA")
+    assert isinstance(agent_a.last_message, str)
+
+
+@pytest.mark.asyncio
+async def test_agency_get_response_stream_adds_recipient_switch_reminder_after_handoff() -> None:
+    """Streaming path should prepend recipient_reminder under the same conditions."""
+    agent_a = CapturingAgent("AgentA")
+    agent_b = CapturingAgent("AgentB")
+    agency = Agency(agent_a, agent_b)
+
+    agency.thread_manager.add_messages(
+        [
+            {"role": "user", "content": "previous", "agent": "AgentB", "callerAgent": None},
+            {
+                "role": "system",
+                "content": "Transfer completed. You are AgentB. Please continue the task.",
+                "agent": "AgentB",
+                "callerAgent": "AgentA",
+                "message_origin": "handoff_reminder",
+            },
+            {"role": "assistant", "content": "done", "agent": "AgentB", "callerAgent": None},
+        ]
+    )
+
+    stream = agency.get_response_stream("new request", recipient_agent="AgentA")
+    async for _event in stream:
+        pass
+
+    assert isinstance(agent_a.last_message, list)
+    assert agent_a.last_message[0]["message_origin"] == "recipient_reminder"

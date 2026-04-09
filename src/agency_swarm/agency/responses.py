@@ -22,6 +22,80 @@ from .helpers import get_agent_context, resolve_agent
 logger = logging.getLogger(__name__)
 
 
+def _get_last_user_call_messages(messages: list[TResponseInputItem]) -> list[TResponseInputItem]:
+    """Return messages from the most recent user-initiated call."""
+    last_user_index = -1
+    for index, message in enumerate(messages):
+        if isinstance(message, dict) and message.get("role") == "user" and message.get("callerAgent") is None:
+            last_user_index = index
+    if last_user_index < 0:
+        return []
+    return messages[last_user_index:]
+
+
+def _should_add_recipient_switch_reminder(
+    *,
+    agency_context: "AgencyContext | None",
+    target_agent_name: str,
+) -> bool:
+    """Return whether to prepend a recipient-switch reminder for this user turn."""
+    if agency_context is None or agency_context.thread_manager is None:
+        return False
+
+    last_call_messages = _get_last_user_call_messages(agency_context.thread_manager.get_all_messages())
+    if not last_call_messages:
+        return False
+
+    used_handoff = any(
+        isinstance(message, dict) and message.get("message_origin") == "handoff_reminder"
+        for message in last_call_messages
+    )
+    if not used_handoff:
+        return False
+
+    for message in reversed(last_call_messages):
+        if isinstance(message, dict):
+            message_dict = cast(dict[str, Any], message)
+            if (
+                message_dict.get("role") == "assistant"
+                and message_dict.get("callerAgent") is None
+                and isinstance(message_dict.get("agent"), str)
+            ):
+                return cast(str, message_dict["agent"]) != target_agent_name
+
+    return False
+
+
+def _build_user_message_with_recipient_reminder(
+    message: str | list[TResponseInputItem],
+    *,
+    target_agent: Agent,
+) -> list[TResponseInputItem]:
+    """Return input items with a recipient-switch reminder prepended."""
+    role_text = target_agent.description
+    if not role_text and isinstance(target_agent.instructions, str):
+        role_text = target_agent.instructions
+    if not role_text:
+        role_text = "unspecified"
+
+    reminder = cast(
+        TResponseInputItem,
+        {
+            "role": "system",
+            "content": (
+                f'User has switched recipient agent. You are "{target_agent.name}". '
+                f"Role: {role_text}. Please continue the task."
+            ),
+            "message_origin": "recipient_reminder",
+        },
+    )
+
+    if isinstance(message, list):
+        return [reminder, *message]
+
+    return [reminder, cast(TResponseInputItem, {"role": "user", "content": message})]
+
+
 async def get_response(
     agency: "Agency",
     message: str | list[TResponseInputItem],
@@ -87,8 +161,12 @@ async def get_response(
     # On handoffs all servers need to be initialized to be used
     await attach_persistent_mcp_servers(agency)
 
+    message_for_call: str | list[TResponseInputItem] = message
+    if _should_add_recipient_switch_reminder(agency_context=agency_context, target_agent_name=target_agent.name):
+        message_for_call = _build_user_message_with_recipient_reminder(message, target_agent=target_agent)
+
     return await target_agent.get_response(
-        message=message,
+        message=message_for_call,
         sender_name=None,
         context_override=context_override,
         hooks_override=effective_hooks,
@@ -222,8 +300,15 @@ def get_response_stream(
 
                 await attach_persistent_mcp_servers(agency)
 
+                message_for_call: str | list[TResponseInputItem] = message
+                if _should_add_recipient_switch_reminder(
+                    agency_context=agency_context,
+                    target_agent_name=target_agent.name,
+                ):
+                    message_for_call = _build_user_message_with_recipient_reminder(message, target_agent=target_agent)
+
                 primary_stream = target_agent.get_response_stream(
-                    message=message,
+                    message=message_for_call,
                     sender_name=None,
                     context_override=enhanced_context,
                     hooks_override=effective_hooks,
