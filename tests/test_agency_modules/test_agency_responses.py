@@ -371,8 +371,9 @@ async def test_agency_get_response_adds_recipient_switch_reminder_after_handoff(
 
     assert isinstance(agent_a.last_message, list)
     assert agent_a.last_message[0]["message_origin"] == "recipient_reminder"
-    assert agent_a.last_message[0]["content"] == (
-        'User has switched recipient agent. You are "AgentA". Role: You are a test agent.. Please continue the task.'
+    assert (
+        agent_a.last_message[0]["content"]
+        == 'User has switched recipient agent. You are "AgentA". Please continue the task.'
     )
     assert agent_a.last_message[1] == {"role": "user", "content": "new request"}
 
@@ -412,6 +413,43 @@ async def test_agency_get_response_skips_recipient_switch_reminder_without_switc
 
 
 @pytest.mark.asyncio
+async def test_agency_get_response_adds_reminder_after_repeated_manual_switches() -> None:
+    """Refreshes the active control reminder on each manual recipient switch."""
+    agent_a = CapturingAgent("AgentA")
+    agent_b = CapturingAgent("AgentB")
+    agent_c = CapturingAgent("AgentC")
+    agency = Agency(agent_a, agent_b, agent_c)
+
+    agency.thread_manager.add_messages(
+        [
+            {"role": "user", "content": "previous", "agent": "AgentB", "callerAgent": None},
+            {
+                "role": "system",
+                "content": "Transfer completed. You are AgentB. Please continue the task.",
+                "agent": "AgentB",
+                "callerAgent": "AgentA",
+                "message_origin": "handoff_reminder",
+            },
+            {"role": "assistant", "content": "done", "agent": "AgentB", "callerAgent": None},
+        ]
+    )
+
+    await agency.get_response("switch to AgentA", recipient_agent="AgentA")
+    assert isinstance(agent_a.last_message, list)
+    assert agent_a.last_message[0]["message_origin"] == "recipient_reminder"
+
+    await agency.get_response("switch to AgentC", recipient_agent="AgentC")
+
+    assert isinstance(agent_c.last_message, list)
+    assert agent_c.last_message[0]["message_origin"] == "recipient_reminder"
+    assert (
+        agent_c.last_message[0]["content"]
+        == 'User has switched recipient agent. You are "AgentC". Please continue the task.'
+    )
+    assert agent_c.last_message[-1] == {"role": "user", "content": "switch to AgentC"}
+
+
+@pytest.mark.asyncio
 async def test_agency_get_response_stream_adds_recipient_switch_reminder_after_handoff() -> None:
     """Streaming path should prepend recipient_reminder under the same conditions."""
     agent_a = CapturingAgent("AgentA")
@@ -438,3 +476,34 @@ async def test_agency_get_response_stream_adds_recipient_switch_reminder_after_h
 
     assert isinstance(agent_a.last_message, list)
     assert agent_a.last_message[0]["message_origin"] == "recipient_reminder"
+
+
+@pytest.mark.asyncio
+async def test_agency_get_response_stream_keeps_empty_input_guard_when_reminder_would_apply() -> None:
+    """Streaming empty-input validation should still win over reminder injection."""
+    agent_a = CapturingAgent("AgentA")
+    agent_b = CapturingAgent("AgentB")
+    agency = Agency(agent_a, agent_b)
+
+    agency.thread_manager.add_messages(
+        [
+            {"role": "user", "content": "previous", "agent": "AgentB", "callerAgent": None},
+            {
+                "role": "system",
+                "content": "Transfer completed. You are AgentB. Please continue the task.",
+                "agent": "AgentB",
+                "callerAgent": "AgentA",
+                "message_origin": "handoff_reminder",
+            },
+            {"role": "assistant", "content": "done", "agent": "AgentB", "callerAgent": None},
+        ]
+    )
+
+    events = []
+    stream = agency.get_response_stream("   ", recipient_agent="AgentA")
+    async for event in stream:
+        events.append(event)
+
+    assert stream.final_result is None
+    assert events == [{"type": "error", "content": "message cannot be empty"}]
+    assert agent_a.last_message == "   "
