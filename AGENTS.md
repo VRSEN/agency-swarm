@@ -113,9 +113,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - Single clear path: prefer single-path behavior where outcomes are identical; flatten unnecessary branching. Avoid optional fallbacks unless explicitly requested.
 
 ## Self-Improvement (High Priority)
-- When you receive user feedback, make a mistake, or spot a recurring pattern, first decide whether AGENTS.md actually needs to change. If it does, revise the relevant lines before any other work.
-- Negative feedback about being too literal, passive, or compliant is a signal to tighten this file toward stronger pushback and better intent-reading before any other work.
-- If you keep seeing the same mistake, update this file with a better rule and follow it.
+- On each user message, first decide whether AGENTS.md needs a policy adjustment to improve performance; if yes, update it before any other work.
 - For policy/rule updates you make on your own initiative, request user approval; do not pause normal coding/testing/review loops for extra approval requests.
 
 ### Writing Style (User Responses Only)
