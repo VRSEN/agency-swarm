@@ -26,22 +26,6 @@ _CONTROL_REMINDER_ORIGINS = frozenset({"handoff_reminder", "recipient_reminder"}
 
 def _get_last_user_call_messages(messages: list[TResponseInputItem]) -> list[TResponseInputItem]:
     """Return messages for the most recent user-initiated call and its leading control reminders."""
-    last_top_level_run_id: str | None = None
-    for message in reversed(messages):
-        if not isinstance(message, dict) or message.get("callerAgent") is not None:
-            continue
-        run_id = message.get("agent_run_id")
-        if isinstance(run_id, str) and run_id:
-            last_top_level_run_id = run_id
-            break
-
-    if last_top_level_run_id is not None:
-        return [
-            message
-            for message in messages
-            if isinstance(message, dict) and message.get("agent_run_id") == last_top_level_run_id
-        ]
-
     last_user_index = -1
     for index, message in enumerate(messages):
         if isinstance(message, dict) and message.get("role") == "user" and message.get("callerAgent") is None:
@@ -50,10 +34,22 @@ def _get_last_user_call_messages(messages: list[TResponseInputItem]) -> list[TRe
         return []
 
     start_index = last_user_index
+    run_id = None
+    last_user_message = messages[last_user_index]
+    if isinstance(last_user_message, dict):
+        candidate_run_id = last_user_message.get("agent_run_id")
+        if isinstance(candidate_run_id, str) and candidate_run_id:
+            run_id = candidate_run_id
+
     while start_index > 0:
         previous = messages[start_index - 1]
         if not isinstance(previous, dict):
             break
+
+        if run_id is not None and previous.get("agent_run_id") == run_id:
+            start_index -= 1
+            continue
+
         if previous.get("message_origin") not in _CONTROL_REMINDER_ORIGINS:
             break
         start_index -= 1
@@ -74,8 +70,17 @@ def _should_add_recipient_switch_reminder(
     if not last_call_messages:
         return False
 
+    top_level_run_ids = {
+        run_id
+        for message in last_call_messages
+        if isinstance(message, dict)
+        and message.get("callerAgent") is None
+        and isinstance(run_id := message.get("agent_run_id"), str)
+    }
     used_control_reminder = any(
-        isinstance(message, dict) and message.get("message_origin") in _CONTROL_REMINDER_ORIGINS
+        isinstance(message, dict)
+        and message.get("message_origin") in _CONTROL_REMINDER_ORIGINS
+        and (not top_level_run_ids or message.get("agent_run_id") in top_level_run_ids)
         for message in last_call_messages
     )
     if not used_control_reminder:
