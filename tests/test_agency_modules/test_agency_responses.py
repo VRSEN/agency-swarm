@@ -486,6 +486,49 @@ async def test_agency_get_response_adds_reminder_after_structured_switch_turn() 
 
 
 @pytest.mark.asyncio
+async def test_agency_get_response_adds_reminder_after_split_run_handoff_turn() -> None:
+    """Split top-level run ids should still preserve handoff reminder chaining."""
+    agent_a = CapturingAgent("AgentA")
+    agent_b = CapturingAgent("AgentB")
+    agent_c = CapturingAgent("AgentC")
+    agency = Agency(agent_a, agent_b, agent_c)
+
+    agency.thread_manager.add_messages(
+        [
+            {
+                "role": "user",
+                "content": "previous",
+                "agent": "AgentA",
+                "callerAgent": None,
+                "agent_run_id": "top-run",
+            },
+            {
+                "role": "system",
+                "content": "Transfer completed. You are AgentB. Please continue the task.",
+                "agent": "AgentA",
+                "callerAgent": None,
+                "agent_run_id": "top-run",
+                "message_origin": "handoff_reminder",
+            },
+            {
+                "role": "assistant",
+                "content": "done",
+                "agent": "AgentB",
+                "callerAgent": None,
+                "agent_run_id": "handoff-run",
+                "parent_run_id": "top-run",
+            },
+        ]
+    )
+
+    await agency.get_response("switch to AgentC", recipient_agent="AgentC")
+
+    assert isinstance(agent_c.last_message, list)
+    assert agent_c.last_message[0]["message_origin"] == "recipient_reminder"
+    assert agent_c.last_message[-1] == {"role": "user", "content": "switch to AgentC"}
+
+
+@pytest.mark.asyncio
 async def test_agency_get_response_stream_adds_recipient_switch_reminder_after_handoff() -> None:
     """Streaming path should prepend recipient_reminder under the same conditions."""
     agent_a = CapturingAgent("AgentA")
