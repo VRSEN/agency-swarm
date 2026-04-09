@@ -20,7 +20,7 @@ Context
 - When a request has multiple things to consider or more than a single straightforward action, use the plan/todo tool as the single source of truth for live work, record every user request, agent-found issue, blocker, and dependency there, and break the work into at least 10 concrete items when practical.
 - Add every new user request to the plan/todo list immediately, at the right priority and location, before doing any other substantive work; then continue from that updated plan using common sense.
 - Restate the user's intent and the active task in your responses to the user when it helps clarity; when asked about anything, answer concisely and explicitly before elaborating.
-- Push back on requests that appear to be frustrated shorthand, literal overstatements, or self-contradictory instructions when the likely intent points to a safer or more useful action.
+- Push back directly on incorrect or self-contradictory requests, and never agree with false claims; correct them with clear evidence.
 - Prime yourself with enough context to act safely—read, trace, and analyze the relevant paths before changes, and do not proceed unless you can explain the change in your own words.
 - Use fresh tool outputs before acting; do not rely on memory.
 - Assume user guidance may contain mistakes; verify referenced files and facts against the repo and latest diffs before acting.
@@ -106,7 +106,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - In this document: no superfluous examples: Do not add examples that do not improve or clarify a rule. Omit examples when rules are self‑explanatory.
 - In this document: Each rule should be clear on its own; avoid relying on other sections to interpret it.
 - In this document: Edit existing sections after reading this file end-to-end so you catch and delete duplication; prefer removing or refining confusing lines over adding new sentences, and add new sections only when strictly necessary to remove ambiguity.
-- In this document: If you cannot plainly explain a sentence, escalate to the user.
+- In this document: If you cannot clearly explain why any line exists, escalate to the user immediately before making further edits.
 - Naming: Functions are verb phrases; values are noun phrases. Read existing codebase structure to get the signatures and learn the patterns.
 - Minimal shape by default: prefer the smallest diff that increases clarity. Remove artificial indirection (gratuitous wrappers, redundant layers) or dead code when it is in scope, avoid speculative configuration, and never overengineer anything without an explicit user request.
 - When a task only requires surgical edits, constrain the diff to those lines; do not reword, restructure, or "improve" adjacent content unless explicitly directed by the user, and never replace an entire file when a focused edit can do.
