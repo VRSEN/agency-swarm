@@ -10,7 +10,7 @@ When writing or improving documentation for Agency Swarm, your primary goal is c
 - Use simple language and clear terms.
 - Docs should be easily readable by an 8th grader.
 - Be concise, but keep full sentences and transitions when they are needed for readability.
-- Make documentation actionable for the target reader. Only tell readers to do things they can actually control in that workflow. If feedback is about a product, template, default, or reviewer request, translate it into what the reader will see or what they need to enter, not instructions to redesign the underlying system. Place code snippets at the top so users can easily copy and paste them. Provide only essential context above the code. Move any complex or detailed explanations to the end of the page.
+- Make documentation actionable. Place code snippets at the top so users can easily copy and paste them. Provide only essential context above the code. Move any complex or detailed explanations to the end of the page.
 - The more important the information is, the higher it should be on the page.
 - Highlight the important parts by using bold, components, etc.
 - Hide complexity under tabs, dropdowns, etc.
