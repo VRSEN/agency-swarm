@@ -214,6 +214,56 @@ def test_openclaw_proxy_filters_request_keys_and_normalizes_payload(
     assert captured["url"] == "http://127.0.0.1:18789/v1/responses"
 
 
+def test_openclaw_proxy_preserves_full_history_without_synthesizing_session_fields(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    class _FakeAsyncClient:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            return None
+
+        async def __aenter__(self) -> _FakeAsyncClient:
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def post(self, url: str, *, headers: dict[str, str], json: dict[str, Any]) -> httpx.Response:
+            captured["json"] = json
+            return httpx.Response(status_code=200, json={"ok": True})
+
+    monkeypatch.setattr("agency_swarm.integrations.openclaw.httpx.AsyncClient", _FakeAsyncClient)
+
+    app = FastAPI()
+    attach_openclaw_to_fastapi(app, _build_openclaw_config(tmp_path))
+    client = TestClient(app)
+
+    response = client.post(
+        "/openclaw/v1/responses",
+        json={
+            "model": "openclaw:main",
+            "input": [
+                {"role": "user", "content": [{"text": "Hi"}]},
+                {"role": "assistant", "content": [{"text": "Hello"}]},
+                {"role": "user", "content": [{"text": "Continue with the same chat"}]},
+            ],
+            "stream": False,
+        },
+    )
+
+    assert response.status_code == 200
+    forwarded = captured["json"]
+    assert forwarded["input"] == [
+        {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Hi"}]},
+        {"type": "message", "role": "assistant", "content": [{"type": "input_text", "text": "Hello"}]},
+        {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Continue with the same chat"}]},
+    ]
+    assert "user" not in forwarded
+    assert "previous_response_id" not in forwarded
+
+
 def test_openclaw_proxy_rejects_unsupported_tool_types(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     called = {"upstream": False}
 

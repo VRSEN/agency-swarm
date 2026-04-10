@@ -185,6 +185,10 @@ def test_openclaw_agent_treats_localhost_proxy_aliases_as_current_app_proxy(
     monkeypatch.setenv("APP_TOKEN", "app-token")
     monkeypatch.delenv("OPENCLAW_GATEWAY_TOKEN", raising=False)
     monkeypatch.setenv("OPENCLAW_PROXY_BASE_URL", "http://127.0.0.1:8000/openclaw/v1")
+    monkeypatch.setattr(openclaw_model_mod, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
+    monkeypatch.setattr(openclaw_model_mod, "_CURRENT_APP_OPENCLAW_DEFAULT_COUNTS", {}, raising=False)
+    monkeypatch.setattr(openclaw_model_mod, "_CURRENT_APP_OPENCLAW_DEFAULT_PATTERNS", [], raising=False)
+    monkeypatch.setattr(openclaw_model_mod, "_CURRENT_APP_OPENCLAW_DEFAULT_PATTERN_COUNTS", {}, raising=False)
 
     model = build_openclaw_responses_model(base_url="http://localhost:8000/openclaw/v1")
 

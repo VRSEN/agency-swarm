@@ -23,6 +23,23 @@ def _reserve_free_port() -> int:
         pytest.skip(f"loopback bind unavailable in this environment: {exc}")
 
 
+def _write_fake_node_binary(tmp_path: Path) -> Path:
+    script_path = tmp_path / "node"
+    script_path.write_text(
+        """#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "v22.12.0"
+  exit 0
+fi
+echo "unexpected invocation: $@" >&2
+exit 1
+""",
+        encoding="utf-8",
+    )
+    script_path.chmod(0o755)
+    return script_path
+
+
 def _write_gateway_script(tmp_path: Path) -> Path:
     script_path = tmp_path / "fake_gateway.py"
     script_path.write_text(
@@ -106,9 +123,10 @@ def _process_is_alive(pid: int) -> bool:
     return True
 
 
-def test_openclaw_runtime_start_and_stop_real_gateway_process(tmp_path: Path) -> None:
+def test_openclaw_runtime_start_and_stop_real_gateway_process(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     port = _reserve_free_port()
     script_path = _write_gateway_script(tmp_path)
+    monkeypatch.setenv("OPENCLAW_NODE_BIN", str(_write_fake_node_binary(tmp_path)))
     config = replace(
         _build_openclaw_config(tmp_path),
         port=port,
@@ -129,9 +147,10 @@ def test_openclaw_runtime_start_and_stop_real_gateway_process(tmp_path: Path) ->
     assert runtime._log_handle is None
 
 
-def test_openclaw_runtime_start_reports_early_exit_log_tail(tmp_path: Path) -> None:
+def test_openclaw_runtime_start_reports_early_exit_log_tail(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     port = _reserve_free_port()
     script_path = _write_gateway_script(tmp_path)
+    monkeypatch.setenv("OPENCLAW_NODE_BIN", str(_write_fake_node_binary(tmp_path)))
     runtime = OpenClawRuntime(
         replace(
             _build_openclaw_config(tmp_path),
@@ -149,10 +168,11 @@ def test_openclaw_runtime_start_reports_early_exit_log_tail(tmp_path: Path) -> N
     assert runtime._log_handle is None
 
 
-def test_openclaw_runtime_timeout_cleans_up_real_process(tmp_path: Path) -> None:
+def test_openclaw_runtime_timeout_cleans_up_real_process(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     port = _reserve_free_port()
     script_path = _write_gateway_script(tmp_path)
     pid_file = tmp_path / "sleep.pid"
+    monkeypatch.setenv("OPENCLAW_NODE_BIN", str(_write_fake_node_binary(tmp_path)))
     runtime = OpenClawRuntime(
         replace(
             _build_openclaw_config(tmp_path),
