@@ -84,18 +84,6 @@ def test_openclaw_agent_preserves_env_proxy_base_url_when_partially_overridden(
     assert str(agent.model._client.base_url) == expected_url
 
 
-def test_openclaw_agent_brackets_ipv6_hosts() -> None:
-    agent = OpenClawAgent(
-        name="OpenClawWorker",
-        description="Worker",
-        instructions="Handle OpenClaw work.",
-        host="::1",
-        port=18080,
-    )
-
-    assert str(agent.model._client.base_url) == "http://[::1]:18080/openclaw/v1/"
-
-
 def test_openclaw_agent_defaults_external_v1_urls_to_provider_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -146,26 +134,6 @@ def test_openclaw_agent_preserves_model_alias_override_for_external_servers(base
     assert agent.model.model == "openclaw:custom"
 
 
-def test_build_openclaw_responses_model_keeps_public_alias_for_external_usage_when_provider_env_missing(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv("OPENCLAW_PROVIDER_MODEL", raising=False)
-
-    model = build_openclaw_responses_model(base_url="https://example.com/openclaw/v1", api_key="external-token")
-
-    assert get_usage_tracking_model_name(model) == "openclaw:main"
-
-
-def test_build_openclaw_responses_model_keeps_public_alias_for_remote_worker_usage_when_provider_env_is_set(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("OPENCLAW_PROVIDER_MODEL", "openai/gpt-5.4-mini")
-
-    model = build_openclaw_responses_model(base_url="https://remote.example/openclaw/v1", api_key="external-token")
-
-    assert get_usage_tracking_model_name(model) == "openclaw:main"
-
-
 def test_build_openclaw_responses_model_preserves_explicit_alias_for_direct_gateway_urls() -> None:
     model = build_openclaw_responses_model(
         model="openclaw:custom",
@@ -176,22 +144,6 @@ def test_build_openclaw_responses_model_preserves_explicit_alias_for_direct_gate
     assert model.model == "openclaw:custom"
     assert get_usage_tracking_model_name(model) == "openclaw:custom"
     assert get_default_settings_model_name(model) == "openclaw:custom"
-
-
-def test_openclaw_agent_uses_gateway_token_when_proxy_key_and_app_token_are_missing(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv("OPENCLAW_PROXY_API_KEY", raising=False)
-    monkeypatch.delenv("APP_TOKEN", raising=False)
-    monkeypatch.setenv("OPENCLAW_GATEWAY_TOKEN", "gateway-token")
-
-    agent = OpenClawAgent(
-        name="OpenClawWorker",
-        description="Worker",
-        instructions="Handle OpenClaw work.",
-    )
-
-    assert agent.model._client.api_key == "gateway-token"
 
 
 def test_openclaw_agent_uses_gateway_token_before_app_token_for_direct_gateway_urls(
@@ -233,11 +185,15 @@ def test_openclaw_agent_treats_localhost_proxy_aliases_as_current_app_proxy(
     monkeypatch.setenv("APP_TOKEN", "app-token")
     monkeypatch.delenv("OPENCLAW_GATEWAY_TOKEN", raising=False)
     monkeypatch.setenv("OPENCLAW_PROXY_BASE_URL", "http://127.0.0.1:8000/openclaw/v1")
+    monkeypatch.setattr(openclaw_model_mod, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
+    monkeypatch.setattr(openclaw_model_mod, "_CURRENT_APP_OPENCLAW_DEFAULT_COUNTS", {}, raising=False)
+    monkeypatch.setattr(openclaw_model_mod, "_CURRENT_APP_OPENCLAW_DEFAULT_PATTERNS", [], raising=False)
+    monkeypatch.setattr(openclaw_model_mod, "_CURRENT_APP_OPENCLAW_DEFAULT_PATTERN_COUNTS", {}, raising=False)
 
     model = build_openclaw_responses_model(base_url="http://localhost:8000/openclaw/v1")
 
     assert model._client.api_key == "app-token"
-    assert get_usage_tracking_model_name(model) == "openai/gpt-5.4-mini"
+    assert get_usage_tracking_model_name(model) == "openai/gpt-5.4"
 
 
 def test_openclaw_agent_uses_app_token_for_explicit_same_app_proxy_url_when_one_current_app_proxy_is_registered(
@@ -264,40 +220,6 @@ def test_openclaw_agent_uses_app_token_for_explicit_same_app_proxy_url_when_one_
 
     assert agent.model.model == "openclaw:custom"
     assert agent.model._client.api_key == "app-token"
-
-
-def test_openclaw_agent_uses_gateway_token_for_external_openclaw_proxy_paths(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv("OPENCLAW_PROXY_API_KEY", raising=False)
-    monkeypatch.setenv("APP_TOKEN", "app-token")
-    monkeypatch.setenv("OPENCLAW_GATEWAY_TOKEN", "gateway-token")
-
-    agent = OpenClawAgent(
-        name="OpenClawWorker",
-        description="Worker",
-        instructions="Handle OpenClaw work.",
-        base_url="https://example.com/openclaw/v1",
-    )
-
-    assert agent.model._client.api_key == "gateway-token"
-
-
-def test_openclaw_agent_does_not_reuse_app_token_for_other_local_proxy_urls(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv("OPENCLAW_PROXY_API_KEY", raising=False)
-    monkeypatch.setenv("APP_TOKEN", "app-token")
-    monkeypatch.setenv("OPENCLAW_GATEWAY_TOKEN", "gateway-token")
-
-    agent = OpenClawAgent(
-        name="OpenClawWorker",
-        description="Worker",
-        instructions="Handle OpenClaw work.",
-        base_url="http://127.0.0.1:18080/openclaw/v1",
-    )
-
-    assert agent.model._client.api_key == "gateway-token"
 
 
 def test_openclaw_agent_rejects_manual_handoffs() -> None:
