@@ -239,6 +239,7 @@ Agency Swarm is a multi-agent orchestration framework built on the OpenAI Agents
 ### Documentation Rules
 - Documentation writing and updates must follow `.cursor/rules/writing-docs.mdc` for formatting, components, links, and page metadata.
 - For documentation work, start the docs app with `cd docs && mintlify dev` before requesting review, then share that preview is running.
+- Do not mention upstream fork origins in Agency Swarm user-facing docs unless the user explicitly asks for that comparison or attribution.
 - Docs are the main value of this repository. Spend 100 times more effort on docs than on source code. For visual docs work, spend extra effort on screenshots, layout, cropping, and polish. When OpenAI vision settings are controllable, use GPT-5.4 with `detail=original`.
 - Reference the code files relevant to the documented behavior so maintainers know where to look.
 - Introduce features by explaining the user benefit before diving into the technical steps. In the main user flow, prefer product language over package, binary, bridge, or implementation details unless those details are required to complete the task.
