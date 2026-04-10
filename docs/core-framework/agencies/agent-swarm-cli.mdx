@@ -14,9 +14,9 @@ Use it when you want a keyboard-first terminal chat for your agency without buil
 python agency.py
 ```
 
-If your agency file is named `agency.py`, this is the one command that launches the TUI after you add `agency.tui()` to that file.
+Run `python agency.py` when your entry file is `agency.py`; otherwise run `python <your-entry-file>.py`.
 
-The interface runs the agents, tools, and communication flows you already defined in `agency-swarm`.
+The terminal UI is based on OpenCode and integrated with the agents, tools, and communication flows you already defined in `agency-swarm`.
 
 ![Agent Swarm CLI startup screen](/images/agent-swarm-cli-preview.png)
 
@@ -26,21 +26,21 @@ Before you launch the TUI, make sure you have:
 
 - Python 3.12 or newer
 - `agency-swarm` installed
-- a model provider configured with `OPENAI_API_KEY` in `.env`, or a setup from [Third-Party Models](/additional-features/third-party-models)
+- for the default OpenAI path, set `OPENAI_API_KEY` in `.env`
+- or configure another provider with [Third-Party Models](/additional-features/third-party-models)
 - an existing agency, or a starting point from [From Scratch](/welcome/getting-started/from-scratch) or the [Starter Template](/welcome/getting-started/starter-template)
 
 ## Features
 
 Once the TUI is running, you get:
 
-- a keyboard-first terminal workflow for your agency
+- a keyboard-first terminal workflow
 - session history, export, undo, redo, and `/compact`
-- `@` file references for local project context
-- `/agents` to pick a top-level agent grouped by agency
-- `@AgentName` mentions to route one prompt to a specific agent
-- `Tab` autocomplete for agent mentions in the prompt box
-- the same tools, communication flows, and shared instructions your agency already uses
-- access to your configured file context, including `files_folder` and `shared_files_folder`
+- `/agents` to switch between top-level agents
+- `@AgentName` mentions to route a prompt to a specific top-level agent
+- `@` file/resource references to attach local or MCP context in the same prompt flow
+- `Tab` autocomplete for both agent mentions and file/resource references
+- direct access to local project files for prompt context
 
 ![Agent Swarm CLI agent picker](/images/agent-swarm-cli-agent-selection.png)
 
@@ -57,7 +57,7 @@ If you already have an agency, this is the fastest path:
     ```
   </Step>
   <Step title="Set your model credentials">
-    Set `OPENAI_API_KEY` in `.env` for the default setup, or follow [Third-Party Models](/additional-features/third-party-models) if you want Anthropic, Gemini, Grok, Azure OpenAI, or other compatible providers.
+    Choose one path: set `OPENAI_API_KEY` in `.env` for the default OpenAI setup, or follow [Third-Party Models](/additional-features/third-party-models) for Anthropic, Gemini, Grok, Azure OpenAI, or other compatible providers.
   </Step>
   <Step title="Add the TUI launch call">
     Put this in your `agency.py` file:
@@ -79,7 +79,7 @@ If you already have an agency, this is the fastest path:
 
 Use `agency.tui(reload=False)` to disable hot reload on file changes.
 
-After the TUI opens, use `/agents` to pick a top-level agent or type `@AgentName` to send a prompt straight to one agent.
+After the TUI opens, use `/agents` to pick a top-level agent, `@AgentName` to route directly to an agent, and `@` file/resource references to attach local or MCP context.
 
 ### Launch A Custom Agency
 
