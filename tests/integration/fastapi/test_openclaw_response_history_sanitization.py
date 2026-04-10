@@ -252,24 +252,19 @@ def _assert_history_input_has_no_response_ids(model_input: str | list[TResponseI
     assert leaked_response_ids == []
 
 
-def _add_hidden_response_id_to_first_history_message(history: list[dict[str, Any]], response_id: str) -> None:
-    assert history
-    history[0]["response_id"] = response_id
-
-
-def _add_hidden_response_id_to_first_assistant_message(history: list[dict[str, Any]], response_id: str) -> None:
-    assistant_message = next(msg for msg in history if msg.get("role") == "assistant")
-    assistant_message["response_id"] = response_id
+def _assert_messages_have_no_response_ids(messages: list[dict[str, Any]]) -> None:
+    leaked_response_ids = [item for item in messages if "response_id" in item]
+    assert leaked_response_ids == []
 
 
 @pytest.mark.asyncio
-async def test_response_endpoint_strips_client_response_id_from_replayed_history() -> None:
+async def test_response_endpoint_replays_returned_history_without_hidden_response_ids() -> None:
     model = _TrackingResponsesModel()
     handler = make_response_endpoint(BaseRequest, _build_agency_factory(model), lambda: None)
 
     first = await handler(BaseRequest(message="hi"), token=None)
     history = copy.deepcopy(first["new_messages"])
-    _add_hidden_response_id_to_first_history_message(history, "resp_client_hidden")
+    _assert_messages_have_no_response_ids(history)
 
     await handler(BaseRequest(message="again", chat_history=history), token=None)
 
@@ -278,7 +273,7 @@ async def test_response_endpoint_strips_client_response_id_from_replayed_history
 
 
 @pytest.mark.asyncio
-async def test_stream_endpoint_strips_client_response_id_from_replayed_history() -> None:
+async def test_stream_endpoint_replays_returned_history_without_hidden_response_ids() -> None:
     model = _TrackingResponsesModel()
     handler = make_stream_endpoint(BaseRequest, _build_agency_factory(model), lambda: None, ActiveRunRegistry())
     http_request = _StubRequest()
@@ -287,7 +282,7 @@ async def test_stream_endpoint_strips_client_response_id_from_replayed_history()
     first_chunks = [chunk async for chunk in first_response.body_iterator]
     first_payload = _parse_sse_messages_payload(first_chunks)
     history = copy.deepcopy(first_payload["new_messages"])
-    _add_hidden_response_id_to_first_history_message(history, "resp_client_hidden")
+    _assert_messages_have_no_response_ids(history)
 
     second_response = await handler(
         http_request=http_request,
@@ -301,13 +296,13 @@ async def test_stream_endpoint_strips_client_response_id_from_replayed_history()
 
 
 @pytest.mark.asyncio
-async def test_agency_get_response_strips_persisted_response_id_from_replayed_history() -> None:
+async def test_agency_get_response_persists_history_without_hidden_response_ids() -> None:
     model = _TrackingResponsesModel()
     persisted_history: list[dict[str, Any]] = []
     agency = _agency_factory_with_store(model, persisted_history)
 
     await agency.get_response(message="hi")
-    _add_hidden_response_id_to_first_assistant_message(persisted_history, "resp_persisted_hidden")
+    _assert_messages_have_no_response_ids(persisted_history)
     await agency.get_response(message="again")
 
     assert model.seen_previous_response_ids == [None, None]
@@ -315,14 +310,14 @@ async def test_agency_get_response_strips_persisted_response_id_from_replayed_hi
 
 
 @pytest.mark.asyncio
-async def test_agency_stream_strips_persisted_response_id_from_replayed_history() -> None:
+async def test_agency_stream_persists_history_without_hidden_response_ids() -> None:
     model = _TrackingResponsesModel()
     persisted_history: list[dict[str, Any]] = []
     agency = _agency_factory_with_store(model, persisted_history)
 
     first_stream = agency.get_response_stream(message="hi")
     _first_events = [event async for event in first_stream]
-    _add_hidden_response_id_to_first_assistant_message(persisted_history, "resp_persisted_hidden")
+    _assert_messages_have_no_response_ids(persisted_history)
 
     second_stream = agency.get_response_stream(message="again")
     _second_events = [event async for event in second_stream]
