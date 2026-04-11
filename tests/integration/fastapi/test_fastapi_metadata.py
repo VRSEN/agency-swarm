@@ -304,7 +304,7 @@ def test_metadata_includes_missing_allowed_dirs(tmp_path, agency_factory):
 
 
 def test_metadata_includes_non_directory_allowed_dirs(tmp_path, agency_factory):
-    """Non-directory allowlist entries should be omitted from metadata."""
+    """Non-directory allowlist entries should fail metadata the same way uploads do."""
     file_entry = tmp_path / "not-a-directory.txt"
     file_entry.write_text("x", encoding="utf-8")
 
@@ -314,13 +314,31 @@ def test_metadata_includes_non_directory_allowed_dirs(tmp_path, agency_factory):
         app_token_env="",
         allowed_local_file_dirs=[str(file_entry)],
     )
-    client = TestClient(app)
+    client = TestClient(app, raise_server_exceptions=False)
 
     response = client.get("/test_agency/get_metadata")
-    assert response.status_code == 200
-    payload = response.json()
+    assert response.status_code == 500
+    assert "Allowed path must be a directory" in response.json()["error"]
 
-    assert payload["allowed_local_file_dirs"] == []
+
+def test_metadata_rejects_mixed_allowlist_with_non_directory_entry(tmp_path, agency_factory):
+    """Metadata should not advertise a partial allowlist when uploads would fail."""
+    allowed_dir = tmp_path / "uploads"
+    allowed_dir.mkdir(parents=True, exist_ok=True)
+    file_entry = tmp_path / "not-a-directory.txt"
+    file_entry.write_text("x", encoding="utf-8")
+
+    app = run_fastapi(
+        agencies={"test_agency": agency_factory},
+        return_app=True,
+        app_token_env="",
+        allowed_local_file_dirs=[str(allowed_dir), str(file_entry)],
+    )
+    client = TestClient(app, raise_server_exceptions=False)
+
+    response = client.get("/test_agency/get_metadata")
+    assert response.status_code == 500
+    assert "Allowed path must be a directory" in response.json()["error"]
 
 
 def test_metadata_preserves_configured_allowlist_strings(tmp_path, monkeypatch, agency_factory):
