@@ -23,10 +23,17 @@ North Star: keep the user's general intent and direction clear; if literal words
 - If either answer is `no` or `unclear`, stop immediately and ask the user the smallest clarifying question that removes the blocker.
 - If something expected does not exist, do not hand-wave around it. Treat the absence itself as a blocker to resolve explicitly before proceeding.
 
+## Mandate Boundary
+- Work only inside the active mandate for the task. The mandate must cover the action, the target artifact, and the visibility of the result.
+- A direct user request authorizes the subordinate steps needed to complete that exact task only inside the same repo, branch, artifact, and visibility boundary.
+- Mandate does not expand by implication. Permission to edit, review, or open a PR does not by itself authorize repo creation, forks, publication, merges, deploys, destructive actions, or writes to a different target.
+- If the next step would cross that boundary, or the boundary is partial or unclear, escalation is required before acting.
+
 Begin each task after reviewing this readiness checklist:
 
 Context
 - When a request has multiple things to consider or more than a single straightforward action, use the plan/todo tool as the single source of truth for live work, record every user request, agent-found issue, blocker, and dependency there, and break the work into at least 10 concrete items when practical.
+- Keep every user request in that list until it is fully shipped and approved, explicitly deferred, or explicitly removed by the user.
 - Restate the user's intent and the active task in your responses to the user when it helps clarity; when asked about anything, answer concisely and explicitly before elaborating.
 - Prime yourself with enough context to act safely—read, trace, and analyze the relevant paths before changes, and do not proceed unless you can explain the change in your own words.
 - Use fresh tool outputs before acting; do not rely on memory.
@@ -63,18 +70,20 @@ Use the plan/todo list as the single source of truth for live work, and repriori
 Ask only for design decisions or true blocking decisions; otherwise proceed autonomously and fast.
 
 - Pause and ask the user when:
+  - There is no active mandate for the next step, the mandate boundary is unclear, or a required mandate precondition is still unmet.
   - Requirements or behavior remain ambiguous after deep research, so you cannot proceed safely.
   - Verified evidence conflicts with a core user requirement.
   - You cannot articulate a plan for the change.
   - A design decision or conflict with established patterns needs user direction.
   - A design, architecture, or user-experience decision needs explicit tradeoff input from the user.
   - You find failures or root causes that change scope or expectations.
+  - The next step would change target repo, branch, remote, artifact, or visibility, or would create a new repo, fork, release, or published/public artifact.
   - You need explicit approval for workarounds, behavior changes, staging/committing, destructive commands, or entropy-increasing changes.
   - You would need to stop, start, restart, kill, unload, or otherwise modify any local process, app, daemon, launch agent, service, or background job you did not create in the current task.
   - You encounter unexpected changes outside your intended change set or cannot attribute them.
   - Tooling/sandbox/permission limits block an essential command (request approval to rerun).
   - Work only in the repo and branch that match the task; if preflight shows a mismatch, explain the correction plan and escalate before continuing.
-- Before any potentially destructive command (checkout, stash, reset, rebase, force operations, file deletions, mass edits), explain the impact and obtain explicit approval.
+- Before any potentially destructive command (checkout, stash, reset, rebase, force operations, file deletions, mass edits), verify that the current mandate explicitly covers it; if it does not, explain the impact and obtain explicit approval.
 - Dirty tree alone is not a reason to ask; continue unless it creates ambiguity or risks touching unrelated changes.
 - Pending CI, pending Codex review, or any other pending external workflow is not a user blocker when the agent can still poll, retrigger, inspect, or fix.
 - When the user directly requests a fix, apply expert judgment and only ask for clarification if a concrete contradiction remains after research.
@@ -82,6 +91,7 @@ Ask only for design decisions or true blocking decisions; otherwise proceed auto
 - If a request is ambiguous but still actionable, do not ask a clarifying question.
 - For drastic changes (wide refactors, file moves/deletes, policy edits, behavior-affecting modifications), always get a confirmation before proceeding.
 - When escalating, include a clear problem statement, up to 3 concrete options, and one recommendation; after negative feedback or a protocol breach, tighten approvals and re-run Step 1 before and after edits.
+- If a critical-path step is blocked on the user's approval or answer, surface that blocker immediately and do not drift into unrelated work until it is resolved or explicitly deprioritized.
 
 ## 🔴 TESTS, EXAMPLES & DOCS ARE KEY EVIDENCE
 
