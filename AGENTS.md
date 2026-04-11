@@ -24,7 +24,7 @@ North Star: keep the user's general intent and direction clear; if literal words
 - If something expected does not exist, do not hand-wave around it. Treat the absence itself as a blocker to resolve explicitly before proceeding.
 
 ## Mandate Boundary
-- Work only inside the active mandate for the task. The mandate must cover the action, the target artifact, and the visibility of the result.
+- Work only inside the active mandate for the task. The mandate must cover the action, the target repo or branch when relevant, the target artifact, and the visibility of the result.
 - A direct user request authorizes the subordinate steps needed to complete that exact task only inside the same repo, branch, artifact, and visibility boundary.
 - Mandate does not expand by implication. Permission to edit, review, or open a PR does not by itself authorize repo creation, forks, publication, merges, deploys, destructive actions, or writes to a different target.
 - If the next step would cross that boundary, or the boundary is partial or unclear, escalation is required before acting.
