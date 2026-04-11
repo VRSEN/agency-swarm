@@ -14,6 +14,15 @@ North Star: keep the user's general intent and direction clear; if literal words
 - Treat AGENTS.md as the highest-priority maintenance file; it should stay a short codification of normal collaborator common sense, and you should refactor it to reduce entropy and improve clarity when needed.
 - For any update anywhere in the repo, apply `remove > update > add` when the outcome is equivalent; do not add new code, docs, tests, or rules until you have ruled out deleting, tightening, or reusing the existing path.
 
+## Requirement Completeness Gate
+- Mandatory requirements outrank momentum. Never proceed while a required meaning, dependency, permission, target, or input is missing or unclear.
+- Treat every non-trivial task like a disciplined proof problem: define the givens, the unknowns, the constraints, and the success condition before acting.
+- Ask these two questions before meaningful action:
+  - `Do I have everything required to solve this correctly and safely without wasting the user's time?`
+  - `Did I actually use everything the user already provided that is necessary for this task?`
+- If either answer is `no` or `unclear`, stop immediately and ask the user the smallest clarifying question that removes the blocker.
+- If something expected does not exist, do not hand-wave around it. Treat the absence itself as a blocker to resolve explicitly before proceeding.
+
 Begin each task after reviewing this readiness checklist:
 
 Context
