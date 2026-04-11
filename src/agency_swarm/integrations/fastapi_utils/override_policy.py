@@ -1,4 +1,3 @@
-import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -7,24 +6,14 @@ from agents.models._openai_shared import get_default_openai_client
 from openai import AsyncOpenAI
 
 from agency_swarm import Agency, Agent
+from agency_swarm.integrations.fastapi_utils.file_handler import _normalize_allowed_dirs
 from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
-
-logger = logging.getLogger(__name__)
 
 
 def get_allowed_dirs_for_metadata(allowed_local_dirs: Sequence[str | Path]) -> list[str]:
-    """Return only usable local upload directories for metadata responses."""
-    normalized: list[str] = []
-    for entry in allowed_local_dirs:
-        path = Path(entry).expanduser().resolve()
-        if not path.exists():
-            logger.warning("Allowed directory not found (skipping metadata entry): %s", entry)
-            continue
-        if not path.is_dir():
-            logger.warning("Allowed path is not a directory (skipping metadata entry): %s", entry)
-            continue
-        normalized.append(str(path))
-    return normalized
+    """Return upload-usable local directories for metadata responses."""
+    normalized = _normalize_allowed_dirs(allowed_local_dirs, skip_missing=True)
+    return [] if normalized is None else [str(path) for path in normalized]
 
 
 @dataclass(frozen=True)
