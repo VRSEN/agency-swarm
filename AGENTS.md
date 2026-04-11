@@ -39,6 +39,8 @@ Repo State
 - Mandatory start state: if VRSEN `origin/main` is reachable, run `git fetch origin` and work from a named branch rebased onto `origin/main`; create or refresh that branch before analysis, edits, or tests. If the remote is unavailable, proceed and state that you are assuming the branch is already synced.
 - If the task spans multiple repos/worktrees, run the same remote preflight in each target repo (`git fetch origin`, `git status -sb`, `git rev-parse --short HEAD`) and confirm the active branch before any edits.
 - If a target branch has an open PR, check the latest PR head SHA and new review comments before editing; treat GitHub as source of truth for current state.
+- After a long gap, reboot, or resumed task, rehydrate state first: current branch, HEAD, local diff, PR head, latest reviews/checks, and active blockers.
+- If a rebase or cherry-pick exposes unrelated stacked commits or conflicts outside task scope, stop replaying the stale stack; create a fresh branch from `origin/main` and transplant only the task-relevant commits.
 
 Execution
 - Complete one change at a time; stash unrelated work before starting another.
@@ -81,7 +83,7 @@ Ask only for design decisions or true blocking decisions; otherwise proceed auto
 - Do not ask about mechanical execution steps that the agent can perform safely with available repo, machine, network, or GitHub access.
 - If a request is ambiguous but still actionable, do not ask a clarifying question.
 - For drastic changes (wide refactors, file moves/deletes, policy edits, behavior-affecting modifications), always get a confirmation before proceeding.
-- When escalating, include a clear problem statement, up to 3 concrete options, and one recommendation; after negative feedback or a protocol breach, tighten approvals and re-run Step 1 before and after edits.
+- When escalating, include a clear problem statement, up to 3 concrete options, and one recommendation; for policy edits, present a short review-friendly summary plus a minimal diff excerpt before applying the change. After negative feedback or a protocol breach, tighten approvals and re-run Step 1 before and after edits.
 
 ## 🔴 TESTS, EXAMPLES & DOCS ARE KEY EVIDENCE
 
@@ -189,6 +191,7 @@ After each meaningful tool call or code edit, validate the result in 1-2 lines a
 ## 🔴 API KEYS
 - Pre-flight gate (real-LLM only): if planned validation includes integration tests/examples that call a real LLM, verify that the required provider credentials and access are usable from environment, the current workspace `.env`, or the related base-repo/worktree `.env` files that plausibly supply those credentials before editing or running tests. If usable credentials still cannot be confirmed, treat that as a blocking issue, stop, report the blocker, and wait for explicit user permission before continuing with other work.
 - Scope limit: this gate does not apply to docs-only changes, pure unit tests, or integrations fully mocked/patched to avoid real LLM calls.
+- If credentials are found only in a `.env` file, export or source them into the validation shell before treating the run as blocked.
 - Before asking the user for any key or permission to continue, inspect environment and the relevant `.env` locations to confirm the blocker is real and external, not local misconfiguration.
 
 ## Common Commands
