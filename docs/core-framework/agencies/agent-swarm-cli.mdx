@@ -1,39 +1,121 @@
 ---
 title: "Agent Swarm CLI"
-description: "Launch the built-in terminal UI with one Python call."
+description: "Run a multi-agent workflow from your terminal."
 icon: "terminal"
 ---
 
-Agent Swarm CLI is the built-in terminal app for `agency-swarm`. The preview below shows the current `tui()` startup screen.
+## Overview
+
+Agent Swarm CLI is the built-in terminal app for `agency-swarm`.
+
+Use it when you want a keyboard-first terminal chat for your agency without building a separate UI.
+
+```bash
+python agency.py
+```
+
+Run `python agency.py` when your entry file is `agency.py`; otherwise run `python <your-entry-file>.py`.
+
+The terminal UI is integrated with the agents, tools, and communication flows you already defined in `agency-swarm`.
 
 ![Agent Swarm CLI startup screen](/images/agent-swarm-cli-preview.png)
 
-Use one command:
+## Prerequisites
 
-```python
-agency.tui()
-```
+Before you launch the TUI, make sure you have:
 
-`tui()` sets up the terminal app on first run, caches it locally, shows a short setup message, and opens the TUI for your current agency.
+- Python 3.12 or newer
+- `agency-swarm` installed
+- for the default OpenAI path, set `OPENAI_API_KEY` in `.env`
+- or configure another provider with [Third-Party Models](/additional-features/third-party-models)
+- an existing agency, or a starting point from [From Scratch](/welcome/getting-started/from-scratch) or the [Starter Template](/welcome/getting-started/starter-template)
 
-Use `agency.tui(reload=False)` to disable hot reload on file changes.
+## Features
 
-## What You Can Do
+Once the TUI is running, you get:
 
-- start the TUI with one Python call
-- switch between agencies and agents with `/agents`
-- send prompts with mentions such as `@Developer fix the failing integration test`
-- stream responses, export sessions, undo or redo, and use `/compact`
-
-## Choose Agencies And Agents
-
-Use `/agents` to open the target picker.
+- a keyboard-first terminal workflow
+- session history, export, undo, redo, and `/compact`
+- `/agents` to switch between top-level agents
+- `@AgentName` mentions to route a prompt to a specific top-level agent
+- `@` file/resource references to attach local or MCP context in the same prompt flow
+- `Tab` autocomplete for both agent mentions and file/resource references
+- direct access to local project files for prompt context
 
 ![Agent Swarm CLI agent picker](/images/agent-swarm-cli-agent-selection.png)
 
-The picker reads live metadata from the running `agency-swarm` backend and groups agents by agency.
+## Using The TUI
 
-Use `Tab` to autocomplete agent mentions in the prompt box.
+### Launch An Existing Agency
+
+If you already have an agency, this is the fastest path:
+
+<Steps>
+  <Step title="Install Agency Swarm">
+    ```bash
+    pip install agency-swarm
+    ```
+  </Step>
+  <Step title="Set your model credentials">
+    Choose one path: set `OPENAI_API_KEY` in `.env` for the default OpenAI setup, or follow [Third-Party Models](/additional-features/third-party-models) for Anthropic, Gemini, Grok, Azure OpenAI, or other compatible providers.
+  </Step>
+  <Step title="Add the TUI launch call">
+    Put this in your `agency.py` file:
+
+    ```python
+    if __name__ == "__main__":
+        agency.tui()
+    ```
+  </Step>
+  <Step title="Run your agency">
+    ```bash
+    python agency.py
+    ```
+  </Step>
+  <Step title="Complete first-run setup">
+    On first run, `agency-swarm` downloads the terminal app, caches it locally, shows a short setup message, and opens the TUI for your current agency.
+  </Step>
+</Steps>
+
+Use `agency.tui(reload=False)` to disable hot reload on file changes.
+
+After the TUI opens, use `/agents` to pick a top-level agent, `@AgentName` to route directly to an agent, and `@` file/resource references to attach local or MCP context.
+
+### Launch A Custom Agency
+
+Use this path when you are building your own agency and want to run it in the TUI right away:
+
+<Steps>
+  <Step title="Create your agent folders">
+    Each agent lives in its own folder with its definition file, `instructions.md`, and optional `tools/`, `files/`, or `schemas/`.
+
+    To scaffold one fast, run:
+
+    ```bash
+    agency-swarm create-agent-template "Developer"
+    ```
+  </Step>
+  <Step title="Wire your agents in agency.py">
+    Import your agents, define the communication flows, and create your `Agency(...)` in `agency.py`.
+  </Step>
+  <Step title="Add the TUI launch call">
+    Add this to the bottom of `agency.py`:
+
+    ```python
+    if __name__ == "__main__":
+        agency.tui()
+    ```
+  </Step>
+  <Step title="Launch the TUI">
+    Run:
+
+    ```bash
+    python agency.py
+    ```
+  </Step>
+</Steps>
+
+For the full project structure, see [From Scratch](/welcome/getting-started/from-scratch).
 
 <Accordion title="Optional: reconnect to another local agency server" defaultOpen={false}>
 `agency.tui()` already opens the TUI for the current local agency.
@@ -43,9 +125,9 @@ The extra connection flow is only for the case where you want the TUI to switch 
 In that case, use `/connect` inside the TUI and point it at the other local server.
 </Accordion>
 
-## Current Limitations
+## Limitations
 
-These commands and modes are intentionally unavailable in the current terminal workflow:
+Some commands and modes visible in the TUI are not wired to the `agency-swarm` backend yet:
 
 - `/models`
 - `/editor`
@@ -53,10 +135,15 @@ These commands and modes are intentionally unavailable in the current terminal w
 - `/commit`
 - docs mode
 
+Use your Python config to choose models and providers, and use your normal editor or Git workflow for editing files and making commits.
+
 `tui(show_reasoning=False)` is not supported in the new TUI yet.
 
 ## Related Pages
 
+- [Installation](/welcome/installation)
+- [From Scratch](/welcome/getting-started/from-scratch)
+- [Third-Party Models](/additional-features/third-party-models)
 - [Running an Agency](/core-framework/agencies/running-agency)
 - [FastAPI Integration](/additional-features/fastapi-integration)
 - [API Reference](/references/api)
