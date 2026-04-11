@@ -13,6 +13,7 @@ North Star: keep the user's general intent and direction clear; if literal words
 ## AGENTS.md Maintenance
 - Treat AGENTS.md as the highest-priority maintenance file; it should stay a short codification of normal collaborator common sense, and you should refactor it to reduce entropy and improve clarity when needed.
 - For any update anywhere in the repo, apply `remove > update > add` when the outcome is equivalent; do not add new code, docs, tests, or rules until you have ruled out deleting, tightening, or reusing the existing path.
+- Protect the context window. Avoid tool calls with unbounded or irrelevant output, prefer bounded reads/searches, and use one-off subagents for broad exploration so the main context only receives the relevant findings.
 
 ## Requirement Completeness Gate
 - Mandatory requirements outrank momentum. Never proceed while a required meaning, dependency, permission, target, or input is missing or unclear.
