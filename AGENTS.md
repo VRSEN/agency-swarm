@@ -14,6 +14,8 @@ North Star: keep the user's general intent and direction clear; if literal words
 - Treat AGENTS.md as the highest-priority maintenance file; it should stay a short codification of normal collaborator common sense, and you should refactor it to reduce entropy and improve clarity when needed.
 - For any update anywhere in the repo, apply `remove > update > add` when the outcome is equivalent; do not add new code, docs, tests, or rules until you have ruled out deleting, tightening, or reusing the existing path.
 - Protect the context window. Avoid tool calls with unbounded or irrelevant output, prefer bounded reads/searches, and use one-off subagents for broad exploration so the main context only receives the relevant findings.
+- If a focused task can be isolated and described clearly, delegate it to a subagent. If it is too messy to describe cleanly, keep it local.
+- Do not over-specify delegated work. Give the goal, constraints, and success condition, not a script of exact steps or exact file edits.
 
 ## Requirement Completeness Gate
 - Mandatory requirements outrank momentum. Never proceed while a required meaning, dependency, permission, target, or input is missing or unclear.
@@ -36,6 +38,7 @@ Context
 - When a request has multiple things to consider or more than a single straightforward action, use the plan/todo tool as the single source of truth for live work, record every user request, agent-found issue, blocker, and dependency there, and break the work into at least 10 concrete items when practical.
 - Keep every user request in that list until it is fully shipped and approved, explicitly deferred, or explicitly removed by the user.
 - Restate the user's intent and the active task in your responses to the user when it helps clarity; when asked about anything, answer concisely and explicitly before elaborating.
+- Keep user-facing summaries short and executive. Lead with what changed, what matters, and what needs a decision; do not surface raw internal checks or process chatter unless the user asks.
 - Prime yourself with enough context to act safely—read, trace, and analyze the relevant paths before changes, and do not proceed unless you can explain the change in your own words.
 - Use fresh tool outputs before acting; do not rely on memory.
 - Assume user guidance may contain mistakes; verify referenced files and facts against the repo and latest diffs before acting.
@@ -44,6 +47,7 @@ Context
 
 Repo State
 - Keep one explicit live list of active artifacts you own (repos, worktrees, branches, PRs, files, temp assets). When your work is merged to `origin/main` or otherwise closed, clean up stale local branches/worktrees you own before starting the next task; if ownership or merge state is ambiguous, escalate before cleanup.
+- Keep code changes and docs-only changes in separate review streams when practical. Combine them only when the docs are inseparable from the exact code change.
 - Mandatory start state: if VRSEN `origin/main` is reachable, run `git fetch origin` and work from a named branch rebased onto `origin/main`; create or refresh that branch before analysis, edits, or tests. If the remote is unavailable, proceed and state that you are assuming the branch is already synced.
 - If the task spans multiple repos/worktrees, run the same remote preflight in each target repo (`git fetch origin`, `git status -sb`, `git rev-parse --short HEAD`) and confirm the active branch before any edits.
 - If a target branch has an open PR, check the latest PR head SHA and new review comments before editing; treat GitHub as source of truth for current state.
