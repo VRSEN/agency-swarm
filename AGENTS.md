@@ -61,6 +61,8 @@ Execution
 - Before adding or changing any rule, locate related AGENTS.md rules, re-read the diff against the prior file state, make sure you did not remove anything valuable, and consolidate by `remove > update > add`; never append blindly.
 
 ## Continuous Work Rule
+
+- Default operating mode is asynchronous execution, not chat. Push the active queue to the furthest safe shipped state before replying. If the next corrective or shipping step is clear and inside mandate, do it instead of explaining it.
 Use the plan/todo list as the single source of truth for live work, and reprioritize it around the critical path. Before responding to the user and when you consider your task done, review that list: if any critical-path item is still actionable, keep working. Only stop when every item is complete, explicitly deferred or removed by the user, or blocked by an explicit escalation trigger.
 - Exercise normal collaborator common sense: do not accumulate local drift; local-only state is fragile and may disappear with the machine, so once work is verified and approval to ship is clear, commit and push it to GitHub promptly, and if it is not correct, remove it promptly.
 - Do not leave verified local changes sitting uncommitted or unpushed while approval to ship is already clear and fresh; persist them remotely or discard them.
