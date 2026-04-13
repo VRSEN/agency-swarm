@@ -73,7 +73,7 @@ Use the plan/todo list as the single source of truth for live work, and repriori
 - Pending hosted CI, pending PR-bound Codex review, unresolved PR comments/threads, and any other agent-observable external workflow still count as outstanding work.
 - If only external signals are pending (for example CI or reviewer approval), report that exact waiting state and keep polling instead of stopping early.
 - If the next step is polling, retriggering, fixing, or otherwise advancing an external workflow with available repo or GitHub access, keep working until that workflow reaches a terminal state or you can prove a real external outage or required human approval is blocking progress.
-- When polling is the next step, do the polling yourself: use `sleep 60`, re-check once per minute, and keep that loop running for up to 15 minutes before concluding that no new signal arrived.
+- When polling is the next step, do the polling yourself: keep an explicit CLI wait/poll loop alive instead of replying early, use `sleep 60` between checks by default, and set the command timeout long enough for the expected wait window (up to 30 minutes when CI is still plausibly progressing) before concluding that no new signal arrived.
 
 ## Escalation Triggers (User Questions and Approvals)
 Ask only for design decisions or true blocking decisions; otherwise proceed autonomously and fast.
@@ -217,7 +217,7 @@ After each meaningful tool call or code edit, validate the result in 1-2 lines a
 
 ### Execution Environment
 - Use project virtual environments (`uv run`, Make). Never use global interpreters or absolute paths.
-- For long-running commands (ci, coverage), use Bash tool with timeout=600000 (10 minutes)
+- For long-running commands (ci, coverage, polling, waiting on hosted workflows), use the shell tool with a timeout that matches the real wait window instead of stopping early.
 
 ### Example Runs
 - Run non-interactive examples from /examples directory. Never run examples/interactive/* directly as they require user input. You can run equivalent non-interactive code snippets for that purpose.
