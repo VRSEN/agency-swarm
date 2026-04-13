@@ -18,6 +18,7 @@ from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, TypedDict
+from urllib.parse import quote
 
 import requests
 
@@ -36,7 +37,7 @@ _BIN_ENV = "AGENTSWARM_BIN"
 _ARGS_ENV = "AGENCY_SWARM_OPENCODE_ARGS"
 _HOST = "127.0.0.1"
 _MODEL = "agency-swarm/default"
-_CLI_VERSION = "1.3.15"
+_CLI_VERSION = "1.4.6"
 _CLI_REGISTRY = "https://registry.npmjs.org"
 _LOCK_AGE = 300
 _LOCK_WAIT = 30
@@ -48,6 +49,7 @@ _SETUP_COMPLETE_MESSAGE = "Agent Swarm CLI setup complete."
 class _Package:
     name: str
     binary: str
+    npm_name: str | None = None
 
 
 class _Dist(TypedDict):
@@ -241,7 +243,7 @@ def _install(pkg: _Package, root: Path, path: Path) -> None:
     tmp = Path(tempfile.mkdtemp(prefix="agentswarm-", dir=root))
     try:
         archive = tmp / "cli.tgz"
-        meta = _metadata(pkg.name)
+        meta = _metadata(pkg.npm_name or pkg.name)
         _download(meta["dist"]["tarball"], archive)
         if meta["dist"].get("shasum") and _sha1(archive) != meta["dist"]["shasum"]:
             raise RuntimeError("Agent Swarm CLI download checksum mismatch.")
@@ -265,7 +267,7 @@ def _install(pkg: _Package, root: Path, path: Path) -> None:
 
 
 def _metadata(name: str) -> _Meta:
-    response = requests.get(f"{_CLI_REGISTRY}/{name}/{_CLI_VERSION}", timeout=30)
+    response = requests.get(f"{_CLI_REGISTRY}/{quote(name, safe='')}/{_CLI_VERSION}", timeout=30)
     response.raise_for_status()
     data = response.json()
     dist = data.get("dist") if isinstance(data, dict) else None
@@ -310,25 +312,29 @@ def _package() -> _Package:
     machine = platform.machine().lower()
     if sys.platform == "darwin":
         if machine in ("aarch64", "arm64"):
-            return _Package("agent-swarm-cli-darwin-arm64", "agency")
+            return _Package("agentswarm-cli-darwin-arm64", "agentswarm", "@vrsen/agentswarm-cli-darwin-arm64")
         if machine in ("amd64", "x86_64"):
-            return _Package("agent-swarm-cli-darwin-x64-baseline", "agency")
+            return _Package(
+                "agentswarm-cli-darwin-x64-baseline", "agentswarm", "@vrsen/agentswarm-cli-darwin-x64-baseline"
+            )
     if sys.platform == "win32":
         if machine in ("aarch64", "arm64"):
-            return _Package("agent-swarm-cli-windows-arm64", "agency.exe")
+            return _Package("agentswarm-cli-windows-arm64", "agentswarm.exe", "@vrsen/agentswarm-cli-windows-arm64")
         if machine in ("amd64", "x86_64"):
-            return _Package("agent-swarm-cli-windows-x64-baseline", "agency.exe")
+            return _Package(
+                "agentswarm-cli-windows-x64-baseline", "agentswarm.exe", "@vrsen/agentswarm-cli-windows-x64-baseline"
+            )
     if sys.platform.startswith("linux"):
         if machine in ("aarch64", "arm64"):
-            name = "agent-swarm-cli-linux-arm64"
+            name = "agentswarm-cli-linux-arm64"
         elif machine in ("amd64", "x86_64"):
-            name = "agent-swarm-cli-linux-x64-baseline"
+            name = "agentswarm-cli-linux-x64-baseline"
         else:
             name = ""
         if name:
             if _musl():
                 name += "-musl"
-            return _Package(name, "agency")
+            return _Package(name, "agentswarm", f"@vrsen/{name}")
     raise RuntimeError(f"Agent Swarm CLI is not available on {sys.platform}/{machine}.")
 
 
