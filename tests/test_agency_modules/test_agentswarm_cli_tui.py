@@ -132,7 +132,7 @@ def test_agentswarm_cli_tui_downloads_platform_cli(monkeypatch, tmp_path):
     blob = BytesIO()
     with tarfile.open(fileobj=blob, mode="w:gz") as tar:
         data = b"#!/bin/sh\nexit 0\n"
-        info = tarfile.TarInfo("package/bin/agency")
+        info = tarfile.TarInfo("package/bin/agentswarm")
         info.size = len(data)
         info.mode = 0o755
         tar.addfile(info, BytesIO(data))
@@ -180,7 +180,7 @@ def test_agentswarm_cli_tui_downloads_platform_cli(monkeypatch, tmp_path):
         "_package",
         lambda: agentswarm_cli_demo._Package(
             "agentswarm-cli-darwin-arm64",
-            "agency",
+            "agentswarm",
             "@vrsen/agentswarm-cli-darwin-arm64",
         ),
     )
@@ -188,7 +188,7 @@ def test_agentswarm_cli_tui_downloads_platform_cli(monkeypatch, tmp_path):
 
     path = agentswarm_cli_demo._ensure_cli()
 
-    assert path == root / "1.2.27-test" / "agentswarm-cli-darwin-arm64" / "agency"
+    assert path == root / "1.2.27-test" / "agentswarm-cli-darwin-arm64" / "agentswarm"
     assert path.read_text() == "#!/bin/sh\nexit 0\n"
     assert calls == [
         "https://registry.npmjs.org/%40vrsen%2Fagentswarm-cli-darwin-arm64/1.2.27-test",
@@ -206,7 +206,7 @@ def test_agentswarm_cli_tui_notifies_on_first_run(monkeypatch, tmp_path):
         "_package",
         lambda: agentswarm_cli_demo._Package(
             "agentswarm-cli-darwin-arm64",
-            "agency",
+            "agentswarm",
             "@vrsen/agentswarm-cli-darwin-arm64",
         ),
     )

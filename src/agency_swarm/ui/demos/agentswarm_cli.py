@@ -37,7 +37,7 @@ _BIN_ENV = "AGENTSWARM_BIN"
 _ARGS_ENV = "AGENCY_SWARM_OPENCODE_ARGS"
 _HOST = "127.0.0.1"
 _MODEL = "agency-swarm/default"
-_CLI_VERSION = "1.4.5"
+_CLI_VERSION = "1.4.6"
 _CLI_REGISTRY = "https://registry.npmjs.org"
 _LOCK_AGE = 300
 _LOCK_WAIT = 30
@@ -312,15 +312,17 @@ def _package() -> _Package:
     machine = platform.machine().lower()
     if sys.platform == "darwin":
         if machine in ("aarch64", "arm64"):
-            return _Package("agentswarm-cli-darwin-arm64", "agency", "@vrsen/agentswarm-cli-darwin-arm64")
-        if machine in ("amd64", "x86_64"):
-            return _Package("agentswarm-cli-darwin-x64-baseline", "agency", "@vrsen/agentswarm-cli-darwin-x64-baseline")
-    if sys.platform == "win32":
-        if machine in ("aarch64", "arm64"):
-            return _Package("agentswarm-cli-windows-arm64", "agency.exe", "@vrsen/agentswarm-cli-windows-arm64")
+            return _Package("agentswarm-cli-darwin-arm64", "agentswarm", "@vrsen/agentswarm-cli-darwin-arm64")
         if machine in ("amd64", "x86_64"):
             return _Package(
-                "agentswarm-cli-windows-x64-baseline", "agency.exe", "@vrsen/agentswarm-cli-windows-x64-baseline"
+                "agentswarm-cli-darwin-x64-baseline", "agentswarm", "@vrsen/agentswarm-cli-darwin-x64-baseline"
+            )
+    if sys.platform == "win32":
+        if machine in ("aarch64", "arm64"):
+            return _Package("agentswarm-cli-windows-arm64", "agentswarm.exe", "@vrsen/agentswarm-cli-windows-arm64")
+        if machine in ("amd64", "x86_64"):
+            return _Package(
+                "agentswarm-cli-windows-x64-baseline", "agentswarm.exe", "@vrsen/agentswarm-cli-windows-x64-baseline"
             )
     if sys.platform.startswith("linux"):
         if machine in ("aarch64", "arm64"):
@@ -332,7 +334,7 @@ def _package() -> _Package:
         if name:
             if _musl():
                 name += "-musl"
-            return _Package(name, "agency", f"@vrsen/{name}")
+            return _Package(name, "agentswarm", f"@vrsen/{name}")
     raise RuntimeError(f"Agent Swarm CLI is not available on {sys.platform}/{machine}.")
 
 
