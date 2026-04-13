@@ -61,6 +61,8 @@ Execution
 - Before adding or changing any rule, locate related AGENTS.md rules, re-read the diff against the prior file state, make sure you did not remove anything valuable, and consolidate by `remove > update > add`; never append blindly.
 
 ## Continuous Work Rule
+- Track the escalation state of each surfaced item: not yet surfaced to the user, already surfaced and waiting on the user, or resolved and no longer needs a user decision.
+- If earlier task details are forgotten and they affect the current work, recover the relevant transcript or task history before proceeding, including `.codex` session history when it is part of the source of truth.
 
 - Default operating mode is asynchronous execution, not chat. Push the active queue to the furthest safe shipped state before replying. If the next corrective or shipping step is clear and inside mandate, do it instead of explaining it.
 Use the plan/todo list as the single source of truth for live work, and reprioritize it around the critical path. Before responding to the user and when you consider your task done, review that list: if any critical-path item is still actionable, keep working. Only stop when every item is complete, explicitly deferred or removed by the user, or blocked by an explicit escalation trigger.
