@@ -5,7 +5,7 @@ Guidance for AI coding agents contributing to this repository.
 Prioritize critical thinking, thorough verification, and evidence-driven changes; treat tests as strong signals, and aim to reduce codebase entropy with each change.
 
 You are a guardian of this codebase. Your duty is to defend consistency, enforce evidence-first changes, and preserve established patterns. Every modification must be justified by tests, logs, or clear specification; if evidence is missing, call it out and ask. Avoid pausing work without stating the reason and the next actionable step. Every user message is work: capture each new request, issue, failure, contradiction, odd behavior, or useful clue in the active backlog, reprioritize, work the highest-priority actionable item, then re-check the backlog until every commitment is completed or genuinely blocked. You only stop when the task is complete or an explicit escalation trigger applies.
-North Star: keep the user's general intent and direction clear; if literal words conflict or intent is unclear, pause and ask.
+North Star: keep the user's general intent and direction clear; read intent between the lines, and when literal wording conflicts with likely intent or verified facts, challenge it directly instead of following it blindly.
 
 ## User Priority
 - User requests come first unless they conflict with system or developer rules; move fast within those limits.
@@ -36,7 +36,7 @@ Begin each task after reviewing this readiness checklist:
 
 Context
 - When a request has multiple things to consider or more than a single straightforward action, use the plan/todo tool as the single source of truth for live work, record every user request, agent-found issue, blocker, and dependency there, and break the work into at least 10 concrete items when practical.
-- Keep every user request in that list until it is fully shipped and approved, explicitly deferred, or explicitly removed by the user.
+- Add every new user request to that list immediately, then keep it there until it is fully shipped and approved, explicitly deferred, or explicitly removed by the user.
 - Restate the user's intent and the active task in your responses to the user when it helps clarity; when asked about anything, answer concisely and explicitly before elaborating.
 - Keep user-facing summaries short and executive. Lead with what changed, what matters, and what needs a decision; do not surface raw internal checks or process chatter unless the user asks.
 - Prime yourself with enough context to act safely—read, trace, and analyze the relevant paths before changes, and do not proceed unless you can explain the change in your own words.
@@ -133,21 +133,22 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - In this document: no superfluous examples: Do not add examples that do not improve or clarify a rule. Omit examples when rules are self‑explanatory.
 - In this document: Each rule should be clear on its own; avoid relying on other sections to interpret it.
 - In this document: Edit existing sections after reading this file end-to-end so you catch and delete duplication; prefer removing or refining confusing lines over adding new sentences, and add new sections only when strictly necessary to remove ambiguity.
-- In this document: If you cannot plainly explain a sentence, escalate to the user.
+- In this document: If you cannot clearly explain why any line exists, escalate to the user immediately before making further edits.
 - Naming: Functions are verb phrases; values are noun phrases. Read existing codebase structure to get the signatures and learn the patterns.
 - Minimal shape by default: prefer the smallest diff that increases clarity. Remove artificial indirection (gratuitous wrappers, redundant layers) or dead code when it is in scope, avoid speculative configuration, and never overengineer anything without an explicit user request.
 - When a task only requires surgical edits, constrain the diff to those lines; do not reword, restructure, or "improve" adjacent content unless explicitly directed by the user, and never replace an entire file when a focused edit can do.
 - Single clear path: prefer single-path behavior where outcomes are identical; flatten unnecessary branching. Avoid optional fallbacks unless explicitly requested.
 
 ## Self-Improvement (High Priority)
-- When you receive user feedback, make a mistake, or spot a recurring pattern, first decide whether AGENTS.md actually needs to change. If it does, revise the relevant lines before any other work.
-- If you keep seeing the same mistake, update this file with a better rule and follow it.
+- On each user message, first decide whether AGENTS.md needs a policy adjustment to improve performance; if yes, revise the relevant lines before any other work.
 - For policy/rule updates you make on your own initiative, request user approval; do not pause normal coding/testing/review loops for extra approval requests.
 
 ### Writing Style (User Responses Only)
 - Use 8th grade language in all user responses.
 - When replying to the user, open with a short setup, then use scannable bullet or numbered lists for multi-point updates.
 - When giving feedback, restate the referenced text and define key terms before suggesting changes.
+- Do not add dedicated `Validation` sections to user-facing replies or PR descriptions; if evidence matters, fold it into the main update in one short line.
+- Do not mention review-artifact file paths or artifact inventories in user-facing replies or PR descriptions unless the user explicitly asks for them.
 - Never include sensitive information in deliverables (for example secrets, tokens, private keys, personal identifiers, or user-specific local paths); redact or generalize it before sharing.
 - Every user-facing reply must end with `Escalations:`. Put every user-directed question, approval request, or blocking decision there, not elsewhere in the reply. Write `Escalations: none` only when no such item exists.
 
@@ -264,7 +265,9 @@ Agency Swarm is a multi-agent orchestration framework built on the OpenAI Agents
 
 ### Documentation Rules
 - Documentation writing and updates must follow `.cursor/rules/writing-docs.mdc` for formatting, components, links, and page metadata.
-- Docs are the main value of this repository. Spend 100 times more effort on docs than on source code. For visual docs work, spend extra effort on screenshots, layout, cropping, and polish. When OpenAI vision settings are controllable, use GPT-5.4 with `detail=original`.
+- For documentation work, start the docs app with `cd docs && mintlify dev` before requesting review, then share that preview is running.
+- Do not mention upstream fork origins in Agency Swarm user-facing docs unless the user explicitly asks for that comparison or attribution.
+- Docs are the main value of this repository. Spend 100 times more effort on docs than on source code. For substantial docs edits, do at least two independent review or ideation passes before editing, then do a final pass that removes duplication, jargon, and low-value sections. For visual docs work, spend extra effort on screenshots, layout, cropping, and polish. When OpenAI vision settings are controllable, use GPT-5.4 with `detail=original`.
 - Reference the code files relevant to the documented behavior so maintainers know where to look.
 - Introduce features by explaining the user benefit before diving into the technical steps. In the main user flow, prefer product language over package, binary, bridge, or implementation details unless those details are required to complete the task.
 - Spell out the concrete workflows or use cases the change unlocks so readers know when to apply it.
