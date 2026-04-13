@@ -73,7 +73,7 @@ Use the plan/todo list as the single source of truth for live work, and repriori
 - Pending hosted CI, pending PR-bound Codex review, unresolved PR comments/threads, and any other agent-observable external workflow still count as outstanding work.
 - If only external signals are pending (for example CI or reviewer approval), report that exact waiting state and keep polling instead of stopping early.
 - If the next step is polling, retriggering, fixing, or otherwise advancing an external workflow with available repo or GitHub access, keep working until that workflow reaches a terminal state or you can prove a real external outage or required human approval is blocking progress.
-- When polling is the next step, do the polling yourself: keep an explicit CLI wait/poll loop alive instead of replying early, use `sleep 60` between checks by default, and set the command timeout long enough for the expected wait window (up to 30 minutes when CI is still plausibly progressing) before concluding that no new signal arrived.
+- When polling is the next step, do the polling yourself: keep an explicit CLI wait loop alive instead of replying early, poll at least once per minute with `sleep 60`, and set the command timeout to cover the real wait window. For PR-bound Codex, inspect and retrigger after 15 minutes without a terminal signal instead of waiting longer silently.
 
 ## Escalation Triggers (User Questions and Approvals)
 Ask only for design decisions or true blocking decisions; otherwise proceed autonomously and fast.
