@@ -65,14 +65,6 @@ If you already have an agency, this is the fastest path:
 This is the `Framework-launched` mode from the table above.
 
 <Steps>
-  <Step title="Install Agency Swarm">
-    ```bash
-    pip install agency-swarm
-    ```
-  </Step>
-  <Step title="Set your model credentials">
-    Choose one path: set `OPENAI_API_KEY` in `.env` for the default OpenAI setup, follow [Third-Party Models](/additional-features/third-party-models) for Anthropic, Gemini, Grok, Azure OpenAI, or other compatible providers, or authenticate inside the TUI with `/auth` after first launch.
-  </Step>
   <Step title="Add the TUI launch call">
     Put this in your `agency.py` file:
 
@@ -97,21 +89,11 @@ After the TUI opens, use `/agents` to pick a top-level agent, `@AgentName` to ro
 
 ### Launch A Custom Agency
 
-Use this path when you are building your own agency and want to run it in the TUI right away:
+Use this path once your custom agency already exists and you want to open it in the TUI.
+
+If you still need to build the agency itself, use [From Scratch](/welcome/getting-started/from-scratch) or the [Starter Template](/welcome/getting-started/starter-template) first.
 
 <Steps>
-  <Step title="Create your agent folders">
-    Each agent lives in its own folder with its definition file, `instructions.md`, and optional `tools/`, `files/`, or `schemas/`.
-
-    To scaffold one fast, run:
-
-    ```bash
-    agency-swarm create-agent-template "Developer"
-    ```
-  </Step>
-  <Step title="Wire your agents in agency.py">
-    Import your agents, define the communication flows, and create your `Agency(...)` in `agency.py`.
-  </Step>
   <Step title="Add the TUI launch call">
     Add this to the bottom of `agency.py`:
 
@@ -128,8 +110,6 @@ Use this path when you are building your own agency and want to run it in the TU
     ```
   </Step>
 </Steps>
-
-For the full project structure, see [From Scratch](/welcome/getting-started/from-scratch).
 
 ## Limitations
 
