@@ -10,27 +10,23 @@ Agent Swarm CLI is the built-in terminal app for `agency-swarm`.
 
 Use it when you want a keyboard-first terminal chat for your agency without building a separate UI.
 
+Add this to your `agency.py` file:
+
+```python
+agency.tui()
+```
+
+Then run:
+
 ```bash
 python agency.py
 ```
 
-Run `python agency.py` when your entry file is `agency.py`; otherwise run `python <your-entry-file>.py`.
+On first run, `agency-swarm` downloads the terminal app and opens it for your agency.
 
-The terminal UI opens your existing `agency-swarm` setup, so the same agents and tools are available in the terminal.
+If your current model provider setup is not usable, the TUI opens `/auth`. Authentication means telling the TUI which model provider to use and giving it the credential it needs to run your prompts. Once you do that, the TUI can reuse the saved credential the next time you launch it. You can open `/auth` later to manage or remove it.
 
 ![Agent Swarm CLI startup screen](/images/agent-swarm-cli-preview.png)
-
-## Modes
-
-| Mode | Triggered by | What happens | Use it when |
-| --- | --- | --- | --- |
-| Framework-launched | `agency.tui()` | `agency-swarm` starts the local bridge for your current agency and opens the TUI already attached to it. | This is the normal path for chatting with your current Python agency from the terminal. |
-| Standalone | launching `agentswarm` directly | the CLI opens without a framework-started agency preselected | advanced or manual usage outside your Python agency entry file |
-| Connect to existing local server | `/connect` inside the CLI | the current session switches to another running local `agency-swarm` server | when the backend is already running elsewhere |
-
-<Tip>
-  Most users want the `Framework-launched` mode.
-</Tip>
 
 ## Prerequisites
 
@@ -38,8 +34,7 @@ Before you launch the TUI, make sure you have:
 
 - Python 3.12 or newer
 - `agency-swarm` installed
-- for the default OpenAI path, set `OPENAI_API_KEY` in `.env`
-- or configure another provider with [Third-Party Models](/additional-features/third-party-models)
+- a model provider credential, either already configured or added through `/auth` on first run
 - an existing agency, or a starting point from [From Scratch](/welcome/getting-started/from-scratch) or the [Starter Template](/welcome/getting-started/starter-template)
 
 ## Features
@@ -55,61 +50,6 @@ Once the TUI is running, you get:
 - direct access to local project files for prompt context
 
 ![Agent Swarm CLI agent picker](/images/agent-swarm-cli-agent-selection.png)
-
-## Using The TUI
-
-### Launch An Existing Agency
-
-If you already have an agency, this is the fastest path:
-
-This is the `Framework-launched` mode from the table above.
-
-<Steps>
-  <Step title="Add the TUI launch call">
-    Put this in your `agency.py` file:
-
-    ```python
-    if __name__ == "__main__":
-        agency.tui()
-    ```
-  </Step>
-  <Step title="Run your agency">
-    ```bash
-    python agency.py
-    ```
-  </Step>
-  <Step title="Complete first-run setup">
-    On first run, `agency-swarm` downloads the terminal app, caches it locally, shows a short setup message, and opens the TUI for your current agency. If you have not authenticated a provider yet, the TUI can open `/auth` so you can sign in there.
-  </Step>
-</Steps>
-
-Use `agency.tui(reload=False)` to disable hot reload on file changes.
-
-After the TUI opens, use `/agents` to pick a top-level agent, `@AgentName` to route directly to an agent, and `@` file/resource references to attach local or MCP context.
-
-### Launch A Custom Agency
-
-Use this path once your custom agency already exists and you want to open it in the TUI.
-
-If you still need to build the agency itself, use [From Scratch](/welcome/getting-started/from-scratch) or the [Starter Template](/welcome/getting-started/starter-template) first.
-
-<Steps>
-  <Step title="Add the TUI launch call">
-    Add this to the bottom of `agency.py`:
-
-    ```python
-    if __name__ == "__main__":
-        agency.tui()
-    ```
-  </Step>
-  <Step title="Launch the TUI">
-    Run:
-
-    ```bash
-    python agency.py
-    ```
-  </Step>
-</Steps>
 
 ## Limitations
 
