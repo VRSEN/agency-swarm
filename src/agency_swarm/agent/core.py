@@ -272,6 +272,11 @@ class Agent(BaseAgent[MasterContext]):
         # Prepare deferred OAuth MCP servers without connecting, so metadata and caches
         # include the activation tool before the first run.
         self._prepare_deferred_oauth_mcp_servers()
+        if self.mcp_servers:
+            # Explicit non-OAuth MCP servers are constructor input, not framework-managed wiring.
+            convert_mcp_servers_to_tools(self)
+            self._mcp_tools_initialized = True
+            self._ensure_web_search_sources_include()
 
         # Refresh after MCP preparation so fingerprint includes deferred auth tools.
         self.refresh_conversation_starters_cache()

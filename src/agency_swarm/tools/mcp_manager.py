@@ -223,7 +223,11 @@ class PersistentMCPServerManager:
                 elif typ == "shutdown":
                     result_fut: Future = cmd["result_fut"]
                     try:
-                        await real_server.cleanup()
+                        cleanup = getattr(real_server, "cleanup", None)
+                        if callable(cleanup):
+                            cleanup_result = cleanup()
+                            if inspect.isawaitable(cleanup_result):
+                                await cleanup_result
                         result_fut.set_result(True)
                     except BaseException as e:  # noqa: BLE001
                         result_fut.set_exception(e)

@@ -107,6 +107,17 @@ class _ContextAwareServer(_DummyServer):
         return self.storage._get_user_cache_dir().name
 
 
+class _NoCleanupServer:
+    def __init__(self, name: str = "dummy") -> None:
+        self.name = name
+        self.session = None
+        self.connect_calls = 0
+
+    async def connect(self) -> None:
+        self.connect_calls += 1
+        self.session = object()
+
+
 @pytest.mark.asyncio
 async def test_ensure_connected_reuses_driver_for_proxy() -> None:
     manager = PersistentMCPServerManager()
@@ -167,6 +178,18 @@ async def test_shutdown_logs_cleanup_exception(caplog: pytest.LogCaptureFixture)
         await manager.shutdown()
 
     assert "Error during MCP server 'dummy' shutdown" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_shutdown_skips_servers_without_cleanup(caplog: pytest.LogCaptureFixture) -> None:
+    manager = PersistentMCPServerManager()
+    server = _NoCleanupServer()
+    await manager.ensure_connected(server)
+
+    with caplog.at_level(logging.WARNING):
+        await manager.shutdown()
+
+    assert "Error during MCP server 'dummy' shutdown" not in caplog.text
 
 
 @pytest.mark.asyncio
