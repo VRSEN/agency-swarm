@@ -96,7 +96,9 @@ npx @vrsen/agentswarm
 
 Run it from your project root when you want the launcher to handle first-run setup and open the terminal UI for you.
 
-For the full terminal launch flow, first-run auth, and agent routing, see [Agent Swarm CLI](/core-framework/agencies/agent-swarm-cli).
+This path opens the TUI in local `Agent Builder` mode by default. Use it when you want the easiest setup path.
+
+For the full launch flow, first-run auth, and the optional terminal launch paths, see [Agent Swarm CLI](/core-framework/agencies/agent-swarm-cli).
 
 <Note>
 If you already launch from Python, `agency.tui()` is still supported:
@@ -106,6 +108,8 @@ agency.tui()
 ```
 
 Use `agency.tui(reload=False)` if you want to turn off hot reload on file changes.
+
+This Python path stays bound to the `Agency` instance you launch from code by starting the local bridge automatically.
 </Note>
 
 <Tip>
