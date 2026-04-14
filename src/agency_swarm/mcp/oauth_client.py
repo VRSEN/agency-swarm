@@ -5,7 +5,7 @@ import contextlib
 import logging
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
-from typing import TypedDict
+from typing import TypedDict, cast
 
 import httpx
 from agents import Agent as AgentBase, RunContextWrapper
@@ -51,10 +51,13 @@ StreamableHTTPContext = AbstractAsyncContextManager[
 def _get_modern_streamable_http_client() -> Callable[..., StreamableHTTPContext] | None:
     """Return modern streamable HTTP transport factory when available."""
     try:
-        from mcp.client.streamable_http import streamable_http_client
+        import mcp.client.streamable_http as streamable_http_module
     except ImportError:  # pragma: no cover - compatibility with older MCP SDKs
         return None
-    return streamable_http_client
+    modern_streamable_http_client = getattr(streamable_http_module, "streamable_http_client", None)
+    if callable(modern_streamable_http_client):
+        return cast("Callable[..., StreamableHTTPContext]", modern_streamable_http_client)
+    return None
 
 
 def _build_streamable_transport(
