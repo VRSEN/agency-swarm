@@ -128,6 +128,7 @@ Use these examples as guidance, not strict templates.
 2. Create a new page reference in the `./docs/docs.json` file in the appropriate group and sub group.
    - If it's unclear where to place the page, ask the user for clarification.
    - Make sure the folder structure in docs folder matches the structure in the `./docs/docs.json` file.
+   - For user-facing features or public API changes, do not ship code without this docs update.
 3. Write the page content using the same path, following all the rules above.
 4. Ask the user to review the page and provide feedback.
 5. Implement any adjustments as needed. See "Updating Existing Pages" section below.

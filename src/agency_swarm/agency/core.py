@@ -5,6 +5,7 @@ import logging
 import os
 import threading
 import warnings
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from agents import RunConfig, RunHooks, RunResult, Tool, TResponseInputItem
@@ -13,6 +14,7 @@ from agency_swarm.agent.agent_flow import AgentFlow
 from agency_swarm.agent.core import AgencyContext, Agent
 from agency_swarm.agent.execution_streaming import StreamingRunResponse
 from agency_swarm.hooks import PersistenceHooks
+from agency_swarm.memory import AgentMemoryConfig, MemoryConfig, MemoryIdentity, MemoryManager
 from agency_swarm.streaming.utils import EventStreamMerger
 from agency_swarm.tools import BaseTool
 from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers, default_mcp_manager
@@ -71,6 +73,8 @@ class Agency:
     shared_mcp_servers: list[Any] | None  # MCP servers shared across all agents
     user_context: dict[str, Any]  # Shared user context for MasterContext
     send_message_tool_class: type | None  # Fallback SendMessage tool class when flows have no override
+    memory: MemoryConfig | None
+    memory_manager: MemoryManager | None
 
     _agent_runtime_state: dict[str, "AgentRuntimeState"]
 
@@ -91,6 +95,9 @@ class Agency:
         load_threads_callback: ThreadLoadCallback | None = None,
         save_threads_callback: ThreadSaveCallback | None = None,
         user_context: dict[str, Any] | None = None,
+        memory: MemoryConfig | None = None,
+        memory_folder: str | os.PathLike[str] | None = None,
+        _memory_manager: MemoryManager | None = None,
     ):
         """
         Initializes the Agency object.
@@ -124,6 +131,10 @@ class Agency:
             load_threads_callback (ThreadLoadCallback | None, optional): Callable to load conversation threads.
             save_threads_callback (ThreadSaveCallback | None, optional): Callable to save conversation threads.
             user_context (dict[str, Any] | None, optional): Initial shared context accessible to all agents.
+            memory (MemoryConfig | None, optional): Durable memory configuration for the agency. When set, the
+                agency owns the memory manager, background write queue, and per-run memory identity normalization.
+            memory_folder (str | os.PathLike[str] | None, optional): Simple markdown-backed durable memory root
+                folder for the common case. Use this instead of `memory=...` when markdown is your source of truth.
 
         Raises:
             ValueError: If the agency structure is not defined, or if agent names are duplicated.
@@ -161,6 +172,16 @@ class Agency:
             self.shared_instructions = ""
         self.user_context = user_context or {}
         self.send_message_tool_class = send_message_tool_class
+        if memory is not None and memory_folder is not None:
+            raise ValueError("Use either memory or memory_folder, not both.")
+        configured_memory = memory or (MemoryConfig.markdown(folder=memory_folder) if memory_folder else None)
+        if (
+            _memory_manager is not None
+            and configured_memory is not None
+            and configured_memory is not _memory_manager.config
+        ):
+            raise ValueError("Provided _memory_manager must match the agency memory configuration.")
+        self.memory = _memory_manager.config if _memory_manager is not None else configured_memory
         self.shared_tools = shared_tools
         self.shared_tools_folder = shared_tools_folder
         self.shared_files_folder = shared_files_folder
@@ -179,6 +200,7 @@ class Agency:
         self._agent_runtime_state = {}
         self._load_threads_callback = load_threads_callback
         self._save_threads_callback = save_threads_callback
+        self.memory_manager = _memory_manager or (MemoryManager(self.memory) if self.memory else None)
         initialize_agent_runtime_state(self)
         self._starter_cache_warmup_started = False
 
@@ -190,6 +212,7 @@ class Agency:
         self._communication_tool_classes = _communication_tool_classes
         configure_agents(self, _derived_communication_flows)
         apply_shared_resources(self)
+        self._configure_memory()
         for agent_name, agent_instance in self.agents.items():
             runtime_state = self._agent_runtime_state.get(agent_name)
             agent_instance.refresh_conversation_starters_cache(
@@ -202,6 +225,8 @@ class Agency:
         # Register MCP shutdown at process exit so persistent servers are cleaned in scripts
         if default_mcp_manager.mark_atexit_registered():
             atexit.register(default_mcp_manager.shutdown_sync)
+        if self.memory_manager is not None and self.memory_manager.mark_atexit_registered():
+            atexit.register(self.memory_manager.close)
 
     def get_agent_context(
         self,
@@ -218,7 +243,47 @@ class Agency:
             load_threads_callback=self._load_threads_callback,
             save_threads_callback=self._save_threads_callback,
             shared_instructions=self.shared_instructions,
+            memory_identity=None,
+            memory_manager=self.memory_manager,
         )
+
+    def normalize_memory_identity(
+        self,
+        memory_identity: MemoryIdentity | None,
+        *,
+        user_id: str | None = None,
+        session_id: str | None = None,
+    ) -> MemoryIdentity | None:
+        """Resolve the effective memory identity for a run."""
+        if self.memory_manager is None:
+            return None
+        agency_id = self.memory.agency_id if self.memory and self.memory.agency_id else self.name or "agency"
+        if memory_identity is None:
+            return MemoryIdentity(user_id=user_id, agency_id=agency_id, session_id=session_id)
+        if user_id is not None and memory_identity.user_id not in {None, user_id}:
+            raise ValueError("user_id conflicts with memory_identity.user_id")
+        if session_id is not None and memory_identity.session_id not in {None, session_id}:
+            raise ValueError("session_id conflicts with memory_identity.session_id")
+        return MemoryIdentity(
+            user_id=user_id if user_id is not None else memory_identity.user_id,
+            agency_id=memory_identity.agency_id or agency_id,
+            session_id=session_id if session_id is not None else memory_identity.session_id,
+        )
+
+    def get_agent_memory_config(self, agent_name: str) -> AgentMemoryConfig | None:
+        """Return the resolved memory configuration for the named agent."""
+        agent = self.agents.get(agent_name)
+        if agent is None:
+            raise ValueError(f"No agent found for memory config lookup: {agent_name}")
+        return agent.memory
+
+    def _configure_memory(self) -> None:
+        """Validate explicit agent memory configuration when agency memory is enabled."""
+        if self.memory_manager is None:
+            return
+        for agent in self.agents.values():
+            if agent.memory is not None and not isinstance(agent.memory, AgentMemoryConfig):
+                raise TypeError("agent.memory must resolve to AgentMemoryConfig when agency memory is enabled")
 
     def get_agent_runtime_state(self, agent_name: str) -> "AgentRuntimeState":
         """Return the runtime state container for the specified agent."""
@@ -236,6 +301,9 @@ class Agency:
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
         agency_context_override: AgencyContext | None = None,
+        memory_identity: MemoryIdentity | None = None,
+        user_id: str | None = None,
+        session_id: str | None = None,
         **kwargs: Any,
     ) -> RunResult:
         """
@@ -259,6 +327,10 @@ class Agency:
             file_ids (list[str] | None, optional): Additional file IDs for the agent run.
             additional_instructions (str | None, optional): Additional instructions to be appended to the recipient
                 agent's instructions for this run only.
+            memory_identity (MemoryIdentity | None, optional): Durable memory identity for this run. This is kept
+                separate from `user_context` and is used for scoped system recall and memory tools.
+            user_id (str | None, optional): Convenience durable-memory user scope for this run.
+            session_id (str | None, optional): Convenience durable-memory session scope for this run.
             **kwargs: Additional arguments passed down to the target agent's `get_response` method
                       and subsequently to `agents.Runner.run`.
 
@@ -277,6 +349,9 @@ class Agency:
             file_ids,
             additional_instructions,
             agency_context_override=agency_context_override,
+            memory_identity=memory_identity,
+            user_id=user_id,
+            session_id=session_id,
             **kwargs,
         )
 
@@ -290,9 +365,12 @@ class Agency:
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
         agency_context_override: AgencyContext | None = None,
+        memory_identity: MemoryIdentity | None = None,
+        user_id: str | None = None,
+        session_id: str | None = None,
         **kwargs: Any,
     ) -> RunResult:
-        """Synchronous wrapper around :meth:`get_response`."""
+        """Synchronous wrapper around :meth:`get_response` with durable memory support."""
         from .responses import get_response_sync
 
         return get_response_sync(
@@ -305,6 +383,9 @@ class Agency:
             file_ids,
             additional_instructions,
             agency_context_override=agency_context_override,
+            memory_identity=memory_identity,
+            user_id=user_id,
+            session_id=session_id,
             **kwargs,
         )
 
@@ -318,6 +399,9 @@ class Agency:
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
         agency_context_override: AgencyContext | None = None,
+        memory_identity: MemoryIdentity | None = None,
+        user_id: str | None = None,
+        session_id: str | None = None,
         **kwargs: Any,
     ) -> StreamingRunResponse:
         """
@@ -339,6 +423,12 @@ class Agency:
             file_ids (list[str] | None, optional): Additional file IDs for the agent run.
             additional_instructions (str | None, optional): Additional instructions to be appended to the recipient
                 agent's instructions for this run only.
+            memory_identity (MemoryIdentity | None, optional): Durable memory identity for this run. This is kept
+                separate from `user_context` and is used for scoped system recall and memory tools.
+            user_id (str | None, optional): Convenience durable-memory user scope for this run. Use this instead of
+                `memory_identity.user_id` for the common case.
+            session_id (str | None, optional): Convenience durable-memory session scope for this run. Use this instead
+                of `memory_identity.session_id` for the common case.
             **kwargs: Additional arguments passed down to `get_response_stream` and `run_streamed`.
 
         Returns:
@@ -357,6 +447,9 @@ class Agency:
             file_ids,
             additional_instructions,
             agency_context_override=agency_context_override,
+            memory_identity=memory_identity,
+            user_id=user_id,
+            session_id=session_id,
             **kwargs,
         )
 
@@ -367,6 +460,8 @@ class Agency:
         app_token_env: str = "APP_TOKEN",
         cors_origins: list[str] | None = None,
         enable_agui: bool = False,
+        allow_client_memory_identity: bool = False,
+        memory_identity_resolver: Callable[[Any | None, Any], Any | None] | None = None,
     ):
         """Serve this agency via the FastAPI integration.
 
@@ -377,8 +472,23 @@ class Agency:
         cors_origins : list[str] | None
             Optional list of allowed CORS origins passed through to
             :func:`run_fastapi`.
+        allow_client_memory_identity : bool
+            Trust raw durable-memory identity values from request bodies.
+            Leave this disabled for browser or third-party clients.
+        memory_identity_resolver : Callable[[Any | None, Any], Any | None] | None
+            Optional server-side hook that binds durable-memory identity from
+            trusted request state.
         """
-        return run_fastapi_helper(self, host, port, app_token_env, cors_origins, enable_agui)
+        return run_fastapi_helper(
+            self,
+            host,
+            port,
+            app_token_env,
+            cors_origins,
+            enable_agui,
+            allow_client_memory_identity,
+            memory_identity_resolver,
+        )
 
     def get_agency_graph(self, include_tools: bool = True) -> dict[str, Any]:
         """Return a ReactFlow-compatible JSON graph describing the agency."""

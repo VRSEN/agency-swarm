@@ -104,7 +104,7 @@ class Execution:
         logger.info(f"Agent '{self.agent.name}' starting run.")
 
         # Common setup and validation
-        original_instructions = setup_execution(
+        original_instructions = await setup_execution(
             self.agent, sender_name, agency_context, additional_instructions, "get_response"
         )
 
@@ -143,7 +143,12 @@ class Execution:
             logger.debug(f"Running agent '{self.agent.name}' with history length {len(history_for_runner)}")
 
             # Prepare context and store reference for potential sync-back
-            master_context_for_run = prepare_master_context(self.agent, context_override, agency_context)
+            master_context_for_run = prepare_master_context(
+                self.agent,
+                context_override,
+                agency_context,
+                sender_name=sender_name,
+            )
             try:
                 master_context_for_run._current_agent_run_id = current_agent_run_id
                 master_context_for_run._parent_run_id = parent_run_id
@@ -167,6 +172,13 @@ class Execution:
                 self.agent.conversation_starters if self.agent.cache_conversation_starters else None,
                 self.agent.quick_replies,
             )
+            has_system_memory = bool(
+                agency_context
+                and agency_context.memory_manager
+                and agency_context.memory_identity
+                and self.agent.memory
+                and self.agent.memory.enable_system_memory
+            )
             has_user_context_override = bool(
                 context_override and any(key != "streaming_context" for key in context_override)
             )
@@ -174,6 +186,7 @@ class Execution:
                 sender_name is None
                 and cacheable_starters
                 and is_first_message
+                and not has_system_memory
                 and is_simple_text_message(processed_current_message_items)
                 and not additional_instructions  # Skip cache when per-run instructions provided
                 and not has_user_context_override  # Skip cache when per-run context provided
@@ -456,7 +469,7 @@ class Execution:
         async def _stream() -> AsyncGenerator[StreamEvent | dict[str, Any]]:
             nonlocal wrapper
 
-            original_instructions = setup_execution(
+            original_instructions = await setup_execution(
                 self.agent, sender_name, agency_context, additional_instructions, "get_response_stream"
             )
 
@@ -504,6 +517,13 @@ class Execution:
                     self.agent.conversation_starters if self.agent.cache_conversation_starters else None,
                     self.agent.quick_replies,
                 )
+                has_system_memory = bool(
+                    agency_context
+                    and agency_context.memory_manager
+                    and agency_context.memory_identity
+                    and self.agent.memory
+                    and self.agent.memory.enable_system_memory
+                )
                 has_user_context_override = bool(
                     context_override and any(key != "streaming_context" for key in context_override)
                 )
@@ -511,6 +531,7 @@ class Execution:
                     sender_name is None
                     and cacheable_starters
                     and is_first_message
+                    and not has_system_memory
                     and is_simple_text_message(processed_current_message_items)
                     and not additional_instructions  # Skip cache when per-run instructions provided
                     and not has_user_context_override  # Skip cache when per-run context provided
@@ -546,7 +567,12 @@ class Execution:
                                 cache_map[normalized] = cached_starter
 
                 if cached_starter is not None:
-                    master_context_for_run = prepare_master_context(self.agent, context_override, agency_context)
+                    master_context_for_run = prepare_master_context(
+                        self.agent,
+                        context_override,
+                        agency_context,
+                        sender_name=sender_name,
+                    )
                     try:
                         master_context_for_run._current_agent_run_id = current_agent_run_id
                         master_context_for_run._parent_run_id = parent_run_id
@@ -598,7 +624,12 @@ class Execution:
                         if isinstance(agency_instance_name, str):
                             agency_name = agency_instance_name
 
-                master_context_for_run = prepare_master_context(self.agent, context_override, agency_context)
+                master_context_for_run = prepare_master_context(
+                    self.agent,
+                    context_override,
+                    agency_context,
+                    sender_name=sender_name,
+                )
 
                 stream_handle = run_stream_with_guardrails(
                     agent=self.agent,

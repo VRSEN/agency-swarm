@@ -1,11 +1,20 @@
 import logging
 import os
 from collections.abc import Callable, Mapping
+from typing import TYPE_CHECKING
 
 from agents.tool import FunctionTool
 
 from agency_swarm.agency import Agency
 from agency_swarm.agent.core import Agent
+
+if TYPE_CHECKING:
+    from fastapi import Request
+    from pydantic import BaseModel
+
+    from agency_swarm.memory import MemoryIdentity
+
+MemoryIdentityResolver = Callable[["Request | None", "BaseModel"], "MemoryIdentity | None"]
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +32,8 @@ def run_fastapi(
     enable_logging: bool = False,
     logs_dir: str = "activity-logs",
     allowed_local_file_dirs: list[str] | None = None,
+    allow_client_memory_identity: bool = False,
+    memory_identity_resolver: MemoryIdentityResolver | None = None,
 ):
     """Launch a FastAPI server exposing endpoints for multiple agencies and tools.
 
@@ -51,6 +62,16 @@ def run_fastapi(
         Optional allowlist of directories that local file_urls may read from.
         When omitted, local file access is disabled. Missing directories are
         skipped so the server can start even if some paths do not exist yet.
+    allow_client_memory_identity : bool
+        Trust `user_id`, `session_id`, and `memory_identity` values provided in
+        raw HTTP request bodies. This is disabled by default because durable
+        memory reads must be bound from trusted server-side identity when
+        clients are untrusted.
+    memory_identity_resolver :
+        Callable[[Request | None, BaseModel], MemoryIdentity | None] | None
+        Optional server-side resolver that binds durable memory identity from
+        trusted request state. When provided, it overrides raw client-supplied
+        memory identity fields.
     """
     if (agencies is None or len(agencies) == 0) and (tools is None or len(tools) == 0):
         logger.warning("No endpoints to deploy. Please provide at least one agency or tool.")
@@ -137,6 +158,7 @@ def run_fastapi(
 
     endpoints = []
     agency_names = []
+    warned_process_local_memory = False
 
     if agencies:
         for agency_name, agency_factory in agencies.items():
@@ -153,6 +175,12 @@ def run_fastapi(
             # Store agent instances for easy lookup
             with force_dry_run():
                 preview_instance = agency_factory(load_threads_callback=lambda: [])
+            if preview_instance.memory_manager is not None and not warned_process_local_memory:
+                logger.warning(
+                    "Durable memory queues are process-local in v1. Use one worker or a unique memory journal path "
+                    "per worker; do not share one journal across multiple FastAPI workers."
+                )
+                warned_process_local_memory = True
             AGENT_INSTANCES: dict[str, Agent] = dict(preview_instance.agents.items())
             AgencyRequest = add_agent_validator(BaseRequest, AGENT_INSTANCES)
             if enable_agui:
@@ -163,6 +191,8 @@ def run_fastapi(
                         agency_factory,
                         verify_token,
                         allowed_local_dirs=normalized_allowed_dirs,
+                        allow_client_memory_identity=allow_client_memory_identity,
+                        memory_identity_resolver=memory_identity_resolver,
                     ),
                     methods=["POST"],
                 )
@@ -176,6 +206,8 @@ def run_fastapi(
                         agency_factory,
                         verify_token,
                         allowed_local_dirs=normalized_allowed_dirs,
+                        allow_client_memory_identity=allow_client_memory_identity,
+                        memory_identity_resolver=memory_identity_resolver,
                     ),
                     methods=["POST"],
                 )
@@ -187,6 +219,8 @@ def run_fastapi(
                         verify_token,
                         run_registry,
                         allowed_local_dirs=normalized_allowed_dirs,
+                        allow_client_memory_identity=allow_client_memory_identity,
+                        memory_identity_resolver=memory_identity_resolver,
                     ),
                     methods=["POST"],
                 )

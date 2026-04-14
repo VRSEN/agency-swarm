@@ -2,6 +2,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from agency_swarm.memory import MemoryIdentity
+
 try:
     from ag_ui.core import RunAgentInput
 except ModuleNotFoundError as exc:
@@ -74,6 +76,25 @@ class RunAgentInputCustom(RunAgentInput):
         default=None,
         description="Structured context merged into MasterContext.user_context for this run only.",
     )
+    user_id: str | None = Field(
+        default=None,
+        description=(
+            "Convenience durable-memory user scope for this run. Bind this value from trusted server-side "
+            "identity checks; run_fastapi blocks raw client-supplied durable-memory identity by default."
+        ),
+    )
+    session_id: str | None = Field(
+        default=None,
+        description="Convenience durable-memory session scope for this run.",
+    )
+    memory_identity: MemoryIdentity | None = Field(
+        default=None,
+        description=(
+            "Advanced durable memory identity override for this run. This is separate from user_context. "
+            "Bind identity fields server-side when requests can come from untrusted clients. "
+            "run_fastapi blocks raw client-supplied durable-memory identity by default."
+        ),
+    )
     file_ids: list[str] | None = None
     file_urls: dict[str, str] | None = Field(
         default=None,
@@ -114,6 +135,25 @@ class BaseRequest(BaseModel):
     user_context: dict[str, Any] | None = Field(
         default=None,
         description="Structured context merged into MasterContext.user_context for this run only.",
+    )
+    user_id: str | None = Field(
+        default=None,
+        description=(
+            "Convenience durable-memory user scope for this run. Bind this value from trusted server-side "
+            "identity checks; run_fastapi blocks raw client-supplied durable-memory identity by default."
+        ),
+    )
+    session_id: str | None = Field(
+        default=None,
+        description="Convenience durable-memory session scope for this run.",
+    )
+    memory_identity: MemoryIdentity | None = Field(
+        default=None,
+        description=(
+            "Advanced durable memory identity override for this run. This is separate from user_context. "
+            "Bind identity fields server-side when requests can come from untrusted clients. "
+            "run_fastapi blocks raw client-supplied durable-memory identity by default."
+        ),
     )
     generate_chat_name: bool | None = Field(
         default=False, description="Generate a fitting chat name for the user input."
