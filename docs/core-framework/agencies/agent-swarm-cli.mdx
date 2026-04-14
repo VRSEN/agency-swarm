@@ -1,16 +1,61 @@
 ---
 title: "Agent Swarm CLI"
-description: "Launch the built-in terminal UI with one Python call."
+description: "Launch the terminal UI with npx, or keep using the Python compatibility path."
 icon: "terminal"
 ---
 
 ## Overview
 
-Agent Swarm CLI is the built-in terminal app for `agency-swarm`.
+Agent Swarm CLI is the terminal app for `agency-swarm`.
 
 Use it when you want a keyboard-first terminal chat for your agency without building a separate UI.
 
-Add this to your `agency.py` file:
+The recommended launch path is:
+
+```bash
+npx @vrsen/agentswarm
+```
+
+This path is designed to handle first-run setup for you: detect the current project, create or reuse a starter project, detect Python, create `.venv`, start the local Agency Swarm server, and open the terminal UI.
+
+| Launch path | When to use it | What it does |
+| --- | --- | --- |
+| `npx @vrsen/agentswarm` | Recommended for most users | Walks through first-run setup, then opens the terminal UI |
+| `agency.tui()` | Existing Python projects that already launch from code | Starts the local bridge and opens the terminal UI from your current agency |
+
+## Recommended: NPX Launch
+
+Run:
+
+```bash
+npx @vrsen/agentswarm
+```
+
+On first run, the launcher guides you through these steps:
+
+1. Detect the current Agency Swarm project.
+2. Reuse the current project or create a new project from the starter template.
+3. Detect Python and create or reuse a local `.venv`.
+4. Install project dependencies if needed.
+5. Start the local Agency Swarm server.
+6. Open the terminal UI.
+
+If your model provider setup is still missing, the TUI opens `/auth` after startup so you can add the credential it needs to run prompts.
+
+<Accordion title="Connect to an existing agency">
+Use the same `npx @vrsen/agentswarm` command, then choose **Connect to an existing agency** during onboarding.
+
+This is the secondary path for:
+
+- a local Agency Swarm server that is already running
+- a remote Agency Swarm server
+- protected servers that require a bearer token
+
+Use this when you want the terminal UI without starting a local project on this machine.
+</Accordion>
+
+<Note>
+If you already launch your agency from Python, `agency.tui()` still works.
 
 ```python
 agency.tui()
@@ -21,10 +66,7 @@ Then run:
 ```bash
 python agency.py
 ```
-
-On first run, `agency-swarm` downloads the terminal app and opens it for your agency.
-
-If your current model provider setup is not usable, the TUI opens `/auth`. Authentication means telling the TUI which model provider to use and giving it the credential it needs to run your prompts. Once you do that, the TUI can reuse the saved credential the next time you launch it. You can open `/auth` later to manage or remove it.
+</Note>
 
 ![Agent Swarm CLI startup screen](/images/agent-swarm-cli-preview.png)
 
@@ -32,8 +74,8 @@ If your current model provider setup is not usable, the TUI opens `/auth`. Authe
 
 Before you launch the TUI, make sure you have:
 
-- Python 3.12 or newer
-- `agency-swarm` installed
+- Node.js installed so `npx` is available
+- Python 3.12 or newer available for Agency Swarm projects
 - a model provider credential, either already configured or added through `/auth` on first run
 - an existing agency, or a starting point from [From Scratch](/welcome/getting-started/from-scratch) or the [Starter Template](/welcome/getting-started/starter-template)
 

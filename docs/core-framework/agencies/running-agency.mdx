@@ -88,17 +88,25 @@ If you're running your agency as an HTTP API, see [Serving Agencies as APIs](/ad
 
 ## Terminal UI
 
-To run the agency directly from your terminal, use the `tui` method:
+The recommended terminal launch path is:
+
+```bash
+npx @vrsen/agentswarm
+```
+
+Run it from your project root when you want the launcher to handle first-run setup and open the terminal UI for you.
+
+For the full terminal launch flow, first-run auth, and agent routing, see [Agent Swarm CLI](/core-framework/agencies/agent-swarm-cli).
+
+<Note>
+If you already launch from Python, `agency.tui()` is still supported:
 
 ```python
 agency.tui()
 ```
 
-On first run, `agency-swarm` sets up the terminal app automatically, caches it locally, shows a short setup message, and opens the terminal UI for your current agency.
-
 Use `agency.tui(reload=False)` if you want to turn off hot reload on file changes.
-
-For the terminal launch flow, first-run auth, and agent routing, see [Agent Swarm CLI](/core-framework/agencies/agent-swarm-cli).
+</Note>
 
 <Tip>
 When using the terminal to run the agency, you can send messages directly to any top-level agent by using the "mentions" feature. To do this, start your message with the agent's name preceded by an @ symbol (for example, `@Developer I want you to build me a website`). This directs your message to the specified agent instead of the CEO. You can also press the tab key to autocomplete the agent's name.
