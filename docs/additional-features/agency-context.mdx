@@ -278,6 +278,22 @@ For a full example showing agency context in action, see the [Agency Context Wor
 - Workflow coordination
 - Context monitoring and debugging
 
-If you want a reminder pattern, see the [System Reminders Example](https://github.com/VRSEN/agency-swarm/blob/main/examples/system_reminders.py). It keeps reminder content in agency context, configures `Agent(system_reminders=[...])`, and shows both a reminder after each new user message and a stronger reminder after every 15 tool calls.
+If you want reminder text to read from agency context, pass a callable instead of a string:
+
+```python
+from agency_swarm import Agent, AfterEveryUserMessage, MasterContext, RunContextWrapper
+
+def build_reminder(ctx: RunContextWrapper[MasterContext], _agent: Agent) -> str:
+    customer_name = ctx.context.user_context.get("customer_name", "the user")
+    return f"Greet {customer_name} by name and end with one next step."
+
+agent = Agent(
+    name="SupportAgent",
+    instructions="You help customers.",
+    system_reminders=[AfterEveryUserMessage(build_reminder)],
+)
+```
+
+If you just want the simplest starting point, see the [System Reminders Example](https://github.com/VRSEN/agency-swarm/blob/main/examples/system_reminders.py).
 
 Agency context eliminates the need for complex parameter passing and enables multi-agent workflows while maintaining clean separation of concerns.

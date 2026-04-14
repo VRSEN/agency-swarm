@@ -46,6 +46,23 @@ Set `include_web_search_sources=False` to skip this.
 ### System Reminders
 
 Use `system_reminders` when you want reminder system messages without writing custom lifecycle hooks.
+Start with one short reminder string.
+
+```python
+from agency_swarm import Agent, AfterEveryUserMessage
+
+agent = Agent(
+    name="SupportAgent",
+    instructions="Answer clearly and keep the user moving forward.",
+    system_reminders=[
+        AfterEveryUserMessage("Before replying, end with one clear next step."),
+    ],
+)
+```
+
+This reminder is injected into the model input before each new user message. It is not saved into the main thread history.
+
+For tool-heavy agents, add a checkpoint reminder:
 
 ```python
 from agency_swarm import Agent, AfterEveryUserMessage, EveryNToolCalls
@@ -54,13 +71,27 @@ agent = Agent(
     name="SupportAgent",
     instructions="Answer clearly and keep the user moving forward.",
     system_reminders=[
-        AfterEveryUserMessage("Restate the next follow-up before answering."),
-        EveryNToolCalls(15, "Summarize progress before using more tools."),
+        AfterEveryUserMessage("Before replying, end with one clear next step."),
+        EveryNToolCalls(15, "Pause and summarize progress before using more tools."),
     ],
 )
 ```
 
-These reminders are injected into the model input only. They are not saved into the main thread history.
+Reminder text can also be dynamic:
+
+```python
+from agency_swarm import Agent, AfterEveryUserMessage, MasterContext, RunContextWrapper
+
+def build_reminder(ctx: RunContextWrapper[MasterContext], _agent: Agent) -> str:
+    customer_name = ctx.context.user_context.get("customer_name", "the user")
+    return f"Greet {customer_name} by name and end with one next step."
+
+agent = Agent(
+    name="SupportAgent",
+    instructions="Answer clearly and keep the user moving forward.",
+    system_reminders=[AfterEveryUserMessage(build_reminder)],
+)
+```
 
 <Note>
 Use `system_reminders` for the common reminder cases. Keep `hooks` for advanced lifecycle behavior that falls outside the built-in reminder triggers.
