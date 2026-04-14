@@ -5,6 +5,7 @@ import pytest
 from agents import RunHooks
 
 from agency_swarm import Agency
+from agency_swarm.mcp.oauth import get_oauth_user_id, set_oauth_user_id
 from agency_swarm.utils.thread import ThreadManager
 from tests.test_agency_modules._response_test_helpers import CapturingAgent, _make_agent
 
@@ -262,3 +263,83 @@ async def test_agent_communication_context_hooks_propagation(mock_agent, mock_ag
     assert saved_messages
     assert mock_agent.last_context_override is context_override
     assert mock_agent.last_hooks_override is hooks_override
+
+
+@pytest.mark.asyncio
+async def test_agency_get_response_sets_oauth_user_context_before_persistent_attach(monkeypatch, mock_agent):
+    """Agency.get_response should set OAuth user context before MCP attachment."""
+    observed: list[str | None] = []
+
+    async def _capture_attach(_agency):
+        observed.append(get_oauth_user_id())
+
+    monkeypatch.setattr("agency_swarm.agency.responses.attach_persistent_mcp_servers", _capture_attach)
+
+    agency = Agency(mock_agent, user_context={"user_id": "agency-user"})
+    await agency.get_response("Test message", "MockAgent")
+
+    assert observed == ["agency-user"]
+    assert get_oauth_user_id() is None
+
+
+@pytest.mark.asyncio
+async def test_agency_get_response_stream_sets_oauth_user_context_before_persistent_attach(monkeypatch, mock_agent):
+    """Agency.get_response_stream should set OAuth user context before MCP attachment."""
+    observed: list[str | None] = []
+
+    async def _capture_attach(_agency):
+        observed.append(get_oauth_user_id())
+
+    monkeypatch.setattr("agency_swarm.agency.responses.attach_persistent_mcp_servers", _capture_attach)
+
+    agency = Agency(mock_agent, user_context={"user_id": "stream-user"})
+    stream = agency.get_response_stream("Test message", "MockAgent")
+    async for _event in stream:
+        pass
+
+    assert observed == ["stream-user"]
+    assert get_oauth_user_id() is None
+
+
+@pytest.mark.asyncio
+async def test_agency_get_response_restores_existing_oauth_user_context(monkeypatch, mock_agent):
+    """Agency.get_response should restore any pre-existing OAuth user context after attachment."""
+    observed: list[str | None] = []
+
+    async def _capture_attach(_agency):
+        observed.append(get_oauth_user_id())
+
+    monkeypatch.setattr("agency_swarm.agency.responses.attach_persistent_mcp_servers", _capture_attach)
+
+    set_oauth_user_id("request-user")
+    try:
+        agency = Agency(mock_agent, user_context={"user_id": "agency-user"})
+        await agency.get_response("Test message", "MockAgent")
+        assert get_oauth_user_id() == "request-user"
+    finally:
+        set_oauth_user_id(None)
+
+    assert observed == ["agency-user"]
+
+
+@pytest.mark.asyncio
+async def test_agency_get_response_stream_restores_existing_oauth_user_context(monkeypatch, mock_agent):
+    """Agency.get_response_stream should restore any pre-existing OAuth user context after attachment."""
+    observed: list[str | None] = []
+
+    async def _capture_attach(_agency):
+        observed.append(get_oauth_user_id())
+
+    monkeypatch.setattr("agency_swarm.agency.responses.attach_persistent_mcp_servers", _capture_attach)
+
+    set_oauth_user_id("request-user")
+    try:
+        agency = Agency(mock_agent, user_context={"user_id": "stream-user"})
+        stream = agency.get_response_stream("Test message", "MockAgent")
+        async for _event in stream:
+            pass
+        assert get_oauth_user_id() == "request-user"
+    finally:
+        set_oauth_user_id(None)
+
+    assert observed == ["stream-user"]

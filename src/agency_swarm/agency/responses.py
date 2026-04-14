@@ -133,6 +133,28 @@ def _build_user_message_with_recipient_reminder(
     return [reminder, cast(TResponseInputItem, {"role": "user", "content": message})]
 
 
+_NO_OAUTH_CONTEXT = object()
+
+
+def _set_attach_oauth_user_context(agency: "Agency", context_override: dict[str, Any] | None) -> str | None | object:
+    """Set OAuth user context before persistent MCP attachment and return the previous value."""
+    try:
+        from agency_swarm.mcp.oauth import get_oauth_user_id, set_oauth_user_id
+    except ImportError:
+        return _NO_OAUTH_CONTEXT
+
+    base_user_context = getattr(agency, "user_context", {})
+    if isinstance(base_user_context, dict):
+        merged_user_context = {**base_user_context, **context_override} if context_override else base_user_context
+        user_id = merged_user_context.get("user_id")
+    else:
+        user_id = None
+
+    previous_user_id = get_oauth_user_id()
+    set_oauth_user_id(user_id if isinstance(user_id, str) else None)
+    return previous_user_id
+
+
 async def get_response(
     agency: "Agency",
     message: str | list[TResponseInputItem],
@@ -196,7 +218,14 @@ async def get_response(
     agency_context = agency_context_override or get_agent_context(agency, target_agent.name)
 
     # On handoffs all servers need to be initialized to be used
-    await attach_persistent_mcp_servers(agency)
+    previous_oauth_user_id = _set_attach_oauth_user_context(agency, context_override)
+    try:
+        await attach_persistent_mcp_servers(agency)
+    finally:
+        if previous_oauth_user_id is not _NO_OAUTH_CONTEXT:
+            from agency_swarm.mcp.oauth import set_oauth_user_id
+
+            set_oauth_user_id(cast("str | None", previous_oauth_user_id))
 
     message_for_call: str | list[TResponseInputItem] = message
     if _should_add_recipient_switch_reminder(agency_context=agency_context, target_agent_name=target_agent.name):
@@ -335,7 +364,14 @@ def get_response_stream(
 
                 agency_context = agency_context_override or get_agent_context(agency, target_agent.name)
 
-                await attach_persistent_mcp_servers(agency)
+                previous_oauth_user_id = _set_attach_oauth_user_context(agency, enhanced_context)
+                try:
+                    await attach_persistent_mcp_servers(agency)
+                finally:
+                    if previous_oauth_user_id is not _NO_OAUTH_CONTEXT:
+                        from agency_swarm.mcp.oauth import set_oauth_user_id
+
+                        set_oauth_user_id(cast("str | None", previous_oauth_user_id))
 
                 message_for_call: str | list[TResponseInputItem] = message
                 if isinstance(message, str) and not message.strip():

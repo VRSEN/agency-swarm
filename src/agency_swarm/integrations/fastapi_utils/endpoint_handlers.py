@@ -1226,7 +1226,14 @@ def make_metadata_endpoint(
         # Metadata must reflect current factory state for /connect and agent
         # selection flows; a startup snapshot goes stale.
         with force_dry_run():
-            agency_metadata = agency_factory(load_threads_callback=lambda: []).get_metadata()
+            preview_instance = agency_factory(load_threads_callback=lambda: [])
+            agents_map = getattr(preview_instance, "agents", None)
+            if isinstance(agents_map, dict):
+                for agent in agents_map.values():
+                    ensure_mcp_tools = getattr(agent, "ensure_mcp_tools", None)
+                    if callable(ensure_mcp_tools):
+                        ensure_mcp_tools()
+            agency_metadata = preview_instance.get_metadata()
         metadata_with_version = dict(agency_metadata)
         agency_swarm_version = _get_agency_swarm_version()
         if agency_swarm_version is not None:
