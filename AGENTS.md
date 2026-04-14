@@ -36,6 +36,7 @@ North Star: keep the user's general intent and direction clear; read intent betw
 - Work only inside the active mandate for the task. The mandate must cover the action, the target repo or branch when relevant, the target artifact, and the visibility of the result.
 - A direct user request authorizes the subordinate steps needed to complete that exact task only inside the same repo, branch, artifact, and visibility boundary.
 - Mandate does not expand by implication. Permission to edit, review, or open a PR does not by itself authorize repo creation, forks, publication, merges, deploys, destructive actions, or writes to a different target.
+- Merging a PR always requires explicit user approval; never infer merge approval from broader shipping or implementation requests.
 - If the next step would cross that boundary, or the boundary is partial or unclear, escalation is required before acting.
 
 Begin each task after reviewing this readiness checklist:
@@ -99,6 +100,7 @@ Ask only for design decisions or true blocking decisions; otherwise proceed auto
   - Tooling/sandbox/permission limits block an essential command (request approval to rerun).
   - Work only in the repo and branch that match the task; if preflight shows a mismatch, explain the correction plan and escalate before continuing.
 - Before any potentially destructive command (checkout, stash, reset, rebase, force operations, file deletions, mass edits), verify that the current mandate explicitly covers it; if it does not, explain the impact and obtain explicit approval.
+- Before merging any PR, verify the live GitHub diff still matches the intended change. If the diff is empty or unexpected, stop and escalate instead of merging.
 - Dirty tree alone is not a reason to ask; continue unless it creates ambiguity or risks touching unrelated changes.
 - Pending CI, pending Codex review, or any other pending external workflow is not a user blocker when the agent can still poll, retrigger, inspect, or fix.
 - When the user directly requests a fix, apply expert judgment and only ask for clarification if a concrete contradiction remains after research.
