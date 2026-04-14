@@ -26,6 +26,12 @@ North Star: keep the user's general intent and direction clear; read intent betw
 - If either answer is `no` or `unclear`, stop immediately and ask the user the smallest clarifying question that removes the blocker.
 - If something expected does not exist, do not hand-wave around it. Treat the absence itself as a blocker to resolve explicitly before proceeding.
 
+## Repository Mandate Boundary
+- Edit a repository only when the user explicitly authorized that repository or a clearly bounded set that includes it, because repositories contain sensitive code, history, and operational context.
+- Treat machine-wide search as discovery permission only, not edit permission, because finding a repository and modifying it are different scopes.
+- If a repository is outside the active mandate, stop before opening files for modification, editing, staging, committing, pushing, or opening PRs there, because implicit scope expansion is a policy violation.
+- If repository scope, ownership, or sensitivity is unclear, ask one precise question before touching it, because reluctance to widen scope prevents leaks and destructive mistakes.
+
 ## Mandate Boundary
 - Work only inside the active mandate for the task. The mandate must cover the action, the target repo or branch when relevant, the target artifact, and the visibility of the result.
 - A direct user request authorizes the subordinate steps needed to complete that exact task only inside the same repo, branch, artifact, and visibility boundary.
