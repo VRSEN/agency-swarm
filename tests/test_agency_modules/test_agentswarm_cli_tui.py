@@ -1,4 +1,5 @@
 import importlib
+import json
 import subprocess
 import tarfile
 from io import BytesIO
@@ -11,16 +12,27 @@ from agency_swarm import Agency, Agent
 agentswarm_cli_demo = importlib.import_module("agency_swarm.ui.demos.agentswarm_cli")
 
 
+class DummyServer:
+    def __init__(self, port: int = 43121) -> None:
+        self.port = port
+        self.stopped = False
+
+    def stop(self) -> None:
+        self.stopped = True
+
+
 def build_agency() -> Agency:
     return Agency(Agent(name="CEO", instructions="test"), name="My Agency")
 
 
 def test_agentswarm_cli_tui_launches_agent_swarm_cli(monkeypatch):
     agency = build_agency()
+    server = DummyServer()
     calls: dict[str, object] = {}
 
     monkeypatch.delenv(agentswarm_cli_demo._RELOAD_CHILD_ENV, raising=False)
     monkeypatch.setattr(agentswarm_cli_demo.os, "getcwd", lambda: "/tmp/project")
+    monkeypatch.setattr(agentswarm_cli_demo, "_start_server", lambda value: server)
     monkeypatch.setattr(agentswarm_cli_demo, "_ensure_cli", lambda: Path("/usr/local/bin/agentswarm"))
 
     def fake_run(cmd, cwd, env, check):
@@ -34,18 +46,24 @@ def test_agentswarm_cli_tui_launches_agent_swarm_cli(monkeypatch):
 
     agentswarm_cli_demo.start_tui(agency, reload=False)
 
-    assert calls["cmd"] == ["/usr/local/bin/agentswarm"]
+    assert calls["cmd"] == ["/usr/local/bin/agentswarm", "--model", agentswarm_cli_demo._MODEL]
     assert calls["cwd"] == "/tmp/project"
     assert calls["check"] is False
-    assert "OPENCODE_CONFIG_CONTENT" not in calls["env"]
+    config = json.loads(calls["env"]["OPENCODE_CONFIG_CONTENT"])
+    assert config["model"] == agentswarm_cli_demo._MODEL
+    assert config["provider"]["agency-swarm"]["options"]["baseURL"] == "http://127.0.0.1:43121"
+    assert config["provider"]["agency-swarm"]["options"]["agency"] == "My_Agency"
+    assert server.stopped is True
 
 
 def test_agentswarm_cli_tui_continues_after_reload(monkeypatch):
     agency = build_agency()
+    server = DummyServer()
     calls: list[str] = []
 
     monkeypatch.setenv(agentswarm_cli_demo._RELOAD_CHILD_ENV, "1")
     monkeypatch.setattr(agentswarm_cli_demo.os, "getcwd", lambda: "/tmp/project")
+    monkeypatch.setattr(agentswarm_cli_demo, "_start_server", lambda value: server)
     monkeypatch.setattr(agentswarm_cli_demo, "_ensure_cli", lambda: Path("/usr/local/bin/agentswarm"))
     monkeypatch.setattr(
         agentswarm_cli_demo.subprocess,
@@ -56,6 +74,7 @@ def test_agentswarm_cli_tui_continues_after_reload(monkeypatch):
     agentswarm_cli_demo.start_tui(agency, reload=False)
 
     assert "--continue" in calls
+    assert server.stopped is True
 
 
 def test_agentswarm_cli_tui_installs_agent_swarm_cli(monkeypatch):
@@ -79,24 +98,22 @@ def test_agentswarm_cli_tui_rejects_hidden_reasoning():
         agentswarm_cli_demo.start_tui(agency, show_reasoning=False, reload=False)
 
 
-def test_agentswarm_cli_tui_raises_when_cli_returns_error(monkeypatch):
+def test_agentswarm_cli_tui_raises_when_bridge_fails(monkeypatch):
     agency = build_agency()
 
     monkeypatch.setattr(agentswarm_cli_demo, "_ensure_cli", lambda: Path("/usr/local/bin/agentswarm"))
-    monkeypatch.setattr(
-        agentswarm_cli_demo.subprocess,
-        "run",
-        lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 3),
-    )
+    monkeypatch.setattr(agentswarm_cli_demo, "_start_server", lambda value: (_ for _ in ()).throw(RuntimeError("boom")))
 
-    with pytest.raises(subprocess.CalledProcessError):
+    with pytest.raises(RuntimeError, match="bridge failed to start"):
         agentswarm_cli_demo.start_tui(agency, reload=False)
 
 
 def test_agentswarm_cli_tui_raises_when_cli_launch_fails(monkeypatch):
     agency = build_agency()
+    server = DummyServer()
 
     monkeypatch.setattr(agentswarm_cli_demo.os, "getcwd", lambda: "/tmp/project")
+    monkeypatch.setattr(agentswarm_cli_demo, "_start_server", lambda value: server)
     monkeypatch.setattr(agentswarm_cli_demo, "_ensure_cli", lambda: Path("/usr/local/bin/agentswarm"))
     monkeypatch.setattr(
         agentswarm_cli_demo.subprocess,
@@ -106,6 +123,8 @@ def test_agentswarm_cli_tui_raises_when_cli_launch_fails(monkeypatch):
 
     with pytest.raises(RuntimeError, match="could not be launched"):
         agentswarm_cli_demo.start_tui(agency, reload=False)
+
+    assert server.stopped is True
 
 
 def test_agentswarm_cli_tui_downloads_platform_cli(monkeypatch, tmp_path):
