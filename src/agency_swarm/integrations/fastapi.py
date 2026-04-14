@@ -158,6 +158,7 @@ def run_fastapi(
 
     endpoints = []
     agency_names = []
+    warned_process_local_memory = False
 
     if agencies:
         for agency_name, agency_factory in agencies.items():
@@ -174,6 +175,12 @@ def run_fastapi(
             # Store agent instances for easy lookup
             with force_dry_run():
                 preview_instance = agency_factory(load_threads_callback=lambda: [])
+            if preview_instance.memory_manager is not None and not warned_process_local_memory:
+                logger.warning(
+                    "Durable memory queues are process-local in v1. Use one worker or a unique memory journal path "
+                    "per worker; do not share one journal across multiple FastAPI workers."
+                )
+                warned_process_local_memory = True
             AGENT_INSTANCES: dict[str, Agent] = dict(preview_instance.agents.items())
             AgencyRequest = add_agent_validator(BaseRequest, AGENT_INSTANCES)
             if enable_agui:

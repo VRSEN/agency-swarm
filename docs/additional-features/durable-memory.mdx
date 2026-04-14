@@ -94,6 +94,10 @@ agency = Agency(
 - You control the root path.
 - The files stay readable and editable by humans.
 
+<Note>
+Markdown `search_memory(...)` uses simple text matching over titles and content. Use Mem0 or OpenAI file search when you need semantic retrieval.
+</Note>
+
 ### Mem0
 
 Use Mem0 when you want a managed backend behind the same Agency Swarm abstraction.
@@ -182,6 +186,10 @@ When an agent opts into memory with `memory=True` or `memory=AgentMemoryConfig(.
 The durable-memory writer queue is process-local in v1. If you run multiple FastAPI workers, do not point them at the same memory journal path.
 </Note>
 
+<Note>
+Replay after a crash intentionally drops the raw queued thread snapshot from the durable journal for privacy. Replayed writes still keep the requested content and rationale, but normalization can be lower fidelity than the original in-memory write path.
+</Note>
+
 ## Permission and Consent
 
 Memory writes are denied by default. Add a `permission_resolver` when you want to allow them.
@@ -205,6 +213,10 @@ This is the place to enforce your consent or approval rules.
 
 <Note>
 If you override `writer_model`, keep it inside the same trust boundary as your main model. The normalizer receives the requested memory content plus a bounded recent context snapshot so it can clean and deduplicate writes.
+</Note>
+
+<Note>
+You can replace the default LLM-based normalizer by passing `normalizer=...` in `Memory.markdown(...)`, `Memory.mem0(...)`, or `MemoryConfig(...)`.
 </Note>
 
 ## FastAPI Requests
