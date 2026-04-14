@@ -4,48 +4,56 @@ description: "Launch the built-in terminal UI with one Python call."
 icon: "terminal"
 ---
 
-Agent Swarm CLI is the built-in terminal app for `agency-swarm`. The preview below shows the current `tui()` startup screen.
+## Overview
 
-![Agent Swarm CLI startup screen](/images/agent-swarm-cli-preview.png)
+Agent Swarm CLI is the built-in terminal app for `agency-swarm`.
 
-Use one command:
+Use it when you want a keyboard-first terminal chat for your agency without building a separate UI.
+
+Add this to your `agency.py` file:
 
 ```python
 agency.tui()
 ```
 
-`tui()` sets up the terminal app on first run, caches it locally, shows a short setup message, and opens the TUI for your current agency.
+Then run:
 
-Use `agency.tui(reload=False)` to disable hot reload on file changes.
+```bash
+python agency.py
+```
 
-## What You Can Do
+On first run, `agency-swarm` downloads the terminal app and opens it for your agency.
 
-- start the TUI with one Python call
-- switch between agencies and agents with `/agents`
-- send prompts with mentions such as `@Developer fix the failing integration test`
-- stream responses, export sessions, undo or redo, and use `/compact`
+If your current model provider setup is not usable, the TUI opens `/auth`. Authentication means telling the TUI which model provider to use and giving it the credential it needs to run your prompts. Once you do that, the TUI can reuse the saved credential the next time you launch it. You can open `/auth` later to manage or remove it.
 
-## Choose Agencies And Agents
+![Agent Swarm CLI startup screen](/images/agent-swarm-cli-preview.png)
 
-Use `/agents` to open the target picker.
+## Prerequisites
+
+Before you launch the TUI, make sure you have:
+
+- Python 3.12 or newer
+- `agency-swarm` installed
+- a model provider credential, either already configured or added through `/auth` on first run
+- an existing agency, or a starting point from [From Scratch](/welcome/getting-started/from-scratch) or the [Starter Template](/welcome/getting-started/starter-template)
+
+## Features
+
+Once the TUI is running, you get:
+
+- a keyboard-first terminal workflow
+- session history, export, undo, redo, and `/compact`
+- `/agents` to switch between top-level agents
+- `@AgentName` mentions to route a prompt to a specific top-level agent
+- `@` file/resource references to attach local or MCP context in the same prompt flow
+- `Tab` autocomplete for both agent mentions and file/resource references
+- direct access to local project files for prompt context
 
 ![Agent Swarm CLI agent picker](/images/agent-swarm-cli-agent-selection.png)
 
-The picker reads live metadata from the running `agency-swarm` backend and groups agents by agency.
+## Limitations
 
-Use `Tab` to autocomplete agent mentions in the prompt box.
-
-<Accordion title="Optional: reconnect to another local agency server" defaultOpen={false}>
-`agency.tui()` already opens the TUI for the current local agency.
-
-The extra connection flow is only for the case where you want the TUI to switch to a different local `agency-swarm` server after startup.
-
-In that case, use `/connect` inside the TUI and point it at the other local server.
-</Accordion>
-
-## Current Limitations
-
-These commands and modes are intentionally unavailable in the current terminal workflow:
+Some commands and modes visible in the TUI are not wired to the `agency-swarm` backend yet:
 
 - `/models`
 - `/editor`
@@ -53,10 +61,15 @@ These commands and modes are intentionally unavailable in the current terminal w
 - `/commit`
 - docs mode
 
+Use your Python config to choose models and providers, and use your normal editor or Git workflow for editing files and making commits.
+
 `tui(show_reasoning=False)` is not supported in the new TUI yet.
 
 ## Related Pages
 
+- [Installation](/welcome/installation)
+- [From Scratch](/welcome/getting-started/from-scratch)
+- [Third-Party Models](/additional-features/third-party-models)
 - [Running an Agency](/core-framework/agencies/running-agency)
 - [FastAPI Integration](/additional-features/fastapi-integration)
 - [API Reference](/references/api)
