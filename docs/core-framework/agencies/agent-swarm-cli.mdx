@@ -13,21 +13,27 @@ Use it when you want to build or test your Agency Swarm project in the terminal.
 For most users, the right way to start is:
 
 ```bash
+mkdir my-agency
+cd my-agency
 npx @vrsen/agentswarm
 ```
 
-This is the main launch path. It handles first-run setup, then opens the terminal UI in local `Agent Builder` mode.
+If you already have an Agency Swarm project, just `cd` into that project and run the same command.
 
-Run it from your project root. If you are starting fresh, run it in a new empty folder.
+This is the main launch path. It handles first-run setup, then opens the terminal UI.
 
 You do not need to install the CLI globally first.
+
+<Tip>
+On first run, the launcher may create `.venv`, install dependencies, and ask a few setup questions. This is expected.
+</Tip>
 
 ## Before You Start
 
 Make sure you have:
 
-- Node.js installed so `npx` is available
-- Python 3.12 or newer available for Agency Swarm projects
+- `node --version` works in your terminal so `npx` is available
+- `python --version` works and points to Python 3.12 or newer
 - a model provider credential if you want to send prompts right away, or you can add it later with `/auth`
 - an existing agency project, or a starting point from [From Scratch](/welcome/getting-started/from-scratch) or the [Starter Template](/welcome/getting-started/starter-template)
 
