@@ -68,6 +68,8 @@ try:
 except ImportError:
     logger.debug("OAuth support not available - install MCP SDK to enable")
 
+_HOSTED_MCP_OAUTH_ORIGINAL_TOOL_ATTR = "_agency_swarm_hosted_mcp_oauth_original_tool"
+
 
 def _sanitize_oauth_registry_user_id(user_id: str) -> str:
     return build_oauth_user_segment(user_id, max_prefix_length=96)
@@ -654,16 +656,22 @@ async def _authorize_hosted_mcp_tools(agent: Any, *, cache_dir: Path | None) -> 
             continue
         if hosted_oauth_mode is True and not is_hosted_mcp_tool_oauth_enabled(tool):
             continue
+        original_tool = getattr(tool, _HOSTED_MCP_OAUTH_ORIGINAL_TOOL_ATTR, None)
+        is_injected_tool = original_tool is not None
+        source_tool = original_tool or tool
         tool_config = getattr(tool, "tool_config", None)
         if not isinstance(tool_config, dict):
             continue
+        source_tool_config = getattr(source_tool, "tool_config", None)
+        if not isinstance(source_tool_config, dict):
+            source_tool_config = tool_config
 
         # Respect user-provided authorization tokens.
-        if tool_config.get("authorization") not in (None, ""):
+        if not is_injected_tool and tool_config.get("authorization") not in (None, ""):
             continue
 
-        server_label = tool_config.get("server_label")
-        server_url = tool_config.get("server_url")
+        server_label = source_tool_config.get("server_label")
+        server_url = source_tool_config.get("server_url")
         if not isinstance(server_label, str) or server_label == "":
             continue
         if not isinstance(server_url, str) or server_url == "":
@@ -675,10 +683,11 @@ async def _authorize_hosted_mcp_tools(agent: Any, *, cache_dir: Path | None) -> 
         if hosted_mcp_tool_type is not None:
             active_tool = enable_hosted_mcp_tool_oauth(
                 hosted_mcp_tool_type(
-                    tool_config=cast(dict[str, Any], dict(tool_config)),
-                    on_approval_request=getattr(tool, "on_approval_request", None),
+                    tool_config=cast(dict[str, Any], dict(source_tool_config)),
+                    on_approval_request=getattr(source_tool, "on_approval_request", None),
                 )
             )
+            setattr(active_tool, _HOSTED_MCP_OAUTH_ORIGINAL_TOOL_ATTR, source_tool)
             tools[index] = active_tool
             active_tool_config = cast(dict[str, Any], active_tool.tool_config)
 
@@ -703,6 +712,21 @@ async def _authorize_hosted_mcp_tools(agent: Any, *, cache_dir: Path | None) -> 
             active_tool_config["authorization"] = tokens.access_token
         finally:
             await oauth_client.cleanup()
+
+
+def restore_hosted_mcp_oauth_tools(agency: Any) -> None:
+    """Restore HostedMCPTool definitions replaced by request-scoped OAuth injection."""
+    agents_map = getattr(agency, "agents", None)
+    if not isinstance(agents_map, dict):
+        return
+    for agent in agents_map.values():
+        tools = getattr(agent, "tools", None)
+        if not isinstance(tools, list):
+            continue
+        for index, tool in enumerate(list(tools)):
+            original_tool = getattr(tool, _HOSTED_MCP_OAUTH_ORIGINAL_TOOL_ATTR, None)
+            if original_tool is not None:
+                tools[index] = original_tool
 
 
 def _sync_oauth_client_handlers(persistent: object, candidate: object) -> bool:

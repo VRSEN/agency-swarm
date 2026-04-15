@@ -19,7 +19,7 @@ from agency_swarm.integrations.fastapi_utils.oauth_support import (
     is_oauth_server,
 )
 from agency_swarm.mcp.oauth import MCPServerOAuth
-from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
+from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers, restore_hosted_mcp_oauth_tools
 
 
 @pytest.mark.asyncio
@@ -418,6 +418,88 @@ async def test_attach_persistent_mcp_servers_keeps_hosted_mcp_tokens_request_loc
     assert agent_b.tools[0] is not shared_hosted_mcp
     assert agent_a.tools[0].tool_config.get("authorization") == "token-user-a"
     assert agent_b.tools[0].tool_config.get("authorization") == "token-user-b"
+
+
+@pytest.mark.asyncio
+async def test_hosted_mcp_oauth_tokens_are_restored_between_reused_agent_requests(tmp_path) -> None:
+    """Shared FastAPI agent instances must not keep injected HostedMCPTool tokens."""
+
+    shared_hosted_mcp = enable_hosted_mcp_tool_oauth(
+        HostedMCPTool(tool_config=Mcp(type="mcp", server_label="demo", server_url="https://example.com/mcp"))
+    )
+
+    class DummyAgent:
+        def __init__(self) -> None:
+            self.mcp_servers = []
+            self.tools = [shared_hosted_mcp]
+
+    class DummyAgency:
+        def __init__(self, agent: DummyAgent) -> None:
+            self.agents = {"demo": agent}
+            self.oauth_token_path = str(tmp_path)
+
+    from mcp.shared.auth import OAuthToken
+
+    issued_tokens = iter(["token-user-a", "token-user-b"])
+
+    class _FakeStorage:
+        def __init__(self, access_token: str) -> None:
+            self._access_token = access_token
+
+        async def get_tokens(self):
+            return OAuthToken(access_token=self._access_token, token_type="Bearer", expires_in=3600)
+
+        async def set_tokens(self, tokens):
+            return None
+
+        async def get_client_info(self):
+            return None
+
+        async def set_client_info(self, client_info):
+            return None
+
+    class _FakeProvider:
+        def __init__(self, access_token: str) -> None:
+            self.context = type("Ctx", (), {"storage": _FakeStorage(access_token)})()
+
+    class _FakeOAuthClient:
+        def __init__(self, oauth_config, custom_handlers=None):
+            self.oauth_config = oauth_config
+            self.name = oauth_config.name
+            self._oauth_provider = _FakeProvider(next(issued_tokens))
+
+        async def connect(self) -> None:
+            return None
+
+        async def cleanup(self) -> None:
+            return None
+
+    from agency_swarm.tools import mcp_manager as mcp_manager_module
+
+    agent = DummyAgent()
+    agency = DummyAgency(agent)
+    original_client = mcp_manager_module._MCPServerOAuthClient
+    try:
+        mcp_manager_module._MCPServerOAuthClient = _FakeOAuthClient  # type: ignore[assignment]
+
+        FastAPIOAuthRuntime(
+            OAuthStateRegistry(), user_id="user-a", enable_hosted_mcp_oauth=True
+        ).install_handler_factory(agent)
+        await attach_persistent_mcp_servers(agency)
+        assert agent.tools[0].tool_config.get("authorization") == "token-user-a"
+        restore_hosted_mcp_oauth_tools(agency)
+
+        FastAPIOAuthRuntime(
+            OAuthStateRegistry(), user_id="user-b", enable_hosted_mcp_oauth=True
+        ).install_handler_factory(agent)
+        await attach_persistent_mcp_servers(agency)
+        assert agent.tools[0].tool_config.get("authorization") == "token-user-b"
+        restore_hosted_mcp_oauth_tools(agency)
+    finally:
+        mcp_manager_module._MCPServerOAuthClient = original_client
+
+    assert agent.tools[0] is shared_hosted_mcp
+    assert shared_hosted_mcp.tool_config.get("authorization") is None
 
 
 @pytest.mark.asyncio

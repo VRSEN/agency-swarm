@@ -65,7 +65,7 @@ from agency_swarm.integrations.fastapi_utils.override_policy import (
 from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
 from agency_swarm.messages import MessageFilter, MessageFormatter
 from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
-from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
+from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers, restore_hosted_mcp_oauth_tools
 from agency_swarm.ui.core.agui_adapter import AguiAdapter
 from agency_swarm.utils.dry_run import force_dry_run
 from agency_swarm.utils.serialization import serialize
@@ -128,12 +128,16 @@ class _RequestOverrideSession:
 
     agency: Agency
     policy: RequestOverridePolicy
+    restore_hosted_mcp_oauth: bool = False
     lease: _AgencyRequestLease | None = None
     restore_snapshot: _AgencyStateSnapshot | None = None
     _is_cleaned: bool = False
 
     async def acquire(self) -> None:
-        self.lease = await _acquire_agency_request_lease(self.agency, is_override=self.policy.has_client_overrides)
+        self.lease = await _acquire_agency_request_lease(
+            self.agency,
+            is_override=self.policy.has_client_overrides or self.restore_hosted_mcp_oauth,
+        )
         if self.policy.has_client_overrides and self.policy.config is not None:
             self.restore_snapshot = _snapshot_agency_state(self.agency)
             apply_openai_client_config(self.agency, self.policy.config)
@@ -142,6 +146,8 @@ class _RequestOverrideSession:
         if self._is_cleaned:
             return
         self._is_cleaned = True
+        if self.restore_hosted_mcp_oauth:
+            restore_hosted_mcp_oauth_tools(self.agency)
         if self.restore_snapshot is not None:
             _restore_agency_state(self.agency, self.restore_snapshot)
         if self.lease is not None:
@@ -351,6 +357,13 @@ def _has_oauth_servers(agency_instance: Agency) -> bool:
     return False
 
 
+def _has_enabled_hosted_mcp_oauth(agency_instance: Agency) -> bool:
+    agents_map = getattr(agency_instance, "agents", {})
+    if not isinstance(agents_map, dict):
+        return False
+    return any(bool(getattr(agent, "_hosted_mcp_oauth_enabled", False)) for agent in agents_map.values())
+
+
 def _has_request_client_overrides(config: ClientConfig | None) -> bool:
     """Return True when request client_config carries any override values."""
     return RequestOverridePolicy(config).has_client_overrides
@@ -406,7 +419,11 @@ def make_response_endpoint(
         agency_instance = agency_factory(load_threads_callback=load_callback)
         oauth_runtime = _prepare_oauth_runtime(agency_instance, oauth_runtime, user_id)
         override_policy = RequestOverridePolicy(request.client_config)
-        override_session = _RequestOverrideSession(agency=agency_instance, policy=override_policy)
+        override_session = _RequestOverrideSession(
+            agency=agency_instance,
+            policy=override_policy,
+            restore_hosted_mcp_oauth=_has_enabled_hosted_mcp_oauth(agency_instance),
+        )
         request_upload_client: AsyncOpenAI | None = None
 
         combined_file_ids = request.file_ids
@@ -530,7 +547,11 @@ def make_stream_endpoint(
         agency_instance = agency_factory(load_threads_callback=load_callback)
         oauth_runtime = _prepare_oauth_runtime(agency_instance, oauth_runtime, user_id)
         override_policy = RequestOverridePolicy(request.client_config)
-        override_session = _RequestOverrideSession(agency=agency_instance, policy=override_policy)
+        override_session = _RequestOverrideSession(
+            agency=agency_instance,
+            policy=override_policy,
+            restore_hosted_mcp_oauth=_has_enabled_hosted_mcp_oauth(agency_instance),
+        )
         request_upload_client: AsyncOpenAI | None = None
 
         combined_file_ids = request.file_ids
@@ -963,7 +984,11 @@ def make_agui_chat_endpoint(
         agency = agency_factory(load_threads_callback=load_callback)
         oauth_runtime = _prepare_oauth_runtime(agency, oauth_runtime, user_id)
         override_policy = RequestOverridePolicy(request.client_config)
-        override_session = _RequestOverrideSession(agency=agency, policy=override_policy)
+        override_session = _RequestOverrideSession(
+            agency=agency,
+            policy=override_policy,
+            restore_hosted_mcp_oauth=_has_enabled_hosted_mcp_oauth(agency),
+        )
         request_upload_client: AsyncOpenAI | None = None
 
         async def cleanup_setup_context() -> None:

@@ -4,7 +4,14 @@ import pytest
 from agents import FunctionTool, ToolOutputImage
 from agents.run_context import RunContextWrapper
 
-from agency_swarm.mcp.oauth import MCPServerOAuth, set_oauth_user_id
+from agency_swarm.mcp.oauth import (
+    MCPServerOAuth,
+    OAuthRuntimeContext,
+    get_oauth_runtime_context,
+    get_oauth_user_id,
+    set_oauth_runtime_context,
+    set_oauth_user_id,
+)
 from agency_swarm.mcp.oauth_client import MCPServerOAuthClient
 from agency_swarm.tools.tool_factory import ToolFactory
 
@@ -314,3 +321,34 @@ async def test_from_mcp_refreshes_handlers_when_reusing_oauth_client(
 
     assert persistent._redirect_handler is second_redirect
     assert persistent._callback_handler is second_callback
+
+
+@patch("agency_swarm.tools.mcp_converter.MCPUtil.get_function_tools", new_callable=AsyncMock)
+@patch("agency_swarm.tools.mcp_converter.default_mcp_manager")
+async def test_from_mcp_preserves_oauth_context_in_discovery_thread(
+    mock_manager, mock_get_function_tools: AsyncMock
+) -> None:
+    seen_context: dict[str, object] = {}
+
+    async def _capture_context(*args, **kwargs):
+        seen_context["user_id"] = get_oauth_user_id()
+        seen_context["runtime"] = get_oauth_runtime_context()
+        return []
+
+    mock_get_function_tools.side_effect = _capture_context
+    mock_manager.get.return_value = None
+    mock_manager.register.side_effect = lambda server, key=None: server
+    mock_manager._ensure_driver.return_value = None
+
+    runtime = OAuthRuntimeContext(mode="saas_stream", user_id="user-a", timeout=600.0)
+    server = MCPServerOAuthClient(MCPServerOAuth(url="https://example.com/mcp", name="github"))
+
+    try:
+        set_oauth_user_id("user-a")
+        set_oauth_runtime_context(runtime)
+        ToolFactory.from_mcp([server])
+    finally:
+        set_oauth_runtime_context(None)
+        set_oauth_user_id(None)
+
+    assert seen_context == {"user_id": "user-a", "runtime": runtime}

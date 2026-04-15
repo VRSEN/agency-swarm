@@ -1,6 +1,7 @@
 """MCP server to tool conversion utilities."""
 
 import asyncio
+import contextvars
 import functools
 import logging
 import threading
@@ -50,13 +51,13 @@ def _with_error_handling(tool: FunctionTool) -> FunctionTool:
 
 def _run_coroutine_from_factory(factory: Callable[[], Awaitable[Any]]) -> Any:
     """Execute an async coroutine factory from synchronous code."""
+    caller_context = contextvars.copy_context()
     result: dict[str, Any] = {}
     error: list[BaseException] = []
 
     def _runner() -> None:
         try:
-            coro = factory()
-            result["value"] = asyncio.run(coro)  # type: ignore[arg-type]
+            result["value"] = caller_context.run(lambda: asyncio.run(factory()))  # type: ignore[arg-type]
         except BaseException as exc:  # noqa: BLE001
             error.append(exc)
 
