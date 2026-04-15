@@ -582,6 +582,8 @@ async def test_fastapi_oauth_request_session_restores_activated_mcp_tools() -> N
             self._deferred_mcp_servers = {"github": server}
             self._mcp_tools_deferred = True
             self._mcp_tools_initialized = False
+            self.mcp_oauth_handler_factory = lambda _server_name: {"redirect": object()}
+            self._hosted_mcp_oauth_enabled = False
 
     class DummyAgency:
         def __init__(self) -> None:
@@ -596,11 +598,14 @@ async def test_fastapi_oauth_request_session_restores_activated_mcp_tools() -> N
     )
 
     await session.acquire()
+    original_factory = agent.mcp_oauth_handler_factory
     agent.tools.append(activated_tool)
     agent.mcp_servers.clear()
     agent._deferred_mcp_servers.pop("github")
     agent._mcp_tools_deferred = False
     agent._mcp_tools_initialized = True
+    agent.mcp_oauth_handler_factory = lambda _server_name: {"callback": object()}
+    agent._hosted_mcp_oauth_enabled = True
     await session.cleanup()
 
     assert agent.tools == [original_tool]
@@ -608,6 +613,71 @@ async def test_fastapi_oauth_request_session_restores_activated_mcp_tools() -> N
     assert agent._deferred_mcp_servers == {"github": server}
     assert agent._mcp_tools_deferred is True
     assert agent._mcp_tools_initialized is False
+    assert agent.mcp_oauth_handler_factory is original_factory
+    assert agent._hosted_mcp_oauth_enabled is False
+
+
+@pytest.mark.asyncio
+async def test_fastapi_oauth_runtime_installs_handlers_after_request_lease(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Request-scoped OAuth handlers must be installed only after the agency lease is held."""
+
+    class DummyRequest:
+        def __init__(self) -> None:
+            self.message = "hello"
+            self.recipient_agent = None
+            self.additional_instructions = None
+            self.file_ids = None
+            self.file_urls = None
+            self.chat_history = None
+            self.user_context = None
+            self.generate_chat_name = False
+            self.client_config = None
+
+    class DummyThreadManager:
+        def get_all_messages(self) -> list:
+            return []
+
+    class DummyAgent:
+        def __init__(self) -> None:
+            self.mcp_servers = [MCPServerOAuth(url="https://example.com/mcp", name="github")]
+            self.tools = []
+
+    class DummyAgency:
+        def __init__(self) -> None:
+            self.agents = {"demo": DummyAgent()}
+            self.user_context = {}
+            self.thread_manager = DummyThreadManager()
+
+        async def get_response(self, *args, **kwargs):
+            raise AssertionError("OAuth MCP servers must be rejected before model execution")
+
+    order: list[str] = []
+    original_acquire = endpoint_handlers._acquire_agency_request_lease
+    original_install = FastAPIOAuthRuntime.install_handler_factory
+
+    async def capture_acquire(*args, **kwargs):
+        order.append("lease")
+        return await original_acquire(*args, **kwargs)
+
+    def capture_install(self, agent):
+        order.append("install")
+        original_install(self, agent)
+
+    monkeypatch.setattr(endpoint_handlers, "_acquire_agency_request_lease", capture_acquire)
+    monkeypatch.setattr(FastAPIOAuthRuntime, "install_handler_factory", capture_install)
+
+    endpoint = make_response_endpoint(
+        DummyRequest,
+        lambda load_threads_callback=None: DummyAgency(),
+        lambda *args, **kwargs: None,
+        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry()),
+    )
+
+    with pytest.raises(HTTPException) as excinfo:
+        await endpoint(DummyRequest(), token=None, user_id="user-1")
+
+    assert excinfo.value.status_code == 400
+    assert order[:2] == ["lease", "install"]
 
 
 @pytest.mark.asyncio

@@ -54,6 +54,7 @@ from agency_swarm.integrations.fastapi_utils.logging_middleware import get_logs_
 from agency_swarm.integrations.fastapi_utils.oauth_support import (
     FastAPIOAuthConfig,
     FastAPIOAuthRuntime,
+    has_hosted_mcp_oauth_tools,
     has_hosted_mcp_tools_missing_authorization,
     is_oauth_server,
 )
@@ -82,7 +83,11 @@ type _AgencyStateSnapshot = dict[
     str,
     tuple[str | Model | None, ModelSettings | None, AsyncOpenAI | None, OpenAI | None],
 ]
-type _OAuthAgentStateSnapshot = dict[str, tuple[list[Any] | None, list[Any] | None, dict[str, Any], bool, bool]]
+type _OAuthAgentStateSnapshot = dict[
+    str,
+    tuple[list[Any] | None, list[Any] | None, dict[str, Any], bool, bool, Any, Any],
+]
+_ATTR_MISSING = object()
 
 
 def _sse_keepalive_comment() -> str:
@@ -379,7 +384,9 @@ def _has_enabled_hosted_mcp_oauth(agency_instance: Agency) -> bool:
 
 def _requires_oauth_agent_state_restore(agency_instance: Agency, oauth_runtime: FastAPIOAuthRuntime | None) -> bool:
     return oauth_runtime is not None and (
-        _has_oauth_servers(agency_instance) or _has_enabled_hosted_mcp_oauth(agency_instance)
+        _has_oauth_servers(agency_instance)
+        or _has_enabled_hosted_mcp_oauth(agency_instance)
+        or (oauth_runtime.enable_hosted_mcp_oauth and has_hosted_mcp_oauth_tools(agency_instance))
     )
 
 
@@ -436,7 +443,6 @@ def make_response_endpoint(
             )
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
-        oauth_runtime = _prepare_oauth_runtime(agency_instance, oauth_runtime, user_id)
         request_user_context = _with_oauth_user_context(request.user_context, user_id)
         override_policy = RequestOverridePolicy(request.client_config)
         override_session = _RequestOverrideSession(
@@ -451,6 +457,7 @@ def make_response_endpoint(
 
         try:
             await override_session.acquire()
+            oauth_runtime = _prepare_oauth_runtime(agency_instance, oauth_runtime, user_id)
 
             has_hosted_mcp_oauth = (
                 oauth_config is not None
@@ -565,7 +572,6 @@ def make_stream_endpoint(
             )
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
-        oauth_runtime = _prepare_oauth_runtime(agency_instance, oauth_runtime, user_id)
         request_user_context = _with_oauth_user_context(request.user_context, user_id)
         override_policy = RequestOverridePolicy(request.client_config)
         override_session = _RequestOverrideSession(
@@ -584,6 +590,7 @@ def make_stream_endpoint(
 
         try:
             await override_session.acquire()
+            oauth_runtime = _prepare_oauth_runtime(agency_instance, oauth_runtime, user_id)
 
             request_upload_client = _build_file_upload_client(
                 agency_instance,
@@ -1028,7 +1035,6 @@ def make_agui_chat_endpoint(
 
         # Choose / build an agent – here we just create a demo agent each time.
         agency = agency_factory(load_threads_callback=load_callback)
-        oauth_runtime = _prepare_oauth_runtime(agency, oauth_runtime, user_id)
         request_user_context = _with_oauth_user_context(request.user_context, user_id)
         override_policy = RequestOverridePolicy(request.client_config)
         override_session = _RequestOverrideSession(
@@ -1044,6 +1050,7 @@ def make_agui_chat_endpoint(
 
         try:
             await override_session.acquire()
+            oauth_runtime = _prepare_oauth_runtime(agency, oauth_runtime, user_id)
 
             request_upload_client = _build_file_upload_client(agency, request.client_config, recipient_agent=None)
             if getattr(request, "file_urls", None):
@@ -1760,23 +1767,47 @@ def _snapshot_oauth_agent_state(agency: Agency) -> _OAuthAgentStateSnapshot:
             dict(deferred_servers) if isinstance(deferred_servers, dict) else {},
             bool(getattr(agent, "_mcp_tools_deferred", False)),
             bool(getattr(agent, "_mcp_tools_initialized", False)),
+            getattr(agent, "mcp_oauth_handler_factory", _ATTR_MISSING),
+            getattr(agent, "_hosted_mcp_oauth_enabled", _ATTR_MISSING),
         )
     return snapshot
 
 
 def _restore_oauth_agent_state(agency: Agency, snapshot: _OAuthAgentStateSnapshot) -> None:
     """Restore agent tool/deferred-OAuth state after a FastAPI OAuth request."""
-    for name, (tools, mcp_servers, deferred_servers, mcp_tools_deferred, mcp_tools_initialized) in snapshot.items():
+    for (
+        name,
+        (
+            tools,
+            mcp_servers,
+            deferred_servers,
+            mcp_tools_deferred,
+            mcp_tools_initialized,
+            handler_factory,
+            hosted_mcp_oauth_enabled,
+        ),
+    ) in snapshot.items():
         agent = agency.agents.get(name)
         if agent is None:
             continue
+        dynamic_agent = cast(Any, agent)
         if tools is not None:
             agent.tools = tools
         if mcp_servers is not None:
             agent.mcp_servers = mcp_servers
-        agent._deferred_mcp_servers = deferred_servers
-        agent._mcp_tools_deferred = mcp_tools_deferred
-        agent._mcp_tools_initialized = mcp_tools_initialized
+        dynamic_agent._deferred_mcp_servers = deferred_servers
+        dynamic_agent._mcp_tools_deferred = mcp_tools_deferred
+        dynamic_agent._mcp_tools_initialized = mcp_tools_initialized
+        if handler_factory is _ATTR_MISSING:
+            with contextlib.suppress(AttributeError):
+                del dynamic_agent.mcp_oauth_handler_factory
+        else:
+            dynamic_agent.mcp_oauth_handler_factory = handler_factory
+        if hosted_mcp_oauth_enabled is _ATTR_MISSING:
+            with contextlib.suppress(AttributeError):
+                del dynamic_agent._hosted_mcp_oauth_enabled
+        else:
+            dynamic_agent._hosted_mcp_oauth_enabled = hosted_mcp_oauth_enabled
 
 
 def _restore_agency_state(

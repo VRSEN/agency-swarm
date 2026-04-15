@@ -245,6 +245,22 @@ def has_hosted_mcp_tools_missing_authorization(agency_instance: Any) -> bool:
     return False
 
 
+def has_hosted_mcp_oauth_tools(agency_instance: Any) -> bool:
+    """Return True when any agent has HostedMCPTool explicitly opted into OAuth."""
+    if HostedMCPToolRuntime is None:
+        return False
+    agents_map = getattr(agency_instance, "agents", {})
+    if not isinstance(agents_map, dict):
+        return False
+    for agent in agents_map.values():
+        tools = getattr(agent, "tools", None)
+        if not isinstance(tools, list):
+            continue
+        if any(isinstance(tool, HostedMCPToolRuntime) and is_hosted_mcp_tool_oauth_enabled(tool) for tool in tools):
+            return True
+    return False
+
+
 class FastAPIOAuthRuntime:
     """Per-request OAuth coordinator for FastAPI streaming."""
 
