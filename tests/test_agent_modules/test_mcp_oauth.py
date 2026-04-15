@@ -774,6 +774,47 @@ class TestOAuthClientTransportCompatibility:
         assert calls.get("auth") is oauth_provider
         assert "legacy_url" not in calls
 
+    def test_build_streamable_transport_uses_modern_auth_api(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Use auth= when the modern transport exposes that API instead of http_client=."""
+        from agency_swarm.mcp import oauth_client as oauth_client_module
+
+        calls: dict[str, object] = {}
+
+        def fake_modern(
+            url: str, *, auth: object | None = None, terminate_on_close: bool = True
+        ):  # pragma: no cover - execution is not needed for this unit
+            calls["modern_url"] = url
+            calls["modern_auth"] = auth
+            calls["modern_terminate_on_close"] = terminate_on_close
+
+            @contextlib.asynccontextmanager
+            async def _modern_context():
+                yield (object(), object(), lambda: None)
+
+            return _modern_context()
+
+        def fake_legacy(url: str, auth: object | None = None):
+            calls["legacy_url"] = url
+            calls["legacy_auth"] = auth
+
+            @contextlib.asynccontextmanager
+            async def _legacy_context():
+                yield (object(), object(), lambda: None)
+
+            return _legacy_context()
+
+        monkeypatch.setattr(oauth_client_module, "_get_modern_streamable_http_client", lambda: fake_modern)
+        monkeypatch.setattr(oauth_client_module, "_legacy_streamablehttp_client", fake_legacy)
+
+        oauth_provider = object()
+        transport, http_client = oauth_client_module._build_streamable_transport(TEST_SERVER_URL, oauth_provider)
+
+        assert transport is not None
+        assert http_client is None
+        assert calls.get("modern_url") == TEST_SERVER_URL
+        assert calls.get("modern_auth") is oauth_provider
+        assert "legacy_url" not in calls
+
     def test_build_streamable_transport_falls_back_to_legacy_api(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Fallback to streamablehttp_client when modern API is unavailable."""
         from agency_swarm.mcp import oauth_client as oauth_client_module

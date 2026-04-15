@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+import inspect
 import logging
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
@@ -62,6 +63,18 @@ def _get_modern_streamable_http_client() -> Callable[..., StreamableHTTPContext]
     return None
 
 
+def _supports_keyword_argument(callable_obj: Callable[..., object], keyword: str) -> bool:
+    """Return whether a transport factory accepts a keyword argument."""
+    try:
+        parameters = inspect.signature(callable_obj).parameters
+    except (TypeError, ValueError):
+        return False
+    parameter = parameters.get(keyword)
+    if parameter is not None and parameter.kind is not inspect.Parameter.POSITIONAL_ONLY:
+        return True
+    return any(parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters.values())
+
+
 def _build_streamable_transport(
     url: str,
     oauth_provider: OAuthClientProvider,
@@ -69,8 +82,11 @@ def _build_streamable_transport(
     """Build streamable HTTP transport with auth across MCP SDK versions."""
     modern_streamable_http_client = _get_modern_streamable_http_client()
     if modern_streamable_http_client is not None:
-        http_client = httpx.AsyncClient(auth=oauth_provider, timeout=httpx.Timeout(30.0, read=300.0))
-        return modern_streamable_http_client(url, http_client=http_client), http_client
+        if _supports_keyword_argument(modern_streamable_http_client, "http_client"):
+            http_client = httpx.AsyncClient(auth=oauth_provider, timeout=httpx.Timeout(30.0, read=300.0))
+            return modern_streamable_http_client(url, http_client=http_client), http_client
+        if _supports_keyword_argument(modern_streamable_http_client, "auth"):
+            return modern_streamable_http_client(url, auth=oauth_provider), None
     return _legacy_streamablehttp_client(url, auth=oauth_provider), None
 
 

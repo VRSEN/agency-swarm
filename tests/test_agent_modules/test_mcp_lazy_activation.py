@@ -1,4 +1,5 @@
 import pytest
+from agents import FunctionTool
 
 from agency_swarm import Agency, Agent
 from agency_swarm.mcp.oauth import MCPServerOAuth
@@ -75,6 +76,15 @@ async def test_authenticate_mcp_server_triggers_selected_conversion(monkeypatch:
     def _fake_convert(agent: Agent) -> None:
         names = [str(getattr(server, "name", "")) for server in agent.mcp_servers]
         convert_calls.append(names)
+        agent.add_tool(
+            FunctionTool(
+                name="github_tool",
+                description="test tool",
+                params_json_schema={"type": "object", "properties": {}},
+                on_invoke_tool=lambda _ctx, _input_json: "ok",
+                strict_json_schema=False,
+            )
+        )
         agent.mcp_servers.clear()
 
     monkeypatch.setattr("agency_swarm.agent.core.convert_mcp_servers_to_tools", _fake_convert)
@@ -97,6 +107,7 @@ async def test_authenticate_mcp_server_triggers_selected_conversion(monkeypatch:
     assert convert_calls == [["github"], ["github"]]
     assert "authenticated and its tools are enabled" in first_result
     assert "re-authentication attempt completed" in second_result
+    assert [getattr(tool, "name", None) for tool in agent.tools].count("github_tool") == 1
     assert set(agent._deferred_mcp_servers) == {"notion"}
 
 
