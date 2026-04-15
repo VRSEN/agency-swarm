@@ -10,6 +10,19 @@ from agency_swarm import Agency, Agent
 from agency_swarm.mcp import MCPServerOAuth
 
 
+class _FakeNonOAuthServer:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+
+class _NoGlobalOauthCacheUpdateManager:
+    def mark_atexit_registered(self) -> bool:
+        return False
+
+    def update_oauth_cache_dir(self, _cache_dir: Path) -> None:
+        raise AssertionError("Agency oauth_token_path must not mutate the global MCP manager")
+
+
 @pytest.fixture(autouse=True)
 def disable_server_registration(monkeypatch: pytest.MonkeyPatch) -> None:
     """Prevent real MCP connections during tests."""
@@ -27,6 +40,19 @@ def _build_agent_with_oauth_server(server: MCPServerOAuth) -> Agent:
 
 def test_agency_applies_oauth_token_path_to_servers(tmp_path: Path) -> None:
     """Agency propagates oauth_token_path into MCPServerOAuth cache_dir."""
+    server = MCPServerOAuth(url="http://localhost:8001/mcp", name="github")
+    agent = _build_agent_with_oauth_server(server)
+
+    Agency(agent, oauth_token_path=str(tmp_path))
+
+    assert server.cache_dir == tmp_path
+
+
+def test_agency_oauth_token_path_does_not_mutate_global_manager(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Agency-managed token paths stay scoped to the agency's configured servers."""
+    monkeypatch.setattr("agency_swarm.agency.core.default_mcp_manager", _NoGlobalOauthCacheUpdateManager())
     server = MCPServerOAuth(url="http://localhost:8001/mcp", name="github")
     agent = _build_agent_with_oauth_server(server)
 
@@ -85,3 +111,14 @@ def test_shared_oauth_servers_extend_activation_tool() -> None:
     assert server_name_schema.get("enum") == ["github", "notion"]
     assert set(agency.agents["OAuthAgent"]._oauth_mcp_servers) == {"github", "notion"}
     assert set(agency.agents["OAuthAgent"]._deferred_mcp_servers) == {"github", "notion"}
+
+
+def test_shared_mcp_servers_skip_names_already_deferred_for_oauth() -> None:
+    """Shared eager MCP servers must not alias an already-deferred OAuth server name."""
+    agent_server = MCPServerOAuth(url="http://localhost:8001/mcp", name="github")
+    agent = _build_agent_with_oauth_server(agent_server)
+
+    agency = Agency(agent, shared_mcp_servers=[_FakeNonOAuthServer("github")])
+
+    assert agency.agents["OAuthAgent"].mcp_servers == []
+    assert set(agency.agents["OAuthAgent"]._oauth_mcp_servers) == {"github"}

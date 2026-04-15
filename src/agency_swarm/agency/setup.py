@@ -490,6 +490,9 @@ def _apply_shared_mcp_servers(agency: "Agency") -> None:
             server_name = getattr(server, "name", None)
             if server_name:
                 existing_names = [getattr(s, "name", None) for s in agent_instance.mcp_servers]
+                deferred_servers = getattr(agent_instance, "_oauth_mcp_servers", None)
+                if isinstance(deferred_servers, dict):
+                    existing_names.extend(deferred_servers)
                 if server_name in existing_names:
                     logger.debug(f"MCP server '{server_name}' already exists for agent '{agent_name}'; skipping")
                     continue
