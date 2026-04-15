@@ -76,11 +76,29 @@ def _sanitize_oauth_registry_user_id(user_id: str) -> str:
     return build_oauth_user_segment(user_id, max_prefix_length=96)
 
 
+def _oauth_store_key_segment(config: Any) -> str:
+    storage = getattr(config, "storage", None)
+    if storage is not None:
+        return _sanitize_oauth_registry_user_id(f"storage:{id(storage)}")
+
+    storage_factory = getattr(config, "storage_factory", None)
+    if storage_factory is not None:
+        return _sanitize_oauth_registry_user_id(f"storage_factory:{id(storage_factory)}")
+
+    cache_dir = getattr(config, "cache_dir", None)
+    if cache_dir is not None:
+        path = Path(cache_dir).expanduser().resolve(strict=False)
+        return _sanitize_oauth_registry_user_id(f"cache:{path}")
+
+    return "default"
+
+
 def _build_persistence_key(server: Any, oauth_user_id: str | None) -> str:
     """Build process-level persistence key for MCP servers.
 
-    OAuth clients are keyed by (server_name, user_id) to avoid cross-user
-    session/token reuse. Non-OAuth servers keep name-only keys.
+    OAuth clients are keyed by (server_name, user_id, token_store) to avoid
+    cross-user or cross-agency session/token reuse. Non-OAuth servers keep
+    name-only keys.
     """
     actual = getattr(server, "_server", server)
     name = getattr(actual, "name", None)
@@ -89,8 +107,12 @@ def _build_persistence_key(server: Any, oauth_user_id: str | None) -> str:
     if _MCPServerOAuthClient is None or not isinstance(actual, _MCPServerOAuthClient):
         return name
     if not isinstance(oauth_user_id, str) or oauth_user_id == "":
-        return name
-    return f"{name}::{_sanitize_oauth_registry_user_id(oauth_user_id)}"
+        user_segment = "default"
+    else:
+        user_segment = _sanitize_oauth_registry_user_id(oauth_user_id)
+    oauth_client = cast(Any, actual)
+    store_segment = _oauth_store_key_segment(oauth_client.oauth_config)
+    return f"{name}::oauth::{user_segment}::{store_segment}"
 
 
 def apply_managed_oauth_cache_dir(config: Any, cache_dir: Path | None) -> None:

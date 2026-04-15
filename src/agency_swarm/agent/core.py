@@ -52,6 +52,7 @@ from .context_types import AgencyContext as AgencyContext, AgentRuntimeState
 
 logger = logging.getLogger(__name__)
 _WEB_SEARCH_SOURCES_INCLUDE = "web_search_call.action.sources"
+_MCP_AUTHENTICATION_TOOL_ATTR = "_agency_swarm_mcp_authentication_tool"
 
 """Constants moved to agency_swarm.agent.constants (no behavior change)."""
 
@@ -411,22 +412,24 @@ class Agent(BaseAgent[MasterContext]):
         except ImportError:
             return {}, list(self.mcp_servers)
 
+        seen_names: set[str] = set()
         deferred: dict[str, Any] = {}
         eager: list[Any] = []
         for server in list(self.mcp_servers):
             actual = getattr(server, "_server", server)
             name = getattr(server, "name", None)
-            if (
-                isinstance(name, str)
-                and name != ""
-                and (isinstance(actual, MCPServerOAuth) or isinstance(actual, MCPServerOAuthClient))
-            ):
-                if name in deferred:
+            server_name = name if isinstance(name, str) and name != "" else None
+            if server_name is not None:
+                if server_name in seen_names:
                     raise ValueError(
-                        f"Server {server} has duplicate name: {name}. "
+                        f"Server {server} has duplicate name: {server_name}. "
                         "Please provide server with unique names by explicitly specifying the name attribute."
                     )
-                deferred[name] = server
+                seen_names.add(server_name)
+            if server_name is not None and (
+                isinstance(actual, MCPServerOAuth) or isinstance(actual, MCPServerOAuthClient)
+            ):
+                deferred[server_name] = server
             else:
                 eager.append(server)
         return deferred, eager
@@ -461,6 +464,11 @@ class Agent(BaseAgent[MasterContext]):
         tool_name = "authenticate_mcp_server"
         existing_tool = next((tool for tool in self.tools if getattr(tool, "name", "") == tool_name), None)
         if existing_tool is not None:
+            if not bool(getattr(existing_tool, _MCP_AUTHENTICATION_TOOL_ATTR, False)):
+                raise ValueError(
+                    f"Tool name '{tool_name}' is reserved for OAuth MCP server activation. "
+                    "Rename the custom tool before configuring OAuth MCP servers."
+                )
             schema = getattr(existing_tool, "params_json_schema", {})
             server_name_schema = schema.get("properties", {}).get("server_name")
             if isinstance(server_name_schema, dict):
@@ -507,6 +515,7 @@ class Agent(BaseAgent[MasterContext]):
         if isinstance(server_name_schema, dict):
             server_name_schema["enum"] = server_names
 
+        setattr(_authenticate_mcp_server, _MCP_AUTHENTICATION_TOOL_ATTR, True)
         self.add_tool(_authenticate_mcp_server)
 
     def _ensure_web_search_sources_include(self) -> None:

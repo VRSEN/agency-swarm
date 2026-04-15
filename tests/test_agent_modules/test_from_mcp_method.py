@@ -256,8 +256,8 @@ async def test_from_mcp_uses_user_scoped_persistence_keys(mock_manager, mock_get
 
     assert len(registered_keys) == 2
     assert registered_keys[0] != registered_keys[1]
-    assert registered_keys[0].startswith("github::")
-    assert registered_keys[1].startswith("github::")
+    assert registered_keys[0].startswith("github::oauth::")
+    assert registered_keys[1].startswith("github::oauth::")
 
 
 @patch("agents.mcp.util.MCPUtil.get_function_tools", new_callable=AsyncMock)

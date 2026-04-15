@@ -57,6 +57,32 @@ def test_oauth_agents_reject_duplicate_deferred_server_names() -> None:
         )
 
 
+def test_oauth_agents_reject_names_shared_with_eager_servers() -> None:
+    with pytest.raises(ValueError, match="duplicate name"):
+        _make_oauth_agent(
+            MCPServerOAuth(url="https://example.com/oauth", name="github"),
+            _FakeNonOAuthServer("github"),
+        )
+
+
+def test_oauth_agents_reject_custom_authentication_tool_name() -> None:
+    custom_tool = FunctionTool(
+        name="authenticate_mcp_server",
+        description="custom tool",
+        params_json_schema={"type": "object", "properties": {}},
+        on_invoke_tool=lambda _ctx, _input_json: "custom",
+        strict_json_schema=False,
+    )
+
+    with pytest.raises(ValueError, match="reserved for OAuth MCP server activation"):
+        Agent(
+            name="OAuthAgent",
+            instructions="Use MCP tools when needed.",
+            tools=[custom_tool],
+            mcp_servers=[MCPServerOAuth(url="https://example.com/mcp", name="github")],
+        )
+
+
 def test_oauth_agents_expose_authentication_tool_in_metadata() -> None:
     agent = _make_oauth_agent(MCPServerOAuth(url="https://example.com/mcp", name="github"))
     agency = Agency(agent)
