@@ -680,6 +680,13 @@ async def test_fastapi_oauth_runtime_installs_handlers_after_request_lease(monke
     assert order[:2] == ["lease", "install"]
 
 
+def test_fastapi_oauth_user_header_overrides_body_user_id() -> None:
+    """The trusted FastAPI user header controls OAuth identity over body context."""
+    context = endpoint_handlers._with_oauth_user_context({"plan": "pro", "user_id": "body-user"}, "header-user")
+
+    assert context == {"plan": "pro", "user_id": "header-user"}
+
+
 @pytest.mark.asyncio
 async def test_attach_persistent_mcp_servers_skips_hosted_mcp_oauth_without_explicit_opt_in(tmp_path) -> None:
     """Public HostedMCPTool definitions should not trigger OAuth implicitly."""

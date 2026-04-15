@@ -355,7 +355,7 @@ def _with_oauth_user_context(user_context: dict[str, Any] | None, user_id: str |
     if user_id is None:
         return user_context
     merged_context = dict(user_context or {})
-    merged_context.setdefault("user_id", user_id)
+    merged_context["user_id"] = user_id
     return merged_context
 
 
