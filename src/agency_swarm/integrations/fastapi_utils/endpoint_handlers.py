@@ -82,6 +82,7 @@ type _AgencyStateSnapshot = dict[
     str,
     tuple[str | Model | None, ModelSettings | None, AsyncOpenAI | None, OpenAI | None],
 ]
+type _OAuthAgentStateSnapshot = dict[str, tuple[list[Any] | None, dict[str, Any], bool]]
 
 
 def _sse_keepalive_comment() -> str:
@@ -128,16 +129,19 @@ class _RequestOverrideSession:
 
     agency: Agency
     policy: RequestOverridePolicy
-    restore_hosted_mcp_oauth: bool = False
+    restore_oauth_state: bool = False
     lease: _AgencyRequestLease | None = None
     restore_snapshot: _AgencyStateSnapshot | None = None
+    oauth_snapshot: _OAuthAgentStateSnapshot | None = None
     _is_cleaned: bool = False
 
     async def acquire(self) -> None:
         self.lease = await _acquire_agency_request_lease(
             self.agency,
-            is_override=self.policy.has_client_overrides or self.restore_hosted_mcp_oauth,
+            is_override=self.policy.has_client_overrides or self.restore_oauth_state,
         )
+        if self.restore_oauth_state:
+            self.oauth_snapshot = _snapshot_oauth_agent_state(self.agency)
         if self.policy.has_client_overrides and self.policy.config is not None:
             self.restore_snapshot = _snapshot_agency_state(self.agency)
             apply_openai_client_config(self.agency, self.policy.config)
@@ -146,8 +150,10 @@ class _RequestOverrideSession:
         if self._is_cleaned:
             return
         self._is_cleaned = True
-        if self.restore_hosted_mcp_oauth:
+        if self.restore_oauth_state:
             restore_hosted_mcp_oauth_tools(self.agency)
+        if self.oauth_snapshot is not None:
+            _restore_oauth_agent_state(self.agency, self.oauth_snapshot)
         if self.restore_snapshot is not None:
             _restore_agency_state(self.agency, self.restore_snapshot)
         if self.lease is not None:
@@ -364,6 +370,12 @@ def _has_enabled_hosted_mcp_oauth(agency_instance: Agency) -> bool:
     return any(bool(getattr(agent, "_hosted_mcp_oauth_enabled", False)) for agent in agents_map.values())
 
 
+def _requires_oauth_agent_state_restore(agency_instance: Agency, oauth_runtime: FastAPIOAuthRuntime | None) -> bool:
+    return oauth_runtime is not None and (
+        _has_oauth_servers(agency_instance) or _has_enabled_hosted_mcp_oauth(agency_instance)
+    )
+
+
 def _has_request_client_overrides(config: ClientConfig | None) -> bool:
     """Return True when request client_config carries any override values."""
     return RequestOverridePolicy(config).has_client_overrides
@@ -422,7 +434,7 @@ def make_response_endpoint(
         override_session = _RequestOverrideSession(
             agency=agency_instance,
             policy=override_policy,
-            restore_hosted_mcp_oauth=_has_enabled_hosted_mcp_oauth(agency_instance),
+            restore_oauth_state=_requires_oauth_agent_state_restore(agency_instance, oauth_runtime),
         )
         request_upload_client: AsyncOpenAI | None = None
 
@@ -550,7 +562,7 @@ def make_stream_endpoint(
         override_session = _RequestOverrideSession(
             agency=agency_instance,
             policy=override_policy,
-            restore_hosted_mcp_oauth=_has_enabled_hosted_mcp_oauth(agency_instance),
+            restore_oauth_state=_requires_oauth_agent_state_restore(agency_instance, oauth_runtime),
         )
         request_upload_client: AsyncOpenAI | None = None
 
@@ -987,7 +999,7 @@ def make_agui_chat_endpoint(
         override_session = _RequestOverrideSession(
             agency=agency,
             policy=override_policy,
-            restore_hosted_mcp_oauth=_has_enabled_hosted_mcp_oauth(agency),
+            restore_oauth_state=_requires_oauth_agent_state_restore(agency, oauth_runtime),
         )
         request_upload_client: AsyncOpenAI | None = None
 
@@ -1698,6 +1710,32 @@ def _snapshot_agency_state(
             getattr(agent, "_openai_client_sync", None),
         )
     return snapshot
+
+
+def _snapshot_oauth_agent_state(agency: Agency) -> _OAuthAgentStateSnapshot:
+    """Capture agent tool/deferred-OAuth state mutated during one OAuth request."""
+    snapshot: _OAuthAgentStateSnapshot = {}
+    for name, agent in agency.agents.items():
+        tools = getattr(agent, "tools", None)
+        deferred_servers = getattr(agent, "_deferred_mcp_servers", {})
+        snapshot[name] = (
+            list(tools) if isinstance(tools, list) else None,
+            dict(deferred_servers) if isinstance(deferred_servers, dict) else {},
+            bool(getattr(agent, "_mcp_tools_deferred", False)),
+        )
+    return snapshot
+
+
+def _restore_oauth_agent_state(agency: Agency, snapshot: _OAuthAgentStateSnapshot) -> None:
+    """Restore agent tool/deferred-OAuth state after a FastAPI OAuth request."""
+    for name, (tools, deferred_servers, mcp_tools_deferred) in snapshot.items():
+        agent = agency.agents.get(name)
+        if agent is None:
+            continue
+        if tools is not None:
+            agent.tools = tools
+        agent._deferred_mcp_servers = deferred_servers
+        agent._mcp_tools_deferred = mcp_tools_deferred
 
 
 def _restore_agency_state(

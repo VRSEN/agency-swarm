@@ -1,4 +1,6 @@
 import asyncio
+import threading
+from queue import Empty, Queue
 
 import pytest
 from agents import HostedMCPTool
@@ -6,6 +8,7 @@ from fastapi import HTTPException
 from openai.types.responses.tool_param import Mcp
 
 from agency_swarm import enable_hosted_mcp_tool_oauth
+from agency_swarm.integrations.fastapi_utils import endpoint_handlers
 from agency_swarm.integrations.fastapi_utils.endpoint_handlers import (
     make_agui_chat_endpoint,
     make_response_endpoint,
@@ -18,6 +21,7 @@ from agency_swarm.integrations.fastapi_utils.oauth_support import (
     extract_state_from_url,
     is_oauth_server,
 )
+from agency_swarm.integrations.fastapi_utils.override_policy import RequestOverridePolicy
 from agency_swarm.mcp.oauth import MCPServerOAuth
 from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers, restore_hosted_mcp_oauth_tools
 
@@ -51,6 +55,63 @@ async def test_runtime_records_redirect_and_completes_on_callback() -> None:
     assert status_event["type"] == "oauth_status"
     assert status_event["state"] == "test-state"
     assert status_event["status"] == "authorized"
+
+
+@pytest.mark.asyncio
+async def test_runtime_emits_oauth_events_from_background_loop() -> None:
+    """MCP background-loop redirect handlers must wake the FastAPI SSE loop."""
+    runtime = FastAPIOAuthRuntime(OAuthStateRegistry(), user_id="user-1", timeout=0.25)
+    event_task = asyncio.create_task(runtime.next_event())
+
+    def emit_redirect() -> None:
+        asyncio.run(runtime.handle_redirect("https://idp.example.com/authorize?state=thread-state", "github"))
+
+    thread = threading.Thread(target=emit_redirect)
+    thread.start()
+    event = await asyncio.wait_for(event_task, timeout=0.5)
+    status_event = await asyncio.wait_for(runtime.next_event(), timeout=0.5)
+    thread.join(timeout=1)
+
+    assert event["type"] == "oauth_redirect"
+    assert event["state"] == "thread-state"
+    assert status_event["type"] == "oauth_status"
+    assert status_event["status"] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_registry_callback_wakes_background_loop_waiter() -> None:
+    """FastAPI callback handlers must release MCP background-loop code waiters."""
+    registry = OAuthStateRegistry()
+    ready = threading.Event()
+    result_queue: Queue[tuple[str, str | None] | BaseException] = Queue()
+
+    async def wait_in_background_loop() -> None:
+        await registry.record_redirect(
+            state="thread-state",
+            auth_url="https://idp.example.com/authorize?state=thread-state",
+            server_name="github",
+            user_id="user-1",
+        )
+        ready.set()
+        try:
+            result_queue.put(await registry.wait_for_code(state="thread-state", timeout=0.5))
+        except BaseException as exc:  # noqa: BLE001
+            result_queue.put(exc)
+
+    thread = threading.Thread(target=lambda: asyncio.run(wait_in_background_loop()))
+    thread.start()
+    assert ready.wait(timeout=1)
+
+    await registry.set_code(state="thread-state", code="code-123", user_id="user-1")
+    thread.join(timeout=1)
+
+    try:
+        result = result_queue.get_nowait()
+    except Empty as exc:
+        raise AssertionError("OAuth callback waiter was not released") from exc
+    if isinstance(result, BaseException):
+        raise result
+    assert result == ("code-123", "thread-state")
 
 
 @pytest.mark.asyncio
@@ -500,6 +561,42 @@ async def test_hosted_mcp_oauth_tokens_are_restored_between_reused_agent_request
 
     assert agent.tools[0] is shared_hosted_mcp
     assert shared_hosted_mcp.tool_config.get("authorization") is None
+
+
+@pytest.mark.asyncio
+async def test_fastapi_oauth_request_session_restores_activated_mcp_tools() -> None:
+    """OAuth MCP tools enabled during one request must not remain on shared agents."""
+    original_tool = object()
+    activated_tool = object()
+    server = MCPServerOAuth(url="https://example.com/mcp", name="github")
+
+    class DummyAgent:
+        def __init__(self) -> None:
+            self.tools = [original_tool]
+            self._deferred_mcp_servers = {"github": server}
+            self._mcp_tools_deferred = True
+
+    class DummyAgency:
+        def __init__(self) -> None:
+            self.agents = {"demo": DummyAgent()}
+
+    agency = DummyAgency()
+    agent = agency.agents["demo"]
+    session = endpoint_handlers._RequestOverrideSession(
+        agency=agency,
+        policy=RequestOverridePolicy(None),
+        restore_oauth_state=True,
+    )
+
+    await session.acquire()
+    agent.tools.append(activated_tool)
+    agent._deferred_mcp_servers.pop("github")
+    agent._mcp_tools_deferred = False
+    await session.cleanup()
+
+    assert agent.tools == [original_tool]
+    assert agent._deferred_mcp_servers == {"github": server}
+    assert agent._mcp_tools_deferred is True
 
 
 @pytest.mark.asyncio

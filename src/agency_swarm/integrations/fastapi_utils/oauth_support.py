@@ -1,4 +1,5 @@
 import asyncio
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -39,7 +40,23 @@ class OAuthFlowState:
     error: str | None = None
     status: str = "pending"
     event: asyncio.Event = field(default_factory=asyncio.Event)
+    loop: asyncio.AbstractEventLoop | None = None
     created_at: float = field(default_factory=time.time)
+
+
+def _get_running_loop_or_none() -> asyncio.AbstractEventLoop | None:
+    try:
+        return asyncio.get_running_loop()
+    except RuntimeError:
+        return None
+
+
+def _notify_oauth_flow(flow: OAuthFlowState) -> None:
+    current_loop = _get_running_loop_or_none()
+    if flow.loop is not None and flow.loop.is_running() and flow.loop is not current_loop:
+        flow.loop.call_soon_threadsafe(flow.event.set)
+        return
+    flow.event.set()
 
 
 class OAuthStateRegistry:
@@ -47,7 +64,7 @@ class OAuthStateRegistry:
 
     def __init__(self, *, expiry_seconds: float | None = 900.0) -> None:
         self._flows: dict[str, OAuthFlowState] = {}
-        self._lock = asyncio.Lock()
+        self._lock = threading.RLock()
         self._expiry_seconds = expiry_seconds
 
     def _prune_expired_locked(self) -> None:
@@ -68,11 +85,18 @@ class OAuthStateRegistry:
         user_id: str | None,
     ) -> OAuthFlowState:
         """Store redirect details and return the flow state."""
-        async with self._lock:
+        flow_loop = _get_running_loop_or_none()
+        with self._lock:
             self._prune_expired_locked()
             flow = self._flows.get(state)
             if flow is None:
-                flow = OAuthFlowState(state=state, auth_url=auth_url, server_name=server_name, user_id=user_id)
+                flow = OAuthFlowState(
+                    state=state,
+                    auth_url=auth_url,
+                    server_name=server_name,
+                    user_id=user_id,
+                    loop=flow_loop,
+                )
                 self._flows[state] = flow
             else:
                 flow.auth_url = auth_url
@@ -81,11 +105,12 @@ class OAuthStateRegistry:
                 flow.error = None
                 flow.code = None
                 flow.status = "pending"
+                flow.loop = flow_loop or flow.loop
             return flow
 
     async def set_code(self, *, state: str, code: str, user_id: str | None) -> OAuthFlowState:
         """Persist the authorization code and release any waiters."""
-        async with self._lock:
+        with self._lock:
             self._prune_expired_locked()
             flow = self._flows.get(state)
             if flow is None:
@@ -99,12 +124,12 @@ class OAuthStateRegistry:
                     flow.error = None
                     flow.status = "authorized"
                 flow.code = code
-            flow.event.set()
+            _notify_oauth_flow(flow)
             return flow
 
     async def set_error(self, *, state: str, error: str, error_description: str | None = None) -> OAuthFlowState:
         """Persist an OAuth provider error and release any waiters."""
-        async with self._lock:
+        with self._lock:
             self._prune_expired_locked()
             flow = self._flows.get(state)
             error_msg = f"{error}: {error_description}" if error_description else error
@@ -114,12 +139,12 @@ class OAuthStateRegistry:
             else:
                 flow.error = error_msg
             flow.status = f"error:{error_msg}"
-            flow.event.set()
+            _notify_oauth_flow(flow)
             return flow
 
     async def set_timeout(self, *, state: str) -> OAuthFlowState:
         """Mark an OAuth flow as timed out and release any waiters."""
-        async with self._lock:
+        with self._lock:
             self._prune_expired_locked()
             flow = self._flows.get(state)
             if flow is None:
@@ -127,12 +152,14 @@ class OAuthStateRegistry:
                 self._flows[state] = flow
             flow.status = "timeout"
             flow.error = None
-            flow.event.set()
+            _notify_oauth_flow(flow)
             return flow
 
     async def wait_for_code(self, *, state: str, timeout: float | None = 300.0) -> tuple[str, str | None]:
         """Wait for the callback to supply an authorization code."""
         flow = await self._get_or_raise(state)
+        if flow.loop is None:
+            flow.loop = _get_running_loop_or_none()
         try:
             await asyncio.wait_for(flow.event.wait(), timeout=timeout)
         except TimeoutError as exc:  # pragma: no cover - timeout exercised in runtime paths
@@ -143,13 +170,13 @@ class OAuthStateRegistry:
             raise OAuthFlowError(flow.error)
         if not flow.code:
             raise OAuthFlowError(f"OAuth callback missing code for state={state}")
-        async with self._lock:
+        with self._lock:
             self._prune_expired_locked()
         return flow.code, flow.state
 
     async def get_status(self, state: str) -> dict[str, Any]:
         """Return a serializable snapshot for status endpoint."""
-        async with self._lock:
+        with self._lock:
             self._prune_expired_locked()
             flow = self._flows.get(state)
             if flow is None:
@@ -163,7 +190,7 @@ class OAuthStateRegistry:
             }
 
     async def _get_or_raise(self, state: str) -> OAuthFlowState:
-        async with self._lock:
+        with self._lock:
             self._prune_expired_locked()
             if state not in self._flows:
                 raise OAuthFlowError(f"No OAuth flow registered for state={state}")
@@ -234,6 +261,7 @@ class FastAPIOAuthRuntime:
         self.timeout = timeout
         self.enable_hosted_mcp_oauth = enable_hosted_mcp_oauth
         self._queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+        self._queue_loop = _get_running_loop_or_none()
         self._state_by_server: dict[str, str] = {}
 
     async def handle_redirect(self, auth_url: str, server_name: str | None) -> None:
@@ -244,8 +272,8 @@ class FastAPIOAuthRuntime:
         await self.registry.record_redirect(
             state=state, auth_url=auth_url, server_name=server_name, user_id=self.user_id
         )
-        await self._queue.put({"type": "oauth_redirect", "state": state, "auth_url": auth_url, "server": server_name})
-        await self._queue.put({"type": "oauth_status", "state": state, "status": "pending", "server": server_name})
+        await self._put_event({"type": "oauth_redirect", "state": state, "auth_url": auth_url, "server": server_name})
+        await self._put_event({"type": "oauth_status", "state": state, "status": "pending", "server": server_name})
 
     async def wait_for_code(self, server_name: str | None) -> tuple[str, str | None]:
         """Block until the callback delivers code/state for the provided server."""
@@ -257,7 +285,7 @@ class FastAPIOAuthRuntime:
             code, resolved_state = await self.registry.wait_for_code(state=state, timeout=self.timeout)
         except OAuthFlowError:
             snapshot = await self.registry.get_status(state)
-            await self._queue.put(
+            await self._put_event(
                 {
                     "type": "oauth_status",
                     "state": state,
@@ -266,14 +294,29 @@ class FastAPIOAuthRuntime:
                 }
             )
             raise
-        await self._queue.put(
+        await self._put_event(
             {"type": "oauth_status", "state": resolved_state, "status": "authorized", "server": server_name}
         )
         return code, resolved_state
 
     async def next_event(self) -> dict[str, Any]:
         """Return the next OAuth event destined for the SSE stream."""
+        if self._queue_loop is None or self._queue_loop.is_closed():
+            self._queue_loop = asyncio.get_running_loop()
         return await self._queue.get()
+
+    async def _put_event(self, payload: dict[str, Any]) -> None:
+        target_loop = self._queue_loop
+        current_loop = asyncio.get_running_loop()
+        if target_loop is None or target_loop.is_closed():
+            self._queue_loop = current_loop
+            await self._queue.put(payload)
+            return
+        if target_loop is current_loop:
+            await self._queue.put(payload)
+            return
+        future = asyncio.run_coroutine_threadsafe(self._queue.put(payload), target_loop)
+        await asyncio.wrap_future(future)
 
     def redirect_handler_factory(self):
         """Build per-server redirect handlers for request-scoped OAuth runtime context."""
