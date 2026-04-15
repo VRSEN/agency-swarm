@@ -26,7 +26,7 @@ from agency_swarm.integrations.fastapi_utils.oauth_support import (
     is_oauth_server,
 )
 from agency_swarm.integrations.fastapi_utils.override_policy import RequestOverridePolicy
-from agency_swarm.mcp.oauth import MCPServerOAuth
+from agency_swarm.mcp.oauth import MCPServerOAuth, get_oauth_user_id
 from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers, restore_hosted_mcp_oauth_tools
 
 
@@ -1277,6 +1277,49 @@ async def test_agui_endpoint_enables_hosted_mcp_oauth_when_opted_in(monkeypatch)
         pass
 
     assert attach_seen == {"enabled": True, "has_factory": True}
+
+
+@pytest.mark.asyncio
+async def test_agui_endpoint_clears_oauth_user_context_after_stream() -> None:
+    """AG-UI stream cleanup should not leak OAuth identity into later async work."""
+
+    class DummyRequest:
+        def __init__(self) -> None:
+            self.messages = None
+            self.chat_history = [{"role": "user", "content": "hello"}]
+            self.file_ids = None
+            self.file_urls = None
+            self.user_context = None
+            self.additional_instructions = None
+            self.client_config = None
+            self.thread_id = "thread-1"
+            self.run_id = "run-1"
+
+    class DummyAgency:
+        def __init__(self) -> None:
+            self.agents = {}
+            self.user_context = {}
+            self.entry_points = []
+
+        async def get_response_stream(self, *args, **kwargs):
+            if False:
+                yield None
+
+    def agency_factory(load_threads_callback=None):
+        return DummyAgency()
+
+    endpoint = make_agui_chat_endpoint(
+        DummyRequest,
+        agency_factory,
+        lambda *args, **kwargs: None,
+        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry()),
+    )
+
+    response = await endpoint(DummyRequest(), token=None, user_id="user-1")
+    async for _ in response.body_iterator:
+        pass
+
+    assert get_oauth_user_id() is None
 
 
 @pytest.mark.asyncio

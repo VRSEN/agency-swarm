@@ -1093,6 +1093,7 @@ def make_agui_chat_endpoint(
                     return
                 cleanup_completed = True
                 await override_session.cleanup()
+                _clear_oauth_request_context()
 
         async def event_generator() -> AsyncGenerator[str]:
             # Emit RUN_STARTED first.
