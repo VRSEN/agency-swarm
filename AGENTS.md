@@ -46,7 +46,7 @@ Begin each task after reviewing this readiness checklist:
 Context
 - When a request has multiple things to consider or more than a single straightforward action, use the plan/todo tool only for the short execution plan for the current task. Do not use it as the durable user-request backlog.
 - If task context can outlive the chat, maintain a durable local ledger file with concise atomic user requests, request-linked active artifacts, close original wording, source pointers, intent, status, blockers, and next actions.
-- When `.codex/skills/requirement-ledger` exists, use its CLI for durable ledger operations; do not hand-edit ledger files.
+- Use `.codex/skills/requirement-ledger` for durable ledger operations; do not hand-edit ledger files.
 - When both exist, keep them separate but aligned: the durable ledger stores user requests and request-linked cross-session state; the plan/todo stores the current execution steps needed to satisfy the active request. Do not duplicate the whole ledger into the plan.
 - Before editing a durable queue, plan the strategy for tackling it, reprioritize deliberately, and keep active items in their strategic chronological order rather than randomizing, sorting by convenience, or grouping away original sequence.
 - Keep durable ledgers active-only: record unfulfilled user requests and requirements, remove non-requirement and duplicate noise without deleting, flattening, or overcompressing the user's actual requests, and move completed, fulfilled, deferred, failed, or noise items to a concise archive that preserves source pointers and original wording.
