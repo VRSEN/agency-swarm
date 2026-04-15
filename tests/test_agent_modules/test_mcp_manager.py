@@ -826,6 +826,18 @@ def test_build_persistence_key_separates_oauth_cache_dirs(tmp_path: Path) -> Non
     assert key_b.startswith("github::oauth::")
 
 
+def test_build_persistence_key_separates_oauth_server_urls() -> None:
+    server_a = MCPServerOAuth(url="http://localhost:8001/mcp", name="github")
+    server_b = MCPServerOAuth(url="http://localhost:8002/mcp", name="github")
+
+    key_a = _build_persistence_key(MCPServerOAuthClient(server_a), "user-a")
+    key_b = _build_persistence_key(MCPServerOAuthClient(server_b), "user-a")
+
+    assert key_a != key_b
+    assert key_a.startswith("github::oauth::")
+    assert key_b.startswith("github::oauth::")
+
+
 def test_build_persistence_key_separates_custom_storage(tmp_path: Path) -> None:
     storage_a = FileTokenStorage(cache_dir=tmp_path / "a", server_name="github")
     storage_b = FileTokenStorage(cache_dir=tmp_path / "b", server_name="github")

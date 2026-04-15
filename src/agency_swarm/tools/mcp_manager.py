@@ -93,10 +93,17 @@ def _oauth_store_key_segment(config: Any) -> str:
     return "default"
 
 
+def _oauth_endpoint_key_segment(config: Any) -> str:
+    url = getattr(config, "url", None)
+    if not isinstance(url, str) or url == "":
+        return "unknown-url"
+    return _sanitize_oauth_registry_user_id(f"url:{url}")
+
+
 def _build_persistence_key(server: Any, oauth_user_id: str | None) -> str:
     """Build process-level persistence key for MCP servers.
 
-    OAuth clients are keyed by (server_name, user_id, token_store) to avoid
+    OAuth clients are keyed by (server_name, endpoint_url, user_id, token_store) to avoid
     cross-user or cross-agency session/token reuse. Non-OAuth servers keep
     name-only keys.
     """
@@ -111,8 +118,9 @@ def _build_persistence_key(server: Any, oauth_user_id: str | None) -> str:
     else:
         user_segment = _sanitize_oauth_registry_user_id(oauth_user_id)
     oauth_client = cast(Any, actual)
+    endpoint_segment = _oauth_endpoint_key_segment(oauth_client.oauth_config)
     store_segment = _oauth_store_key_segment(oauth_client.oauth_config)
-    return f"{name}::oauth::{user_segment}::{store_segment}"
+    return f"{name}::oauth::{endpoint_segment}::{user_segment}::{store_segment}"
 
 
 def apply_managed_oauth_cache_dir(config: Any, cache_dir: Path | None) -> None:

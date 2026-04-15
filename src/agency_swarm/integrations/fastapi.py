@@ -91,6 +91,7 @@ def run_fastapi(
         )
         from .fastapi_utils.oauth_support import (
             FastAPIOAuthConfig,
+            OAuthFlowError,
             OAuthStateRegistry,
             has_hosted_mcp_tools_missing_authorization,
         )
@@ -270,13 +271,19 @@ def run_fastapi(
         ):
             # Handle OAuth provider error responses (e.g., user denied authorization)
             if error:
-                flow = await shared_oauth_registry.set_error(
-                    state=state, error=error, error_description=error_description
-                )
+                try:
+                    flow = await shared_oauth_registry.set_error(
+                        state=state, error=error, error_description=error_description
+                    )
+                except OAuthFlowError as exc:
+                    raise HTTPException(status_code=400, detail=str(exc)) from exc
                 raise HTTPException(status_code=400, detail=f"OAuth error: {flow.error}")
             if not code:
                 raise HTTPException(status_code=400, detail="OAuth callback missing authorization code")
-            flow = await shared_oauth_registry.set_code(state=state, code=code, user_id=user_id)
+            try:
+                flow = await shared_oauth_registry.set_code(state=state, code=code, user_id=user_id)
+            except OAuthFlowError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
             if flow.error:
                 raise HTTPException(status_code=400, detail=f"OAuth callback failed: {flow.error}")
             return {"status": "ok", "state": state, "server_name": flow.server_name}

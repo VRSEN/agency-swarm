@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -34,6 +35,14 @@ def test_oauth_callback_handles_provider_error_response(monkeypatch):
         )
 
     registry = OAuthStateRegistry()
+    asyncio.run(
+        registry.record_redirect(
+            state="test-state",
+            auth_url="https://idp.example.com/authorize?state=test-state",
+            server_name="oauth-demo",
+            user_id=None,
+        )
+    )
     app = run_fastapi(
         agencies={"test_agency": agency_factory},
         return_app=True,
@@ -51,6 +60,37 @@ def test_oauth_callback_handles_provider_error_response(monkeypatch):
     assert response.status_code == 400
     data = response.json()
     assert "access_denied" in data.get("detail", "").lower() or "error" in data.get("detail", "").lower()
+
+
+def test_oauth_callback_rejects_unknown_success_state() -> None:
+    """OAuth callback must reject authorization codes for states the server did not issue."""
+    oauth_server = MCPServerOAuth(
+        url="http://localhost:9999/mcp",
+        name="oauth-demo",
+        client_id="client-id",
+        client_secret="client-secret",
+    )
+
+    def agency_factory(load_threads_callback=None, save_threads_callback=None):
+        agent = Agent(name="TestAgent", instructions="Base instructions", mcp_servers=[oauth_server])
+        return Agency(
+            agent,
+            load_threads_callback=load_threads_callback,
+            save_threads_callback=save_threads_callback,
+        )
+
+    app = run_fastapi(
+        agencies={"test_agency": agency_factory},
+        return_app=True,
+        app_token_env="",
+        oauth_registry=OAuthStateRegistry(),
+    )
+    client = TestClient(app)
+
+    response = client.get("/auth/callback?state=unknown-state&code=code-123")
+
+    assert response.status_code == 400
+    assert "unknown oauth state" in response.json()["detail"].lower()
 
 
 def test_run_fastapi_enables_oauth_routes_for_deferred_oauth_server() -> None:

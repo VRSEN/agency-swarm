@@ -114,8 +114,7 @@ class OAuthStateRegistry:
             self._prune_expired_locked()
             flow = self._flows.get(state)
             if flow is None:
-                flow = OAuthFlowState(state=state, auth_url="", server_name=None, user_id=user_id, code=code)
-                self._flows[state] = flow
+                raise OAuthFlowError(f"Unknown OAuth state: {state}")
             else:
                 if flow.user_id and user_id and flow.user_id != user_id:
                     flow.error = "user_mismatch"
@@ -134,8 +133,7 @@ class OAuthStateRegistry:
             flow = self._flows.get(state)
             error_msg = f"{error}: {error_description}" if error_description else error
             if flow is None:
-                flow = OAuthFlowState(state=state, auth_url="", server_name=None, user_id=None, error=error_msg)
-                self._flows[state] = flow
+                raise OAuthFlowError(f"Unknown OAuth state: {state}")
             else:
                 flow.error = error_msg
             flow.status = f"error:{error_msg}"

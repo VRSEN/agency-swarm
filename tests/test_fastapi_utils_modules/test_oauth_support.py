@@ -119,6 +119,28 @@ async def test_registry_callback_wakes_background_loop_waiter() -> None:
 
 
 @pytest.mark.asyncio
+async def test_registry_rejects_code_for_unknown_state() -> None:
+    """Callbacks must not create OAuth flows for states that were never issued."""
+    registry = OAuthStateRegistry()
+
+    with pytest.raises(OAuthFlowError, match="Unknown OAuth state"):
+        await registry.set_code(state="unknown-state", code="code-123", user_id="user-1")
+
+    assert (await registry.get_status("unknown-state"))["status"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_registry_rejects_provider_error_for_unknown_state() -> None:
+    """Provider error callbacks must also map to an existing OAuth flow."""
+    registry = OAuthStateRegistry()
+
+    with pytest.raises(OAuthFlowError, match="Unknown OAuth state"):
+        await registry.set_error(state="unknown-state", error="access_denied")
+
+    assert (await registry.get_status("unknown-state"))["status"] == "unknown"
+
+
+@pytest.mark.asyncio
 async def test_wait_for_code_surfaces_user_mismatch_error() -> None:
     registry = OAuthStateRegistry()
     await registry.record_redirect(
