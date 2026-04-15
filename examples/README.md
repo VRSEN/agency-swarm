@@ -5,6 +5,7 @@ This directory contains runnable examples demonstrating key features of Agency S
 ## Core Functionality
 - **`multi_agent_workflow.py`** – Multi-agent collaboration with validation patterns
 - **`agency_context.py`** – Sharing data between agents using agency context
+- **`system_reminders.py`** – Beginner-friendly first `system_reminders` setup
 - **`streaming.py`** – Real-time streaming responses
 - **`guardrails.py`** – Input and output guardrails
 - **`custom_persistence.py`** – Chat history persistence between sessions
