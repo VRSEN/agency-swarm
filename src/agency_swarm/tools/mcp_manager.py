@@ -102,10 +102,14 @@ def _clone_oauth_candidate(server: Any) -> Any:
         return server
     client = cast(Any, actual)
 
+    runtime_context = _get_oauth_runtime_context() if _get_oauth_runtime_context is not None else None
+    preserve_client_handlers = runtime_context is None or (
+        client.oauth_config.redirect_handler is not None or client.oauth_config.callback_handler is not None
+    )
     handlers: OAuthHandlerMap = {}
-    if client._redirect_handler is not None:
+    if preserve_client_handlers and client._redirect_handler is not None:
         handlers["redirect"] = client._redirect_handler
-    if client._callback_handler is not None:
+    if preserve_client_handlers and client._callback_handler is not None:
         handlers["callback"] = client._callback_handler
     return _MCPServerOAuthClient(client.oauth_config, handlers or None)
 
@@ -637,8 +641,7 @@ async def _authorize_hosted_mcp_tools(agent: Any, *, cache_dir: Path | None) -> 
     tools = getattr(agent, "tools", None)
     if not isinstance(tools, list) or len(tools) == 0:
         return
-    hosted_oauth_mode = getattr(agent, "_hosted_mcp_oauth_enabled", None)
-    if hosted_oauth_mode is False:
+    if getattr(agent, "_hosted_mcp_oauth_enabled", False) is not True:
         return
 
     handler_factory = getattr(agent, "mcp_oauth_handler_factory", None)
@@ -654,7 +657,7 @@ async def _authorize_hosted_mcp_tools(agent: Any, *, cache_dir: Path | None) -> 
     for index, tool in enumerate(list(tools)):
         if getattr(tool, "name", None) != "hosted_mcp":
             continue
-        if hosted_oauth_mode is True and not is_hosted_mcp_tool_oauth_enabled(tool):
+        if not is_hosted_mcp_tool_oauth_enabled(tool):
             continue
         original_tool = getattr(tool, _HOSTED_MCP_OAUTH_ORIGINAL_TOOL_ATTR, None)
         is_injected_tool = original_tool is not None
@@ -743,19 +746,27 @@ def _sync_oauth_client_handlers(persistent: object, candidate: object) -> bool:
     if not isinstance(existing_client, _MCPServerOAuthClient) or not isinstance(new_client, _MCPServerOAuthClient):
         return False
 
-    client = cast(Any, existing_client)
     new_instance = cast(Any, new_client)
-    if new_instance._redirect_handler is not None:
-        client._redirect_handler = new_instance._redirect_handler
-    if new_instance._callback_handler is not None:
-        client._callback_handler = new_instance._callback_handler
+    server_handlers: OAuthHandlerMap = {}
+    if new_instance.oauth_config.redirect_handler is not None:
+        server_handlers["redirect"] = new_instance.oauth_config.redirect_handler
+    if new_instance.oauth_config.callback_handler is not None:
+        server_handlers["callback"] = new_instance.oauth_config.callback_handler
+    if not server_handlers:
+        return False
+
+    client = cast(Any, existing_client)
+    if "redirect" in server_handlers:
+        client._redirect_handler = server_handlers["redirect"]
+    if "callback" in server_handlers:
+        client._callback_handler = server_handlers["callback"]
     provider = getattr(client, "_oauth_provider", None)
     provider_context = getattr(provider, "context", None) if provider is not None else None
     if provider_context is not None:
-        if new_instance._redirect_handler is not None:
-            provider_context.redirect_handler = new_instance._redirect_handler
-        if new_instance._callback_handler is not None:
-            provider_context.callback_handler = new_instance._callback_handler
+        if "redirect" in server_handlers:
+            provider_context.redirect_handler = server_handlers["redirect"]
+        if "callback" in server_handlers:
+            provider_context.callback_handler = server_handlers["callback"]
     return False
 
 

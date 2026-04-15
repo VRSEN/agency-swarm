@@ -570,7 +570,7 @@ def test_resolve_method_timeout_prefers_runtime_timeout_for_oauth_servers() -> N
     assert timeout == 123.0
 
 
-def test_sync_oauth_client_handlers_keeps_authenticated_session() -> None:
+def test_sync_oauth_client_handlers_ignores_request_scoped_handlers() -> None:
     oauth_config = MCPServerOAuth(url="http://localhost:8001/mcp", name="github")
 
     async def first_redirect(_auth_url: str) -> None:
@@ -605,21 +605,75 @@ def test_sync_oauth_client_handlers_keeps_authenticated_session() -> None:
 
     _sync_oauth_client_handlers(persistent, candidate)
 
-    assert persistent._redirect_handler is second_redirect
-    assert persistent._callback_handler is second_callback
+    assert persistent._redirect_handler is first_redirect
+    assert persistent._callback_handler is first_callback
     assert persistent._oauth_provider is not None
-    assert persistent._oauth_provider.context.redirect_handler is second_redirect
-    assert persistent._oauth_provider.context.callback_handler is second_callback
+    assert persistent._oauth_provider.context.redirect_handler is first_redirect
+    assert persistent._oauth_provider.context.callback_handler is first_callback
     assert persistent.session is not None
     assert persistent._authenticated is True
 
 
+def test_sync_oauth_client_handlers_allows_static_server_handlers() -> None:
+    async def first_redirect(_auth_url: str) -> None:
+        return None
+
+    async def first_callback() -> tuple[str, str | None]:
+        return ("code-1", None)
+
+    async def second_redirect(_auth_url: str) -> None:
+        return None
+
+    async def second_callback() -> tuple[str, str | None]:
+        return ("code-2", None)
+
+    persistent = MCPServerOAuthClient(
+        MCPServerOAuth(
+            url="http://localhost:8001/mcp",
+            name="github",
+            redirect_handler=first_redirect,
+            callback_handler=first_callback,
+        ),
+        {"redirect": first_redirect, "callback": first_callback},
+    )
+    persistent._oauth_provider = SimpleNamespace(
+        context=SimpleNamespace(
+            redirect_handler=first_redirect,
+            callback_handler=first_callback,
+        )
+    )
+
+    candidate = MCPServerOAuthClient(
+        MCPServerOAuth(
+            url="http://localhost:8001/mcp",
+            name="github",
+            redirect_handler=second_redirect,
+            callback_handler=second_callback,
+        ),
+        {"redirect": second_redirect, "callback": second_callback},
+    )
+
+    _sync_oauth_client_handlers(persistent, candidate)
+
+    assert persistent._redirect_handler is second_redirect
+    assert persistent._callback_handler is second_callback
+    assert persistent._oauth_provider.context.redirect_handler is second_redirect
+    assert persistent._oauth_provider.context.callback_handler is second_callback
+
+
 @pytest.mark.asyncio
-async def test_attach_persistent_updates_oauth_handlers_per_request() -> None:
-    """Persistent OAuth client should adopt per-request handlers before reuse."""
+async def test_attach_persistent_does_not_cache_request_scoped_oauth_handlers() -> None:
+    """Request-scoped OAuth handlers should come from contextvars, not cached clients."""
     await default_mcp_manager.shutdown()
 
     try:
+        set_oauth_runtime_context(
+            OAuthRuntimeContext(
+                mode="saas_stream",
+                user_id="user-1",
+                timeout=123.0,
+            )
+        )
         first_agent = SimpleNamespace(
             mcp_servers=[MCPServerOAuth(url="http://localhost:8001/mcp", name="github")],
             mcp_oauth_handler_factory=lambda server_name: {
@@ -632,6 +686,7 @@ async def test_attach_persistent_updates_oauth_handlers_per_request() -> None:
 
         first_client = default_mcp_manager.get("github")
         first_redirect = getattr(first_client, "_redirect_handler", None)
+        first_callback = getattr(first_client, "_callback_handler", None)
 
         second_agent = SimpleNamespace(
             mcp_servers=[MCPServerOAuth(url="http://localhost:8001/mcp", name="github")],
@@ -645,12 +700,15 @@ async def test_attach_persistent_updates_oauth_handlers_per_request() -> None:
 
         reused_client = default_mcp_manager.get("github")
         reused_redirect = getattr(reused_client, "_redirect_handler", None)
+        reused_callback = getattr(reused_client, "_callback_handler", None)
 
         assert reused_client is first_client
-        assert reused_redirect is not None
-        assert reused_redirect is not first_redirect
-        assert reused_redirect("auth-url") == ("req2", "auth-url", "github")
+        assert first_redirect is None
+        assert first_callback is None
+        assert reused_redirect is None
+        assert reused_callback is None
     finally:
+        set_oauth_runtime_context(None)
         await default_mcp_manager.shutdown()
 
 

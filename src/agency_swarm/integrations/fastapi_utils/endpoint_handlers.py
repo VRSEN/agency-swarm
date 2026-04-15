@@ -328,10 +328,6 @@ def _prepare_oauth_runtime(
     _set_oauth_user_context(user_id)
     _set_oauth_runtime_context(oauth_runtime, user_id)
 
-    agency_instance.user_context = dict(getattr(agency_instance, "user_context", {}))
-    if user_id is not None:
-        agency_instance.user_context["user_id"] = user_id
-
     agents_map = getattr(agency_instance, "agents", None)
     if oauth_runtime is None:
         if isinstance(agents_map, dict):
@@ -345,6 +341,15 @@ def _prepare_oauth_runtime(
                 oauth_runtime.install_handler_factory(agent)
 
     return oauth_runtime
+
+
+def _with_oauth_user_context(user_context: dict[str, Any] | None, user_id: str | None) -> dict[str, Any] | None:
+    """Return request context with header user_id included without mutating shared agency state."""
+    if user_id is None:
+        return user_context
+    merged_context = dict(user_context or {})
+    merged_context.setdefault("user_id", user_id)
+    return merged_context
 
 
 def _has_oauth_servers(agency_instance: Agency) -> bool:
@@ -430,6 +435,7 @@ def make_response_endpoint(
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
         oauth_runtime = _prepare_oauth_runtime(agency_instance, oauth_runtime, user_id)
+        request_user_context = _with_oauth_user_context(request.user_context, user_id)
         override_policy = RequestOverridePolicy(request.client_config)
         override_session = _RequestOverrideSession(
             agency=agency_instance,
@@ -484,7 +490,7 @@ def make_response_endpoint(
             response = await agency_instance.get_response(
                 message=request.message,
                 recipient_agent=request.recipient_agent,
-                context_override=request.user_context,
+                context_override=request_user_context,
                 additional_instructions=request.additional_instructions,
                 file_ids=combined_file_ids,
             )
@@ -558,6 +564,7 @@ def make_stream_endpoint(
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
         oauth_runtime = _prepare_oauth_runtime(agency_instance, oauth_runtime, user_id)
+        request_user_context = _with_oauth_user_context(request.user_context, user_id)
         override_policy = RequestOverridePolicy(request.client_config)
         override_session = _RequestOverrideSession(
             agency=agency_instance,
@@ -662,7 +669,7 @@ def make_stream_endpoint(
                 stream = agency_instance.get_response_stream(
                     message=request.message,
                     recipient_agent=request.recipient_agent,
-                    context_override=request.user_context,
+                    context_override=request_user_context,
                     additional_instructions=request.additional_instructions,
                     file_ids=combined_file_ids,
                 )
@@ -995,6 +1002,7 @@ def make_agui_chat_endpoint(
         # Choose / build an agent – here we just create a demo agent each time.
         agency = agency_factory(load_threads_callback=load_callback)
         oauth_runtime = _prepare_oauth_runtime(agency, oauth_runtime, user_id)
+        request_user_context = _with_oauth_user_context(request.user_context, user_id)
         override_policy = RequestOverridePolicy(request.client_config)
         override_session = _RequestOverrideSession(
             agency=agency,
@@ -1100,7 +1108,7 @@ def make_agui_chat_endpoint(
                 snapshot_messages = list(initial_snapshot)
                 stream_events = agency.get_response_stream(
                     message=input_message,
-                    context_override=request.user_context,
+                    context_override=request_user_context,
                     additional_instructions=request.additional_instructions,
                     file_ids=combined_file_ids or None,
                 )

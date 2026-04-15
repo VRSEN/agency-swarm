@@ -655,10 +655,12 @@ async def test_attach_persistent_mcp_servers_skips_hosted_mcp_oauth_without_expl
 
 
 @pytest.mark.asyncio
-async def test_attach_persistent_mcp_servers_keeps_non_fastapi_hosted_mcp_oauth_behavior(tmp_path) -> None:
-    """Non-FastAPI hosted MCP authorization should keep working without the opt-in flag."""
+async def test_attach_persistent_mcp_servers_skips_hosted_mcp_oauth_without_runtime_opt_in(tmp_path) -> None:
+    """HostedMCPTool OAuth injection should require FastAPI runtime opt-in."""
 
-    hosted_mcp = HostedMCPTool(tool_config=Mcp(type="mcp", server_label="demo", server_url="https://example.com/mcp"))
+    hosted_mcp = enable_hosted_mcp_tool_oauth(
+        HostedMCPTool(tool_config=Mcp(type="mcp", server_label="demo", server_url="https://example.com/mcp"))
+    )
 
     class DummyAgent:
         def __init__(self) -> None:
@@ -694,6 +696,7 @@ async def test_attach_persistent_mcp_servers_keeps_non_fastapi_hosted_mcp_oauth_
             self.oauth_config = oauth_config
             self.name = oauth_config.name
             self._oauth_provider = _FakeProvider()
+            connect_calls.append(oauth_config.url)
 
         async def connect(self) -> None:
             return None
@@ -704,6 +707,7 @@ async def test_attach_persistent_mcp_servers_keeps_non_fastapi_hosted_mcp_oauth_
     from agency_swarm.tools import mcp_manager as mcp_manager_module
 
     original_client = mcp_manager_module._MCPServerOAuthClient
+    connect_calls: list[str] = []
     try:
         mcp_manager_module._MCPServerOAuthClient = _FakeOAuthClient  # type: ignore[assignment]
         agency = DummyAgency()
@@ -711,8 +715,8 @@ async def test_attach_persistent_mcp_servers_keeps_non_fastapi_hosted_mcp_oauth_
     finally:
         mcp_manager_module._MCPServerOAuthClient = original_client
 
-    injected_tool = next(iter(agency.agents.values())).tools[0]
-    assert injected_tool.tool_config.get("authorization") == "token-legacy"
+    assert connect_calls == []
+    assert hosted_mcp.tool_config.get("authorization") is None
 
 
 @pytest.mark.asyncio
@@ -826,6 +830,65 @@ async def test_get_response_allows_hosted_mcp_tool_without_streaming_when_hosted
     req = DummyRequest()
     response = await endpoint(req, token=None, user_id="user-1")
     assert response == {"response": "ok", "new_messages": []}
+
+
+@pytest.mark.asyncio
+async def test_get_response_header_user_id_does_not_mutate_shared_agency_context() -> None:
+    """FastAPI header identity should stay request-scoped for reused agency instances."""
+
+    class DummyRequest:
+        def __init__(self, user_context=None) -> None:
+            self.message = "hello"
+            self.recipient_agent = None
+            self.additional_instructions = None
+            self.file_ids = None
+            self.file_urls = None
+            self.chat_history = None
+            self.user_context = user_context
+            self.generate_chat_name = False
+            self.client_config = None
+
+    class DummyThreadManager:
+        def get_all_messages(self) -> list:
+            return []
+
+    class DummyAgent:
+        def __init__(self) -> None:
+            self.mcp_servers = []
+            self.tools = []
+
+    class DummyAgency:
+        def __init__(self) -> None:
+            self.agents = {"demo": DummyAgent()}
+            self.user_context = {"plan": "base"}
+            self.thread_manager = DummyThreadManager()
+            self.seen_contexts: list[dict | None] = []
+
+        async def get_response(self, *args, **kwargs):
+            self.seen_contexts.append(kwargs.get("context_override"))
+
+            class DummyResponse:
+                final_output = "ok"
+
+            return DummyResponse()
+
+    shared_agency = DummyAgency()
+
+    def agency_factory(load_threads_callback=None):
+        return shared_agency
+
+    endpoint = make_response_endpoint(
+        DummyRequest,
+        agency_factory,
+        lambda *args, **kwargs: None,
+        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry()),
+    )
+
+    await endpoint(DummyRequest(), token=None, user_id="header-user")
+    await endpoint(DummyRequest(), token=None, user_id=None)
+
+    assert shared_agency.user_context == {"plan": "base"}
+    assert shared_agency.seen_contexts == [{"user_id": "header-user"}, None]
 
 
 @pytest.mark.asyncio
