@@ -46,6 +46,7 @@ Begin each task after reviewing this readiness checklist:
 Context
 - When a request has multiple things to consider or more than a single straightforward action, use the plan/todo tool only for the short execution plan for the current task. Do not use it as the durable user-request backlog.
 - If task context can outlive the chat, maintain a durable local ledger file with concise atomic user requests, request-linked active artifacts, close original wording, source pointers, intent, status, blockers, and next actions.
+- When `.codex/skills/requirement-ledger` exists, use its CLI for durable ledger operations; do not hand-edit ledger files.
 - When both exist, keep them separate but aligned: the durable ledger stores user requests and request-linked cross-session state; the plan/todo stores the current execution steps needed to satisfy the active request. Do not duplicate the whole ledger into the plan.
 - Before editing a durable queue, plan the strategy for tackling it, reprioritize deliberately, and keep active items in their strategic chronological order rather than randomizing, sorting by convenience, or grouping away original sequence.
 - Keep durable ledgers active-only: record unfulfilled user requests and requirements, remove non-requirement and duplicate noise without deleting, flattening, or overcompressing the user's actual requests, and move completed, fulfilled, deferred, failed, or noise items to a concise archive that preserves source pointers and original wording.
@@ -113,7 +114,7 @@ Ask only for design decisions or true blocking decisions; otherwise proceed auto
 - Pending CI, pending Codex review, or any other pending external workflow is not a user blocker when the agent can still poll, retrigger, inspect, or fix.
 - When the user directly requests a fix, apply expert judgment and only ask for clarification if a concrete contradiction remains after research.
 - Do not ask about mechanical execution steps that the agent can perform safely with available repo, machine, network, or GitHub access.
-- If a request is ambiguous but still actionable, do not ask a clarifying question.
+- If ambiguity changes user-visible behavior, scope, architecture, repo/branch, or release outcome, ask before acting; if only mechanical details are ambiguous and the safe path is clear, proceed.
 - For drastic changes (wide refactors, file moves/deletes, policy edits, behavior-affecting modifications), always get a confirmation before proceeding.
 - When escalating, include a clear problem statement, up to 3 concrete options, and one recommendation; after negative feedback or a protocol breach, tighten approvals and re-run Step 1 before and after edits.
 - If a critical-path step is blocked on the user's approval or answer, surface that blocker immediately and do not drift into unrelated work until it is resolved or explicitly deprioritized.
