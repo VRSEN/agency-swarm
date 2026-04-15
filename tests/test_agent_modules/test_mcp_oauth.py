@@ -50,7 +50,7 @@ class TestFileTokenStorage:
         await storage.set_tokens(test_token)
 
         # Verify file exists with secure permissions in default/server subdirectory
-        token_dir = tmp_path / "default" / "test-server"
+        token_dir = tmp_path / "default" / storage.server_cache_segment
         token_file = token_dir / "tokens.json"
         assert token_file.exists()
         assert token_file.stat().st_mode & 0o777 == 0o600
@@ -111,7 +111,7 @@ class TestFileTokenStorage:
         await storage.set_client_info(client_info)
 
         # Verify file exists in default/server subdirectory
-        client_file = tmp_path / "default" / "test-server" / "client.json"
+        client_file = tmp_path / "default" / storage.server_cache_segment / "client.json"
         assert client_file.exists()
 
         # Load client info
@@ -128,7 +128,7 @@ class TestFileTokenStorage:
         )
 
         # Write corrupted JSON
-        token_file = tmp_path / "default" / "test-server" / "tokens.json"
+        token_file = tmp_path / "default" / storage.server_cache_segment / "tokens.json"
         token_file.parent.mkdir(parents=True, exist_ok=True)
         token_file.write_text("invalid json {{{")
 
@@ -223,6 +223,33 @@ class TestFileTokenStorage:
             assert loaded_b.access_token == "token-b"
         finally:
             set_oauth_user_id(None)
+
+    async def test_token_storage_separates_same_name_different_urls(self, tmp_path: Path) -> None:
+        """File-backed tokens should not leak across endpoints sharing one display name."""
+        storage_a = FileTokenStorage(
+            cache_dir=tmp_path,
+            server_name="github",
+            server_url="https://staging.example.com/mcp",
+        )
+        storage_b = FileTokenStorage(
+            cache_dir=tmp_path,
+            server_name="github",
+            server_url="https://production.example.com/mcp",
+        )
+
+        await storage_a.set_tokens(OAuthToken(access_token="staging-token", token_type="Bearer", expires_in=3600))
+
+        assert await storage_b.get_tokens() is None
+
+        await storage_b.set_tokens(OAuthToken(access_token="production-token", token_type="Bearer", expires_in=3600))
+
+        loaded_a = await storage_a.get_tokens()
+        loaded_b = await storage_b.get_tokens()
+        assert loaded_a is not None
+        assert loaded_b is not None
+        assert loaded_a.access_token == "staging-token"
+        assert loaded_b.access_token == "production-token"
+        assert storage_a.server_cache_segment != storage_b.server_cache_segment
 
     async def test_token_storage_does_not_load_raw_callback_tokens_into_user_scoped_requests(
         self, tmp_path: Path

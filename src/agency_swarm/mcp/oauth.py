@@ -134,14 +134,19 @@ class FileTokenStorage:
 
         Args:
             cache_dir: Base directory for token storage
-            server_name: Unique name for the MCP server (used in filename)
-            server_url: Full MCP endpoint URL (used for callback identification)
+            server_name: Unique name for the MCP server
+            server_url: Full MCP endpoint URL (used for storage isolation and callback identification)
             token_callbacks: Optional callback registry for custom persistence
         """
         self.base_cache_dir = cache_dir
         self.server_name = server_name
-        self.server_cache_segment = build_oauth_cache_segment(server_name, max_prefix_length=120, preserve_safe=True)
         self.server_url = server_url or server_name
+        server_identity = server_name if self.server_url == server_name else f"{server_name}::{self.server_url}"
+        self.server_cache_segment = build_oauth_cache_segment(
+            server_identity,
+            max_prefix_length=120,
+            preserve_safe=self.server_url == server_name,
+        )
         self._token_callbacks = token_callbacks
 
     def _get_user_cache_dir(self) -> Path:

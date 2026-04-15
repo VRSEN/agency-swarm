@@ -15,6 +15,7 @@ from agents import RunConfig, RunHooks, RunResult, TResponseInputItem
 
 from agency_swarm.agent.core import Agent
 from agency_swarm.agent.execution_streaming import StreamingRunResponse
+from agency_swarm.hooks import CompositeRunHooks
 from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
 
 from .helpers import get_agent_context, resolve_agent
@@ -155,6 +156,18 @@ def _set_attach_oauth_user_context(agency: "Agency", context_override: dict[str,
     return previous_user_id
 
 
+def _resolve_effective_hooks(agency: "Agency", hooks_override: RunHooks | None) -> RunHooks | None:
+    """Return caller hooks while preserving required internal OAuth hooks."""
+    if hooks_override is None:
+        return agency.default_run_hooks
+
+    oauth_hook = getattr(agency, "_oauth_storage_hook", None)
+    if oauth_hook is None or hooks_override is oauth_hook:
+        return hooks_override
+
+    return CompositeRunHooks([cast(RunHooks, oauth_hook), hooks_override])
+
+
 async def get_response(
     agency: "Agency",
     message: str | list[TResponseInputItem],
@@ -212,7 +225,7 @@ async def get_response(
 
     target_agent = resolve_agent(agency, target_recipient)
 
-    effective_hooks = hooks_override or agency.default_run_hooks
+    effective_hooks = _resolve_effective_hooks(agency, hooks_override)
 
     # Get agency context for the target agent (stateless context passing)
     agency_context = agency_context_override or get_agent_context(agency, target_agent.name)
@@ -355,7 +368,7 @@ def get_response_stream(
 
         target_agent = resolve_agent(agency, target_recipient)
 
-        effective_hooks = hooks_override or agency.default_run_hooks
+        effective_hooks = _resolve_effective_hooks(agency, hooks_override)
 
         try:
             async with agency.event_stream_merger.create_streaming_context() as streaming_context:

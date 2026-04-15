@@ -5,7 +5,7 @@ import pytest
 from agents import RunHooks
 
 from agency_swarm import Agency
-from agency_swarm.mcp.oauth import get_oauth_user_id, set_oauth_user_id
+from agency_swarm.mcp.oauth import MCPServerOAuth, get_oauth_user_id, set_oauth_user_id
 from agency_swarm.utils.thread import ThreadManager
 from tests.test_agency_modules._response_test_helpers import CapturingAgent, _make_agent
 
@@ -25,6 +25,16 @@ def mock_agent2():
 
 
 # --- Agency Response Method Tests ---
+
+
+class OAuthContextRecordingHooks(RunHooks):
+    """Record OAuth user context visible to caller-provided hooks."""
+
+    def __init__(self) -> None:
+        self.user_ids_on_start: list[str | None] = []
+
+    async def on_agent_start(self, context: Any, agent: Any) -> None:
+        self.user_ids_on_start.append(get_oauth_user_id())
 
 
 @pytest.mark.asyncio
@@ -81,6 +91,24 @@ async def test_agency_get_response_preserves_positional_hooks_override(mock_agen
 
     assert result.final_output == "Test response"
     assert mock_agent.last_hooks_override is hooks_override
+
+
+@pytest.mark.asyncio
+async def test_agency_get_response_preserves_oauth_hooks_with_hooks_override() -> None:
+    """OAuth agencies should keep internal token isolation hooks when caller hooks are supplied."""
+    oauth_agent = CapturingAgent(
+        "OAuthAgent",
+        mcp_servers=[MCPServerOAuth(url="http://localhost:8001/mcp", name="github")],
+    )
+    agency = Agency(oauth_agent, user_context={"user_id": "agency-user"})
+    hooks_override = OAuthContextRecordingHooks()
+
+    result = await agency.get_response("Test message", "OAuthAgent", hooks_override=hooks_override)
+
+    assert result.final_output == "Test response"
+    assert hooks_override.user_ids_on_start == ["agency-user"]
+    assert oauth_agent.last_hooks_override is not hooks_override
+    assert get_oauth_user_id() is None
 
 
 @pytest.mark.asyncio
@@ -159,6 +187,27 @@ async def test_agency_get_response_stream_preserves_positional_hooks_override(mo
     assert stream.final_result is not None
     assert stream.final_result.final_output == "Test response"
     assert mock_agent.last_hooks_override is hooks_override
+
+
+@pytest.mark.asyncio
+async def test_agency_get_response_stream_preserves_oauth_hooks_with_hooks_override() -> None:
+    """Streaming OAuth agencies should keep internal token isolation hooks with caller hooks."""
+    oauth_agent = CapturingAgent(
+        "OAuthAgent",
+        mcp_servers=[MCPServerOAuth(url="http://localhost:8001/mcp", name="github")],
+    )
+    agency = Agency(oauth_agent, user_context={"user_id": "agency-user"})
+    hooks_override = OAuthContextRecordingHooks()
+
+    stream = agency.get_response_stream("Test message", "OAuthAgent", hooks_override=hooks_override)
+    async for _event in stream:
+        pass
+
+    assert stream.final_result is not None
+    assert stream.final_result.final_output == "Test response"
+    assert hooks_override.user_ids_on_start == ["agency-user"]
+    assert oauth_agent.last_hooks_override is not hooks_override
+    assert get_oauth_user_id() is None
 
 
 @pytest.mark.asyncio
