@@ -6,12 +6,14 @@ from agents.models._openai_shared import get_default_openai_client
 from openai import AsyncOpenAI
 
 from agency_swarm import Agency, Agent
+from agency_swarm.integrations.fastapi_utils.file_handler import _normalize_allowed_dirs
 from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
 
 
 def get_allowed_dirs_for_metadata(allowed_local_dirs: Sequence[str | Path]) -> list[str]:
-    """Return all configured allowlist entries as resolved absolute paths."""
-    return [str(Path(entry).expanduser().resolve()) for entry in allowed_local_dirs]
+    """Return upload-usable local directories for metadata responses."""
+    normalized = _normalize_allowed_dirs(allowed_local_dirs, skip_missing=True)
+    return [] if normalized is None else [str(path) for path in normalized]
 
 
 @dataclass(frozen=True)

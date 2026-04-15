@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
+import pytest
 from openai import AsyncOpenAI
 
 from agency_swarm.integrations.fastapi_utils.override_policy import (
@@ -38,30 +39,38 @@ def test_request_override_policy_flags() -> None:
     assert empty.has_openai_overrides is False
 
 
-def test_get_allowed_dirs_for_metadata_returns_absolute_paths(tmp_path) -> None:
+def test_get_allowed_dirs_for_metadata_returns_existing_directories(tmp_path, monkeypatch) -> None:
     allowed = tmp_path / "uploads"
     allowed.mkdir(parents=True, exist_ok=True)
-    file_entry = tmp_path / "not-a-dir.txt"
-    file_entry.write_text("x", encoding="utf-8")
     missing_entry = tmp_path / "missing"
-    tilde_entry = Path("~") / "custom"
+    fake_home = tmp_path / "fake-home"
+    tilde_entry = fake_home / "custom"
+    tilde_entry.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(fake_home))
 
     visible = get_allowed_dirs_for_metadata(
         [
             str(allowed),
-            str(file_entry),
             str(missing_entry),
-            tilde_entry,
+            Path("~") / "custom",
         ]
     )
 
     assert visible == [
-        str(allowed.expanduser().resolve()),
-        str(file_entry.expanduser().resolve()),
-        str(missing_entry.expanduser().resolve()),
-        str(tilde_entry.expanduser().resolve()),
+        str(allowed.resolve()),
+        str(tilde_entry.resolve()),
     ]
     assert all(Path(p).is_absolute() for p in visible)
+
+
+def test_get_allowed_dirs_for_metadata_rejects_non_directory_entry(tmp_path) -> None:
+    allowed = tmp_path / "uploads"
+    allowed.mkdir(parents=True, exist_ok=True)
+    file_entry = tmp_path / "not-a-dir.txt"
+    file_entry.write_text("x", encoding="utf-8")
+
+    with pytest.raises(NotADirectoryError, match="Allowed path must be a directory"):
+        get_allowed_dirs_for_metadata([str(allowed), str(file_entry)])
 
 
 def test_build_file_upload_client_uses_selected_agent_client() -> None:
