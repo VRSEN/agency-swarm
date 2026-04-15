@@ -154,6 +154,28 @@ def _clone_oauth_candidate(server: Any) -> Any:
     return _MCPServerOAuthClient(client.oauth_config, handlers or None)
 
 
+def _current_oauth_handlers(client: Any) -> OAuthHandlerMap:
+    """Return the handlers that should be active for the current OAuth request."""
+    handlers: OAuthHandlerMap = {}
+    if client._redirect_handler is not None:
+        handlers["redirect"] = client._redirect_handler
+    if client._callback_handler is not None:
+        handlers["callback"] = client._callback_handler
+
+    runtime_context = _get_oauth_runtime_context() if _get_oauth_runtime_context is not None else None
+    if runtime_context is not None:
+        if "redirect" not in handlers and runtime_context.redirect_handler_factory is not None:
+            handlers["redirect"] = runtime_context.redirect_handler_factory(client.name)
+        if "callback" not in handlers and runtime_context.callback_handler_factory is not None:
+            handlers["callback"] = runtime_context.callback_handler_factory(client.name)
+
+    if "redirect" not in handlers and client.oauth_config.redirect_handler is not None:
+        handlers["redirect"] = client.oauth_config.redirect_handler
+    if "callback" not in handlers and client.oauth_config.callback_handler is not None:
+        handlers["callback"] = client.oauth_config.callback_handler
+    return handlers
+
+
 _OAUTH_LIST_TOOLS_TIMEOUT_SECONDS = 620.0
 
 
@@ -783,12 +805,7 @@ def _sync_oauth_client_handlers(persistent: object, candidate: object) -> bool:
     if not isinstance(existing_client, _MCPServerOAuthClient) or not isinstance(new_client, _MCPServerOAuthClient):
         return False
 
-    new_instance = cast(Any, new_client)
-    server_handlers: OAuthHandlerMap = {}
-    if new_instance.oauth_config.redirect_handler is not None:
-        server_handlers["redirect"] = new_instance.oauth_config.redirect_handler
-    if new_instance.oauth_config.callback_handler is not None:
-        server_handlers["callback"] = new_instance.oauth_config.callback_handler
+    server_handlers = _current_oauth_handlers(cast(Any, new_client))
     if not server_handlers:
         return False
 
