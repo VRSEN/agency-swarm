@@ -234,6 +234,7 @@ class ActiveRun:
     initial_message_count: int
     cancelled: bool = field(default=False)
     cancel_mode: str | None = field(default=None)
+    cancel_event: asyncio.Event = field(default_factory=asyncio.Event)
     done_event: asyncio.Event = field(default_factory=asyncio.Event)
 
 
@@ -258,6 +259,7 @@ class ActiveRunRegistry:
             if run is not None:
                 run.cancelled = True
                 run.cancel_mode = cancel_mode
+                run.cancel_event.set()
             return run
 
     async def finish(self, run_id: str) -> ActiveRun | None:
@@ -642,6 +644,7 @@ def make_stream_endpoint(
             stream = None
             stream_task: asyncio.Task | None = None
             connect_task: asyncio.Task | None = None
+            cancel_task: asyncio.Task | None = None
             active_run: ActiveRun | None = None
             oauth_pending = False
             queue_task: asyncio.Task | None = (
@@ -680,6 +683,7 @@ def make_stream_endpoint(
                     initial_message_count=initial_message_count,
                 )
                 await run_registry.register(run_id, active_run)
+                cancel_task = asyncio.create_task(active_run.cancel_event.wait())
 
                 # Now send run_id - client can safely call cancel endpoint
                 yield f"event: meta\ndata: {json.dumps({'run_id': run_id})}\n\n"
@@ -692,7 +696,15 @@ def make_stream_endpoint(
                             wait_set.add(queue_task)
                         if keepalive_task:
                             wait_set.add(keepalive_task)
+                        if cancel_task:
+                            wait_set.add(cancel_task)
                         done, _ = await asyncio.wait(wait_set, return_when=asyncio.FIRST_COMPLETED)
+
+                        if cancel_task and cancel_task in done:
+                            connect_task.cancel()
+                            with contextlib.suppress(asyncio.CancelledError):
+                                await connect_task
+                            break
 
                         if queue_task and queue_task in done:
                             try:
@@ -725,15 +737,26 @@ def make_stream_endpoint(
                 else:
                     await attach_persistent_mcp_servers(agency_instance)
 
-                stream_task = asyncio.create_task(stream.__anext__())
+                if active_run.cancelled:
+                    stream_task = None
+                else:
+                    stream_task = asyncio.create_task(stream.__anext__())
                 while stream_task:
                     wait_set = {stream_task}
                     if queue_task:
                         wait_set.add(queue_task)
                     if keepalive_task:
                         wait_set.add(keepalive_task)
+                    if cancel_task:
+                        wait_set.add(cancel_task)
 
                     done, _ = await asyncio.wait(wait_set, return_when=asyncio.FIRST_COMPLETED)
+
+                    if cancel_task and cancel_task in done:
+                        stream_task.cancel()
+                        with contextlib.suppress(asyncio.CancelledError):
+                            await stream_task
+                        break
 
                     if queue_task and queue_task in done:
                         try:
@@ -852,6 +875,10 @@ def make_stream_endpoint(
                         stream_task.cancel()
                         with contextlib.suppress(asyncio.CancelledError):
                             await stream_task
+                    if cancel_task and not cancel_task.done():
+                        cancel_task.cancel()
+                        with contextlib.suppress(asyncio.CancelledError):
+                            await cancel_task
                     if connect_task and not connect_task.done():
                         connect_task.cancel()
                         with contextlib.suppress(asyncio.CancelledError):

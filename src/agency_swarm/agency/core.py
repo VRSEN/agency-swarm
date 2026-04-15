@@ -16,7 +16,11 @@ from agency_swarm.agent.execution_streaming import StreamingRunResponse
 from agency_swarm.hooks import CompositeRunHooks, PersistenceHooks
 from agency_swarm.streaming.utils import EventStreamMerger
 from agency_swarm.tools import BaseTool
-from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers, default_mcp_manager
+from agency_swarm.tools.mcp_manager import (
+    apply_managed_oauth_cache_dir,
+    attach_persistent_mcp_servers,
+    default_mcp_manager,
+)
 from agency_swarm.utils.files import get_external_caller_directory
 from agency_swarm.utils.thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
 
@@ -268,8 +272,7 @@ class Agency:
                 if config is None:
                     continue
                 has_oauth_servers = True
-                if cache_dir and getattr(config, "cache_dir", None) is None:
-                    config.cache_dir = cache_dir
+                apply_managed_oauth_cache_dir(config, cache_dir)
 
         if has_oauth_servers and OAuthStorageHooksRuntime is not None:
             self._oauth_storage_hook = cast(RunHooks, OAuthStorageHooksRuntime())

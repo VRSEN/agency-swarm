@@ -69,6 +69,7 @@ except ImportError:
     logger.debug("OAuth support not available - install MCP SDK to enable")
 
 _HOSTED_MCP_OAUTH_ORIGINAL_TOOL_ATTR = "_agency_swarm_hosted_mcp_oauth_original_tool"
+_MANAGED_OAUTH_CACHE_DIR_ATTR = "_agency_swarm_managed_oauth_cache_dir"
 
 
 def _sanitize_oauth_registry_user_id(user_id: str) -> str:
@@ -90,6 +91,15 @@ def _build_persistence_key(server: Any, oauth_user_id: str | None) -> str:
     if not isinstance(oauth_user_id, str) or oauth_user_id == "":
         return name
     return f"{name}::{_sanitize_oauth_registry_user_id(oauth_user_id)}"
+
+
+def apply_managed_oauth_cache_dir(config: Any, cache_dir: Path | None) -> None:
+    """Apply an Agency-managed OAuth cache dir without overwriting explicit server config."""
+    if cache_dir is None:
+        return
+    if getattr(config, "cache_dir", None) is None or bool(getattr(config, _MANAGED_OAUTH_CACHE_DIR_ATTR, False)):
+        config.cache_dir = cache_dir
+        setattr(config, _MANAGED_OAUTH_CACHE_DIR_ATTR, True)
 
 
 def _clone_oauth_candidate(server: Any) -> Any:
@@ -391,8 +401,7 @@ class PersistentMCPServerManager:
         actual = getattr(server, "_server", server)
         if _MCPServerOAuth is not None and isinstance(actual, _MCPServerOAuth):
             oauth_config = cast("MCPServerOAuth", actual)
-            if cache_dir is not None and getattr(oauth_config, "cache_dir", None) is None:
-                oauth_config.cache_dir = cache_dir
+            apply_managed_oauth_cache_dir(oauth_config, cache_dir)
             return
         try:
             from agency_swarm.mcp.oauth_client import MCPServerOAuthClient
@@ -401,8 +410,7 @@ class PersistentMCPServerManager:
 
         if isinstance(actual, MCPServerOAuthClient):
             config = actual.oauth_config
-            if cache_dir is not None and getattr(config, "cache_dir", None) is None:
-                config.cache_dir = cache_dir
+            apply_managed_oauth_cache_dir(config, cache_dir)
             oauth_provider = getattr(actual, "_oauth_provider", None)
             storage = getattr(oauth_provider, "storage", None) if oauth_provider else None
             if storage and hasattr(storage, "base_cache_dir") and cache_dir is not None:
@@ -695,8 +703,7 @@ async def _authorize_hosted_mcp_tools(agent: Any, *, cache_dir: Path | None) -> 
             active_tool_config = cast(dict[str, Any], active_tool.tool_config)
 
         oauth_srv = oauth_config_type(url=server_url, name=server_label)
-        if cache_dir is not None and getattr(oauth_srv, "cache_dir", None) is None:
-            oauth_srv.cache_dir = cache_dir
+        apply_managed_oauth_cache_dir(oauth_srv, cache_dir)
 
         server_handlers: OAuthHandlerMap = {}
         if factory is not None:

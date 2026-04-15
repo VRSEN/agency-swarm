@@ -537,6 +537,33 @@ def test_update_oauth_cache_dir_updates_clients(tmp_path: Path) -> None:
     assert client._oauth_provider.storage.base_cache_dir == tmp_path
 
 
+def test_update_oauth_cache_dir_replaces_previous_managed_path(tmp_path: Path) -> None:
+    manager = PersistentMCPServerManager()
+    old_path = tmp_path / "old"
+    new_path = tmp_path / "new"
+    server = MCPServerOAuth(url="http://localhost:8001/mcp", name="github")
+    mcp_manager.apply_managed_oauth_cache_dir(server, old_path)
+    client = MCPServerOAuthClient(server)
+
+    manager.register(client)
+    manager.update_oauth_cache_dir(new_path)
+
+    assert client.oauth_config.cache_dir == new_path
+
+
+def test_update_oauth_cache_dir_preserves_explicit_server_path(tmp_path: Path) -> None:
+    manager = PersistentMCPServerManager()
+    explicit_path = tmp_path / "explicit"
+    new_path = tmp_path / "new"
+    server = MCPServerOAuth(url="http://localhost:8001/mcp", name="github", cache_dir=explicit_path)
+    client = MCPServerOAuthClient(server)
+
+    manager.register(client)
+    manager.update_oauth_cache_dir(new_path)
+
+    assert client.oauth_config.cache_dir == explicit_path
+
+
 def test_resolve_method_timeout_keeps_short_list_tools_for_non_oauth_servers() -> None:
     manager = PersistentMCPServerManager()
     timeout = manager._resolve_method_timeout(_DummyServer(), "list_tools")

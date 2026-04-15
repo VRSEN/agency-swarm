@@ -1,4 +1,5 @@
 import asyncio
+import json
 import threading
 from queue import Empty, Queue
 
@@ -10,8 +11,11 @@ from openai.types.responses.tool_param import Mcp
 from agency_swarm import enable_hosted_mcp_tool_oauth
 from agency_swarm.integrations.fastapi_utils import endpoint_handlers
 from agency_swarm.integrations.fastapi_utils.endpoint_handlers import (
+    ActiveRunRegistry,
     make_agui_chat_endpoint,
+    make_cancel_endpoint,
     make_response_endpoint,
+    make_stream_endpoint,
 )
 from agency_swarm.integrations.fastapi_utils.oauth_support import (
     FastAPIOAuthConfig,
@@ -889,6 +893,115 @@ async def test_get_response_header_user_id_does_not_mutate_shared_agency_context
 
     assert shared_agency.user_context == {"plan": "base"}
     assert shared_agency.seen_contexts == [{"user_id": "header-user"}, None]
+
+
+@pytest.mark.asyncio
+async def test_stream_cancel_stops_pending_oauth_attachment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Cancel endpoint should interrupt OAuth attachment before model streaming starts."""
+
+    class DummyRequest:
+        def __init__(self) -> None:
+            self.message = "hello"
+            self.recipient_agent = None
+            self.additional_instructions = None
+            self.file_ids = None
+            self.file_urls = None
+            self.chat_history = None
+            self.user_context = None
+            self.client_config = None
+            self.generate_chat_name = False
+
+    class DummyHttpRequest:
+        async def is_disconnected(self) -> bool:
+            return False
+
+    class DummyThreadManager:
+        def get_all_messages(self) -> list:
+            return []
+
+    class DummyStream:
+        final_result = None
+
+        def __init__(self) -> None:
+            self.cancel_calls: list[str] = []
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            await asyncio.Future()
+
+        def cancel(self, mode: str = "immediate") -> None:
+            self.cancel_calls.append(mode)
+
+    class DummyAgent:
+        def __init__(self) -> None:
+            self.mcp_servers = [MCPServerOAuth(url="http://localhost:8999/mcp", name="demo")]
+            self.tools = []
+
+    class DummyAgency:
+        def __init__(self) -> None:
+            self.agents = {"demo": DummyAgent()}
+            self.user_context = {}
+            self.thread_manager = DummyThreadManager()
+            self.stream = DummyStream()
+
+        def get_response_stream(self, *args, **kwargs):
+            return self.stream
+
+    shared_agency = DummyAgency()
+    attach_started = asyncio.Event()
+    attach_cancelled = asyncio.Event()
+
+    async def _blocked_attach(_agency) -> None:  # noqa: ANN001
+        attach_started.set()
+        try:
+            await asyncio.Future()
+        except asyncio.CancelledError:
+            attach_cancelled.set()
+            raise
+
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.attach_persistent_mcp_servers",
+        _blocked_attach,
+    )
+
+    def agency_factory(load_threads_callback=None):
+        return shared_agency
+
+    run_registry = ActiveRunRegistry()
+    stream_endpoint = make_stream_endpoint(
+        DummyRequest,
+        agency_factory,
+        lambda *args, **kwargs: None,
+        run_registry,
+        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry()),
+    )
+    cancel_endpoint = make_cancel_endpoint(DummyRequest, lambda *args, **kwargs: None, run_registry)
+
+    response = await stream_endpoint(DummyHttpRequest(), DummyRequest(), token=None, user_id="user-1")
+    iterator = response.body_iterator.__aiter__()
+    meta_chunk = await anext(iterator)
+    run_id = json.loads(
+        next(line.removeprefix("data: ") for line in meta_chunk.splitlines() if line.startswith("data: "))
+    )["run_id"]
+
+    async def _drain_stream() -> list[str]:
+        return [chunk async for chunk in iterator]
+
+    drain_task = asyncio.create_task(_drain_stream())
+    await asyncio.wait_for(attach_started.wait(), timeout=0.5)
+
+    cancel_request = DummyRequest()
+    cancel_request.run_id = run_id
+    cancel_request.cancel_mode = "immediate"
+    cancel_response = await asyncio.wait_for(cancel_endpoint(cancel_request, token=None), timeout=1.0)
+    chunks = await asyncio.wait_for(drain_task, timeout=1.0)
+
+    assert cancel_response["ok"] is True
+    assert attach_cancelled.is_set()
+    assert shared_agency.stream.cancel_calls == ["immediate"]
+    assert any("event: messages" in chunk for chunk in chunks)
 
 
 @pytest.mark.asyncio
