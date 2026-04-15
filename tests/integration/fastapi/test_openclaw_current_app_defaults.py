@@ -117,9 +117,10 @@ def test_attach_openclaw_rejects_conflicting_current_app_defaults(
 ) -> None:
     _clear_openclaw_env(monkeypatch)
     monkeypatch.setenv("OPENCLAW_PROXY_PORT", "8000")
+    first_app = FastAPI()
 
     attach_openclaw_to_fastapi(
-        FastAPI(),
+        first_app,
         replace(
             _build_openclaw_config(tmp_path / "first"),
             default_model="openclaw:first",
