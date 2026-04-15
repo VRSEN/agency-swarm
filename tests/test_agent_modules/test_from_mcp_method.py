@@ -1,8 +1,10 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from agents import FunctionTool, ToolOutputImage
+from agents import Agent as SDKAgent, FunctionTool, ToolOutputImage
+from agents.mcp.util import MCPUtil
 from agents.run_context import RunContextWrapper
+from mcp.types import Tool as MCPTool
 
 from agency_swarm.mcp.oauth import (
     MCPServerOAuth,
@@ -192,6 +194,28 @@ async def test_from_mcp_tools_catch_exceptions_and_return_error_strings(
     assert isinstance(result, str)
     assert "error" in result.lower()
     assert "Connection timed out after 5 seconds" in result
+
+
+async def test_oauth_client_converts_with_real_agents_mcp_util(monkeypatch: pytest.MonkeyPatch) -> None:
+    """OAuth clients must satisfy the Agents SDK MCPServer tool-conversion interface."""
+    server = MCPServerOAuthClient(MCPServerOAuth(url="https://example.com/mcp", name="github"))
+
+    async def list_tools(
+        run_context: RunContextWrapper[object] | None = None,
+        agent: SDKAgent | None = None,
+    ) -> list[MCPTool]:
+        return [MCPTool(name="echo", inputSchema={"type": "object", "properties": {}})]
+
+    monkeypatch.setattr(server, "list_tools", list_tools)
+
+    tools = await MCPUtil.get_function_tools(
+        server,
+        False,
+        RunContextWrapper(context=None),
+        SDKAgent(name="mcp_tool_loader"),
+    )
+
+    assert [tool.name for tool in tools] == ["echo"]
 
 
 @patch("agents.mcp.util.MCPUtil.get_function_tools", new_callable=AsyncMock)

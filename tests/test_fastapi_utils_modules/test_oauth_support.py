@@ -568,13 +568,16 @@ async def test_fastapi_oauth_request_session_restores_activated_mcp_tools() -> N
     """OAuth MCP tools enabled during one request must not remain on shared agents."""
     original_tool = object()
     activated_tool = object()
+    regular_server = object()
     server = MCPServerOAuth(url="https://example.com/mcp", name="github")
 
     class DummyAgent:
         def __init__(self) -> None:
             self.tools = [original_tool]
+            self.mcp_servers = [regular_server]
             self._deferred_mcp_servers = {"github": server}
             self._mcp_tools_deferred = True
+            self._mcp_tools_initialized = False
 
     class DummyAgency:
         def __init__(self) -> None:
@@ -590,13 +593,17 @@ async def test_fastapi_oauth_request_session_restores_activated_mcp_tools() -> N
 
     await session.acquire()
     agent.tools.append(activated_tool)
+    agent.mcp_servers.clear()
     agent._deferred_mcp_servers.pop("github")
     agent._mcp_tools_deferred = False
+    agent._mcp_tools_initialized = True
     await session.cleanup()
 
     assert agent.tools == [original_tool]
+    assert agent.mcp_servers == [regular_server]
     assert agent._deferred_mcp_servers == {"github": server}
     assert agent._mcp_tools_deferred is True
+    assert agent._mcp_tools_initialized is False
 
 
 @pytest.mark.asyncio

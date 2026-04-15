@@ -82,7 +82,7 @@ type _AgencyStateSnapshot = dict[
     str,
     tuple[str | Model | None, ModelSettings | None, AsyncOpenAI | None, OpenAI | None],
 ]
-type _OAuthAgentStateSnapshot = dict[str, tuple[list[Any] | None, dict[str, Any], bool]]
+type _OAuthAgentStateSnapshot = dict[str, tuple[list[Any] | None, list[Any] | None, dict[str, Any], bool, bool]]
 
 
 def _sse_keepalive_comment() -> str:
@@ -1717,25 +1717,31 @@ def _snapshot_oauth_agent_state(agency: Agency) -> _OAuthAgentStateSnapshot:
     snapshot: _OAuthAgentStateSnapshot = {}
     for name, agent in agency.agents.items():
         tools = getattr(agent, "tools", None)
+        mcp_servers = getattr(agent, "mcp_servers", None)
         deferred_servers = getattr(agent, "_deferred_mcp_servers", {})
         snapshot[name] = (
             list(tools) if isinstance(tools, list) else None,
+            list(mcp_servers) if isinstance(mcp_servers, list) else None,
             dict(deferred_servers) if isinstance(deferred_servers, dict) else {},
             bool(getattr(agent, "_mcp_tools_deferred", False)),
+            bool(getattr(agent, "_mcp_tools_initialized", False)),
         )
     return snapshot
 
 
 def _restore_oauth_agent_state(agency: Agency, snapshot: _OAuthAgentStateSnapshot) -> None:
     """Restore agent tool/deferred-OAuth state after a FastAPI OAuth request."""
-    for name, (tools, deferred_servers, mcp_tools_deferred) in snapshot.items():
+    for name, (tools, mcp_servers, deferred_servers, mcp_tools_deferred, mcp_tools_initialized) in snapshot.items():
         agent = agency.agents.get(name)
         if agent is None:
             continue
         if tools is not None:
             agent.tools = tools
+        if mcp_servers is not None:
+            agent.mcp_servers = mcp_servers
         agent._deferred_mcp_servers = deferred_servers
         agent._mcp_tools_deferred = mcp_tools_deferred
+        agent._mcp_tools_initialized = mcp_tools_initialized
 
 
 def _restore_agency_state(

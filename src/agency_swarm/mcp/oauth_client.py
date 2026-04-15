@@ -5,10 +5,12 @@ import contextlib
 import logging
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
-from typing import TypedDict, cast
+from typing import Any, TypedDict, cast
 
 import httpx
-from agents import Agent as AgentBase, RunContextWrapper
+from agents import RunContextWrapper
+from agents.agent import AgentBase
+from agents.mcp.server import MCPServer
 from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
 from mcp import ClientSession
 from mcp.client.auth import OAuthClientProvider
@@ -17,7 +19,7 @@ from mcp.shared.message import SessionMessage
 from mcp.types import (
     CallToolResult,
     GetPromptResult,
-    Prompt,
+    ListPromptsResult,
     ReadResourceResult,
     Resource,
     Tool as MCPTool,
@@ -72,7 +74,7 @@ def _build_streamable_transport(
     return _legacy_streamablehttp_client(url, auth=oauth_provider), None
 
 
-class MCPServerOAuthClient:
+class MCPServerOAuthClient(MCPServer):
     """OAuth-authenticated MCP server client."""
 
     def __init__(
@@ -88,10 +90,11 @@ class MCPServerOAuthClient:
                 - 'redirect': Custom redirect handler function
                 - 'callback': Custom callback handler function
         """
+        super().__init__(use_structured_content=False)
         self.oauth_config = oauth_config
-        self.name = oauth_config.name  # Required by mcp_manager
-        self.use_structured_content = False  # Required by Agents SDK MCP util
+        self._name = oauth_config.name
         self.session: ClientSession | None = None
+        self._tools_list: list[MCPTool] | None = None
         self._oauth_provider: OAuthClientProvider | None = None
         self._http_client: httpx.AsyncClient | None = None
         self._transport_context: StreamableHTTPContext | None = None
@@ -108,6 +111,16 @@ class MCPServerOAuthClient:
         self._callback_handler: OAuthCallbackHandler | None = custom_handlers.get("callback")
 
         logger.info(f"Initialized OAuth MCP client for {self.name}")
+
+    @property
+    def name(self) -> str:
+        """Return the MCP server name expected by the Agents SDK."""
+        return self._name
+
+    @property
+    def cached_tools(self) -> list[MCPTool] | None:
+        """Return the most recent OAuth-authenticated tool list, if fetched."""
+        return self._tools_list
 
     async def connect(self) -> None:
         """Establish OAuth-authenticated connection to MCP server.
@@ -165,7 +178,7 @@ class MCPServerOAuthClient:
     async def list_tools(
         self,
         run_context: RunContextWrapper[object] | None = None,
-        agent: AgentBase | None = None,
+        agent: AgentBase[Any] | None = None,
     ) -> list[MCPTool]:
         """List available tools from MCP server (OAuth required on HTTP transports).
 
@@ -184,17 +197,24 @@ class MCPServerOAuthClient:
         logger.debug(f"Listing tools via authenticated session: {self.name}")
         result = await self.session.list_tools()
         logger.info(f"Found {len(result.tools)} tools from {self.name} (authenticated)")
-        return list(result.tools)
+        self._tools_list = list(result.tools)
+        return self._tools_list
 
-    async def call_tool(self, name: str, arguments: dict[str, object] | None = None) -> CallToolResult:
+    async def call_tool(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any] | None = None,
+        meta: dict[str, Any] | None = None,
+    ) -> CallToolResult:
         """Call an OAuth MCP tool (requires authentication).
 
         This method ensures OAuth authentication is complete before calling.
         This is where OAuth is triggered - not during discovery/schema fetch.
 
         Args:
-            name: Name of the tool to call
+            tool_name: Name of the tool to call
             arguments: Tool arguments
+            meta: Optional MCP request metadata
 
         Returns:
             Tool execution result
@@ -208,16 +228,19 @@ class MCPServerOAuthClient:
             await self.connect()
         assert self.session is not None
 
-        logger.debug(f"Calling tool {name} on OAuth MCP server: {self.name}")
-        result = await self.session.call_tool(name, arguments or {})
-        logger.debug(f"Tool {name} executed successfully on {self.name}")
+        logger.debug(f"Calling tool {tool_name} on OAuth MCP server: {self.name}")
+        if meta is None:
+            result = await self.session.call_tool(tool_name, arguments or {})
+        else:
+            result = await self.session.call_tool(tool_name, arguments or {}, meta=meta)
+        logger.debug(f"Tool {tool_name} executed successfully on {self.name}")
         return result
 
-    async def list_prompts(self) -> list[Prompt]:
+    async def list_prompts(self) -> ListPromptsResult:
         """List available prompts from OAuth MCP server.
 
         Returns:
-            List of available prompts from the MCP server
+            Prompt list result from the MCP server
 
         Raises:
             Exception: If not connected or listing prompts fails
@@ -228,9 +251,9 @@ class MCPServerOAuthClient:
 
         logger.debug(f"Listing prompts from OAuth MCP server: {self.name}")
         result = await self.session.list_prompts()
-        return result.prompts
+        return result
 
-    async def get_prompt(self, name: str, arguments: dict[str, str] | None = None) -> GetPromptResult:
+    async def get_prompt(self, name: str, arguments: dict[str, Any] | None = None) -> GetPromptResult:
         """Get a prompt from OAuth MCP server.
 
         Args:
