@@ -97,9 +97,12 @@ def command_add(args: argparse.Namespace) -> None:
     paths = _paths(args.ledger_dir)
     _ensure_ledger(paths)
     active = _load_active(paths["active"])
-    item_id = _required_text("id", args.id) if args.id else _next_item_id(active["items"])
+    archive = _load_archive(paths["archive"])
+    item_id = _required_text("id", args.id) if args.id else _next_item_id(active["items"], archive)
     if _find_item(active["items"], item_id) is not None:
         raise LedgerError(f"active item already exists: {item_id}")
+    if _find_item(archive, item_id) is not None:
+        raise LedgerError(f"archived item already exists: {item_id}")
 
     now = _now()
     item = {
@@ -275,9 +278,9 @@ def _validate_item(item: dict[str, Any], location: str, allowed_statuses: tuple[
         raise LedgerError(f"{location} has invalid source pointers")
 
 
-def _next_item_id(items: list[dict[str, Any]]) -> str:
+def _next_item_id(*item_groups: list[dict[str, Any]]) -> str:
     prefix = f"REQ-{datetime.now(UTC):%Y%m%d}"
-    existing_ids = {item.get("id") for item in items}
+    existing_ids = {item.get("id") for items in item_groups for item in items}
     counter = 1
     while True:
         item_id = f"{prefix}-{counter:03d}"
