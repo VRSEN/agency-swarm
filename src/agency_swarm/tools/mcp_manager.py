@@ -883,10 +883,11 @@ def register_and_connect_agent_servers(agent: Any) -> None:
         name = getattr(srv, "name", None)
         if isinstance(name, str) and name != "" and name not in server_names:
             server_names.append(name)
-            key = _build_persistence_key(srv, oauth_user_id)
-            persistent = default_mcp_manager.get(key) or default_mcp_manager.register(srv, key=key)
-            if persistent is not srv:
-                _sync_oauth_client_handlers(persistent, srv)
+            candidate = _clone_oauth_candidate(srv)
+            key = _build_persistence_key(candidate, oauth_user_id)
+            persistent = default_mcp_manager.get(key) or default_mcp_manager.register(candidate, key=key)
+            if persistent is not candidate:
+                _sync_oauth_client_handlers(persistent, candidate)
             if persistent is not servers[i]:
                 servers[i] = persistent
         elif name in server_names:

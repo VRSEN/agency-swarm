@@ -482,6 +482,46 @@ def test_register_and_connect_agent_servers_reuses_persistent_instances(monkeypa
     assert ensured == [existing, registered[0]]
 
 
+def test_register_and_connect_agent_servers_rebuilds_oauth_client_when_same_agent_is_reused_across_users(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registered: dict[str, Any] = {}
+    ensured: list[Any] = []
+
+    class _FakeManager:
+        def get(self, key: str) -> Any | None:
+            return registered.get(key)
+
+        def register(self, server: Any, *, key: str | None = None) -> Any:
+            assert key is not None
+            registered[key] = server
+            return server
+
+        def _ensure_driver(self, server: Any) -> None:
+            ensured.append(server)
+
+    monkeypatch.setattr(mcp_manager, "default_mcp_manager", _FakeManager())
+
+    agent = SimpleNamespace(mcp_servers=[MCPServerOAuth(url="http://localhost:8001/mcp", name="github")])
+
+    try:
+        set_oauth_user_id("user-a")
+        mcp_manager.register_and_connect_agent_servers(agent)
+        key_a = _build_persistence_key(agent.mcp_servers[0], "user-a")
+        client_a = registered[key_a]
+
+        set_oauth_user_id("user-b")
+        mcp_manager.register_and_connect_agent_servers(agent)
+        key_b = _build_persistence_key(agent.mcp_servers[0], "user-b")
+        client_b = registered[key_b]
+
+        assert client_a is not client_b
+        assert getattr(agent.mcp_servers[0], "_server", agent.mcp_servers[0]) is client_b
+        assert ensured == [client_a, client_b]
+    finally:
+        set_oauth_user_id(None)
+
+
 def test_convert_mcp_servers_to_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     added_tools: list[str] = []
     agent = SimpleNamespace(
