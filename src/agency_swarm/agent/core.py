@@ -421,6 +421,11 @@ class Agent(BaseAgent[MasterContext]):
                 and name != ""
                 and (isinstance(actual, MCPServerOAuth) or isinstance(actual, MCPServerOAuthClient))
             ):
+                if name in deferred:
+                    raise ValueError(
+                        f"Server {server} has duplicate name: {name}. "
+                        "Please provide server with unique names by explicitly specifying the name attribute."
+                    )
                 deferred[name] = server
             else:
                 eager.append(server)
@@ -434,6 +439,14 @@ class Agent(BaseAgent[MasterContext]):
         deferred_servers, eager_servers = self._split_deferred_oauth_mcp_servers()
         if not deferred_servers:
             return bool(self._oauth_mcp_servers)
+
+        for server_name, server in deferred_servers.items():
+            existing = self._oauth_mcp_servers.get(server_name)
+            if existing is not None and existing is not server:
+                raise ValueError(
+                    f"Server {server} has duplicate name: {server_name}. "
+                    "Please provide server with unique names by explicitly specifying the name attribute."
+                )
 
         self._oauth_mcp_servers.update(deferred_servers)
         for server_name, server in deferred_servers.items():

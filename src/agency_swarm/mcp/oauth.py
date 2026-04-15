@@ -29,7 +29,7 @@ from mcp.shared.auth import (
 )
 from pydantic import AnyUrl
 
-from .oauth_user import build_oauth_user_segment
+from .oauth_user import build_oauth_cache_segment, build_oauth_user_segment
 
 # Contextvar for per-user token isolation
 _user_id_context: ContextVar[str | None] = ContextVar("oauth_user_id", default=None)
@@ -140,6 +140,7 @@ class FileTokenStorage:
         """
         self.base_cache_dir = cache_dir
         self.server_name = server_name
+        self.server_cache_segment = build_oauth_cache_segment(server_name, max_prefix_length=120, preserve_safe=True)
         self.server_url = server_url or server_name
         self._token_callbacks = token_callbacks
 
@@ -158,7 +159,13 @@ class FileTokenStorage:
 
     def _get_server_cache_dir(self) -> Path:
         """Get cache directory for current server under the current user."""
-        server_dir = self._get_user_cache_dir() / self.server_name
+        user_dir = self._get_user_cache_dir()
+        server_dir = (user_dir / self.server_cache_segment).resolve()
+        try:
+            server_dir.relative_to(user_dir.resolve())
+        except ValueError:
+            logger.warning("OAuth server name resolved outside user cache dir; falling back to default server bucket.")
+            server_dir = user_dir / "default"
         server_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         return server_dir
 
@@ -167,14 +174,14 @@ class FileTokenStorage:
         legacy_dir = self._get_legacy_user_cache_dir()
         if legacy_dir is None:
             return None
-        return legacy_dir / f"{self.server_name}_tokens.json"
+        return legacy_dir / f"{self.server_cache_segment}_tokens.json"
 
     def _legacy_client_file(self) -> Path | None:
         """Return legacy flat client file path for migration."""
         legacy_dir = self._get_legacy_user_cache_dir()
         if legacy_dir is None:
             return None
-        return legacy_dir / f"{self.server_name}_client.json"
+        return legacy_dir / f"{self.server_cache_segment}_client.json"
 
     def _get_user_cache_segment(self) -> str:
         """Return the current cache bucket name for the active user."""

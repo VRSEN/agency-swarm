@@ -62,6 +62,22 @@ class TestFileTokenStorage:
         assert loaded_token.access_token == "test_access_token"
         assert loaded_token.refresh_token == "test_refresh_token"
 
+    async def test_token_storage_sanitizes_path_traversal_server_name(self, tmp_path: Path) -> None:
+        """Server names should never escape the configured cache directory."""
+        storage = FileTokenStorage(
+            cache_dir=tmp_path,
+            server_name="../../outside",
+            server_url=TEST_SERVER_URL,
+        )
+        token = OAuthToken(access_token="traversal-test", token_type="Bearer", expires_in=3600)
+
+        await storage.set_tokens(token)
+
+        token_files = list(tmp_path.rglob("tokens.json"))
+        assert len(token_files) == 1
+        token_files[0].resolve().relative_to(tmp_path.resolve())
+        assert ".." not in token_files[0].relative_to(tmp_path).parts
+
     async def test_token_storage_returns_none_for_missing_file(self, tmp_path: Path) -> None:
         """FileTokenStorage returns None when token file doesn't exist."""
         storage = FileTokenStorage(
@@ -827,8 +843,8 @@ class TestMCPServerOAuthClientAuthOnly:
         mock_session.list_tools = AsyncMock(return_value=mock_result)
 
         with patch.object(client, "connect", new_callable=AsyncMock) as mock_connect:
-            mock_connect.side_effect = lambda: setattr(client, "session", mock_session) or setattr(
-                client, "_authenticated", True
+            mock_connect.side_effect = lambda: (
+                setattr(client, "session", mock_session) or setattr(client, "_authenticated", True)
             )
             tools = await client.list_tools()
 
@@ -856,8 +872,8 @@ class TestMCPServerOAuthClientAuthOnly:
         mock_session.call_tool = AsyncMock(return_value=mock_result)
 
         with patch.object(client, "connect", new_callable=AsyncMock) as mock_connect:
-            mock_connect.side_effect = lambda: setattr(client, "session", mock_session) or setattr(
-                client, "_authenticated", True
+            mock_connect.side_effect = lambda: (
+                setattr(client, "session", mock_session) or setattr(client, "_authenticated", True)
             )
             await client.call_tool("test_tool", {"arg": "value"})
 

@@ -48,6 +48,14 @@ def test_oauth_agents_prepare_authentication_tool_before_first_run() -> None:
     assert agent.mcp_servers == []
 
 
+def test_oauth_agents_reject_duplicate_deferred_server_names() -> None:
+    with pytest.raises(ValueError, match="duplicate name"):
+        _make_oauth_agent(
+            MCPServerOAuth(url="https://example.com/one", name="github"),
+            MCPServerOAuth(url="https://example.com/two", name="github"),
+        )
+
+
 def test_oauth_agents_expose_authentication_tool_in_metadata() -> None:
     agent = _make_oauth_agent(MCPServerOAuth(url="https://example.com/mcp", name="github"))
     agency = Agency(agent)
