@@ -79,6 +79,7 @@ python .codex/skills/requirement-ledger/scripts/requirement_ledger.py list --arc
 
 - Do not add raw user-message dumps, images, logs, stack traces, or private data unless the exact text is required.
 - Noise reduction may remove non-requirement chatter and duplicates, but it must not delete, flatten, or overcompress the user's actual request.
+- Keep the tooling simple: validate required fields, but avoid arbitrary caps or normalization that distorts user wording.
 - Never rewrite the whole queue file. Use item-level `add`, `update`, `complete`, or `reject` operations so source pointers, original wording, and order survive.
 - Avoid vague one-off labels such as "cleanup"; name the exact requirement set, source range, and intended ledger change.
 - Prefer one item per requirement; do not mix status notes, design choices, and implementation steps in one item.

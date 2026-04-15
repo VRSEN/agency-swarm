@@ -149,7 +149,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - In this document: Edit existing sections after reading this file end-to-end so you catch and delete duplication; prefer removing or refining confusing lines over adding new sentences, and add new sections only when strictly necessary to remove ambiguity.
 - In this document: If you cannot clearly explain why any line exists, escalate to the user immediately before making further edits.
 - Naming: Functions are verb phrases; values are noun phrases. Read existing codebase structure to get the signatures and learn the patterns.
-- Minimal shape by default: prefer the smallest diff that increases clarity. Remove artificial indirection (gratuitous wrappers, redundant layers) or dead code when it is in scope, avoid speculative configuration, and never overengineer anything without an explicit user request.
+- Minimal shape by default: never over-complicate anything; when unsure, choose the simplest elegant design that increases clarity. Remove artificial indirection (gratuitous wrappers, redundant layers) or dead code when it is in scope, and avoid speculative configuration.
 - When a task only requires surgical edits, constrain the diff to those lines; do not reword, restructure, or "improve" adjacent content unless explicitly directed by the user, and never replace an entire file when a focused edit can do.
 - Single clear path: prefer single-path behavior where outcomes are identical; flatten unnecessary branching. Avoid optional fallbacks unless explicitly requested.
 
@@ -167,7 +167,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - Do not add dedicated `Validation` sections to user-facing replies or PR descriptions; if evidence matters, fold it into the main update in one short line.
 - Do not mention review-artifact file paths or artifact inventories in user-facing replies or PR descriptions unless the user explicitly asks for them.
 - Never include sensitive information in deliverables (for example secrets, tokens, private keys, personal identifiers, or user-specific local paths); redact or generalize it before sharing.
-- Every user-facing reply must end with `Escalations:`. Put every user-directed question, approval request, or blocking decision there, state exactly what is needed from the user, and write `Escalations: none` only when no such item exists.
+- Include an `Escalations:` block when outstanding items, stopped work, required user action, approval requests, or blockers remain; state exactly what is needed from the user or what blocks progress. If all work is complete and no user action is needed, omit the block instead of writing an empty escalation.
 
 ## 🔴 SAFETY PROTOCOLS
 

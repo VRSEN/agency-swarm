@@ -14,17 +14,6 @@ ACTIVE_FILE = "active.json"
 ARCHIVE_FILE = "archive.jsonl"
 ACTIVE_STATUSES = ("open", "in_progress", "blocked", "waiting", "deferred")
 ARCHIVE_STATUSES = ("completed", "failed")
-TEXT_LIMITS = {
-    "id": 80,
-    "status": 64,
-    "category": 80,
-    "title": 160,
-    "original": 2000,
-    "intent": 400,
-    "next_action": 280,
-    "resolution": 400,
-    "source_pointer": 240,
-}
 
 
 class LedgerError(RuntimeError):
@@ -108,7 +97,7 @@ def command_add(args: argparse.Namespace) -> None:
     paths = _paths(args.ledger_dir)
     _ensure_ledger(paths)
     active = _load_active(paths["active"])
-    item_id = _clean_text("id", args.id) if args.id else _next_item_id(active["items"])
+    item_id = _required_text("id", args.id) if args.id else _next_item_id(active["items"])
     if _find_item(active["items"], item_id) is not None:
         raise LedgerError(f"active item already exists: {item_id}")
 
@@ -117,13 +106,13 @@ def command_add(args: argparse.Namespace) -> None:
         "id": item_id,
         "created_at": now,
         "updated_at": now,
-        "status": _clean_text("status", args.status),
-        "category": _clean_text("category", args.category),
-        "title": _clean_text("title", args.title),
-        "original": _clean_text("original", args.original),
-        "intent": _clean_text("intent", args.intent),
-        "next_action": _clean_text("next_action", args.next_action),
-        "source_pointers": [_clean_text("source_pointer", source) for source in args.source_pointer],
+        "status": _required_text("status", args.status),
+        "category": _required_text("category", args.category),
+        "title": _required_text("title", args.title),
+        "original": _required_text("original", args.original),
+        "intent": _required_text("intent", args.intent),
+        "next_action": _required_text("next_action", args.next_action),
+        "source_pointers": [_required_text("source_pointer", source) for source in args.source_pointer],
     }
     active["items"].append(item)
     _write_active(paths["active"], active)
@@ -147,9 +136,9 @@ def command_update(args: argparse.Namespace) -> None:
         raise LedgerError("update needs at least one field to change")
     for field, value in updates.items():
         if value is not None:
-            item[field] = _clean_text(field, value)
+            item[field] = _required_text(field, value)
     if args.source_pointer:
-        item["source_pointers"].extend(_clean_text("source_pointer", source) for source in args.source_pointer)
+        item["source_pointers"].extend(_required_text("source_pointer", source) for source in args.source_pointer)
     item["updated_at"] = _now()
 
     _write_active(paths["active"], active)
@@ -181,7 +170,7 @@ def _archive_active_item(args: argparse.Namespace, status: str) -> None:
     now = _now()
     archived_item = dict(item)
     archived_item["status"] = status
-    archived_item["resolution"] = _clean_text("resolution", args.resolution)
+    archived_item["resolution"] = _required_text("resolution", args.resolution)
     archived_item["updated_at"] = now
     archived_item["archived_at"] = now
 
@@ -301,15 +290,10 @@ def _now() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def _clean_text(field: str, value: str) -> str:
-    text = " ".join(value.split())
+def _required_text(field: str, value: str) -> str:
+    text = value.strip()
     if not text:
         raise LedgerError(f"{field} cannot be empty")
-    limit = TEXT_LIMITS[field]
-    if len(text) > limit:
-        raise LedgerError(
-            f"{field} is {len(text)} characters; limit is {limit}. Summarize instead of pasting raw text."
-        )
     return text
 
 
