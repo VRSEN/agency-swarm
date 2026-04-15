@@ -110,6 +110,9 @@ venv.bak/
 .venv39
 .venv_res
 
+# Local agent state
+.codex/requirements-ledger/
+
 # Spyder project settings
 .spyderproject
 .spyproject
