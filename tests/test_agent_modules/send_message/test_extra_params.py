@@ -25,6 +25,10 @@ class NumericContextParams(BaseModel):
     summary: str = Field(description="Summary")
 
 
+class InlineContext(BaseModel):
+    value: int = Field(description="Value")
+
+
 class SendMessageWithContext(SendMessage):
     extra_params_model = NumericContextParams
 
@@ -182,6 +186,32 @@ def test_inline_fields_not_picked_up_when_extra_params_exists() -> None:
     properties = tool.params_json_schema["properties"]
     assert "from_nested" in properties
     assert "inline_field" not in properties
+
+
+def test_bare_annotations_are_not_treated_as_inline_fields() -> None:
+    """Bare subclass annotations should remain internal typing hints."""
+
+    class BareAnnotationSendMessage(SendMessage):
+        internal_note: str
+
+    sender = _make_stub_agent("Sender")
+    tool = BareAnnotationSendMessage(sender)
+
+    assert "internal_note" not in tool.params_json_schema["properties"]
+
+
+def test_inline_fields_resolve_forward_annotations() -> None:
+    """Inline fields should resolve future-style annotations from the subclass module."""
+
+    class FutureStyleAnnotation(SendMessage):
+        context: "InlineContext" = Field(description="Structured context")
+
+    sender = _make_stub_agent("Sender")
+    tool = FutureStyleAnnotation(sender)
+
+    assert "context" in tool.params_json_schema["properties"]
+    assert tool._extra_params_model is not None
+    assert tool._extra_params_model.model_fields["context"].annotation is InlineContext
 
 
 @pytest.mark.asyncio

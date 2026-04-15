@@ -10,7 +10,7 @@ recipient details.
 import asyncio
 import json
 import logging
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, get_type_hints
 
 from agents import (
     FunctionTool,
@@ -144,10 +144,13 @@ class SendMessage(FunctionTool):
                 # Only use field-level schema content
                 model_properties: dict[str, Any] = model_schema.get("properties", {})
                 model_required: list[str] = list(model_schema.get("required", []))
+                model_defs: dict[str, Any] = model_schema.get("$defs", {})
 
                 # Apply properties and required
                 if isinstance(model_properties, dict) and model_properties:
                     params_schema["properties"].update(model_properties)
+                if isinstance(model_defs, dict) and model_defs:
+                    params_schema.setdefault("$defs", {}).update(model_defs)
                 if isinstance(model_required, list) and model_required:
                     # Ensure unique while preserving order
                     existing_required: list[str] = list(params_schema.get("required", []))
@@ -241,18 +244,26 @@ class SendMessage(FunctionTool):
         for mro_cls in reversed(cls.__mro__):
             if mro_cls is SendMessage or not issubclass(mro_cls, SendMessage) or mro_cls is object:
                 continue
-            for field_name, annotation in getattr(mro_cls, "__annotations__", {}).items():
+            annotations = getattr(mro_cls, "__annotations__", {})
+            try:
+                resolved_annotations = get_type_hints(mro_cls, include_extras=True)
+            except Exception:
+                resolved_annotations = annotations
+            for field_name, annotation in annotations.items():
                 if field_name in base_annotations or field_name in reserved or field_name.startswith("_"):
                     continue
-                default = mro_cls.__dict__.get(field_name, ...)
-                # Only include fields that look like Pydantic fields (have FieldInfo or Ellipsis)
+                if field_name not in mro_cls.__dict__:
+                    continue
+                default = mro_cls.__dict__[field_name]
+                # Only include fields that are explicitly declared as Pydantic fields.
                 if isinstance(default, FieldInfo) or default is ...:
+                    annotation = resolved_annotations.get(field_name, annotation)
                     extra_field_defs[field_name] = (annotation, default)
 
         if not extra_field_defs:
             return None
 
-        return _create_model(f"{cls.__name__}Params", **extra_field_defs)
+        return _create_model(f"{cls.__name__}Params", __module__=cls.__module__, **extra_field_defs)
 
     def _create_recipient_agency_context(self, wrapper: RunContextWrapper[MasterContext]) -> "AgencyContext":
         """Create agency context for the recipient agent."""
