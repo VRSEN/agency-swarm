@@ -124,6 +124,7 @@ Ask only for design decisions or true blocking decisions; otherwise proceed auto
 ## DANGER ZONE: PUBLIC AND IRREVERSIBLE OPERATIONS
 - PR merges, release notes, tags, GitHub releases, PyPI or NPM publishing, yanks, unpublishes, and any step that changes public package or release state are danger-zone operations because stale state here causes lasting public damage.
 - Never use memory, cached notes, or an earlier audit in the danger zone. Immediately before each step, re-verify the live repo state, the exact commit you are acting on, the exact version files on that commit, the live GitHub PR/release/tag state, the live PyPI or NPM version state, and the exact release-notes compare base and shipped scope.
+- In the danger zone, uncertainty is a blocker. If the live public state, the exact source of truth, or the exact next mutation is not fully verified, stop and escalate to the user before acting.
 - For release notes, re-check the exact compare range and the exact shipped PR set right before drafting or editing. If tags, versions, or the compare base changed since the last draft, throw the old draft away and rebuild it from fresh evidence.
 - If GitHub releases/tags, package-index state, and repo version files disagree, treat that as recovery work. Stop, identify the actual shipped version and commit first, and get approval for the exact repair instead of cutting another release to paper over the mismatch.
 - Never merge, tag, draft, publish, yank, unpublish, or edit release notes to make the state "look right" before you prove what is already live.
