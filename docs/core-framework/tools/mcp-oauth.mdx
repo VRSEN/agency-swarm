@@ -198,7 +198,7 @@ Then run the FastMCP server (see `examples/mcp_oauth/github_server.py` for GitHu
 
 ## Token storage and isolation
 
-Tokens default to `~/.agency-swarm/mcp-tokens/{user}/{server}/`. Set `AGENCY_SWARM_MCP_CACHE_DIR` for a global override or pass `cache_dir` per server.
+Tokens default to `~/.agency-swarm/mcp-tokens/{user}/{server-endpoint}/`. Set `AGENCY_SWARM_MCP_CACHE_DIR` for a global override or pass `cache_dir` per server.
 
 User-scoped buckets now use a collision-resistant filesystem segment derived from `X-User-Id` or `set_oauth_user_id()`. Legacy buckets whose old sanitized name could map to more than one user ID are intentionally not auto-migrated; those users must authorize again instead of risking cross-user token reuse.
 
@@ -224,8 +224,8 @@ agency = Agency(
 Per-user layout (conceptual):
 ```
 ./data/oauth-tokens/
-  default/github/tokens.json
-  user_123-<hash>/github/tokens.json
+  default/github-<endpoint-hash>/tokens.json
+  user_123-<hash>/github-<endpoint-hash>/tokens.json
 ```
 Access tokens refresh automatically via the MCP SDK; if a refresh token expires, the flow will prompt for authorization again.
 

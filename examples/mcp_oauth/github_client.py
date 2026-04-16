@@ -27,7 +27,7 @@ Prerequisites:
 The example will:
     - Register itself with the MCP server automatically
     - Open your browser for OAuth authentication
-    - Store tokens in ./data/oauth-tokens/default/github/ by default
+    - Store tokens under ./data/oauth-tokens/default/ by default
     - Reuse tokens on subsequent runs
     - Demonstrate using OAuth-protected MCP tools
 """
@@ -37,13 +37,13 @@ import os
 from pathlib import Path
 
 from agency_swarm import Agency, Agent
-from agency_swarm.mcp.oauth import MCPServerOAuth, _listen_for_callback_once
+from agency_swarm.mcp.oauth import FileTokenStorage, MCPServerOAuth, _listen_for_callback_once
 
 # Configure OAuth MCP Server
 SERVER_URL = os.getenv("MCP_SERVER_URL", "http://localhost:8001")
 CACHE_DIR = Path(os.getenv("MCP_TOKEN_CACHE_DIR", "./data/oauth-tokens")).expanduser()
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
-SERVER_CACHE_DIR = CACHE_DIR / "default" / "github"
+SERVER_CACHE_DIR = CACHE_DIR / "default" / FileTokenStorage.build_server_cache_segment("github", f"{SERVER_URL}/mcp")
 
 print("=" * 80)
 print("Agency Swarm - OAuth MCP Example")

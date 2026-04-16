@@ -19,6 +19,7 @@ from agency_swarm.tools.mcp_manager import (
     _build_persistence_key,
     _sync_oauth_client_handlers,
     attach_persistent_mcp_servers,
+    cleanup_oauth_runtime_mcp_servers,
     default_mcp_manager,
 )
 
@@ -888,6 +889,52 @@ def test_build_persistence_key_separates_oauth_server_urls() -> None:
     assert key_a != key_b
     assert key_a.startswith("github::oauth::")
     assert key_b.startswith("github::oauth::")
+
+
+def test_build_persistence_key_separates_saas_oauth_requests() -> None:
+    oauth_server = MCPServerOAuth(url="http://localhost:8001/mcp", name="github")
+    oauth_client = MCPServerOAuthClient(oauth_server)
+
+    set_oauth_runtime_context(OAuthRuntimeContext(mode="saas_stream", user_id="user-a", request_id="request-a"))
+    try:
+        key_a = _build_persistence_key(oauth_client, "user-a")
+    finally:
+        set_oauth_runtime_context(None)
+
+    set_oauth_runtime_context(OAuthRuntimeContext(mode="saas_stream", user_id="user-a", request_id="request-b"))
+    try:
+        key_b = _build_persistence_key(oauth_client, "user-a")
+    finally:
+        set_oauth_runtime_context(None)
+        set_oauth_user_id(None)
+
+    assert key_a != key_b
+    assert key_a.startswith("github::oauth::")
+    assert key_b.startswith("github::oauth::")
+
+
+@pytest.mark.asyncio
+async def test_cleanup_oauth_runtime_mcp_servers_removes_request_scoped_clients() -> None:
+    await default_mcp_manager.shutdown()
+    runtime = OAuthRuntimeContext(mode="saas_stream", user_id="user-a", request_id="request-a")
+
+    try:
+        set_oauth_runtime_context(runtime)
+        agent = SimpleNamespace(mcp_servers=[MCPServerOAuth(url="http://localhost:8001/mcp", name="github")])
+        agency = SimpleNamespace(agents={"a": agent})
+
+        await attach_persistent_mcp_servers(agency)
+
+        key = _build_persistence_key(agent.mcp_servers[0], "user-a")
+        assert default_mcp_manager.get(key) is not None
+
+        await cleanup_oauth_runtime_mcp_servers()
+
+        assert default_mcp_manager.get(key) is None
+    finally:
+        set_oauth_runtime_context(None)
+        set_oauth_user_id(None)
+        await default_mcp_manager.shutdown()
 
 
 def test_build_persistence_key_separates_custom_storage(tmp_path: Path) -> None:

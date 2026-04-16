@@ -100,6 +100,10 @@ def _oauth_endpoint_key_segment(config: Any) -> str:
     return _sanitize_oauth_registry_user_id(f"url:{url}")
 
 
+def _oauth_request_key_suffix(request_id: str) -> str:
+    return f"::{_sanitize_oauth_registry_user_id(f'request:{request_id}')}"
+
+
 def _build_persistence_key(server: Any, oauth_user_id: str | None) -> str:
     """Build process-level persistence key for MCP servers.
 
@@ -120,6 +124,11 @@ def _build_persistence_key(server: Any, oauth_user_id: str | None) -> str:
     oauth_client = cast(Any, actual)
     endpoint_segment = _oauth_endpoint_key_segment(oauth_client.oauth_config)
     store_segment = _oauth_store_key_segment(oauth_client.oauth_config)
+    runtime_context = _get_oauth_runtime_context() if _get_oauth_runtime_context is not None else None
+    runtime_request_id = getattr(runtime_context, "request_id", None) if runtime_context is not None else None
+    if getattr(runtime_context, "mode", None) == "saas_stream" and isinstance(runtime_request_id, str):
+        key_prefix = f"{name}::oauth::{endpoint_segment}::{user_segment}::{store_segment}"
+        return f"{key_prefix}{_oauth_request_key_suffix(runtime_request_id)}"
     return f"{name}::oauth::{endpoint_segment}::{user_segment}::{store_segment}"
 
 
@@ -413,6 +422,17 @@ class PersistentMCPServerManager:
                     self._bg_loop = None
                     self._bg_thread = None
 
+    async def unregister_keys_ending_with(self, suffix: str) -> None:
+        """Cleanup and remove registered servers whose persistence keys end with suffix."""
+        if suffix == "":
+            return
+        async with self._lock:
+            matches = [key for key in self._servers if key.endswith(suffix)]
+            for key in matches:
+                server = self._servers.pop(key, None)
+                if server is not None:
+                    await self._shutdown_server_unlocked(server)
+
     def register(self, server: Any, *, key: str | None = None) -> Any:
         """Register (or reuse) a server by key and return the canonical instance."""
         name = key or getattr(server, "name", None)
@@ -467,6 +487,23 @@ class PersistentMCPServerManager:
             storage = getattr(oauth_provider, "storage", None) if oauth_provider else None
             if storage and hasattr(storage, "base_cache_dir") and cache_dir is not None:
                 storage.base_cache_dir = cache_dir
+
+    async def _shutdown_server_unlocked(self, server: Any) -> None:
+        real_server = getattr(server, "_server", server)
+        state = self._drivers.pop(real_server, None)
+        if state is not None:
+            queue: asyncio.Queue = state["queue"]
+            fut: Future = Future()
+            loop = self._ensure_bg_loop()
+            loop.call_soon_threadsafe(lambda: queue.put_nowait({"type": "shutdown", "result_fut": fut}))
+            fut.result(timeout=self._timeouts.get("cleanup", 10.0))
+            return
+
+        cleanup = getattr(real_server, "cleanup", None)
+        if callable(cleanup):
+            cleanup_result = cleanup()
+            if inspect.isawaitable(cleanup_result):
+                await cleanup_result
 
     def _ensure_bg_loop(self) -> asyncio.AbstractEventLoop:
         if self._bg_loop is not None:
@@ -703,6 +740,12 @@ async def _authorize_hosted_mcp_tools(agent: Any, *, cache_dir: Path | None) -> 
         return
     if getattr(agent, "_hosted_mcp_oauth_enabled", False) is not True:
         return
+    if not any(
+        getattr(tool, "name", None) == "hosted_mcp" and is_hosted_mcp_tool_oauth_enabled(tool) for tool in tools
+    ):
+        return
+    tools = list(tools)
+    agent.tools = tools
 
     handler_factory = getattr(agent, "mcp_oauth_handler_factory", None)
     factory: Callable[[str], OAuthHandlerMap] | None = None
@@ -875,6 +918,15 @@ async def attach_persistent_mcp_servers(agency: Any) -> None:
         # After replacing, ensure all are connected once
         for srv in servers:
             await default_mcp_manager.ensure_connected(srv)
+
+
+async def cleanup_oauth_runtime_mcp_servers() -> None:
+    """Remove request-scoped OAuth MCP clients for the active runtime context."""
+    runtime_context = _get_oauth_runtime_context() if _get_oauth_runtime_context is not None else None
+    request_id = getattr(runtime_context, "request_id", None) if runtime_context is not None else None
+    if getattr(runtime_context, "mode", None) != "saas_stream" or not isinstance(request_id, str):
+        return
+    await default_mcp_manager.unregister_keys_ending_with(_oauth_request_key_suffix(request_id))
 
 
 def register_and_connect_agent_servers(agent: Any) -> None:

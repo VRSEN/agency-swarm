@@ -11,6 +11,7 @@ import logging
 import os
 import select
 import sys
+import uuid
 import webbrowser
 from collections.abc import Awaitable, Callable, Coroutine
 from contextvars import ContextVar
@@ -74,6 +75,7 @@ class OAuthRuntimeContext:
 
     mode: Literal["saas_stream", "local_browser"]
     user_id: str | None
+    request_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     timeout: float | None = None
     redirect_handler_factory: OAuthRedirectHandlerFactory | None = None
     callback_handler_factory: OAuthCallbackHandlerFactory | None = None
@@ -141,13 +143,19 @@ class FileTokenStorage:
         self.base_cache_dir = cache_dir
         self.server_name = server_name
         self.server_url = server_url or server_name
-        server_identity = server_name if self.server_url == server_name else f"{server_name}::{self.server_url}"
-        self.server_cache_segment = build_oauth_cache_segment(
+        self.server_cache_segment = self.build_server_cache_segment(server_name, self.server_url)
+        self._token_callbacks = token_callbacks
+
+    @staticmethod
+    def build_server_cache_segment(server_name: str, server_url: str | None = None) -> str:
+        """Build the cache bucket used for one MCP server endpoint."""
+        endpoint = server_url or server_name
+        server_identity = server_name if endpoint == server_name else f"{server_name}::{endpoint}"
+        return build_oauth_cache_segment(
             server_identity,
             max_prefix_length=120,
-            preserve_safe=self.server_url == server_name,
+            preserve_safe=endpoint == server_name,
         )
-        self._token_callbacks = token_callbacks
 
     def _get_user_cache_dir(self) -> Path:
         """Get cache directory for current user from contextvar."""

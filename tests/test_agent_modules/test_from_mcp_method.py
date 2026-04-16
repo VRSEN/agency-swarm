@@ -304,7 +304,7 @@ async def test_from_mcp_rebuilds_oauth_client_when_same_server_object_is_reused_
 
 @patch("agents.mcp.util.MCPUtil.get_function_tools", new_callable=AsyncMock)
 @patch("agency_swarm.tools.mcp_converter.default_mcp_manager")
-async def test_from_mcp_does_not_refresh_request_handlers_when_reusing_oauth_client(
+async def test_from_mcp_refreshes_static_handlers_when_reusing_oauth_client(
     mock_manager, mock_get_function_tools: AsyncMock
 ) -> None:
     function_tool = FunctionTool(
@@ -343,8 +343,8 @@ async def test_from_mcp_does_not_refresh_request_handlers_when_reusing_oauth_cli
 
     ToolFactory.from_mcp([candidate])
 
-    assert persistent._redirect_handler is first_redirect
-    assert persistent._callback_handler is first_callback
+    assert persistent._redirect_handler is second_redirect
+    assert persistent._callback_handler is second_callback
 
 
 @patch("agency_swarm.tools.mcp_converter.MCPUtil.get_function_tools", new_callable=AsyncMock)

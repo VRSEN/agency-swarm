@@ -80,7 +80,7 @@ class TestFileTokenStorageWithContextVar:
 
         await storage.set_tokens(test_token)
 
-        expected_file = tmp_path / "default" / "test-server" / "tokens.json"
+        expected_file = tmp_path / "default" / storage.server_cache_segment / "tokens.json"
         assert expected_file.exists()
 
         loaded_token = await storage.get_tokens()
@@ -101,7 +101,10 @@ class TestFileTokenStorageWithContextVar:
             await storage.set_tokens(test_token)
 
             expected_file = (
-                tmp_path / build_oauth_user_segment("user_456", max_prefix_length=120) / "test-server" / "tokens.json"
+                tmp_path
+                / build_oauth_user_segment("user_456", max_prefix_length=120)
+                / storage.server_cache_segment
+                / "tokens.json"
             )
             assert expected_file.exists()
             assert expected_file.stat().st_mode & 0o777 == 0o600
@@ -137,10 +140,16 @@ class TestFileTokenStorageWithContextVar:
         assert loaded2.access_token == "user2_token"
 
         assert (
-            tmp_path / build_oauth_user_segment("user1", max_prefix_length=120) / "test-server" / "tokens.json"
+            tmp_path
+            / build_oauth_user_segment("user1", max_prefix_length=120)
+            / storage.server_cache_segment
+            / "tokens.json"
         ).exists()
         assert (
-            tmp_path / build_oauth_user_segment("user2", max_prefix_length=120) / "test-server" / "tokens.json"
+            tmp_path
+            / build_oauth_user_segment("user2", max_prefix_length=120)
+            / storage.server_cache_segment
+            / "tokens.json"
         ).exists()
 
         set_oauth_user_id(None)
@@ -164,7 +173,10 @@ class TestFileTokenStorageWithContextVar:
             await storage.set_client_info(client_info)
 
             expected_file = (
-                tmp_path / build_oauth_user_segment("user_789", max_prefix_length=120) / "test-server" / "client.json"
+                tmp_path
+                / build_oauth_user_segment("user_789", max_prefix_length=120)
+                / storage.server_cache_segment
+                / "client.json"
             )
             assert expected_file.exists()
 
@@ -213,8 +225,8 @@ class TestFileTokenStorageWithContextVar:
         second_dir = build_oauth_user_segment(second_user, max_prefix_length=120)
 
         assert first_dir != second_dir
-        assert (tmp_path / first_dir / "test-server" / "tokens.json").exists()
-        assert (tmp_path / second_dir / "test-server" / "tokens.json").exists()
+        assert (tmp_path / first_dir / storage.server_cache_segment / "tokens.json").exists()
+        assert (tmp_path / second_dir / storage.server_cache_segment / "tokens.json").exists()
 
         set_oauth_user_id(None)
 
@@ -229,7 +241,6 @@ class TestFileTokenStorageWithContextVar:
         storage = FileTokenStorage(
             cache_dir=tmp_path,
             server_name="test-server",
-            server_url="http://localhost:8001/mcp",
         )
 
         set_oauth_user_id("user1")
@@ -238,7 +249,10 @@ class TestFileTokenStorageWithContextVar:
             assert loaded is not None
             assert loaded.access_token == "legacy"
             assert (
-                tmp_path / build_oauth_user_segment("user1", max_prefix_length=120) / "test-server" / "tokens.json"
+                tmp_path
+                / build_oauth_user_segment("user1", max_prefix_length=120)
+                / storage.server_cache_segment
+                / "tokens.json"
             ).exists()
             assert not (legacy_dir / "test-server_tokens.json").exists()
         finally:
@@ -253,7 +267,6 @@ class TestFileTokenStorageWithContextVar:
         storage = FileTokenStorage(
             cache_dir=tmp_path,
             server_name="test-server",
-            server_url="http://localhost:8001/mcp",
         )
 
         set_oauth_user_id("/")
@@ -374,7 +387,6 @@ class TestFileTokenStorageWithContextVar:
         storage = FileTokenStorage(
             cache_dir=tmp_path,
             server_name="test-server",
-            server_url="http://localhost:8001/mcp",
         )
 
         set_oauth_user_id("user1")
@@ -383,7 +395,10 @@ class TestFileTokenStorageWithContextVar:
             assert loaded is not None
             assert loaded.client_id == "legacy-client"
             assert (
-                tmp_path / build_oauth_user_segment("user1", max_prefix_length=120) / "test-server" / "client.json"
+                tmp_path
+                / build_oauth_user_segment("user1", max_prefix_length=120)
+                / storage.server_cache_segment
+                / "client.json"
             ).exists()
             assert not (legacy_dir / "test-server_client.json").exists()
         finally:

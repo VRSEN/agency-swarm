@@ -66,7 +66,11 @@ from agency_swarm.integrations.fastapi_utils.override_policy import (
 from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
 from agency_swarm.messages import MessageFilter, MessageFormatter
 from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
-from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers, restore_hosted_mcp_oauth_tools
+from agency_swarm.tools.mcp_manager import (
+    attach_persistent_mcp_servers,
+    cleanup_oauth_runtime_mcp_servers,
+    restore_hosted_mcp_oauth_tools,
+)
 from agency_swarm.ui.core.agui_adapter import AguiAdapter
 from agency_swarm.utils.dry_run import force_dry_run
 from agency_swarm.utils.serialization import serialize
@@ -156,6 +160,7 @@ class _RequestOverrideSession:
             return
         self._is_cleaned = True
         if self.restore_oauth_state:
+            await cleanup_oauth_runtime_mcp_servers()
             restore_hosted_mcp_oauth_tools(self.agency)
         if self.oauth_snapshot is not None:
             _restore_oauth_agent_state(self.agency, self.oauth_snapshot)

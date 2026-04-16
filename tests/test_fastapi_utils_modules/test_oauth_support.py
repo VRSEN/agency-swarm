@@ -508,6 +508,78 @@ async def test_attach_persistent_mcp_servers_keeps_hosted_mcp_tokens_request_loc
 
 
 @pytest.mark.asyncio
+async def test_attach_persistent_mcp_servers_does_not_mutate_shared_hosted_mcp_tool_list(tmp_path) -> None:
+    """Request-local HostedMCPTool injection must not mutate shared tool lists."""
+
+    shared_hosted_mcp = enable_hosted_mcp_tool_oauth(
+        HostedMCPTool(tool_config=Mcp(type="mcp", server_label="demo", server_url="https://example.com/mcp"))
+    )
+    shared_tools = [shared_hosted_mcp]
+
+    class DummyAgent:
+        def __init__(self) -> None:
+            self.mcp_servers = []
+            self.tools = shared_tools
+
+    class DummyAgency:
+        def __init__(self, agent: DummyAgent) -> None:
+            self.agents = {"demo": agent}
+            self.oauth_token_path = str(tmp_path)
+
+    from mcp.shared.auth import OAuthToken
+
+    class _FakeStorage:
+        async def get_tokens(self):
+            return OAuthToken(access_token="token-user-a", token_type="Bearer", expires_in=3600)
+
+        async def set_tokens(self, tokens):
+            return None
+
+        async def get_client_info(self):
+            return None
+
+        async def set_client_info(self, client_info):
+            return None
+
+    class _FakeProvider:
+        def __init__(self) -> None:
+            self.context = type("Ctx", (), {"storage": _FakeStorage()})()
+
+    class _FakeOAuthClient:
+        def __init__(self, oauth_config, custom_handlers=None):
+            self.oauth_config = oauth_config
+            self.name = oauth_config.name
+            self._oauth_provider = _FakeProvider()
+
+        async def connect(self) -> None:
+            return None
+
+        async def cleanup(self) -> None:
+            return None
+
+    from agency_swarm.tools import mcp_manager as mcp_manager_module
+
+    agent_a = DummyAgent()
+    agent_b = DummyAgent()
+    original_client = mcp_manager_module._MCPServerOAuthClient
+    try:
+        mcp_manager_module._MCPServerOAuthClient = _FakeOAuthClient  # type: ignore[assignment]
+        FastAPIOAuthRuntime(
+            OAuthStateRegistry(), user_id="user-a", enable_hosted_mcp_oauth=True
+        ).install_handler_factory(agent_a)
+
+        await attach_persistent_mcp_servers(DummyAgency(agent_a))
+    finally:
+        mcp_manager_module._MCPServerOAuthClient = original_client
+
+    assert shared_tools == [shared_hosted_mcp]
+    assert agent_a.tools is not shared_tools
+    assert agent_a.tools[0].tool_config.get("authorization") == "token-user-a"
+    assert agent_b.tools is shared_tools
+    assert agent_b.tools == [shared_hosted_mcp]
+
+
+@pytest.mark.asyncio
 async def test_hosted_mcp_oauth_tokens_are_restored_between_reused_agent_requests(tmp_path) -> None:
     """Shared FastAPI agent instances must not keep injected HostedMCPTool tokens."""
 
