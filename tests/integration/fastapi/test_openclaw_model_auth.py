@@ -5,6 +5,7 @@ import pytest
 from agency_swarm.integrations import openclaw as openclaw_mod
 from agency_swarm.integrations.openclaw import build_openclaw_responses_model
 from agency_swarm.utils.model_utils import get_default_settings_model_name, get_usage_tracking_model_name
+from tests.integration.fastapi._openclaw_test_support import reset_openclaw_current_app_defaults
 
 
 def test_build_openclaw_responses_model_uses_app_token_when_proxy_key_is_missing(
@@ -72,7 +73,7 @@ def test_build_openclaw_responses_model_uses_openclaw_default_model_env_when_mod
     monkeypatch.delenv("OPENCLAW_PROXY_PORT", raising=False)
     monkeypatch.delenv("PORT", raising=False)
     monkeypatch.setenv("OPENCLAW_DEFAULT_MODEL", "openclaw:beta")
-    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
+    reset_openclaw_current_app_defaults(monkeypatch)
 
     model = build_openclaw_responses_model()
 
@@ -115,8 +116,7 @@ def test_build_openclaw_responses_model_preserves_openclaw_aliases_for_direct_ga
 def test_build_openclaw_responses_model_preserves_explicit_nondefault_alias_metadata_for_current_app_proxy(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
-    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULT_PATTERNS", [], raising=False)
+    reset_openclaw_current_app_defaults(monkeypatch)
     openclaw_mod.openclaw_model.register_current_app_openclaw_defaults(
         default_model="openclaw:main",
         provider_model="openai/gpt-5.4-mini",

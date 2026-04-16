@@ -6,7 +6,6 @@ import pytest
 from agents.models.openai_responses import OpenAIResponsesModel
 
 from agency_swarm import Agency, Agent, OpenClawAgent
-from agency_swarm.integrations import openclaw_model as openclaw_model_mod
 from agency_swarm.integrations.openclaw_model import (
     build_openclaw_responses_model,
     register_current_app_openclaw_defaults,
@@ -17,6 +16,7 @@ from agency_swarm.utils.model_utils import (
     get_model_name,
     get_usage_tracking_model_name,
 )
+from tests.integration.fastapi._openclaw_test_support import reset_openclaw_current_app_defaults
 
 
 def test_openclaw_agent_auto_builds_responses_model(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -185,10 +185,7 @@ def test_openclaw_agent_treats_localhost_proxy_aliases_as_current_app_proxy(
     monkeypatch.setenv("APP_TOKEN", "app-token")
     monkeypatch.delenv("OPENCLAW_GATEWAY_TOKEN", raising=False)
     monkeypatch.setenv("OPENCLAW_PROXY_BASE_URL", "http://127.0.0.1:8000/openclaw/v1")
-    monkeypatch.setattr(openclaw_model_mod, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
-    monkeypatch.setattr(openclaw_model_mod, "_CURRENT_APP_OPENCLAW_DEFAULT_COUNTS", {}, raising=False)
-    monkeypatch.setattr(openclaw_model_mod, "_CURRENT_APP_OPENCLAW_DEFAULT_PATTERNS", [], raising=False)
-    monkeypatch.setattr(openclaw_model_mod, "_CURRENT_APP_OPENCLAW_DEFAULT_PATTERN_COUNTS", {}, raising=False)
+    reset_openclaw_current_app_defaults(monkeypatch)
 
     model = build_openclaw_responses_model(base_url="http://localhost:8000/openclaw/v1")
 
@@ -203,7 +200,7 @@ def test_openclaw_agent_uses_app_token_for_explicit_same_app_proxy_url_when_one_
     monkeypatch.setenv("OPENCLAW_PROXY_BASE_URL", "http://127.0.0.1:9000/openclaw/v1")
     monkeypatch.setenv("APP_TOKEN", "app-token")
     monkeypatch.setenv("OPENCLAW_GATEWAY_TOKEN", "gateway-token")
-    monkeypatch.setattr(openclaw_model_mod, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
+    reset_openclaw_current_app_defaults(monkeypatch)
     register_current_app_openclaw_defaults(
         default_model="openclaw:custom",
         provider_model="openai/gpt-5.4-mini",

@@ -12,15 +12,15 @@ from fastapi import FastAPI
 from agency_swarm.integrations import openclaw as openclaw_mod
 from agency_swarm.integrations.openclaw import attach_openclaw_to_fastapi, build_openclaw_responses_model
 from agency_swarm.utils.model_utils import get_usage_tracking_model_name
-from tests.integration.fastapi._openclaw_test_support import _build_openclaw_config
+from tests.integration.fastapi._openclaw_test_support import (
+    _build_openclaw_config,
+    reset_openclaw_current_app_defaults,
+)
 
 
 @pytest.fixture(autouse=True)
 def _reset_openclaw_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
-    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULT_COUNTS", {}, raising=False)
-    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULT_PATTERNS", [], raising=False)
-    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULT_PATTERN_COUNTS", {}, raising=False)
+    reset_openclaw_current_app_defaults(monkeypatch)
 
 
 def _clear_openclaw_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -36,6 +36,58 @@ def _clear_openclaw_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "PORT",
     ]:
         monkeypatch.delenv(name, raising=False)
+
+
+def test_reset_openclaw_defaults_drains_stale_app_finalizers(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _clear_openclaw_env(monkeypatch)
+    monkeypatch.setenv("OPENCLAW_PROXY_BASE_URL", "http://127.0.0.1:8000/openclaw/v1")
+
+    stale_app = FastAPI()
+    attach_openclaw_to_fastapi(
+        stale_app,
+        replace(
+            _build_openclaw_config(tmp_path / "stale"),
+            default_model="openclaw:stale",
+            provider_model="openai/gpt-4o",
+        ),
+    )
+    stale_app = None
+
+    reset_openclaw_current_app_defaults(monkeypatch)
+
+    monkeypatch.setenv("OPENCLAW_PROXY_BASE_URL", "http://127.0.0.1:8000/openclaw/v1")
+    first_app = FastAPI()
+    attach_openclaw_to_fastapi(
+        first_app,
+        replace(
+            _build_openclaw_config(tmp_path / "first"),
+            default_model="openclaw:first",
+            provider_model="openai/gpt-4o",
+        ),
+    )
+
+    monkeypatch.setenv("OPENCLAW_PROXY_BASE_URL", "http://127.0.0.1:9000/openclaw/v1")
+    second_app = FastAPI()
+    attach_openclaw_to_fastapi(
+        second_app,
+        replace(
+            _build_openclaw_config(tmp_path / "second"),
+            port=9000,
+            default_model="openclaw:second",
+            provider_model="openai/gpt-5.4-mini",
+        ),
+    )
+
+    gc.collect()
+
+    first_model = build_openclaw_responses_model(base_url="http://127.0.0.1:8000/openclaw/v1", api_key="first-token")
+    second_model = build_openclaw_responses_model(
+        base_url="http://127.0.0.1:9000/openclaw/v1",
+        api_key="second-token",
+    )
+
+    assert first_model.model == "openclaw:first"
+    assert second_model.model == "openclaw:second"
 
 
 def test_build_openclaw_model_uses_current_app_proxy_defaults(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

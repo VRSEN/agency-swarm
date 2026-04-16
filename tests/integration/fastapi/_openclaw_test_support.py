@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import gc
 from pathlib import Path
 
+import pytest
+
+from agency_swarm.integrations import openclaw as openclaw_mod
 from agency_swarm.integrations.openclaw import OpenClawIntegrationConfig
 
 
@@ -23,6 +27,14 @@ def _build_openclaw_config(tmp_path: Path) -> OpenClawIntegrationConfig:
         gateway_command="openclaw gateway",
         tool_mode="full",
     )
+
+
+def reset_openclaw_current_app_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    gc.collect()
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULTS", {}, raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULT_COUNTS", {}, raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULT_PATTERNS", [], raising=False)
+    monkeypatch.setattr(openclaw_mod.openclaw_model, "_CURRENT_APP_OPENCLAW_DEFAULT_PATTERN_COUNTS", {}, raising=False)
 
 
 build_openclaw_config = _build_openclaw_config
