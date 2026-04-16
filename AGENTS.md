@@ -12,6 +12,7 @@ North Star: keep the user's general intent and direction clear; read intent betw
 
 ## AGENTS.md Maintenance
 - Treat AGENTS.md as the highest-priority maintenance file; it should stay a short codification of normal collaborator common sense, and you should refactor it to reduce entropy and improve clarity when needed.
+- After every chat summarization or compaction event, re-read the current repo's live AGENTS.md from the default-branch source of truth before continuing.
 - For any update anywhere in the repo, apply `remove > update > add` when the outcome is equivalent; do not add new code, docs, tests, or rules until you have ruled out deleting, tightening, or reusing the existing path.
 - At task start, identify your role from available tools because the same AGENTS.md governs managers and subagents: agents with the Subagent tool are managers/execution-loop coordinators; agents without it are subagents, must stay inside delegated scope, report blockers, and must not claim they can delegate.
 - Protect the context window. Avoid tool calls with unbounded or irrelevant output, prefer bounded reads/searches, and use delegated agents for broad exploration only when available through the real Subagent tool so the main context receives relevant findings.
