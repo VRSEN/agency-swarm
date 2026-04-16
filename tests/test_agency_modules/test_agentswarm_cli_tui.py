@@ -129,34 +129,54 @@ def test_agentswarm_cli_tui_raises_when_cli_launch_fails(monkeypatch):
     assert server.stopped is True
 
 
-def test_agentswarm_cli_tui_contains_python_prints_while_cli_runs(monkeypatch, capsys):
+def test_agentswarm_cli_tui_contains_python_prints_while_cli_runs(monkeypatch, capsys, tmp_path):
     agency = build_agency()
-    server = DummyServer()
+    log = tmp_path / "bridge.log"
+    worker: threading.Thread | None = None
+    state: dict[str, DummyServer] = {}
 
     monkeypatch.setattr(agentswarm_cli_demo.os, "getcwd", lambda: "/tmp/project")
-    monkeypatch.setattr(agentswarm_cli_demo, "_start_server", lambda value: server)
     monkeypatch.setattr(agentswarm_cli_demo, "_ensure_cli", lambda: Path("/usr/local/bin/agentswarm"))
+    monkeypatch.setattr(agentswarm_cli_demo, "_bridge_log", lambda: log)
     monkeypatch.setattr(agentswarm_cli_demo, "_should_contain_bridge_output", lambda: True)
 
-    def fake_run(cmd, cwd, env, check):
-        worker = threading.Thread(
-            target=lambda: (
-                print("bridge stdout noise"),
-                print("bridge stderr noise", file=sys.stderr),
-            )
-        )
+    def fake_start_server(value):
+        nonlocal worker
+
+        def target():
+            print("bridge stdout noise")
+            print("bridge stderr noise", file=sys.stderr)
+
+        worker = threading.Thread(target=target)
         worker.start()
-        worker.join()
+
+        class LoggingServer(DummyServer):
+            def stop(self) -> None:
+                if worker is not None:
+                    worker.join()
+                super().stop()
+
+        state["server"] = LoggingServer()
+        return state["server"]
+
+    monkeypatch.setattr(agentswarm_cli_demo, "_start_server", fake_start_server)
+
+    def fake_run(cmd, cwd, env, check):
+        if worker is not None:
+            worker.join()
         return subprocess.CompletedProcess(cmd, 0)
 
     monkeypatch.setattr(agentswarm_cli_demo.subprocess, "run", fake_run)
+    log.unlink(missing_ok=True)
 
     agentswarm_cli_demo.start_tui(agency, reload=False)
 
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == ""
-    assert server.stopped is True
+    assert "bridge stdout noise" in log.read_text()
+    assert "bridge stderr noise" in log.read_text()
+    assert state["server"].stopped is True
 
 
 def test_agentswarm_cli_tui_downloads_platform_cli(monkeypatch, tmp_path):

@@ -364,13 +364,19 @@ def _contain_bridge_output():
         yield
         return
 
-    with open(os.devnull, "w", encoding="utf-8") as sink:
+    path = _bridge_log()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8", buffering=1) as sink:
         with redirect_stdout(sink), redirect_stderr(sink):
             yield
 
 
 def _should_contain_bridge_output() -> bool:
     return _isatty(sys.stdout) or _isatty(sys.stderr)
+
+
+def _bridge_log() -> Path:
+    return _cache() / "logs" / "bridge.log"
 
 
 def _isatty(stream: object) -> bool:
