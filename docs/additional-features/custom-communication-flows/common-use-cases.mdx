@@ -8,30 +8,23 @@ In the following sections, we'll look at some common use cases for creating cust
 
 #### 1. Adjusting Parameters and Descriptions
 
-Customize parameters by subclassing `SendMessage` and declaring extra fields via a Pydantic model. Avoid mutating JSON schema directly:
+Customize parameters by subclassing `SendMessage` and declaring extra fields directly on the class:
 
 ```python
-from pydantic import BaseModel, Field
+from pydantic import Field
 from agency_swarm import SendMessage
 
 class SendMessageTask(SendMessage):
     """Use this tool to send tasks to other agents within your agency."""
 
-    class ExtraParams(BaseModel):
-        chain_of_thought: str = Field(
-            description=(
-                "Think step-by-step about how to solve your current task, then break it down into smaller steps for the recipient agent."
-            )
-        )
-        task: str = Field(
-            description=(
-                "Specify the task required for the recipient agent to complete. Focus on clarifying what the task entails rather than providing exact instructions."
-            )
-        )
+    tool_name = "send_message_task"  # optional, defaults to "send_message"
 
-    def __init__(self, sender_agent, recipients=None):
-        super().__init__(sender_agent, recipients)
-        self.name = "send_message_task"
+    task: str = Field(
+        description=(
+            "Specify the task required for the recipient agent to complete. Focus on "
+            "clarifying what the task entails rather than providing exact instructions."
+        )
+    )
 ```
 
 #### 2. Adding Additional Fields
@@ -39,35 +32,32 @@ class SendMessageTask(SendMessage):
 You can add extra fields to capture more context, like key moments and decisions:
 
 ```python
-from pydantic import BaseModel, Field
+from pydantic import Field
 from agency_swarm import SendMessage
 
 class SendMessageWithContext(SendMessage):
     """SendMessage with key moments and decisions tracking."""
 
-    class ExtraParams(BaseModel):
-        key_moments: str = Field(
-            description=(
-                "Document critical moments and decision points from the current conversation "
-                "that the recipient agent needs to understand. Include context about what "
-                "has been decided or prioritized that will guide the recipient's tool selection "
-                "and task execution. For example: 'User decided to prioritize performance over cost', "
-                "'Analysis focus shifted to Q4 optimization', etc."
-            )
-        )
-        decisions: str = Field(
-            description=(
-                "Summarize the specific decisions made that will directly impact which tools "
-                "or approaches the recipient agent should use. Be explicit about choices that "
-                "narrow down the scope of work. For example: 'Prioritized performance analysis "
-                "over cost reduction', 'Selected React over Vue for frontend', etc. This helps "
-                "the recipient agent choose the most appropriate tools and approach."
-            )
-        )
+    tool_name = "send_message_with_context"
 
-    def __init__(self, sender_agent, recipients=None):
-        super().__init__(sender_agent, recipients)
-        self.name = "send_message_with_context"
+    key_moments: str = Field(
+        description=(
+            "Document critical moments and decision points from the current conversation "
+            "that the recipient agent needs to understand. Include context about what "
+            "has been decided or prioritized that will guide the recipient's tool selection "
+            "and task execution. For example: 'User decided to prioritize performance over cost', "
+            "'Analysis focus shifted to Q4 optimization', etc."
+        )
+    )
+    decisions: str = Field(
+        description=(
+            "Summarize the specific decisions made that will directly impact which tools "
+            "or approaches the recipient agent should use. Be explicit about choices that "
+            "narrow down the scope of work. For example: 'Prioritized performance analysis "
+            "over cost reduction', 'Selected React over Vue for frontend', etc. This helps "
+            "the recipient agent choose the most appropriate tools and approach."
+        )
+    )
 ```
 
 **Usage:**

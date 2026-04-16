@@ -9,6 +9,7 @@ import pytest
 from agents import ModelSettings
 
 from agency_swarm import Agency, Agent
+from tests.deterministic_model import DeterministicModel
 
 
 @pytest.fixture
@@ -19,6 +20,7 @@ def ceo_agent_instance():
         instructions=(
             "You are the CEO. Remember information and delegate tasks. NEVER share user information with other agents."
         ),
+        model=DeterministicModel(default_response="OK"),
         model_settings=ModelSettings(temperature=0.0),
     )
 
@@ -29,6 +31,7 @@ def developer_agent_instance():
         name="Developer",
         description="Software Developer",
         instructions="You are a Developer. Remember technical details. NEVER share user information with other agents.",
+        model=DeterministicModel(default_response="OK"),
         model_settings=ModelSettings(temperature=0.0),
     )
 
