@@ -287,7 +287,9 @@ class TestTerminalEdgeCases:
 
     def test_bad_formatted_agent_name_handoff(self, agency, capsys):
         """Test handling of bad formatted agent name."""
-        input_provider = MockInputProvider(["Use the transfer_to_Security_Expert_Agent tool", "Hi", "/exit"])
+        # Use the exact tool name so this test validates UI handoff rendering, not
+        # the live model's ability to normalize a mismatched tool name.
+        input_provider = MockInputProvider(["Use the transfer_to_SecUrity_ExperT_Agent tool", "Hi", "/exit"])
 
         with patch("builtins.input", input_provider):
             with patch("agency_swarm.ui.demos.terminal.Application", new=_application_factory(input_provider)):
