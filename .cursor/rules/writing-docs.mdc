@@ -16,6 +16,18 @@ When writing or improving documentation for Agency Swarm, your primary goal is c
 - Hide complexity under tabs, dropdowns, etc.
 - Split pages into sub pages if needed. Use ~150 visible lines as a readability target, not a hard limit. Collapsed content (for example accordions) does not count toward this target.
 
+## Release Notes
+
+Use these rules for release notes so the intro stays readable and every claim stays tied to a shipped change.
+
+- Write the opening paragraph and each section intro for non-technical readers first. In one or two sentences, say what changed and why it matters in plain English.
+- Ground every phrase in a concrete change from the repo or release diff. If a phrase cannot be tied to a command, API, capability, limit, or fix, delete it.
+- Prefer plain verbs and nouns like `start`, `open`, `run`, `set up`, `use`, and `fix`.
+- Avoid vague opener words like `documented`, `surface`, `workflow`, `path`, and `behavior` unless the exact term is required for accuracy.
+- Keep the intro broad and easy to read, then let the bullets carry the exact commands, APIs, models, limits, PR numbers, and contributor names.
+- Group sections by reader value, not by implementation layer.
+- Do not present internal policy or agent-rule changes as public docs. If they must be included, label them as internal maintenance and keep them brief.
+
 # Mintlify Components Reference
 
 You can utilize various components from mintlify:
