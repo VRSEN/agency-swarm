@@ -93,26 +93,33 @@ def start_tui(agency, show_reasoning: bool | None = None, reload: bool = True) -
 
     command = _command()
 
-    with _contain_bridge_output():
-        try:
-            server = _start_server(agency)
-        except Exception as exc:
-            raise RuntimeError("Agent Swarm CLI bridge failed to start.") from exc
+    capture: Path | None = None
+    try:
+        with _contain_bridge_output() as capture:
+            try:
+                server = _start_server(agency)
+            except Exception as exc:
+                raise RuntimeError("Agent Swarm CLI bridge failed to start.") from exc
 
-        try:
-            result = subprocess.run(
-                [*command, *_command_args()],
-                cwd=os.getcwd(),
-                env=_env(server.port, _agency_id(agency)),
-                check=False,
-            )
-        except OSError as exc:
-            raise RuntimeError("Agent Swarm CLI could not be launched.") from exc
-        finally:
-            server.stop()
+            try:
+                result = subprocess.run(
+                    [*command, *_command_args()],
+                    cwd=os.getcwd(),
+                    env=_env(server.port, _agency_id(agency)),
+                    check=False,
+                )
+            except OSError as exc:
+                raise RuntimeError("Agent Swarm CLI could not be launched.") from exc
+            finally:
+                server.stop()
+    except Exception:
+        _report_bridge_output(capture)
+        raise
 
     if result.returncode not in (0, 130):
+        _report_bridge_output(capture)
         raise subprocess.CalledProcessError(result.returncode, [*command, *_command_args()])
+    _clear_bridge_output(capture)
 
 
 def _command() -> list[str]:
@@ -361,14 +368,14 @@ def _notify_setup(message: str) -> None:
 @contextmanager
 def _contain_bridge_output():
     if not _should_contain_bridge_output():
-        yield
+        yield None
         return
 
     path = _bridge_log()
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8", buffering=1) as sink:
+    with path.open("w", encoding="utf-8", buffering=1) as sink:
         with redirect_stdout(sink), redirect_stderr(sink):
-            yield
+            yield path
 
 
 def _should_contain_bridge_output() -> bool:
@@ -376,7 +383,26 @@ def _should_contain_bridge_output() -> bool:
 
 
 def _bridge_log() -> Path:
-    return _cache() / "logs" / "bridge.log"
+    fd, value = tempfile.mkstemp(prefix="agentswarm-bridge-", suffix=".log")
+    os.close(fd)
+    return Path(value)
+
+
+def _report_bridge_output(path: Path | None) -> None:
+    if not path or not path.exists():
+        return
+    with suppress(OSError):
+        if path.stat().st_size == 0:
+            path.unlink()
+            return
+    print(f"Python bridge output was captured in {path}", file=sys.stderr, flush=True)
+
+
+def _clear_bridge_output(path: Path | None) -> None:
+    if not path:
+        return
+    with suppress(OSError):
+        path.unlink()
 
 
 def _isatty(stream: object) -> bool:

@@ -174,6 +174,56 @@ def test_agentswarm_cli_tui_contains_python_prints_while_cli_runs(monkeypatch, c
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == ""
+    assert not log.exists()
+    assert state["server"].stopped is True
+
+
+def test_agentswarm_cli_tui_reports_bridge_output_on_failure(monkeypatch, capsys, tmp_path):
+    agency = build_agency()
+    log = tmp_path / "bridge.log"
+    worker: threading.Thread | None = None
+    state: dict[str, DummyServer] = {}
+
+    monkeypatch.setattr(agentswarm_cli_demo.os, "getcwd", lambda: "/tmp/project")
+    monkeypatch.setattr(agentswarm_cli_demo, "_ensure_cli", lambda: Path("/usr/local/bin/agentswarm"))
+    monkeypatch.setattr(agentswarm_cli_demo, "_bridge_log", lambda: log)
+    monkeypatch.setattr(agentswarm_cli_demo, "_should_contain_bridge_output", lambda: True)
+
+    def fake_start_server(value):
+        nonlocal worker
+
+        def target():
+            print("bridge stdout noise")
+            print("bridge stderr noise", file=sys.stderr)
+
+        worker = threading.Thread(target=target)
+        worker.start()
+
+        class LoggingServer(DummyServer):
+            def stop(self) -> None:
+                if worker is not None:
+                    worker.join()
+                super().stop()
+
+        state["server"] = LoggingServer()
+        return state["server"]
+
+    monkeypatch.setattr(agentswarm_cli_demo, "_start_server", fake_start_server)
+
+    def fake_run(cmd, cwd, env, check):
+        if worker is not None:
+            worker.join()
+        return subprocess.CompletedProcess(cmd, 1)
+
+    monkeypatch.setattr(agentswarm_cli_demo.subprocess, "run", fake_run)
+    log.unlink(missing_ok=True)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        agentswarm_cli_demo.start_tui(agency, reload=False)
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert str(log) in captured.err
     assert "bridge stdout noise" in log.read_text()
     assert "bridge stderr noise" in log.read_text()
     assert state["server"].stopped is True
