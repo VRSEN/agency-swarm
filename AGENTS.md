@@ -63,11 +63,12 @@ Context
 - Always produce evidence when asked—run the relevant code, examples, or commands before responding, and cite the observed output.
 
 Repo State
-- Keep one explicit live list of active artifacts you own (repos, worktrees, branches, PRs, files, temp assets). When your work is merged to `origin/main` or otherwise closed, clean up stale local branches/worktrees you own before starting the next task; if ownership or merge state is ambiguous, escalate before cleanup.
+- Keep one explicit live list of active artifacts you own (repos, worktrees, branches, PRs, files, temp assets). Every artifact you touch becomes a tracked ledger item and a blocker until it is shipped, explicitly discarded, or clearly handed off with status. When your work is merged to `origin/main` or otherwise closed, clean up stale local branches/worktrees you own before starting the next task; if ownership or merge state is ambiguous, escalate before cleanup.
 - Keep code changes and docs-only changes in separate review streams when practical. Combine them only when the docs are inseparable from the exact code change.
 - Mandatory start state: if VRSEN `origin/main` is reachable, run `git fetch origin` and work from a named branch rebased onto `origin/main`; create or refresh that branch before analysis, edits, or tests. For danger-zone release work, also verify that the exact release commit is already reachable from `origin/main` and that the target version already appears in the release inputs on that commit (for example `pyproject.toml` and lockfiles) before drafting, tagging, publishing, deleting, or restoring any release artifact. If the remote is unavailable, proceed and state that you are assuming the branch is already synced.
 - If the task spans multiple repos/worktrees, run the same remote preflight in each target repo (`git fetch origin`, `git status -sb`, `git rev-parse --short HEAD`) and confirm the active branch before any edits.
-- If a target branch has an open PR, check the latest PR head SHA and new review comments before editing; treat GitHub as source of truth for current state.
+- If a target branch has an open PR, read the latest PR comments/reviews, check the latest PR head SHA, and treat GitHub as source of truth for current state before editing.
+- If there is already an open PR for the same ongoing work, reuse that PR. Do not open a replacement PR unless the existing PR is explicitly discarded or structurally impossible to reuse, and record that decision in the ledger first.
 
 Execution
 - Complete one change at a time; stash unrelated work before starting another.

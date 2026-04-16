@@ -17,6 +17,9 @@ Use this skill when task state must survive beyond the current chat or when a re
 6. Before presenting a revised ledger, list every active unfulfilled requirement with `original` and source pointers.
 7. When an item is done, run `complete` so it moves out of the active queue and into the archive.
 8. If a ledger revision is rejected, run `reject`; failed revision output is not source of truth and must be rebuilt from original sources.
+9. Register every active artifact you touch as a ledger-linked item or note: repos, worktrees, branches, PRs, conflicted states, temp artifacts, and generated review artifacts that still matter.
+10. Treat every unshipped or undiscarded artifact as a blocker; do not let it fall out of the active queue until it is shipped, explicitly discarded, or archived with resolution.
+11. Before opening a new PR for ongoing work, record the existing related PR and why it cannot be reused; if that reason is missing, reuse the existing PR instead.
 
 ## CLI
 
@@ -85,3 +88,4 @@ python .codex/skills/requirement-ledger/scripts/requirement_ledger.py list --arc
 - Prefer one item per requirement; do not mix status notes, design choices, and implementation steps in one item.
 - Use `blocked` only when the next action truly needs a user decision or missing external input.
 - Use `complete` or `reject` instead of setting active items to a terminal status; the archive is the terminal-work record.
+- Keep artifact state current at task boundaries so the ledger always reflects the real critical path, not a stale memory of it.
