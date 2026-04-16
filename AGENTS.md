@@ -51,6 +51,7 @@ Context
 - Use `.codex/skills/requirement-ledger` for durable ledger operations; do not hand-edit ledger files.
 - When both exist, keep them separate but aligned: the durable ledger stores user requests and request-linked cross-session state; the plan/todo stores the current execution steps needed to satisfy the active request. Do not duplicate the whole ledger into the plan.
 - Before editing a durable queue, plan the strategy for tackling it, reprioritize deliberately, and keep active items in their strategic chronological order rather than randomizing, sorting by convenience, or grouping away original sequence.
+- At every task boundary, reread the entire active ledger, then reprioritize the full queue before choosing the next action; do not rely on a partial or stale view of active work.
 - Keep durable ledgers active-only: record unfulfilled user requests and requirements, remove non-requirement and duplicate noise without deleting, flattening, or overcompressing the user's actual requests, and move completed, fulfilled, deferred, failed, or noise items to a concise archive that preserves source pointers and original wording.
 - Add every new user request to the active list immediately, queue it without interrupting the current highest-priority work unless it changes the critical path, then keep it there until it is fully shipped and approved, explicitly deferred, archived as fulfilled, or explicitly removed by the user.
 - Never rewrite the whole queue file to revise the ledger; use targeted add, update, complete, or reject operations so original wording, source pointers, and order survive.
@@ -68,7 +69,7 @@ Repo State
 - Keep code changes and docs-only changes in separate review streams when practical. Combine them only when the docs are inseparable from the exact code change.
 - Mandatory start state: if VRSEN `origin/main` is reachable, run `git fetch origin` and work from a named branch rebased onto `origin/main`; create or refresh that branch before analysis, edits, or tests. For danger-zone release work, also verify that the exact release commit is already reachable from `origin/main` and that the target version already appears in the release inputs on that commit (for example `pyproject.toml` and lockfiles) before drafting, tagging, publishing, deleting, or restoring any release artifact. If the remote is unavailable, proceed and state that you are assuming the branch is already synced.
 - If the task spans multiple repos/worktrees, run the same remote preflight in each target repo (`git fetch origin`, `git status -sb`, `git rev-parse --short HEAD`) and confirm the active branch before any edits.
-- If a target branch has an open PR, read the latest PR comments/reviews, check the latest PR head SHA, and treat GitHub as source of truth for current state before editing.
+- If a target branch has an open PR, read the latest PR comments/reviews and unresolved threads on the current head, check the latest PR head SHA, and treat GitHub as source of truth for current state before any non-readonly action.
 - If there is already an open PR for the same ongoing work, reuse that PR. Do not open a replacement PR unless the existing PR is explicitly discarded or structurally impossible to reuse, and record that decision in the ledger first.
 
 Execution

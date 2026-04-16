@@ -12,7 +12,7 @@ Use this skill when task state must survive beyond the current chat or when a re
 1. Record only real user requests, explicit requirements, blockers, or decisions that change the work.
 2. Preserve user wording close to the original in `original`; summarize only in `intent` after the auditable wording is captured.
 3. Add a source pointer for each item, such as `chat:2026-04-15 user#2`, `PR#123 comment 456`, or `docs/foo.md:42`.
-4. Plan the strategy for tackling the active queue before editing it, then reprioritize deliberately.
+4. Plan the strategy for tackling the active queue before editing it, then reread the full active ledger and reprioritize deliberately at each task boundary.
 5. Keep active unfulfilled work in strategic chronological order; do not randomize, convenience-sort, or group items away from their original sequence.
 6. Before presenting a revised ledger, list every active unfulfilled requirement with `original` and source pointers.
 7. When an item is done, run `complete` so it moves out of the active queue and into the archive.
