@@ -384,7 +384,7 @@ Strictness
   - Trigger `@codex review` only when local Codex CLI is unavailable, explicitly requested, or merge-gate evidence needs PR-bound Codex.
   - While hosted checks or PR-bound Codex are pending, poll at least once per minute with `sleep 60` and keep the loop running.
   - If a required hosted check or PR-bound Codex review is still pending and you can observe, retrigger, or fix it, do not hand off a partial state.
-  - If a PR-bound Codex trigger stays non-terminal for 15 minutes, inspect the latest comments, reviews, and reactions, retrigger once if the service appears stuck, and continue; escalate only after you can point to a real service failure, outage, or missing human approval.
+  - If a local Codex CLI review or PR-bound Codex trigger stays non-terminal for 15 minutes, or a required hosted GitHub CI check stays non-terminal for 30 minutes, inspect the latest output, logs, comments, and reactions, retrigger once if the service appears stuck, and continue; escalate only after you can point to a real service failure, outage, or missing human approval.
   - Repeat until the latest PR head has: zero unresolved threads, clean subagent review or local Codex review, required checks green, and explicit PR approval/thumbs up.
   - Only after that state is reached, hand off to the user.
 - Exemption to prevent circular loops:
