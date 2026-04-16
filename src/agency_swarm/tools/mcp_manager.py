@@ -496,7 +496,8 @@ class PersistentMCPServerManager:
             fut: Future = Future()
             loop = self._ensure_bg_loop()
             loop.call_soon_threadsafe(lambda: queue.put_nowait({"type": "shutdown", "result_fut": fut}))
-            fut.result(timeout=self._timeouts.get("cleanup", 10.0))
+            running_loop = asyncio.get_running_loop()
+            await running_loop.run_in_executor(None, fut.result, self._timeouts.get("cleanup", 10.0))
             return
 
         cleanup = getattr(real_server, "cleanup", None)
@@ -797,7 +798,7 @@ async def _authorize_hosted_mcp_tools(agent: Any, *, cache_dir: Path | None) -> 
             tools[index] = active_tool
             active_tool_config = cast(dict[str, Any], active_tool.tool_config)
 
-        oauth_srv = oauth_config_type(url=server_url, name=server_label)
+        oauth_srv = oauth_config_type(url=server_url, name=server_label, use_env_credentials=False)
         apply_managed_oauth_cache_dir(oauth_srv, cache_dir)
 
         server_handlers: OAuthHandlerMap = {}

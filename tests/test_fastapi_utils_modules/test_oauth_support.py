@@ -386,6 +386,7 @@ async def test_attach_persistent_mcp_servers_injects_hosted_mcp_oauth_token(tmp_
         def __init__(self, oauth_config, custom_handlers=None):
             self.oauth_config = oauth_config
             self.name = oauth_config.name
+            assert oauth_config.use_env_credentials is False
             custom_handlers = custom_handlers or {}
             self._redirect_handler = custom_handlers.get("redirect")
             self._oauth_provider = _FakeProvider(_FakeStorage())
