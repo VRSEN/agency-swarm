@@ -1,7 +1,9 @@
 import importlib
 import json
 import subprocess
+import sys
 import tarfile
+import threading
 from io import BytesIO
 from pathlib import Path
 
@@ -124,6 +126,36 @@ def test_agentswarm_cli_tui_raises_when_cli_launch_fails(monkeypatch):
     with pytest.raises(RuntimeError, match="could not be launched"):
         agentswarm_cli_demo.start_tui(agency, reload=False)
 
+    assert server.stopped is True
+
+
+def test_agentswarm_cli_tui_contains_python_prints_while_cli_runs(monkeypatch, capsys):
+    agency = build_agency()
+    server = DummyServer()
+
+    monkeypatch.setattr(agentswarm_cli_demo.os, "getcwd", lambda: "/tmp/project")
+    monkeypatch.setattr(agentswarm_cli_demo, "_start_server", lambda value: server)
+    monkeypatch.setattr(agentswarm_cli_demo, "_ensure_cli", lambda: Path("/usr/local/bin/agentswarm"))
+    monkeypatch.setattr(agentswarm_cli_demo, "_should_contain_bridge_output", lambda: True)
+
+    def fake_run(cmd, cwd, env, check):
+        worker = threading.Thread(
+            target=lambda: (
+                print("bridge stdout noise"),
+                print("bridge stderr noise", file=sys.stderr),
+            )
+        )
+        worker.start()
+        worker.join()
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(agentswarm_cli_demo.subprocess, "run", fake_run)
+
+    agentswarm_cli_demo.start_tui(agency, reload=False)
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
     assert server.stopped is True
 
 

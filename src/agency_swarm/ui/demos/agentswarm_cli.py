@@ -14,7 +14,7 @@ import tarfile
 import tempfile
 import threading
 import time
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager, redirect_stderr, redirect_stdout, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, TypedDict
@@ -93,22 +93,23 @@ def start_tui(agency, show_reasoning: bool | None = None, reload: bool = True) -
 
     command = _command()
 
-    try:
-        server = _start_server(agency)
-    except Exception as exc:
-        raise RuntimeError("Agent Swarm CLI bridge failed to start.") from exc
+    with _contain_bridge_output():
+        try:
+            server = _start_server(agency)
+        except Exception as exc:
+            raise RuntimeError("Agent Swarm CLI bridge failed to start.") from exc
 
-    try:
-        result = subprocess.run(
-            [*command, *_command_args()],
-            cwd=os.getcwd(),
-            env=_env(server.port, _agency_id(agency)),
-            check=False,
-        )
-    except OSError as exc:
-        raise RuntimeError("Agent Swarm CLI could not be launched.") from exc
-    finally:
-        server.stop()
+        try:
+            result = subprocess.run(
+                [*command, *_command_args()],
+                cwd=os.getcwd(),
+                env=_env(server.port, _agency_id(agency)),
+                check=False,
+            )
+        except OSError as exc:
+            raise RuntimeError("Agent Swarm CLI could not be launched.") from exc
+        finally:
+            server.stop()
 
     if result.returncode not in (0, 130):
         raise subprocess.CalledProcessError(result.returncode, [*command, *_command_args()])
@@ -355,6 +356,29 @@ def _chmod(path: Path) -> None:
 
 def _notify_setup(message: str) -> None:
     print(message, file=sys.stderr, flush=True)
+
+
+@contextmanager
+def _contain_bridge_output():
+    if not _should_contain_bridge_output():
+        yield
+        return
+
+    with open(os.devnull, "w", encoding="utf-8") as sink:
+        with redirect_stdout(sink), redirect_stderr(sink):
+            yield
+
+
+def _should_contain_bridge_output() -> bool:
+    return _isatty(sys.stdout) or _isatty(sys.stderr)
+
+
+def _isatty(stream: object) -> bool:
+    method = getattr(stream, "isatty", None)
+    if callable(method):
+        with suppress(Exception):
+            return bool(method())
+    return False
 
 
 @contextmanager
