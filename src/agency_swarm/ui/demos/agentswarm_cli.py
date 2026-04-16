@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import hashlib
 import json
 import logging
@@ -14,7 +15,7 @@ import tarfile
 import tempfile
 import threading
 import time
-from contextlib import contextmanager, redirect_stderr, redirect_stdout, suppress
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, TypedDict
@@ -93,25 +94,24 @@ def start_tui(agency, show_reasoning: bool | None = None, reload: bool = True) -
 
     command = _command()
 
-    capture: Path | None = None
+    capture = _bridge_log() if _should_contain_bridge_output() else None
     try:
-        with _contain_bridge_output() as capture:
-            try:
-                server = _start_server(agency)
-            except Exception as exc:
-                raise RuntimeError("Agent Swarm CLI bridge failed to start.") from exc
+        try:
+            server = _start_server(agency, capture)
+        except Exception as exc:
+            raise RuntimeError("Agent Swarm CLI bridge failed to start.") from exc
 
-            try:
-                result = subprocess.run(
-                    [*command, *_command_args()],
-                    cwd=os.getcwd(),
-                    env=_env(server.port, _agency_id(agency)),
-                    check=False,
-                )
-            except OSError as exc:
-                raise RuntimeError("Agent Swarm CLI could not be launched.") from exc
-            finally:
-                server.stop()
+        try:
+            result = subprocess.run(
+                [*command, *_command_args()],
+                cwd=os.getcwd(),
+                env=_env(server.port, _agency_id(agency)),
+                check=False,
+            )
+        except OSError as exc:
+            raise RuntimeError("Agent Swarm CLI could not be launched.") from exc
+        finally:
+            server.stop()
     except Exception:
         _report_bridge_output(capture)
         raise
@@ -119,7 +119,7 @@ def start_tui(agency, show_reasoning: bool | None = None, reload: bool = True) -
     if result.returncode not in (0, 130):
         _report_bridge_output(capture)
         raise subprocess.CalledProcessError(result.returncode, [*command, *_command_args()])
-    _clear_bridge_output(capture)
+    _report_bridge_output(capture)
 
 
 def _command() -> list[str]:
@@ -165,7 +165,7 @@ def _agency_id(agency) -> str:
     return str(name).replace(" ", "_")
 
 
-def _start_server(agency) -> _Server:
+def _start_server(agency, capture: Path | None = None) -> _Server:
     port = _port()
     app = run_fastapi(
         agencies=build_fastapi_agencies(agency),
@@ -186,7 +186,8 @@ def _start_server(agency) -> _Server:
 
     def target() -> None:
         try:
-            server.run()
+            with _contain_bridge_output(capture):
+                server.run()
         except BaseException as exc:  # pragma: no cover - surfaced by waiter below
             error.append(exc)
 
@@ -366,16 +367,36 @@ def _notify_setup(message: str) -> None:
 
 
 @contextmanager
-def _contain_bridge_output():
-    if not _should_contain_bridge_output():
-        yield None
+def _contain_bridge_output(path: Path | None):
+    if path is None:
+        yield
         return
 
-    path = _bridge_log()
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", buffering=1) as sink:
-        with redirect_stdout(sink), redirect_stderr(sink):
-            yield path
+    owner = threading.get_ident()
+    original = builtins.print
+    lock = threading.Lock()
+
+    def print_wrapper(*args, **kwargs):
+        file = kwargs.get("file")
+        if threading.get_ident() != owner or file not in (None, sys.stdout, sys.stderr):
+            return original(*args, **kwargs)
+
+        end = kwargs.get("end", "\n")
+        sep = kwargs.get("sep", " ")
+        flush = kwargs.get("flush", False)
+        text = sep.join(str(arg) for arg in args) + end
+        with lock:
+            with path.open("a", encoding="utf-8", buffering=1) as sink:
+                sink.write(text)
+                if flush:
+                    sink.flush()
+
+    builtins.print = print_wrapper
+    try:
+        yield path
+    finally:
+        builtins.print = original
 
 
 def _should_contain_bridge_output() -> bool:
@@ -396,13 +417,6 @@ def _report_bridge_output(path: Path | None) -> None:
             path.unlink()
             return
     print(f"Python bridge output was captured in {path}", file=sys.stderr, flush=True)
-
-
-def _clear_bridge_output(path: Path | None) -> None:
-    if not path:
-        return
-    with suppress(OSError):
-        path.unlink()
 
 
 def _isatty(stream: object) -> bool:
