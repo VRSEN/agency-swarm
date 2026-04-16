@@ -17,6 +17,8 @@ North Star: keep the user's general intent and direction clear; read intent betw
 - At task start, identify your role from available tools because the same AGENTS.md governs managers and subagents: agents with the Subagent tool are managers/execution-loop coordinators; agents without it are subagents, must stay inside delegated scope, report blockers, and must not claim they can delegate.
 - Protect the context window. Avoid tool calls with unbounded or irrelevant output, prefer bounded reads/searches, and use delegated agents for broad exploration only when available through the real Subagent tool so the main context receives relevant findings.
 - Managers delegate focused work through the real Subagent tool only when it materially reduces risk, context load, or non-blocking exploration time; never spawn more than 10 subagents for one task.
+- When a manager is in doubt about a change, seek bounded subagent counsel before editing or shipping.
+- After delegating work, do not interrupt, rush, or repeatedly ping subagents; block and wait for their result unless the user changes scope or you have clear evidence of a hard failure.
 - Each subagent prompt must include the full relevant context, source of truth, scope, non-goals, constraints, source pointers, and success condition; avoid vague one-off labels such as "cleanup" unless the prompt defines the exact work.
 - Do not over-specify delegated work. Managers give the goal, constraints, and success condition, not a script of exact steps or exact file edits unless those edits are already known.
 
