@@ -65,7 +65,7 @@ Context
 Repo State
 - Keep one explicit live list of active artifacts you own (repos, worktrees, branches, PRs, files, temp assets). When your work is merged to `origin/main` or otherwise closed, clean up stale local branches/worktrees you own before starting the next task; if ownership or merge state is ambiguous, escalate before cleanup.
 - Keep code changes and docs-only changes in separate review streams when practical. Combine them only when the docs are inseparable from the exact code change.
-- Mandatory start state: if VRSEN `origin/main` is reachable, run `git fetch origin` and work from a named branch rebased onto `origin/main`; create or refresh that branch before analysis, edits, or tests. If the remote is unavailable, proceed and state that you are assuming the branch is already synced.
+- Mandatory start state: if VRSEN `origin/main` is reachable, run `git fetch origin` and work from a named branch rebased onto `origin/main`; create or refresh that branch before analysis, edits, or tests. For danger-zone release work, also verify that the exact release commit is already reachable from `origin/main` and that the target version already appears in the release inputs on that commit (for example `pyproject.toml` and lockfiles) before drafting, tagging, publishing, deleting, or restoring any release artifact. If the remote is unavailable, proceed and state that you are assuming the branch is already synced.
 - If the task spans multiple repos/worktrees, run the same remote preflight in each target repo (`git fetch origin`, `git status -sb`, `git rev-parse --short HEAD`) and confirm the active branch before any edits.
 - If a target branch has an open PR, check the latest PR head SHA and new review comments before editing; treat GitHub as source of truth for current state.
 
@@ -120,6 +120,13 @@ Ask only for design decisions or true blocking decisions; otherwise proceed auto
 - For drastic changes (wide refactors, file moves/deletes, policy edits, behavior-affecting modifications), always get a confirmation before proceeding.
 - When escalating, include a clear problem statement, up to 3 concrete options, and one recommendation; after negative feedback or a protocol breach, tighten approvals and re-run Step 1 before and after edits.
 - If a critical-path step is blocked on the user's approval or answer, surface that blocker immediately and do not drift into unrelated work until it is resolved or explicitly deprioritized.
+
+## DANGER ZONE: PUBLIC AND IRREVERSIBLE OPERATIONS
+- PR merges, release notes, tags, GitHub releases, PyPI or NPM publishing, yanks, unpublishes, and any step that changes public package or release state are danger-zone operations because stale state here causes lasting public damage.
+- Never use memory, cached notes, or an earlier audit in the danger zone. Immediately before each step, re-verify the live repo state, the exact commit you are acting on, the exact version files on that commit, the live GitHub PR/release/tag state, the live PyPI or NPM version state, and the exact release-notes compare base and shipped scope.
+- For release notes, re-check the exact compare range and the exact shipped PR set right before drafting or editing. If tags, versions, or the compare base changed since the last draft, throw the old draft away and rebuild it from fresh evidence.
+- If GitHub releases/tags, package-index state, and repo version files disagree, treat that as recovery work. Stop, identify the actual shipped version and commit first, and get approval for the exact repair instead of cutting another release to paper over the mismatch.
+- Never merge, tag, draft, publish, yank, unpublish, or edit release notes to make the state "look right" before you prove what is already live.
 
 ## 🔴 TESTS, EXAMPLES & DOCS ARE KEY EVIDENCE
 
