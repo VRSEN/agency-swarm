@@ -236,7 +236,7 @@ def test_agentswarm_cli_tui_reports_bridge_output_on_failure(monkeypatch, capsys
     assert state["server"].stopped is True
 
 
-def test_agentswarm_cli_tui_capture_only_redirects_the_server_thread(capsys, tmp_path):
+def test_agentswarm_cli_tui_capture_redirects_other_threads(capsys, tmp_path):
     log = tmp_path / "bridge.log"
 
     def other():
@@ -249,9 +249,8 @@ def test_agentswarm_cli_tui_capture_only_redirects_the_server_thread(capsys, tmp
         print("server thread output")
 
     captured = capsys.readouterr()
-    assert "other thread output" in captured.out
-    assert "server thread output" not in captured.out
-    assert log.read_text() == "server thread output\n"
+    assert captured.out == ""
+    assert log.read_text() == "other thread output\nserver thread output\n"
 
 
 def test_agentswarm_cli_tui_downloads_platform_cli(monkeypatch, tmp_path):

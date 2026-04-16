@@ -373,13 +373,12 @@ def _contain_bridge_output(path: Path | None):
         return
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    owner = threading.get_ident()
     original = builtins.print
     lock = threading.Lock()
 
     def print_wrapper(*args, **kwargs):
         file = kwargs.get("file")
-        if threading.get_ident() != owner or file not in (None, sys.stdout, sys.stderr):
+        if file not in (None, sys.stdout, sys.stderr):
             return original(*args, **kwargs)
 
         end = kwargs.get("end", "\n")
