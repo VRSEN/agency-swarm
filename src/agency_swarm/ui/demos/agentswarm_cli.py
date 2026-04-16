@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import hashlib
 import json
 import logging
@@ -93,25 +94,32 @@ def start_tui(agency, show_reasoning: bool | None = None, reload: bool = True) -
 
     command = _command()
 
+    capture = _bridge_log() if _should_contain_bridge_output() else None
     try:
-        server = _start_server(agency)
-    except Exception as exc:
-        raise RuntimeError("Agent Swarm CLI bridge failed to start.") from exc
+        try:
+            server = _start_server(agency, capture)
+        except Exception as exc:
+            raise RuntimeError("Agent Swarm CLI bridge failed to start.") from exc
 
-    try:
-        result = subprocess.run(
-            [*command, *_command_args()],
-            cwd=os.getcwd(),
-            env=_env(server.port, _agency_id(agency)),
-            check=False,
-        )
-    except OSError as exc:
-        raise RuntimeError("Agent Swarm CLI could not be launched.") from exc
-    finally:
-        server.stop()
+        try:
+            result = subprocess.run(
+                [*command, *_command_args()],
+                cwd=os.getcwd(),
+                env=_env(server.port, _agency_id(agency)),
+                check=False,
+            )
+        except OSError as exc:
+            raise RuntimeError("Agent Swarm CLI could not be launched.") from exc
+        finally:
+            server.stop()
+    except Exception:
+        _report_bridge_output(capture)
+        raise
 
     if result.returncode not in (0, 130):
+        _report_bridge_output(capture)
         raise subprocess.CalledProcessError(result.returncode, [*command, *_command_args()])
+    _report_bridge_output(capture)
 
 
 def _command() -> list[str]:
@@ -157,7 +165,7 @@ def _agency_id(agency) -> str:
     return str(name).replace(" ", "_")
 
 
-def _start_server(agency) -> _Server:
+def _start_server(agency, capture: Path | None = None) -> _Server:
     port = _port()
     app = run_fastapi(
         agencies=build_fastapi_agencies(agency),
@@ -178,7 +186,8 @@ def _start_server(agency) -> _Server:
 
     def target() -> None:
         try:
-            server.run()
+            with _contain_bridge_output(capture):
+                server.run()
         except BaseException as exc:  # pragma: no cover - surfaced by waiter below
             error.append(exc)
 
@@ -355,6 +364,66 @@ def _chmod(path: Path) -> None:
 
 def _notify_setup(message: str) -> None:
     print(message, file=sys.stderr, flush=True)
+
+
+@contextmanager
+def _contain_bridge_output(path: Path | None):
+    if path is None:
+        yield
+        return
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    original = builtins.print
+    lock = threading.Lock()
+
+    def print_wrapper(*args, **kwargs):
+        file = kwargs.get("file")
+        if file not in (None, sys.stdout, sys.stderr):
+            return original(*args, **kwargs)
+
+        end = kwargs.get("end", "\n")
+        sep = kwargs.get("sep", " ")
+        flush = kwargs.get("flush", False)
+        text = sep.join(str(arg) for arg in args) + end
+        with lock:
+            with path.open("a", encoding="utf-8", buffering=1) as sink:
+                sink.write(text)
+                if flush:
+                    sink.flush()
+
+    builtins.print = print_wrapper
+    try:
+        yield path
+    finally:
+        builtins.print = original
+
+
+def _should_contain_bridge_output() -> bool:
+    return _isatty(sys.stdout) or _isatty(sys.stderr)
+
+
+def _bridge_log() -> Path:
+    fd, value = tempfile.mkstemp(prefix="agentswarm-bridge-", suffix=".log")
+    os.close(fd)
+    return Path(value)
+
+
+def _report_bridge_output(path: Path | None) -> None:
+    if not path or not path.exists():
+        return
+    with suppress(OSError):
+        if path.stat().st_size == 0:
+            path.unlink()
+            return
+    print(f"Python bridge output was captured in {path}", file=sys.stderr, flush=True)
+
+
+def _isatty(stream: object) -> bool:
+    method = getattr(stream, "isatty", None)
+    if callable(method):
+        with suppress(Exception):
+            return bool(method())
+    return False
 
 
 @contextmanager

@@ -1,7 +1,9 @@
 import importlib
 import json
 import subprocess
+import sys
 import tarfile
+import threading
 from io import BytesIO
 from pathlib import Path
 
@@ -32,7 +34,7 @@ def test_agentswarm_cli_tui_launches_agent_swarm_cli(monkeypatch):
 
     monkeypatch.delenv(agentswarm_cli_demo._RELOAD_CHILD_ENV, raising=False)
     monkeypatch.setattr(agentswarm_cli_demo.os, "getcwd", lambda: "/tmp/project")
-    monkeypatch.setattr(agentswarm_cli_demo, "_start_server", lambda value: server)
+    monkeypatch.setattr(agentswarm_cli_demo, "_start_server", lambda value, capture=None: server)
     monkeypatch.setattr(agentswarm_cli_demo, "_ensure_cli", lambda: Path("/usr/local/bin/agentswarm"))
 
     def fake_run(cmd, cwd, env, check):
@@ -63,7 +65,7 @@ def test_agentswarm_cli_tui_continues_after_reload(monkeypatch):
 
     monkeypatch.setenv(agentswarm_cli_demo._RELOAD_CHILD_ENV, "1")
     monkeypatch.setattr(agentswarm_cli_demo.os, "getcwd", lambda: "/tmp/project")
-    monkeypatch.setattr(agentswarm_cli_demo, "_start_server", lambda value: server)
+    monkeypatch.setattr(agentswarm_cli_demo, "_start_server", lambda value, capture=None: server)
     monkeypatch.setattr(agentswarm_cli_demo, "_ensure_cli", lambda: Path("/usr/local/bin/agentswarm"))
     monkeypatch.setattr(
         agentswarm_cli_demo.subprocess,
@@ -102,7 +104,11 @@ def test_agentswarm_cli_tui_raises_when_bridge_fails(monkeypatch):
     agency = build_agency()
 
     monkeypatch.setattr(agentswarm_cli_demo, "_ensure_cli", lambda: Path("/usr/local/bin/agentswarm"))
-    monkeypatch.setattr(agentswarm_cli_demo, "_start_server", lambda value: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(
+        agentswarm_cli_demo,
+        "_start_server",
+        lambda value, capture=None: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
 
     with pytest.raises(RuntimeError, match="bridge failed to start"):
         agentswarm_cli_demo.start_tui(agency, reload=False)
@@ -113,7 +119,7 @@ def test_agentswarm_cli_tui_raises_when_cli_launch_fails(monkeypatch):
     server = DummyServer()
 
     monkeypatch.setattr(agentswarm_cli_demo.os, "getcwd", lambda: "/tmp/project")
-    monkeypatch.setattr(agentswarm_cli_demo, "_start_server", lambda value: server)
+    monkeypatch.setattr(agentswarm_cli_demo, "_start_server", lambda value, capture=None: server)
     monkeypatch.setattr(agentswarm_cli_demo, "_ensure_cli", lambda: Path("/usr/local/bin/agentswarm"))
     monkeypatch.setattr(
         agentswarm_cli_demo.subprocess,
@@ -125,6 +131,126 @@ def test_agentswarm_cli_tui_raises_when_cli_launch_fails(monkeypatch):
         agentswarm_cli_demo.start_tui(agency, reload=False)
 
     assert server.stopped is True
+
+
+def test_agentswarm_cli_tui_contains_python_prints_while_cli_runs(monkeypatch, capsys, tmp_path):
+    agency = build_agency()
+    log = tmp_path / "bridge.log"
+    worker: threading.Thread | None = None
+    state: dict[str, DummyServer] = {}
+
+    monkeypatch.setattr(agentswarm_cli_demo.os, "getcwd", lambda: "/tmp/project")
+    monkeypatch.setattr(agentswarm_cli_demo, "_ensure_cli", lambda: Path("/usr/local/bin/agentswarm"))
+    monkeypatch.setattr(agentswarm_cli_demo, "_bridge_log", lambda: log)
+    monkeypatch.setattr(agentswarm_cli_demo, "_should_contain_bridge_output", lambda: True)
+
+    def fake_start_server(value, capture):
+        nonlocal worker
+
+        def target():
+            with agentswarm_cli_demo._contain_bridge_output(capture):
+                print("bridge stdout noise")
+                print("bridge stderr noise", file=sys.stderr)
+
+        worker = threading.Thread(target=target)
+        worker.start()
+
+        class LoggingServer(DummyServer):
+            def stop(self) -> None:
+                if worker is not None:
+                    worker.join()
+                super().stop()
+
+        state["server"] = LoggingServer()
+        return state["server"]
+
+    monkeypatch.setattr(agentswarm_cli_demo, "_start_server", fake_start_server)
+
+    def fake_run(cmd, cwd, env, check):
+        if worker is not None:
+            worker.join()
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(agentswarm_cli_demo.subprocess, "run", fake_run)
+    log.unlink(missing_ok=True)
+
+    agentswarm_cli_demo.start_tui(agency, reload=False)
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert str(log) in captured.err
+    assert "bridge stdout noise" in log.read_text()
+    assert "bridge stderr noise" in log.read_text()
+    assert state["server"].stopped is True
+
+
+def test_agentswarm_cli_tui_reports_bridge_output_on_failure(monkeypatch, capsys, tmp_path):
+    agency = build_agency()
+    log = tmp_path / "bridge.log"
+    worker: threading.Thread | None = None
+    state: dict[str, DummyServer] = {}
+
+    monkeypatch.setattr(agentswarm_cli_demo.os, "getcwd", lambda: "/tmp/project")
+    monkeypatch.setattr(agentswarm_cli_demo, "_ensure_cli", lambda: Path("/usr/local/bin/agentswarm"))
+    monkeypatch.setattr(agentswarm_cli_demo, "_bridge_log", lambda: log)
+    monkeypatch.setattr(agentswarm_cli_demo, "_should_contain_bridge_output", lambda: True)
+
+    def fake_start_server(value, capture):
+        nonlocal worker
+
+        def target():
+            with agentswarm_cli_demo._contain_bridge_output(capture):
+                print("bridge stdout noise")
+                print("bridge stderr noise", file=sys.stderr)
+
+        worker = threading.Thread(target=target)
+        worker.start()
+
+        class LoggingServer(DummyServer):
+            def stop(self) -> None:
+                if worker is not None:
+                    worker.join()
+                super().stop()
+
+        state["server"] = LoggingServer()
+        return state["server"]
+
+    monkeypatch.setattr(agentswarm_cli_demo, "_start_server", fake_start_server)
+
+    def fake_run(cmd, cwd, env, check):
+        if worker is not None:
+            worker.join()
+        return subprocess.CompletedProcess(cmd, 1)
+
+    monkeypatch.setattr(agentswarm_cli_demo.subprocess, "run", fake_run)
+    log.unlink(missing_ok=True)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        agentswarm_cli_demo.start_tui(agency, reload=False)
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert str(log) in captured.err
+    assert "bridge stdout noise" in log.read_text()
+    assert "bridge stderr noise" in log.read_text()
+    assert state["server"].stopped is True
+
+
+def test_agentswarm_cli_tui_capture_redirects_other_threads(capsys, tmp_path):
+    log = tmp_path / "bridge.log"
+
+    def other():
+        print("other thread output")
+
+    with agentswarm_cli_demo._contain_bridge_output(log):
+        worker = threading.Thread(target=other)
+        worker.start()
+        worker.join()
+        print("server thread output")
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert log.read_text() == "other thread output\nserver thread output\n"
 
 
 def test_agentswarm_cli_tui_downloads_platform_cli(monkeypatch, tmp_path):
