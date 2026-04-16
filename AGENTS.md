@@ -175,8 +175,10 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 
 ### Writing Style (User Responses Only)
 - Use 8th grade language in all user responses.
-- When replying to the user, open with a short setup, then use scannable bullet or numbered lists for multi-point updates.
-- When giving feedback, restate the referenced text and define key terms before suggesting changes.
+- Lead with the answer. If one sentence is enough, use one sentence.
+- Use bullet or numbered lists only when they make the answer clearer.
+- Cut filler, vague wording, hype, and empty agreement words.
+- When giving feedback, quote or restate only the minimum text needed to make the point.
 - Do not add dedicated `Validation` sections to user-facing replies or PR descriptions; if evidence matters, fold it into the main update in one short line.
 - Do not mention review-artifact file paths or artifact inventories in user-facing replies or PR descriptions unless the user explicitly asks for them.
 - Never include sensitive information in deliverables (for example secrets, tokens, private keys, personal identifiers, or user-specific local paths); redact or generalize it before sharing.
