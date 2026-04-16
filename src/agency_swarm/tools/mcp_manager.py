@@ -316,7 +316,7 @@ class PersistentMCPServerManager:
                     break
 
         # Start driver
-        asyncio.run_coroutine_threadsafe(_driver(), loop)
+        driver_future = asyncio.run_coroutine_threadsafe(_driver(), loop)
         # Wait until driver has connected
         if not ready_evt.wait(timeout=self._timeouts.get("connect", 20.0)):
             # Handle timeout explicitly
@@ -325,7 +325,12 @@ class PersistentMCPServerManager:
         has_session = getattr(real_server, "session", None) is not None
         has_discovery = getattr(real_server, "_discovery_session", None) is not None
         created_by_driver = has_session or has_discovery
-        self._drivers[real_server] = {"queue": queue, "real": real_server, "created_by_driver": created_by_driver}
+        self._drivers[real_server] = {
+            "queue": queue,
+            "real": real_server,
+            "created_by_driver": created_by_driver,
+            "driver_future": driver_future,
+        }
 
     async def ensure_connected(self, server: Any) -> None:
         # Ensure the per-server driver is running and connected
@@ -497,7 +502,12 @@ class PersistentMCPServerManager:
             loop = self._ensure_bg_loop()
             loop.call_soon_threadsafe(lambda: queue.put_nowait({"type": "shutdown", "result_fut": fut}))
             running_loop = asyncio.get_running_loop()
-            await running_loop.run_in_executor(None, fut.result, self._timeouts.get("cleanup", 10.0))
+            try:
+                await running_loop.run_in_executor(None, fut.result, self._timeouts.get("cleanup", 10.0))
+            except TimeoutError:
+                driver_future = state.get("driver_future")
+                if isinstance(driver_future, Future):
+                    driver_future.cancel()
             return
 
         cleanup = getattr(real_server, "cleanup", None)

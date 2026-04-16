@@ -257,3 +257,53 @@ async def test_agui_endpoint_cancels_stream_task_on_teardown(monkeypatch: pytest
         await consumer
 
     await asyncio.wait_for(cancelled.wait(), timeout=0.2)
+
+
+@pytest.mark.asyncio
+async def test_agui_chat_history_loads_prior_history_only() -> None:
+    """AG-UI chat_history should not replay the current input message twice."""
+
+    captured: dict[str, Any] = {}
+
+    async def _empty_stream() -> AsyncGenerator[dict[str, Any]]:
+        if False:
+            yield {}
+
+    class _StubAgency:
+        def __init__(self) -> None:
+            self.agents = {}
+            self.entry_points = []
+            self.thread_manager = type("_ThreadManager", (), {"get_all_messages": lambda self: []})()
+
+        def get_response_stream(self, message: str, **_kwargs: Any) -> StreamingRunResponse:
+            captured["message"] = message
+            return StreamingRunResponse(_empty_stream())
+
+    def _agency_factory(load_threads_callback=None, **_kwargs: Any) -> _StubAgency:
+        captured["loaded_history"] = load_threads_callback() if load_threads_callback is not None else None
+        return _StubAgency()
+
+    handler = make_agui_chat_endpoint(
+        RunAgentInputCustom,
+        agency_factory=_agency_factory,
+        verify_token=lambda: None,
+    )
+
+    request = RunAgentInputCustom(
+        thread_id="thread-1",
+        run_id="run-1",
+        state=None,
+        messages=[],
+        tools=[],
+        context=[],
+        forwarded_props=None,
+        chat_history=[
+            {"role": "assistant", "content": "previous"},
+            {"role": "user", "content": "current"},
+        ],
+    )
+    response = await handler(request, token=None)
+    _ = [chunk async for chunk in response.body_iterator]
+
+    assert captured["message"] == "current"
+    assert captured["loaded_history"] == [{"role": "assistant", "content": "previous"}]

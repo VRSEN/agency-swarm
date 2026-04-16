@@ -990,7 +990,7 @@ def make_agui_chat_endpoint(
         if has_chat_history:
             # Chat history is now a flat list
             def load_callback() -> list:
-                return request.chat_history
+                return request.chat_history[:-1]
 
             # Extract input message from last chat_history entry
             last_chat_msg = request.chat_history[-1]

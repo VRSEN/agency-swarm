@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from concurrent.futures import Future
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -935,6 +936,27 @@ async def test_cleanup_oauth_runtime_mcp_servers_removes_request_scoped_clients(
         set_oauth_runtime_context(None)
         set_oauth_user_id(None)
         await default_mcp_manager.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_unregister_keys_ending_with_cancels_busy_request_scoped_driver() -> None:
+    manager = PersistentMCPServerManager()
+    server = _DummyServer("busy")
+    key = "busy::oauth::url::user::store::request_suffix"
+    driver_future: Future = Future()
+    manager._timeouts["cleanup"] = 0.01
+    manager._servers[key] = server
+    manager._drivers[server] = {
+        "queue": asyncio.Queue(),
+        "real": server,
+        "created_by_driver": False,
+        "driver_future": driver_future,
+    }
+
+    await manager.unregister_keys_ending_with("::request_suffix")
+
+    assert manager.get(key) is None
+    assert driver_future.cancelled()
 
 
 def test_build_persistence_key_separates_custom_storage(tmp_path: Path) -> None:
