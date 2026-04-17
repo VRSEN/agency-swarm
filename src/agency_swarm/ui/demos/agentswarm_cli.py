@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import builtins
 import hashlib
 import json
 import logging
@@ -372,30 +371,66 @@ def _contain_bridge_output(path: Path | None):
         yield
         return
 
+    class _CapturedTextStream:
+        def __init__(self, sink, lock: threading.Lock) -> None:
+            self._sink = sink
+            self._lock = lock
+            self.encoding = sink.encoding
+            self.errors = sink.errors
+
+        def write(self, text: str) -> int:
+            value = str(text)
+            with self._lock:
+                written = self._sink.write(value)
+                self._sink.flush()
+            return written
+
+        def writelines(self, lines) -> None:
+            with self._lock:
+                for line in lines:
+                    self._sink.write(str(line))
+                self._sink.flush()
+
+        def flush(self) -> None:
+            with self._lock:
+                self._sink.flush()
+
+        def isatty(self) -> bool:
+            return False
+
+        def writable(self) -> bool:
+            return True
+
     path.parent.mkdir(parents=True, exist_ok=True)
-    original = builtins.print
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
     lock = threading.Lock()
+    with path.open("a", encoding="utf-8", buffering=1) as sink:
+        capture_stream = _CapturedTextStream(sink, lock)
+        rebound_handlers: list[tuple[logging.StreamHandler, object]] = []
+        managed_loggers = [
+            logging.getLogger(),
+            *[value for value in logging.root.manager.loggerDict.values() if isinstance(value, logging.Logger)],
+        ]
 
-    def print_wrapper(*args, **kwargs):
-        file = kwargs.get("file")
-        if file not in (None, sys.stdout, sys.stderr):
-            return original(*args, **kwargs)
+        for current_logger in managed_loggers:
+            for handler in current_logger.handlers:
+                if not isinstance(handler, logging.StreamHandler):
+                    continue
+                if handler.stream not in (original_stdout, original_stderr):
+                    continue
+                rebound_handlers.append((handler, handler.stream))
+                handler.setStream(capture_stream)
 
-        end = kwargs.get("end", "\n")
-        sep = kwargs.get("sep", " ")
-        flush = kwargs.get("flush", False)
-        text = sep.join(str(arg) for arg in args) + end
-        with lock:
-            with path.open("a", encoding="utf-8", buffering=1) as sink:
-                sink.write(text)
-                if flush:
-                    sink.flush()
-
-    builtins.print = print_wrapper
-    try:
-        yield path
-    finally:
-        builtins.print = original
+        sys.stdout = capture_stream
+        sys.stderr = capture_stream
+        try:
+            yield path
+        finally:
+            sys.stdout = original_stdout
+            sys.stderr = original_stderr
+            for handler, stream in reversed(rebound_handlers):
+                handler.setStream(stream)
 
 
 def _should_contain_bridge_output() -> bool:
