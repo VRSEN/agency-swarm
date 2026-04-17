@@ -1,5 +1,6 @@
 import importlib
 import json
+import logging
 import subprocess
 import sys
 import tarfile
@@ -138,6 +139,11 @@ def test_agentswarm_cli_tui_contains_python_prints_while_cli_runs(monkeypatch, c
     log = tmp_path / "bridge.log"
     worker: threading.Thread | None = None
     state: dict[str, DummyServer] = {}
+    logger = logging.getLogger("test.agentswarm_cli.bridge")
+    handler = logging.StreamHandler(sys.stderr)
+    logger.handlers = [handler]
+    logger.setLevel(logging.WARNING)
+    logger.propagate = False
 
     monkeypatch.setattr(agentswarm_cli_demo.os, "getcwd", lambda: "/tmp/project")
     monkeypatch.setattr(agentswarm_cli_demo, "_ensure_cli", lambda: Path("/usr/local/bin/agentswarm"))
@@ -149,8 +155,9 @@ def test_agentswarm_cli_tui_contains_python_prints_while_cli_runs(monkeypatch, c
 
         def target():
             with agentswarm_cli_demo._contain_bridge_output(capture):
-                print("bridge stdout noise")
-                print("bridge stderr noise", file=sys.stderr)
+                sys.stdout.write("bridge stdout noise\n")
+                sys.stderr.write("bridge stderr noise\n")
+                logger.warning("bridge logger noise")
 
         worker = threading.Thread(target=target)
         worker.start()
@@ -173,14 +180,21 @@ def test_agentswarm_cli_tui_contains_python_prints_while_cli_runs(monkeypatch, c
 
     monkeypatch.setattr(agentswarm_cli_demo.subprocess, "run", fake_run)
     log.unlink(missing_ok=True)
-
-    agentswarm_cli_demo.start_tui(agency, reload=False)
+    try:
+        agentswarm_cli_demo.start_tui(agency, reload=False)
+    finally:
+        logger.handlers = []
 
     captured = capsys.readouterr()
     assert captured.out == ""
+    assert "bridge stdout noise" not in captured.err
+    assert "bridge stderr noise" not in captured.err
+    assert "bridge logger noise" not in captured.err
     assert str(log) in captured.err
-    assert "bridge stdout noise" in log.read_text()
-    assert "bridge stderr noise" in log.read_text()
+    text = log.read_text()
+    assert "bridge stdout noise" in text
+    assert "bridge stderr noise" in text
+    assert "bridge logger noise" in text
     assert state["server"].stopped is True
 
 
@@ -238,19 +252,39 @@ def test_agentswarm_cli_tui_reports_bridge_output_on_failure(monkeypatch, capsys
 
 def test_agentswarm_cli_tui_capture_redirects_other_threads(capsys, tmp_path):
     log = tmp_path / "bridge.log"
+    logger = logging.getLogger("test.agentswarm_cli.capture")
+    handler = logging.StreamHandler(sys.stderr)
+    logger.handlers = [handler]
+    logger.setLevel(logging.WARNING)
+    logger.propagate = False
 
     def other():
-        print("other thread output")
+        sys.stdout.write("other thread stdout\n")
+        sys.stderr.write("other thread stderr\n")
+        logger.warning("other thread logger")
 
-    with agentswarm_cli_demo._contain_bridge_output(log):
-        worker = threading.Thread(target=other)
-        worker.start()
-        worker.join()
-        print("server thread output")
+    try:
+        with agentswarm_cli_demo._contain_bridge_output(log):
+            worker = threading.Thread(target=other)
+            worker.start()
+            worker.join()
+            sys.stdout.write("server thread stdout\n")
+            sys.stderr.write("server thread stderr\n")
+            logger.warning("server thread logger")
+    finally:
+        logger.handlers = []
 
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert log.read_text() == "other thread output\nserver thread output\n"
+    assert captured.err == ""
+    assert log.read_text() == (
+        "other thread stdout\n"
+        "other thread stderr\n"
+        "other thread logger\n"
+        "server thread stdout\n"
+        "server thread stderr\n"
+        "server thread logger\n"
+    )
 
 
 def test_agentswarm_cli_tui_downloads_platform_cli(monkeypatch, tmp_path):
