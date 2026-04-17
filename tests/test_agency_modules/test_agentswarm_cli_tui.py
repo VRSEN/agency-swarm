@@ -1,6 +1,7 @@
 import importlib
 import json
 import logging
+import os
 import subprocess
 import sys
 import tarfile
@@ -285,6 +286,34 @@ def test_agentswarm_cli_tui_capture_redirects_other_threads(capsys, tmp_path):
         "server thread stderr\n"
         "server thread logger\n"
     )
+
+
+def test_agentswarm_cli_tui_capture_redirects_streams_logging_and_fds(capsys, tmp_path):
+    log = tmp_path / "bridge.log"
+    logger = logging.getLogger("agency_swarm.tests.bridge_capture")
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.handlers = [handler]
+
+    try:
+        with agentswarm_cli_demo._contain_bridge_output(log):
+            sys.stdout.write("stdout write noise\n")
+            sys.stdout.flush()
+            sys.stderr.write("stderr write noise\n")
+            sys.stderr.flush()
+            logger.info("logging noise")
+            os.write(1, b"fd1 noise\n")
+            os.write(2, b"fd2 noise\n")
+    finally:
+        handler.close()
+        logger.handlers = []
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+    assert log.read_text() == ("stdout write noise\nstderr write noise\nlogging noise\nfd1 noise\nfd2 noise\n")
 
 
 def test_agentswarm_cli_tui_downloads_platform_cli(monkeypatch, tmp_path):

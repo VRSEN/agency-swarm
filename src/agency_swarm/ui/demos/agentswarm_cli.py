@@ -405,6 +405,8 @@ def _contain_bridge_output(path: Path | None):
     original_stdout = sys.stdout
     original_stderr = sys.stderr
     lock = threading.Lock()
+    saved_stdout_fd = os.dup(1)
+    saved_stderr_fd = os.dup(2)
     with path.open("a", encoding="utf-8", buffering=1) as sink:
         capture_stream = _CapturedTextStream(sink, lock)
         rebound_handlers: list[tuple[logging.StreamHandler, object]] = []
@@ -422,6 +424,13 @@ def _contain_bridge_output(path: Path | None):
                 rebound_handlers.append((handler, handler.stream))
                 handler.setStream(capture_stream)
 
+        fd_sink = os.open(str(path), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
+        try:
+            os.dup2(fd_sink, 1)
+            os.dup2(fd_sink, 2)
+        finally:
+            os.close(fd_sink)
+
         sys.stdout = capture_stream
         sys.stderr = capture_stream
         try:
@@ -431,6 +440,10 @@ def _contain_bridge_output(path: Path | None):
             sys.stderr = original_stderr
             for handler, stream in reversed(rebound_handlers):
                 handler.setStream(stream)
+            os.dup2(saved_stdout_fd, 1)
+            os.dup2(saved_stderr_fd, 2)
+            os.close(saved_stdout_fd)
+            os.close(saved_stderr_fd)
 
 
 def _should_contain_bridge_output() -> bool:
