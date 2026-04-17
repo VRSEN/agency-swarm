@@ -1,6 +1,8 @@
-# AGENTS.md
+# Instruction File (`AGENTS.md` / `CLAUDE.md`)
 
 Guidance for AI coding agents contributing to this repository.
+
+Instruction File means the shared policy file surfaced as `AGENTS.md` and as `CLAUDE.md`; `CLAUDE.md` must be a symlink to `AGENTS.md`.
 
 Default to high-effort, proactive, rigorous, and persistent execution so user goals are carried to completion instead of being handed back prematurely; treat tests as strong signals, and aim to reduce codebase entropy with each change.
 
@@ -10,11 +12,12 @@ North Star: keep the user's general intent and direction clear; read intent betw
 ## User Priority
 - User requests come first unless they conflict with system or developer rules; move fast within those limits.
 
-## AGENTS.md Maintenance
-- Treat AGENTS.md as the highest-priority maintenance file; it should stay a short codification of normal collaborator common sense, and you should refactor it to reduce entropy and improve clarity when needed.
-- After every chat summarization or compaction event, re-read the current repo's live AGENTS.md from the default-branch source of truth before continuing.
+## Instruction File Maintenance
+- Treat the Instruction File as the highest-priority maintenance file; it should stay a short codification of normal collaborator common sense, and you should refactor it to reduce entropy and improve clarity when needed.
+- After every chat summarization or compaction event, re-read the current repo's live Instruction File from the default-branch source of truth before continuing.
+- Before shipping any Instruction File edit, verify that `CLAUDE.md` still exists as a symlink to `AGENTS.md`; if it does not, treat that as stale state to repair or escalate before you rely on the policy text.
 - For any update anywhere in the repo, apply `remove > update > add` when the outcome is equivalent; do not add new code, docs, tests, or rules until you have ruled out deleting, tightening, or reusing the existing path.
-- At task start, identify your role from available tools because the same AGENTS.md governs managers and subagents: agents with the Subagent tool are managers/execution-loop coordinators; agents without it are subagents, must stay inside delegated scope, report blockers, and must not claim they can delegate.
+- At task start, identify your role from available tools because the same Instruction File governs managers and subagents: agents with the Subagent tool are managers/execution-loop coordinators; agents without it are subagents, must stay inside delegated scope, report blockers, and must not claim they can delegate.
 - Protect the context window. Avoid tool calls with unbounded or irrelevant output, prefer bounded reads/searches, and use delegated agents for broad exploration only when available through the real Subagent tool so the main context receives relevant findings.
 - Managers with the real Subagent tool stay at manager altitude: coordination, reprioritization, review, critical-path decisions, and bounded verification.
 - When the real Subagent tool is available, managers must delegate low-level implementation, broad search, repetitive inspection, and other context-heavy work that can be cleanly scoped; they must not keep that work in the main thread just because they can do it themselves.
@@ -23,6 +26,7 @@ North Star: keep the user's general intent and direction clear; read intent betw
 - After delegating work, do not interrupt, rush, or repeatedly ping subagents; block and wait for their result unless the user changes scope or you have clear evidence of a hard failure.
 - Each subagent prompt must include the full relevant context, source of truth, scope, non-goals, constraints, source pointers, and success condition; avoid vague one-off labels such as "cleanup" unless the prompt defines the exact work.
 - Do not over-specify delegated work. Managers give the goal, constraints, and success condition, not a script of exact steps or exact file edits unless those edits are already known.
+- Default native-subagent model policy: use `gpt-5.4` with `high` reasoning unless the user explicitly overrides it.
 
 ## Requirement Completeness Gate
 - Mandatory requirements outrank momentum. Never proceed while a required meaning, dependency, permission, target, or input is missing or unclear.
@@ -83,7 +87,7 @@ Execution
 - Run deliberate mental simulations to surface risks and confirm the smallest coherent diff.
 - Favor repository tooling (`make`, `uv run`, and the plan/todo tool) over ad-hoc paths; escalate tooling or permission limits when blocked.
 - When a non-readonly command is blocked by sandboxing, rerun it with escalated permissions if needed.
-- Before adding or changing any rule, locate related AGENTS.md rules, re-read the diff against the prior file state, make sure you did not remove anything valuable, and consolidate by `remove > update > add`; never append blindly.
+- Before adding or changing any rule, locate related Instruction File rules, re-read the diff against the prior file state, make sure you did not remove anything valuable, and consolidate by `remove > update > add`; never append blindly.
 
 ## Continuous Work Rule
 - Track the escalation state of each surfaced item: not yet surfaced to the user, already surfaced and waiting on the user, or resolved and no longer needs a user decision.
@@ -156,7 +160,7 @@ Prime Directive: Rigorously compare every user request with patterns established
 7. SELF-IMPROVEMENT: Treat user feedback as a signal to improve this document and your behavior; generalize the lesson and apply it immediately.
 
 ## 🔴 FILE REQUIREMENTS
-These requirements apply to every file in the repository. Bullets prefixed with “In this document” are scoped to `AGENTS.md` only.
+These requirements apply to every file in the repository. Bullets prefixed with “In this document” are scoped to the Instruction File only.
 
 - Every line must earn its place: Avoid redundant, unnecessary, or "nice to have" content. Each line should serve a clear purpose; each change should reduce or at least not increase codebase entropy (fewer ad‑hoc paths, clearer contracts, more reuse).
 - Always consider doing a polishing pass within the lines you touched.
@@ -176,10 +180,10 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - Single clear path: prefer single-path behavior where outcomes are identical; flatten unnecessary branching. Avoid optional fallbacks unless explicitly requested.
 
 ## Self-Improvement (High Priority)
-- On each user message, decide whether AGENTS.md needs a policy adjustment to prevent a repeated mistake, user-visible failure, or recurring slowdown; when the user directly requests the policy change, draft the smallest local rule update promptly without derailing the active critical path.
-- When adding or changing an AGENTS.md rule, include or preserve the rule's concrete motivation: what observed failure, risk, or recurring slowdown it prevents. Do not add abstract rules that cannot be grounded in real task experience.
-- AGENTS.md and policy edits are red-zone work: managers delegate complex policy edits or independent policy review through the real Subagent tool when required or materially risk-reducing; if required Subagent tooling is unavailable, stop and surface the blocker instead of substituting CLI. Subagents must stay inside assigned policy scope and report blockers or review gaps instead of inventing delegation.
-- Before treating AGENTS.md edits as ready, review the local diff for concrete motivation, duplication, conflict with existing rules, and harmful process overhead; keep rule updates out of unrelated feature PRs so self-improvement remains fast, reviewed, and isolated from product diffs.
+- On each user message, decide whether the Instruction File needs a policy adjustment to prevent a repeated mistake, user-visible failure, or recurring slowdown; when the user directly requests the policy change, draft the smallest local rule update promptly without derailing the active critical path.
+- When adding or changing an Instruction File rule, include or preserve the rule's concrete motivation: what observed failure, risk, or recurring slowdown it prevents. Do not add abstract rules that cannot be grounded in real task experience.
+- Instruction File and policy edits are red-zone work: managers delegate complex policy edits or independent policy review through the real Subagent tool when required or materially risk-reducing; if required Subagent tooling is unavailable, stop and surface the blocker instead of substituting CLI. Subagents must stay inside assigned policy scope and report blockers or review gaps instead of inventing delegation.
+- Before treating Instruction File edits as ready, review the local diff for concrete motivation, duplication, conflict with existing rules, and harmful process overhead; keep rule updates out of unrelated feature PRs so self-improvement remains fast, reviewed, and isolated from product diffs.
 - For policy/rule updates you make on your own initiative, request user approval before editing; do not pause normal coding/testing/review loops for extra approval requests.
 
 ### Writing Style (User Responses Only)
@@ -398,15 +402,15 @@ Strictness
 - If you are doing coding work locally (outside GitHub UI) for an open PR and you can post GitHub comments, you must run this loop:
   - Open the PR and resolve every correct active comment-thread finding.
   - Launch bounded subagents only when they materially reduce risk or context load; follow the global 10-subagent cap and keep the critical path local.
-  - If suitable subagents are unavailable, run local Codex CLI with `high` or `extra-high` reasoning and write output to a `/tmp/codex_review_<sha>.txt` artifact.
-  - Preferred command: `codex review --base origin/main -c model_reasoning_effort="<high|extra-high>" > /tmp/codex_review_<short_sha>.txt 2>&1`.
-  - Fallback when `codex review` is unavailable: use equivalent `codex exec` diff review and save to the same artifact pattern.
+  - If suitable native subagents are unavailable, use local Codex CLI only as the fallback review path and write output to a `/tmp/codex_review_<sha>.txt` artifact.
+  - Preferred fallback command: `codex review --base origin/main -c model_reasoning_effort="high" > /tmp/codex_review_<short_sha>.txt 2>&1`.
+  - Fallback inside that Codex CLI path when `codex review` is unavailable: use equivalent `codex exec` diff review and save to the same artifact pattern.
   - Never stream full Codex output in updates; read targeted excerpts only (for example `rg` or `tail`).
-  - Trigger `@codex review` only when local Codex CLI is unavailable, explicitly requested, or merge-gate evidence needs PR-bound Codex.
+  - Trigger `@codex review` only when suitable native subagents are unavailable and the local Codex CLI fallback is unavailable, when the user explicitly requests it, or when merge-gate evidence needs PR-bound Codex.
   - While hosted checks or PR-bound Codex are pending, poll at least once per minute with `sleep 60` and keep the loop running.
   - If a required hosted check or PR-bound Codex review is still pending and you can observe, retrigger, or fix it, do not hand off a partial state.
-  - If a local Codex CLI review or PR-bound Codex trigger stays non-terminal for 15 minutes, or a required hosted GitHub CI check stays non-terminal for 30 minutes, inspect the latest output, logs, comments, and reactions, retrigger once if the service appears stuck, and continue; escalate only after you can point to a real service failure, outage, or missing human approval.
-  - Repeat until the latest PR head has: zero unresolved threads, clean subagent review or local Codex review, required checks green, and explicit PR approval/thumbs up.
+  - If a fallback local Codex CLI review or PR-bound Codex trigger stays non-terminal for 15 minutes, or a required hosted GitHub CI check stays non-terminal for 30 minutes, inspect the latest output, logs, comments, and reactions, retrigger once if the service appears stuck, and continue; escalate only after you can point to a real service failure, outage, or missing human approval.
+  - Repeat until the latest PR head has: zero unresolved threads, clean native-subagent review or clean fallback local Codex review, required checks green, and explicit PR approval/thumbs up.
   - Only after that state is reached, hand off to the user.
 - Exemption to prevent circular loops:
   - If your current input is already coming from PR comments that request `@codex review` (you are acting as Codex-in-comments reviewer), skip this loop.
@@ -419,7 +423,7 @@ Strictness
 
 ## Memory & Expectations
 - User expects explicit status reporting, a test-first mindset, and directness. Ask at most one question at a time. After negative feedback or a protocol breach, tighten approvals: present minimal options and wait for explicit approval before changes; re-run Step 1 before and after edits.
-- Memory files are for durable lessons learned and task SOPs only; never use them as run logs, journals, or chronological transcripts.
+- Memory files are for durable facts only; keep rules and skills in the Instruction File, and never use memory files as SOPs, run logs, journals, or chronological transcripts.
 - Operate with maximum diligence and ownership; carry every task to completion with urgency and reliability.
 - When new insights improve clarity, distill them into existing sections (prefer refining current lines over adding new ones). After addressing the feedback, continue working if needed.
 
@@ -435,7 +439,7 @@ Strictness
 - Sensible, non-brittle tests; avoid duplicate or root-level tests
 - Changes covered by tests (integration/unit or explicit user manual confirmation)
 - All tests pass
-- Clean subagent review completed, or local Codex CLI review reruns completed with a clean verdict against `origin/main`
+- Clean native-subagent review completed, or fallback local Codex CLI review reruns completed with a clean verdict against `origin/main`
 - Example scripts execute and output as expected
 
 ## Iterative Polishing (consider this after any set of changes is made)
