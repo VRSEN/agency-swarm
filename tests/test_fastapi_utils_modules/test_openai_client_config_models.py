@@ -204,6 +204,34 @@ def test_litellm_openai_provider_can_use_generic_api_key_fallback() -> None:
     assert agent.model.api_key == "sk-openai"
 
 
+def test_openai_client_override_applies_codex_compatibility_model_settings() -> None:
+    """Codex overrides should use the Responses settings the browser-auth backend accepts."""
+    pytest.importorskip("agents")
+
+    from agents import OpenAIResponsesModel
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    class _Agency:
+        def __init__(self, agent: Agent):
+            self.agents = {"A": agent}
+
+    agent = Agent(name="A", instructions="x", model="gpt-4o-mini")
+    agency = _Agency(agent)
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(api_key="sk-openai", base_url="https://chatgpt.com/backend-api/codex"),
+    )
+
+    assert isinstance(agent.model, OpenAIResponsesModel)
+    assert agent.model_settings is not None
+    assert agent.model_settings.store is False
+    assert agent.model_settings.truncation is None
+
+
 def test_snapshot_restore_preserves_model_settings_headers() -> None:
     """Snapshot/restore should not leak mutated model_settings."""
     pytest.importorskip("agents")

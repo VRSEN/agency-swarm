@@ -7,6 +7,80 @@ import pytest
 
 
 @pytest.mark.asyncio
+async def test_generate_chat_name_uses_codex_direct_client_stream() -> None:
+    """Codex chat-name generation should use the proven low-level client request shape."""
+    from agency_swarm.integrations.fastapi_utils import endpoint_handlers
+
+    captured: dict[str, object] = {}
+
+    class _Event:
+        def __init__(self, event_type: str, delta: str = ""):
+            self.type = event_type
+            self.delta = delta
+
+    class _DummyResponse:
+        def __aiter__(self):
+            return self._events()
+
+        async def _events(self):
+            yield _Event("response.output_text.delta", "Friendly")
+            yield _Event("response.output_text.delta", " Greeting")
+
+    class _DummyResponses:
+        async def create(self, **kwargs):
+            captured.update(kwargs)
+            return _DummyResponse()
+
+    class _DummyClient:
+        base_url = "https://chatgpt.com/backend-api/codex"
+        responses = _DummyResponses()
+
+    result = await endpoint_handlers.generate_chat_name(
+        [{"role": "user", "content": "hello"}],
+        openai_client=_DummyClient(),
+    )
+
+    assert result == "Friendly Greeting"
+    assert captured["model"] == "gpt-5.4-mini"
+    assert captured["store"] is False
+    assert captured["stream"] is True
+    assert captured["input"] == [{"role": "user", "content": "hello"}]
+    assert "generates a human-friendly title" in str(captured["instructions"])
+
+
+@pytest.mark.asyncio
+async def test_generate_chat_name_keeps_agency_path_for_non_codex(monkeypatch) -> None:
+    """Non-Codex backends should keep the existing Agency-based retry path."""
+    pytest.importorskip("agents")
+
+    from openai import AsyncOpenAI
+
+    from agency_swarm.integrations.fastapi_utils import endpoint_handlers
+
+    class _FinalOutput:
+        chat_name = "Sample Chat Name"
+
+    class _DummyResult:
+        final_output = _FinalOutput()
+
+    captured = {"used_agency": False}
+
+    async def _fake_get_response(self, _message):
+        captured["used_agency"] = True
+        return _DummyResult()
+
+    monkeypatch.setattr(endpoint_handlers.Agency, "get_response", _fake_get_response)
+
+    result = await endpoint_handlers.generate_chat_name(
+        [{"role": "user", "content": "hello"}],
+        openai_client=AsyncOpenAI(api_key="sk-test", base_url="https://api.openai.com/v1"),
+    )
+
+    assert captured["used_agency"] is True
+    assert result == "Sample Chat Name"
+
+
+@pytest.mark.asyncio
 async def test_make_response_endpoint_applies_client_config_to_agent_client_sync(monkeypatch) -> None:
     """Request client_config should provide a sync OpenAI client for attachment lookups."""
     pytest.importorskip("agents")
