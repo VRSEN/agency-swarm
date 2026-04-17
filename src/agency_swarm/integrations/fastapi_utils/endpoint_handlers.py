@@ -821,6 +821,9 @@ async def generate_chat_name(
 ):
     client = openai_client or get_default_openai_client() or AsyncOpenAI()
 
+    def _word_count(value: str) -> int:
+        return len(value.split(" "))
+
     class ResponseFormat(BaseModel):
         chat_name: str = Field(description="A fitting name for the provided chat history.")
 
@@ -833,7 +836,7 @@ async def generate_chat_name(
 
         chat_name = response_text.chat_name if isinstance(response_text, ResponseFormat) else str(response_text)
 
-        if len(chat_name.split(" ")) < 2 or len(chat_name.split(" ")) > 6:
+        if _word_count(chat_name) < 2 or _word_count(chat_name) > 6:
             tripwire_triggered = True
             output_info = "The name should contain between 2 and 6 words"
 
@@ -842,17 +845,12 @@ async def generate_chat_name(
             tripwire_triggered=tripwire_triggered,
         )
 
-    formatted_messages = str(MessageFormatter.strip_agency_metadata(new_messages))  # type: ignore[arg-type]
+    stripped_messages = MessageFormatter.strip_agency_metadata(new_messages)  # type: ignore[arg-type]
+    formatted_messages = str(stripped_messages)
     if len(formatted_messages) > 1000:
         formatted_messages = "HISTORY TRUNCATED TO 1000 CHARACTERS:\n" + formatted_messages[:1000]
 
-    model = OpenAIResponsesModel(model="gpt-5.4-mini", openai_client=client)
-
-    name_agent = Agent(
-        name="NameGenerator",
-        model=model,
-        instructions=(
-            """
+    title_instructions = """
 You are a helpful assistant that generates a human-friendly title for a conversation.
 You will receive a list of messages where the first one is the user input and the rest are
 related to the assistant response.
@@ -864,17 +862,54 @@ Rules:
 - If the first user message is generic (e.g., “hi”), use the best available intent from the rest of the messages.
 - If you lack context of the user input (continuation of an ongoing conversation), derive it from agent's response.
 """
-        ),
+
+    if _is_codex_base_url(str(client.base_url)):
+        codex_input: list[TResponseInputItem]
+        if len(formatted_messages) > 1000:
+            codex_input = [cast(TResponseInputItem, {"role": "user", "content": formatted_messages})]
+        else:
+            codex_input = cast(list[TResponseInputItem], stripped_messages)
+
+        retry_suffix = ""
+        for _attempt in range(4):
+            response = await client.responses.create(
+                model="gpt-5.4-mini",
+                instructions=title_instructions + retry_suffix,
+                input=codex_input,
+                store=False,
+                stream=True,
+            )
+            text_parts: list[str] = []
+            async for event in response:
+                if getattr(event, "type", "") != "response.output_text.delta":
+                    continue
+                delta = getattr(event, "delta", None)
+                if isinstance(delta, str) and delta:
+                    text_parts.append(delta)
+            chat_name = "".join(text_parts).strip()
+            if 2 <= _word_count(chat_name) <= 6:
+                return chat_name
+            retry_suffix = (
+                "\nThe previous title was invalid because it must contain between 2 and 6 words. "
+                "Return a corrected title now."
+            )
+        raise ValueError("Generated chat name must contain between 2 and 6 words")
+
+    model = OpenAIResponsesModel(model="gpt-5.4-mini", openai_client=client)
+
+    name_agent = Agent(
+        name="NameGenerator",
+        model=model,
+        model_settings=ModelSettings(store=False),
+        instructions=title_instructions,
         output_type=ResponseFormat,
         validation_attempts=3,
         output_guardrails=[response_content_guardrail],
     )
 
     agency = Agency(name_agent)
-
-    response = await agency.get_response(formatted_messages)
-
-    return response.final_output.chat_name
+    run_result = await agency.get_response(formatted_messages)
+    return run_result.final_output.chat_name
 
 
 def _get_agency_swarm_version() -> str | None:
@@ -973,6 +1008,20 @@ def _apply_default_headers_to_agent_model_settings(agent: Agent, headers: dict[s
     agent.model_settings = current
 
 
+def _is_codex_base_url(value: str | None) -> bool:
+    if not value:
+        return False
+    return value.rstrip("/") == "https://chatgpt.com/backend-api/codex"
+
+
+def _apply_codex_compatibility_model_settings(agent: Agent) -> None:
+    """Strip unsupported Responses parameters for the Codex browser-auth backend."""
+    current: ModelSettings = getattr(agent, "model_settings", None) or ModelSettings()
+    current.store = False
+    current.truncation = None
+    agent.model_settings = current
+
+
 def _is_litellm_model(model_name: str) -> bool:
     """Check if a model name is a LiteLLM model (uses litellm/ prefix)."""
     return model_name.startswith("litellm/")
@@ -1059,6 +1108,8 @@ def _apply_client_to_agent(agent: Agent, client: AsyncOpenAI | None, config: Cli
             if client is None:
                 return
             agent.model = OpenAIResponsesModel(model=model, openai_client=client)
+            if _is_codex_base_url(str(client.base_url)):
+                _apply_codex_compatibility_model_settings(agent)
     elif isinstance(model, OpenAIResponsesModel):
         if _is_litellm_model(model.model):
             if has_litellm_overrides:
@@ -1075,6 +1126,8 @@ def _apply_client_to_agent(agent: Agent, client: AsyncOpenAI | None, config: Cli
             if client is None:
                 return
             agent.model = OpenAIResponsesModel(model=model.model, openai_client=client)
+            if _is_codex_base_url(str(client.base_url)):
+                _apply_codex_compatibility_model_settings(agent)
     elif isinstance(model, OpenAIChatCompletionsModel):
         if _is_litellm_model(model.model):
             if has_litellm_overrides:
@@ -1115,6 +1168,8 @@ def _apply_client_to_agent(agent: Agent, client: AsyncOpenAI | None, config: Cli
                 if client is None:
                     return
                 agent.model = OpenAIResponsesModel(model=model_name, openai_client=client)
+                if _is_codex_base_url(str(client.base_url)):
+                    _apply_codex_compatibility_model_settings(agent)
         else:
             logger.warning(
                 f"Cannot apply client config to agent '{agent.name}': unsupported model type {type(model).__name__}"
