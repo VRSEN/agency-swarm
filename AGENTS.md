@@ -17,25 +17,16 @@ North Star: keep the user's general intent and direction clear; read intent betw
 - After every chat summarization or compaction event, re-read the current repo's live Instruction File from the default-branch source of truth before continuing.
 - Before relying on the Instruction File or shipping any Instruction File edit, verify that `CLAUDE.md` still exists as a symlink to `AGENTS.md`; if it does not, treat that as stale state to repair or escalate before you rely on the policy text.
 - For any update anywhere in the repo, apply `remove > update > add` when the outcome is equivalent; do not add new code, docs, tests, or rules until you have ruled out deleting, tightening, or reusing the existing path.
-<<<<<<< HEAD
-- At task start, identify your role from available tools because the same Instruction File governs managers and subagents: agents with the Subagent tool are managers/execution-loop coordinators; agents without it are subagents, must stay inside delegated scope, report blockers, and must not claim they can delegate.
-=======
 - At task start, identify your role from available tools because the same Instruction File (`AGENTS.md` / `CLAUDE.md`) governs managers and subagents: agents with the Subagent tool are managers/execution-loop coordinators; agents without it are subagents, must stay inside delegated scope, report blockers, and must not claim they can delegate.
->>>>>>> 3ec0c9ca (docs(agents): mandate end-user QA as proof of bug fixes)
 - Protect the context window. Avoid tool calls with unbounded or irrelevant output, prefer bounded reads/searches, and use delegated agents for broad exploration only when available through the real Subagent tool so the main context receives relevant findings.
 - Managers with the real Subagent tool stay at manager altitude: coordination, reprioritization, review, critical-path decisions, and bounded verification.
 - Managers delegate only when it clearly shortens the critical path or removes main-thread context load; use the bare minimum number of subagents, defaulting to one.
 - Combine related delegated work when one subagent can cover it; add another only when it clearly shortens the critical path.
 - After delegating work, do not interrupt, rush, or repeatedly ping subagents; block and wait for their result unless the user changes scope or you have clear evidence of a hard failure.
-<<<<<<< HEAD
 - Each subagent prompt must include the full relevant context, source of truth, scope, non-goals, constraints, source pointers, and success condition; avoid vague one-off labels such as "cleanup" unless the prompt defines the exact work.
-- Do not over-specify delegated work. Managers give the goal, constraints, and success condition, not a script of exact steps or exact file edits unless those edits are already known.
-- Default native-subagent model policy: use `gpt-5.4` with `high` reasoning unless the user explicitly overrides it.
-=======
-- Start every subagent task with background explaining what went wrong. Include enough context for the handoff, with no fixed length requirement.
 - Keep subagent prompts goal-based and avoid unnecessary scripting; do not script exact file edits. If the exact edit is already known, apply it in the main thread and use the subagent for review or finalization.
 - PR-specific work belongs to subagents, not the manager. If no suitable native subagent is available, stop and surface the blocker or use Codex CLI only as the fallback review path.
->>>>>>> 3ec0c9ca (docs(agents): mandate end-user QA as proof of bug fixes)
+- Default native-subagent model policy: use `gpt-5.4` with `high` reasoning unless the user explicitly overrides it.
 
 ## Requirement Completeness Gate
 - Mandatory requirements outrank momentum. Never proceed while a required meaning, dependency, permission, target, or input is missing or unclear.
@@ -189,17 +180,10 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - Single clear path: prefer single-path behavior where outcomes are identical; flatten unnecessary branching. Avoid optional fallbacks unless explicitly requested.
 
 ## Self-Improvement (High Priority)
-<<<<<<< HEAD
-- On each user message, decide whether the Instruction File needs a policy adjustment to prevent a repeated mistake, user-visible failure, or recurring slowdown; when the user directly requests the policy change, draft the smallest local rule update promptly without derailing the active critical path.
-- When adding or changing an Instruction File rule, include or preserve the rule's concrete motivation: what observed failure, risk, or recurring slowdown it prevents. Do not add abstract rules that cannot be grounded in real task experience.
-- Instruction File and policy edits are red-zone work: managers delegate complex policy edits or independent policy review through the real Subagent tool when required or materially risk-reducing; if required Subagent tooling is unavailable, stop and surface the blocker instead of substituting CLI. Subagents must stay inside assigned policy scope and report blockers or review gaps instead of inventing delegation.
-- Before treating Instruction File edits as ready, review the local diff for concrete motivation, duplication, conflict with existing rules, and harmful process overhead; keep rule updates out of unrelated feature PRs so self-improvement remains fast, reviewed, and isolated from product diffs.
-=======
 - On each user message, decide whether the Instruction File needs a policy adjustment to keep standing user instructions from this chat derivable from it and to prevent repeated mistakes, user-visible failures, or recurring slowdown; if a standing user instruction is not derivable from the Instruction File, update it promptly without derailing the active critical path.
 - When adding or changing an Instruction File rule, include or preserve the rule's concrete motivation: what observed failure, risk, or recurring slowdown it prevents. Do not add abstract rules that cannot be grounded in real task experience.
-- Instruction File and policy edits are red-zone work because process mistakes slowed execution. Use one native subagent run by default for review or finalization, start with the root cause and enough background for the handoff, avoid unnecessary scripting, and follow `remove > update > add`. Use Codex CLI only when suitable native subagents are unavailable.
+- Instruction File and policy edits are red-zone work because process mistakes slow execution. Use one native subagent run by default for review or finalization, start with the root cause and enough background for the handoff, avoid unnecessary scripting, and follow `remove > update > add`. Use Codex CLI only when suitable native subagents are unavailable.
 - Before treating Instruction File edits as ready, review the local diff for concrete motivation, duplication, conflict with existing rules, and harmful process overhead; keep critical priming paths non-duplicative by updating or moving an existing rule instead of restating it, and keep rule updates out of unrelated feature PRs so self-improvement remains fast, reviewed, and isolated from product diffs.
->>>>>>> 3ec0c9ca (docs(agents): mandate end-user QA as proof of bug fixes)
 - For policy/rule updates you make on your own initiative, request user approval before editing; do not pause normal coding/testing/review loops for extra approval requests.
 
 ### Writing Style (User Responses Only)
@@ -419,18 +403,11 @@ Strictness
 ### PR Comment Review Loop (Mandatory for Local Coding Work)
 - If you are doing coding work locally (outside GitHub UI) for an open PR and you can post GitHub comments, you must run this loop:
   - Open the PR and resolve every correct active comment-thread finding.
-<<<<<<< HEAD
-  - Launch bounded subagents only when they materially reduce risk or context load; follow the global 10-subagent cap and keep the critical path local.
-  - If suitable native subagents are unavailable, use local Codex CLI only as the fallback review path and write output to a `/tmp/codex_review_<sha>.txt` artifact.
-  - Preferred fallback command: `codex review --base origin/main -c model_reasoning_effort="high" > /tmp/codex_review_<short_sha>.txt 2>&1`.
-  - Fallback inside that Codex CLI path when `codex review` is unavailable: use equivalent `codex exec` diff review and save to the same artifact pattern.
-=======
   - Route PR-specific work through one suitable native subagent by default. Keep the manager on the local critical path and add another subagent only when it clearly shortens that path.
   - PR-specific work includes comment review, thread replies, issue-link checks, PR-body edits, and other GitHub-side mutations; do not do that work in the manager thread.
   - If suitable native subagents are unavailable, run local Codex CLI as the fallback review path and write output to a `/tmp/codex_review_<sha>.txt` artifact.
   - Preferred command: `codex review --base origin/main -c model_reasoning_effort="high" > /tmp/codex_review_<short_sha>.txt 2>&1`.
   - Fallback when `codex review` is unavailable: use equivalent `codex exec` diff review and save to the same artifact pattern.
->>>>>>> 3ec0c9ca (docs(agents): mandate end-user QA as proof of bug fixes)
   - Never stream full Codex output in updates; read targeted excerpts only (for example `rg` or `tail`).
   - Trigger `@codex review` only when suitable native subagents are unavailable and the local Codex CLI fallback is unavailable, when the user explicitly requests it, or when merge-gate evidence needs PR-bound Codex.
   - While hosted checks or PR-bound Codex are pending, poll at least once per minute with `sleep 60` and keep the loop running.
