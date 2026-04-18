@@ -48,7 +48,7 @@ North Star: keep the user's general intent and direction clear; read intent betw
 - During rule-repair mandates, product work is blocked until rule/tool changes are repaired and reviewed, so failed rules cannot guide product changes.
 - A direct user request authorizes the subordinate steps needed to complete that exact task only inside the same repo, branch, artifact, and visibility boundary.
 - Mandate does not expand by implication. Permission to edit, review, or open a PR does not by itself authorize repo creation, forks, publication, merges, deploys, destructive actions, or writes to a different target.
-- PR merges do not need user approval. Green required checks plus a clean Codex CLI review of the PR head are sufficient — merge. Never make the user review a PR. Releases (tag / GitHub release / npm or PyPI publish) are the step that needs explicit user approval, not merges.
+- Merging a PR always requires explicit user approval; never infer merge approval from broader shipping or implementation requests.
 - If the next step would cross that boundary, or the boundary is partial or unclear, escalation is required before acting.
 
 Begin each task after reviewing this readiness checklist:
@@ -136,8 +136,7 @@ Ask only for design decisions or true blocking decisions; otherwise proceed auto
 - If a critical-path step is blocked on the user's approval or answer, surface that blocker immediately and do not drift into unrelated work until it is resolved or explicitly deprioritized.
 
 ## DANGER ZONE: PUBLIC AND IRREVERSIBLE OPERATIONS
-- Release notes, tags, GitHub releases, PyPI or NPM publishing, yanks, unpublishes, and any step that changes public package or release state are danger-zone operations because stale state here causes lasting public damage. (PR merges are separately governed — see the PR rule in Mandate Boundary; merges do not need user approval.)
-- No release of any kind without BOTH (a) one explicit user message approving that specific release and (b) a green Codex CLI xhigh review of the exact release commit. Citing either one alone is not enough. A release cut without both is a severity-1 breach.
+- PR merges, release notes, tags, GitHub releases, PyPI or NPM publishing, yanks, unpublishes, and any step that changes public package or release state are danger-zone operations because stale state here causes lasting public damage.
 - Never use memory, cached notes, or an earlier audit in the danger zone. Immediately before each step, re-verify the live repo state, the exact commit you are acting on, the exact version files on that commit, the live GitHub PR/release/tag state, the live PyPI or NPM version state, and the exact release-notes compare base and shipped scope.
 - In the danger zone, uncertainty is a blocker. If the live public state, the exact source of truth, or the exact next mutation is not fully verified, stop and escalate to the user before acting.
 - For release notes, re-check the exact compare range and the exact shipped PR set right before drafting or editing. If tags, versions, or the compare base changed since the last draft, throw the old draft away and rebuild it from fresh evidence.
@@ -190,9 +189,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - For policy/rule updates you make on your own initiative, request user approval before editing; do not pause normal coding/testing/review loops for extra approval requests.
 
 ### Writing Style (User Responses Only)
-- Use 8th grade language everywhere. No jargon unless the user used it first.
-- Use executive summary format: one-line answer first, then short sections only when they clarify.
-- Ask at most one question per turn. Never force the user to type more than one sentence back. Long forms, menus, or multi-question prompts are forbidden.
+- Use 8th grade language in all user responses.
 - Lead with the answer. If one sentence is enough, use one sentence.
 - Use bullet or numbered lists only when they make the answer clearer.
 - Cut filler, vague wording, hype, and empty agreement words.
@@ -200,9 +197,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - Do not add dedicated `Validation` sections to user-facing replies or PR descriptions; if evidence matters, fold it into the main update in one short line.
 - Do not mention review-artifact file paths or artifact inventories in user-facing replies or PR descriptions unless the user explicitly asks for them.
 - Never include sensitive information in deliverables (for example secrets, tokens, private keys, personal identifiers, or user-specific local paths); redact or generalize it before sharing.
-- Never include health or personal facts about the user in any file, PR, issue, or response (they belong to the user, not the artifact).
-- Include an `Escalations:` block when outstanding items, stopped work, required user action, approval requests, or blockers remain. Format: one-line problem statement, up to three concrete options, one recommendation, one yes/no question. If all work is complete and no user action is needed, omit the block instead of writing an empty escalation.
-- Classify every user message before acting. Feedback (persistent rule) → draft an Instruction File rule update now. Input (task detail) → log it in the requirement ledger. Mixing the two causes rules to scatter and tasks to escape the ledger.
+- Include an `Escalations:` block when outstanding items, stopped work, required user action, approval requests, or blockers remain; state exactly what is needed from the user or what blocks progress. If all work is complete and no user action is needed, omit the block instead of writing an empty escalation.
 
 ## 🔴 SAFETY PROTOCOLS
 
@@ -225,10 +220,8 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - Share findings promptly when failures/root causes are found; avoid silent fixes.
 - Debug with systematic source analysis, logging, and minimal unit testing.
 - MANDATORY: Before fixing any error, reproduce it locally first. Run the exact command or test that triggers the error and confirm you see the same failure. Never apply a fix without first observing the error yourself.
-- Framework-stability presumption: agency-swarm, openai-agents, and other mature upstream libraries have thousands of deployments. The default assumption when something looks wrong is "I misread the symptoms" or "this is intentional behavior," not "framework bug." Before filing an issue or writing a fix against an upstream framework: (1) reproduce deterministically, (2) ask Codex CLI xhigh for a verdict, and (3) describe the exact path that would otherwise be violated by the current behavior. If any of the three is missing, drop the proposed fix. This rule is driven by the PR #617 incident where an unnecessary "fix" would have corrupted history on aborted streams.
-- MANDATORY: End-user QA is the only accepted proof of a fix. A bug is "fixed" only after you re-run the exact end-user flow that surfaced it (same installed binary or same release artifact, same starting state, same commands) and observe the failure no longer reproduces. Unit tests and PR checks are necessary but never sufficient. For any TUI or visual flow, the proof MUST include a rendered screenshot of the installed release taken from a real terminal (macOS Terminal.app, iTerm2, tmux + `screencapture`, or an equivalent native capture). Pyte-rendered or other emulator-synthesized frames are NOT accepted because their palette is synthetic and cannot prove a color regression the user sees. For a CLI subcommand, run the command against the released build and capture its output. For an installed package, install the released artifact fresh and retry. Do not claim a fix as complete and do not close a REQ until that end-user proof (real-terminal screenshot for UI, observed output for CLI) exists and is cited.
-- MANDATORY Codex counsel: every non-trivial code change, every PR before merge, and every release before tag gets a Codex CLI review (`codex review --base <base> -c model_reasoning_effort="<high|xhigh>"`). Use `xhigh` for anything that touches the release state. Codex runs even when native subagents are available — two independent reviews are the norm, not an exception. If Codex flags a P1, stop and escalate instead of over-riding the finding.
-- Release-blocking auth smoke: every change that can affect OpenAI OAuth, OpenAI API key, or Anthropic API key message-send must pass the auth smoke script (`packages/opencode/script/auth-smoke-test.py` in agentswarm-cli, driven by the `auth-smoke.yml` workflow). A failing smoke halts releases until the responsible path is restored. The v1.4.12→v1.4.17 auth outage proved this gate is not optional.
+- MANDATORY: End-user QA is the only accepted proof of a fix. A bug is "fixed" only after you re-run the exact end-user flow that surfaced it (same installed binary or same release artifact, same starting state, same commands) and observe the failure no longer reproduces. Unit tests and PR checks are necessary but never sufficient. If the bug was reported from a TUI session, prove the fix in a TUI session against the released build (drive it via pty/pexpect/expect/script if you have no human at the keyboard); if from a CLI subcommand, prove it by running that subcommand against the released build; if from an installed package, install the released artifact fresh and retry. Do not claim a fix as complete and do not close a REQ until that end-user proof exists and is cited.
+- MANDATORY: End-user QA is the only accepted proof of a fix. A bug is "fixed" only after you re-run the exact end-user flow that surfaced it (same installed binary or same release artifact, same starting state, same commands) and observe the failure no longer reproduces. Unit tests and PR checks are necessary but never sufficient. If the bug was reported from a TUI session, prove the fix in a TUI session against the released build (drive it via pty/pexpect/expect/script if you have no human at the keyboard); if from a CLI subcommand, prove it by running that subcommand against the released build; if from an installed package, install the released artifact fresh and retry. Do not claim a fix as complete and do not close a REQ until that end-user proof exists and is cited.
 - For bug fixes, encode the report in an automated test before touching runtime code; confirm it fails with the same error you saw in the report.
 - Edit incrementally: make small, focused changes, validating each with tests when practical.
 - After changes affecting data flow or order, scan for related patterns and remove obsolete ones when in scope.
@@ -408,7 +401,6 @@ Strictness
 - If pre-commit hooks modify files (it means you forgot to run mandatory `make format`), stage the hook-modified files and re-run the commit with the same message.
 - When committing, base the message on the staged diff and use a title plus bullet body (e.g., `git commit -m "type: summary" -m "- bullet"`).
 - After committing, double-check what you committed with `git show --name-only -1`.
-- Before `git add` on any file, grep the whole file for `<<<<<<` or `>>>>>>`. A committed or pushed conflict marker in a live code, docs, or config file is a severity-1 protocol breach because the Instruction File and similar priming files are read by agents on every task boundary.
 - Force-pushes and published-branch history rewrites are forbidden without an explicit user request. `git push --force`, `--force-with-lease`, rebasing an already-pushed branch, and amending a commit that other people have pulled all count; resolve issues with a fresh forward commit instead.
 - A stale-branch mistake is a severity-1 protocol breach: opening, merging, or pushing a PR from an out-of-date branch (wrong base, wrong diff, wrong artifact) halts all product work, triggers a full artifact/PR audit with a live-diff refresh, and bans further PR mutations until the current state is verified end-to-end.
 
