@@ -20,8 +20,9 @@ North Star: keep the user's general intent and direction clear; read intent betw
 - At task start, identify your role from available tools because the same Instruction File (`AGENTS.md` / `CLAUDE.md`) governs managers and subagents: agents with the Subagent tool are managers, not chatbots, and must run the execution loop; agents without it are subagents, must stay inside delegated scope, report blockers, and must not claim they can delegate.
 - Protect the context window. Avoid tool calls with unbounded or irrelevant output, prefer bounded reads/searches, and use delegated agents for broad exploration only when available through the real Subagent tool so the main context receives relevant findings.
 - Managers with the real Subagent tool stay at manager altitude: coordination, reprioritization, delegation, review, critical-path decisions, and bounded verification. They are not chatbots and should follow the delegation rules below instead of defaulting to low-level solo work.
-- Managers delegate only when it clearly shortens the critical path or removes main-thread context load; use the bare minimum number of subagents, defaulting to one.
-- Combine related delegated work when one subagent can cover it; add another only when it clearly shortens the critical path.
+- For any non-trivial task (more than a one-line edit), use the smallest possible native-subagent mandate; reserve main-thread edits for trivial mechanical changes only.
+- If one subagent cannot cover the task cleanly, split the work into two scoped subagents instead of broadening one mandate.
+- Why: recent broad manager-owned edits made request ownership hard to trace and burned main-thread context.
 - After delegating work, do not interrupt, rush, or repeatedly ping subagents; block and wait for their result unless the user changes scope or you have clear evidence of a hard failure.
 - Each subagent prompt must include the full relevant context, source of truth, scope, non-goals, constraints, source pointers, and success condition; avoid vague one-off labels such as "cleanup" unless the prompt defines the exact work.
 - Keep subagent prompts goal-based and avoid unnecessary scripting; do not script exact file edits. If the exact edit is already known, apply it in the main thread and use the subagent for review or finalization.
@@ -134,7 +135,8 @@ Ask only for design decisions or true blocking decisions; otherwise proceed auto
 - Do not ask about mechanical execution steps that the agent can perform safely with available repo, machine, network, or GitHub access.
 - If ambiguity changes user-visible behavior, scope, architecture, repo/branch, or release outcome, ask before acting; if only mechanical details are ambiguous and the safe path is clear, proceed.
 - For drastic changes (wide refactors, file moves/deletes, policy edits, behavior-affecting modifications), always get a confirmation before proceeding.
-- When escalating, include a clear problem statement, up to 3 concrete options, and one recommendation; after negative feedback or a protocol breach, tighten approvals and re-run Step 1 before and after edits.
+- When surfacing a decision, blocker, or tradeoff, use a numbered options block with up to 3 options labeled `(1)`, `(2)`, `(3)`, each with a one-sentence tradeoff, followed by a single-line `Recommendation: (N) — because …`; unstructured escalations are forbidden. After negative feedback or a protocol breach, tighten approvals and re-run Step 1 before and after edits.
+- Why: recent release-chain escalations drifted when the recommendation was buried inside free-form summaries.
 - If a critical-path step is blocked on the user's approval or answer, surface that blocker immediately and do not drift into unrelated work until it is resolved or explicitly deprioritized.
 
 ## DANGER ZONE: PUBLIC AND IRREVERSIBLE OPERATIONS
@@ -171,7 +173,9 @@ Prime Directive: Rigorously compare every user request with patterns established
 These requirements apply to every file in the repository. Bullets prefixed with “In this document” are scoped to the Instruction File only.
 
 - Every line must earn its place: Avoid redundant, unnecessary, or "nice to have" content. Each line should serve a clear purpose; each change should reduce or at least not increase codebase entropy (fewer ad‑hoc paths, clearer contracts, more reuse).
-- Always consider doing a polishing pass within the lines you touched.
+- On every turn that touches code or docs, use the polishing pass to verify that identifiers, comments, log strings, TUI copy, and user-facing docs use the same vocabulary; if a code symbol and product term disagree, propose a rename in either direction in the same turn, for example `isAgencySwarmFrameworkMode` and `Run mode` must converge.
+- When a product concept's user-facing name changes, audit every identifier, route, test file, docstring, and doc reference that still uses the old name before you stop.
+- Why: a recent mode-name mismatch forced readers to translate between code and docs, and partial renames keep that confusion alive.
 - Every change must have a clear reason; do not edit formatting or whitespace without justification.
 - Performance is a key constraint: favor the fastest viable design when performance is at risk, measure (if applicable) and call out any regressions with confirmed before/after evidence.
 - Clarity over verbosity: Use the fewest words necessary without loss of meaning. For documentation, ensure you deliver value to end users and your writing is beginner-friendly.
