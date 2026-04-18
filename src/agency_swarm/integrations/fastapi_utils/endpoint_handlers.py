@@ -10,7 +10,7 @@ from collections.abc import AsyncGenerator, Callable, Sequence
 from dataclasses import dataclass, field
 from importlib import metadata
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 from weakref import WeakKeyDictionary
 
 from ag_ui.core import EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
@@ -48,6 +48,7 @@ from agency_swarm import (
     RunContextWrapper,
 )
 from agency_swarm.agent.execution_stream_response import StreamingRunResponse
+from agency_swarm.agent.initialization import apply_framework_defaults
 from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_urls
 from agency_swarm.integrations.fastapi_utils.logging_middleware import get_logs_endpoint_impl
 from agency_swarm.integrations.fastapi_utils.override_policy import (
@@ -127,7 +128,7 @@ _AGENCY_REQUEST_STATES: WeakKeyDictionary[Agency, dict[asyncio.AbstractEventLoop
 _AGENCY_REQUEST_STATES_GUARD = threading.Lock()
 
 
-def _apply_request_model_override(agent: Agent, model_name: str) -> None:
+def _apply_request_model_override(agent: Agent, model_name: str, config: ClientConfig | None = None) -> bool:
     """Set ``agent.model`` to ``model_name`` for this request, preserving existing wiring.
 
     A per-request model swap must not silently discard the agent's embedded
@@ -136,38 +137,101 @@ def _apply_request_model_override(agent: Agent, model_name: str) -> None:
 
     - ``OpenAIResponsesModel`` / ``OpenAIChatCompletionsModel`` keep their
       embedded ``AsyncOpenAI`` client and their transport (Responses vs
-      ChatCompletions). The model name is swapped in place.
+      ChatCompletions). The model name is swapped in place. Any post-construction
+      usage alias (e.g. ``_agency_swarm_usage_model_name`` set by the OpenClaw
+      adapter) is carried across the rebuild so cost tracking stays correct.
     - ``LitellmModel`` keeps its existing ``base_url`` / ``api_key`` and only
       the model identifier is swapped.
     - Bare-string agents become bare strings (or a minimal ``LitellmModel`` for
       ``litellm/...`` names).
+
+    When ``config`` carries OpenAI gateway overrides (``base_url`` / ``api_key`` /
+    ``default_headers``), the rebuilt OpenAI wrapper is routed through
+    :func:`_build_openai_client_for_agent` so the request gateway reaches the
+    swapped model even when the new name is provider-prefixed (for example
+    ``anthropic/claude-sonnet-4``) and would otherwise fail the downstream
+    ``_agent_supports_openai_client_override`` gate.
+
+    Returns ``True`` when the OpenAI gateway client has already been applied
+    during the swap so the caller can skip the downstream client-apply step.
     """
     model = agent.model
+    gateway_client = _resolve_request_gateway_client(agent, config)
 
     if isinstance(model, OpenAIResponsesModel):
         if _is_litellm_model(model_name):
             _apply_request_litellm_model(agent, model_name)
-            return
-        agent.model = OpenAIResponsesModel(model=model_name, openai_client=model._client)
-        return
+            return False
+        client = gateway_client if gateway_client is not None else model._client
+        agent.model = _rebuild_openai_responses_model(model, model_name, client)
+        return gateway_client is not None
 
     if isinstance(model, OpenAIChatCompletionsModel):
         if _is_litellm_model(model_name):
             _apply_request_litellm_model(agent, model_name)
-            return
-        agent.model = OpenAIChatCompletionsModel(model=model_name, openai_client=model._client)
-        return
+            return False
+        client = gateway_client if gateway_client is not None else model._client
+        agent.model = OpenAIChatCompletionsModel(model=model_name, openai_client=client)
+        return gateway_client is not None
 
     if _LITELLM_AVAILABLE and LitellmModel is not None and isinstance(model, LitellmModel):
         actual = model_name[8:] if model_name.startswith("litellm/") else model_name
         agent.model = LitellmModel(model=actual, base_url=model.base_url, api_key=model.api_key)
-        return
+        return False
 
     if _is_litellm_model(model_name):
         _apply_request_litellm_model(agent, model_name)
-        return
+        return False
 
     agent.model = model_name
+    return False
+
+
+def _resolve_request_gateway_client(agent: Agent, config: ClientConfig | None) -> AsyncOpenAI | None:
+    """Return a request-scoped OpenAI gateway client when ``config`` asks for one."""
+    if config is None:
+        return None
+    if config.base_url is None and config.api_key is None and config.default_headers is None:
+        return None
+    return _build_openai_client_for_agent(agent, config)
+
+
+def _rebuild_openai_responses_model(
+    source: OpenAIResponsesModel,
+    model_name: str,
+    client: AsyncOpenAI,
+) -> OpenAIResponsesModel:
+    """Rebuild ``OpenAIResponsesModel`` while preserving the usage-tracking alias."""
+    rebuilt = OpenAIResponsesModel(model=model_name, openai_client=client)
+    usage_alias = getattr(source, "_agency_swarm_usage_model_name", None)
+    if isinstance(usage_alias, str) and usage_alias:
+        rebuilt._agency_swarm_usage_model_name = usage_alias  # type: ignore[attr-defined]
+    return rebuilt
+
+
+def _refresh_framework_defaults_after_model_swap(agent: Agent) -> None:
+    """Re-layer framework defaults for the new ``agent.model`` without losing headers.
+
+    ``Agent.__init__`` calls ``apply_framework_defaults`` to layer model-family
+    defaults (e.g. GPT-5 reasoning effort). After a request-time model swap we
+    replay the same logic so the new model's defaults take effect, and we carry
+    caller-set ``extra_headers`` from the pre-swap ``model_settings`` forward so
+    request-applied headers are not wiped.
+    """
+    previous: ModelSettings | None = getattr(agent, "model_settings", None)
+    preserved_headers = dict(previous.extra_headers) if previous is not None and previous.extra_headers else None
+
+    kwargs: dict[str, Any] = {"model": agent.model}
+    if previous is not None:
+        kwargs["model_settings"] = previous
+    apply_framework_defaults(kwargs)
+
+    refreshed = cast(ModelSettings, kwargs["model_settings"])
+    if preserved_headers:
+        existing = dict(refreshed.extra_headers or {})
+        existing.update(preserved_headers)
+        refreshed.extra_headers = existing
+    agent.model_settings = refreshed
 
 
 def _apply_request_litellm_model(agent: Agent, model_name: str) -> None:
@@ -217,8 +281,10 @@ def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
 
     # Apply to all agents in the agency
     for agent in agency.agents.values():
+        gateway_applied = False
         if config.model is not None:
-            _apply_request_model_override(agent, config.model)
+            gateway_applied = _apply_request_model_override(agent, config.model, config)
+            _refresh_framework_defaults_after_model_swap(agent)
 
         # File attachment handling uses agent.client / agent.client_sync directly.
         # Keep those clients request-scoped too, so file_ids work without server env keys.
@@ -234,6 +300,14 @@ def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
             continue
 
         if not openai_overrides_present:
+            continue
+
+        if gateway_applied:
+            # Gateway client was already routed through the freshly rebuilt model.
+            if config.default_headers is not None:
+                _apply_default_headers_to_agent_model_settings(agent, config.default_headers)
+            if _is_codex_base_url(config.base_url):
+                _apply_codex_compatibility_model_settings(agent)
             continue
 
         if not _agent_supports_openai_client_override(agent):
