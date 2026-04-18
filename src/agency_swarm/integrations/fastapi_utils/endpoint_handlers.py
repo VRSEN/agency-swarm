@@ -183,6 +183,14 @@ def _apply_request_model_override(agent: Agent, model_name: str, config: ClientC
         _apply_request_litellm_model(agent, model_name)
         return False
 
+    if gateway_client is not None:
+        # Wrap bare-string swaps through the request gateway client so provider-prefixed
+        # names (e.g. "anthropic/claude-sonnet-4") still reach the gateway — the downstream
+        # _agent_supports_openai_client_override gate rejects those names and would
+        # otherwise drop the request-scoped client entirely.
+        agent.model = OpenAIResponsesModel(model=model_name, openai_client=gateway_client)
+        return True
+
     agent.model = model_name
     return False
 
@@ -201,10 +209,22 @@ def _rebuild_openai_responses_model(
     model_name: str,
     client: AsyncOpenAI,
 ) -> OpenAIResponsesModel:
-    """Rebuild ``OpenAIResponsesModel`` while preserving the usage-tracking alias."""
+    """Rebuild ``OpenAIResponsesModel`` while preserving OpenClaw-scoped aliases.
+
+    - ``_agency_swarm_default_model_name`` drives OpenClaw default-settings lookup
+      and must survive the rebuild whenever the source carried it.
+    - ``_agency_swarm_usage_model_name`` maps the wrapper's ``.model`` to an
+      upstream provider model for cost tracking. It is only valid for the exact
+      source model name — carrying it across a model-name change would mis-label
+      usage (e.g. ``openclaw:main`` -> ``gpt-4.1`` still reporting OpenClaw's
+      upstream). Copy it only when the rebuilt model name matches the source.
+    """
     rebuilt = OpenAIResponsesModel(model=model_name, openai_client=client)
+    default_alias = getattr(source, "_agency_swarm_default_model_name", None)
+    if isinstance(default_alias, str) and default_alias:
+        rebuilt._agency_swarm_default_model_name = default_alias  # type: ignore[attr-defined]
     usage_alias = getattr(source, "_agency_swarm_usage_model_name", None)
-    if isinstance(usage_alias, str) and usage_alias:
+    if isinstance(usage_alias, str) and usage_alias and rebuilt.model == source.model:
         rebuilt._agency_swarm_usage_model_name = usage_alias  # type: ignore[attr-defined]
     return rebuilt
 
@@ -214,16 +234,18 @@ def _refresh_framework_defaults_after_model_swap(agent: Agent) -> None:
 
     ``Agent.__init__`` calls ``apply_framework_defaults`` to layer model-family
     defaults (e.g. GPT-5 reasoning effort). After a request-time model swap we
-    replay the same logic so the new model's defaults take effect, and we carry
-    caller-set ``extra_headers`` from the pre-swap ``model_settings`` forward so
-    request-applied headers are not wiped.
+    replay that logic with a fresh ``ModelSettings()`` so every field recomputes
+    from the new model name — otherwise fields from the OLD settings (e.g. a
+    ``reasoning.effort`` baked for GPT-5) would stick when swapping to GPT-4o.
+    Only caller-set ``extra_headers`` from the pre-swap ``model_settings`` are
+    carried forward so previously applied request headers survive the refresh.
     """
     previous: ModelSettings | None = getattr(agent, "model_settings", None)
     preserved_headers = dict(previous.extra_headers) if previous is not None and previous.extra_headers else None
 
-    kwargs: dict[str, Any] = {"model": agent.model}
-    if previous is not None:
-        kwargs["model_settings"] = previous
+    # Pass a fresh ModelSettings() so apply_framework_defaults doesn't treat
+    # stale fields from the previous model as caller-explicit overrides.
+    kwargs: dict[str, Any] = {"model": agent.model, "model_settings": ModelSettings()}
     apply_framework_defaults(kwargs)
 
     refreshed = cast(ModelSettings, kwargs["model_settings"])

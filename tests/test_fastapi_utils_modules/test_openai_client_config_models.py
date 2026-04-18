@@ -458,3 +458,107 @@ def test_model_override_preserves_openclaw_usage_alias() -> None:
     assert isinstance(agent.model, OpenAIResponsesModel)
     # Same name, new instance — the custom alias must carry over.
     assert get_usage_tracking_model_name(agent.model) == "openai/gpt-5.4"
+
+
+def test_string_model_override_wraps_gateway_for_provider_prefix() -> None:
+    """Bare-string agents whose request model is provider-prefixed must still bind the gateway client."""
+    pytest.importorskip("agents")
+
+    from agents import OpenAIResponsesModel
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    agent = Agent(name="A", instructions="x", model="gpt-4o")
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(
+            model="anthropic/claude-sonnet-4",
+            base_url="https://gateway.test/v1",
+            api_key="sk-gateway",
+        ),
+    )
+
+    # The provider-prefixed name must route through the request-scoped gateway client,
+    # not silently stay as a bare string (which would skip the override entirely).
+    assert isinstance(agent.model, OpenAIResponsesModel)
+    assert agent.model.model == "anthropic/claude-sonnet-4"
+    assert agent.model._client.api_key == "sk-gateway"
+    assert str(agent.model._client.base_url).startswith("https://gateway.test")
+
+
+def test_model_override_does_not_stick_old_gpt5_reasoning_settings() -> None:
+    """Swapping GPT-5 -> GPT-4o must recompute settings, not inherit GPT-5 reasoning."""
+    pytest.importorskip("agents")
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    # Agent starts on gpt-5, which layers reasoning.effort="low" at construction.
+    agent = Agent(name="A", instructions="x", model="gpt-5")
+    assert agent.model_settings is not None
+    assert agent.model_settings.reasoning is not None
+    assert agent.model_settings.reasoning.effort == "low"
+
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+    apply_openai_client_config(agency, ClientConfig(model="gpt-4o"))
+
+    # After swapping to gpt-4o, the old GPT-5 reasoning defaults must not stick.
+    assert agent.model == "gpt-4o"
+    assert agent.model_settings is not None
+    assert agent.model_settings.reasoning is None
+
+
+def test_model_override_carries_openclaw_default_settings_alias() -> None:
+    """OpenClaw default-settings alias must survive a same-name request model swap."""
+    pytest.importorskip("agents")
+
+    from agents import OpenAIResponsesModel
+    from openai import AsyncOpenAI
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+    from agency_swarm.utils.model_utils import get_default_settings_model_name
+
+    embedded = AsyncOpenAI(api_key="sk-agent", base_url="https://openclaw.test/v1")
+    source = OpenAIResponsesModel(model="openclaw:main", openai_client=embedded)
+    source._agency_swarm_default_model_name = "gpt-5"  # type: ignore[attr-defined]
+    agent = Agent(name="A", instructions="x", model=source)
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(agency, ClientConfig(model="openclaw:main"))
+
+    assert isinstance(agent.model, OpenAIResponsesModel)
+    # OpenClaw default-settings lookup relies on this alias being carried.
+    assert get_default_settings_model_name(agent.model) == "gpt-5"
+
+
+def test_model_override_drops_usage_alias_when_model_name_changes() -> None:
+    """OpenClaw usage alias must NOT be copied when the swap changes the model name."""
+    pytest.importorskip("agents")
+
+    from agents import OpenAIResponsesModel
+    from openai import AsyncOpenAI
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+    from agency_swarm.utils.model_utils import get_usage_tracking_model_name
+
+    embedded = AsyncOpenAI(api_key="sk-agent", base_url="https://openclaw.test/v1")
+    source = OpenAIResponsesModel(model="openclaw:main", openai_client=embedded)
+    source._agency_swarm_usage_model_name = "openai/gpt-5.4"  # type: ignore[attr-defined]
+    agent = Agent(name="A", instructions="x", model=source)
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(agency, ClientConfig(model="gpt-4.1"))
+
+    assert isinstance(agent.model, OpenAIResponsesModel)
+    assert agent.model.model == "gpt-4.1"
+    # The alias belonged to openclaw:main — it must not inherit onto gpt-4.1.
+    assert get_usage_tracking_model_name(agent.model) == "gpt-4.1"
