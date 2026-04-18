@@ -24,7 +24,7 @@ class ClientConfig(BaseModel):
 
     base_url: str | None = Field(
         default=None,
-        description="OpenAI-compatible API base URL override. Applies to OpenAI-side agents only.",
+        description="OpenAI-compatible API base URL override.",
     )
     api_key: str | None = Field(
         default=None,
@@ -46,14 +46,6 @@ class ClientConfig(BaseModel):
             "variables; OpenAI-compatible providers may fall back to 'api_key'."
         ),
     )
-    litellm_base_url: str | None = Field(
-        default=None,
-        description=(
-            "Base URL override for LiteLLM-routed agents (non-OpenAI providers like anthropic/gemini/etc.). "
-            "Use this for a per-request LiteLLM proxy gateway. Kept separate from `base_url` so a request "
-            "that targets a mix of OpenAI and LiteLLM providers never conflates the two endpoints."
-        ),
-    )
 
     @field_validator("litellm_keys")
     @classmethod
@@ -62,16 +54,6 @@ class ClientConfig(BaseModel):
         if v is not None and not _LITELLM_INSTALLED:
             raise ValueError(
                 "litellm_keys requires litellm to be installed. Install with: pip install 'openai-agents[litellm]'"
-            )
-        return v
-
-    @field_validator("litellm_base_url")
-    @classmethod
-    def validate_litellm_base_url_installed(cls, v: str | None) -> str | None:
-        """Raise error if litellm_base_url provided but litellm not installed."""
-        if v is not None and not _LITELLM_INSTALLED:
-            raise ValueError(
-                "litellm_base_url requires litellm to be installed. Install with: pip install 'openai-agents[litellm]'"
             )
         return v
 
