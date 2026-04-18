@@ -283,3 +283,62 @@ def test_persist_streamed_items_normalizes_placeholder_tool_ids(mock_extract, mo
     assert persisted[0]["call_id"] == "call_x"
     assert persisted[0]["id"] == "call_x"
     assert persisted[0]["id"] != FAKE_RESPONSES_ID
+
+
+@patch(
+    "agency_swarm.agent.execution_stream_persistence.MessageFilter.remove_orphaned_messages",
+    side_effect=lambda x: x,
+)
+@patch("agency_swarm.agent.execution_stream_persistence.MessageFilter.should_filter", return_value=False)
+@patch("agency_swarm.agent.execution_stream_persistence.MessageFormatter.extract_hosted_tool_results", return_value=[])
+def test_persist_streamed_items_falls_back_to_collected_items_when_new_items_is_empty(
+    mock_extract, mock_filter, mock_orphan
+) -> None:
+    """When RunResultStreaming.new_items is empty (externally-consumed stream), persist from collected_items instead.
+
+    Regression for the bug where assistant messages never landed in agency_swarm_history on
+    the Codex OAuth path because openai-agents SDK only populates new_items when its own
+    internal loop drains the stream. agency-swarm consumes the stream externally via
+    StreamingRunResponse, so new_items stays empty even on successful runs.
+    """
+    agent = Agent(name="AgentA", instructions="noop")
+
+    tool_call = ResponseFunctionToolCall(
+        arguments="{}",
+        call_id="call_fallback",
+        name="tool_fallback",
+        type="function_call",
+        id="call_fallback",
+        status="in_progress",
+    )
+    tool_item = ToolCallItem(agent=agent, raw_item=tool_call)
+
+    thread_manager = _DummyThreadManager()
+    agency_context = AgencyContext(agency_instance=None, thread_manager=thread_manager)
+
+    # streaming_result carries new_items=[] — exactly what openai-agents SDK leaves behind
+    # when agency-swarm consumes the stream externally.
+    stream_result = _DummyStreamResult(
+        new_items=[],
+        input_list=[tool_item.to_input_item()],
+    )
+
+    _persist_streamed_items(
+        streaming_result=stream_result,
+        metadata_store=StreamMetadataStore(),
+        collected_items=[tool_item],
+        agent=agent,
+        sender_name="Manager",
+        parent_run_id=None,
+        run_trace_id="trace",
+        fallback_agent_run_id="agent_run_runner",
+        agency_context=agency_context,
+        initial_saved_count=0,
+    )
+
+    persisted = thread_manager.get_all_messages()
+    assert persisted, (
+        "Expected collected_items to be persisted when new_items is empty; "
+        "otherwise assistant messages disappear from history after the turn."
+    )
+    assert persisted[0]["call_id"] == "call_fallback"

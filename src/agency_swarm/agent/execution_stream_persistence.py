@@ -265,11 +265,23 @@ def _persist_streamed_items(
         return
 
     # Get new_items directly from streaming_result - these are the same Python objects
-    # that were emitted during streaming via RunItemStreamEvent
+    # that were emitted during streaming via RunItemStreamEvent.
+    #
+    # When an external caller consumes the RunResultStreaming generator itself (via
+    # StreamingRunResponse / stream_events) rather than letting the openai-agents SDK's
+    # internal loop drain it, the SDK never runs the post-turn logic that populates
+    # `new_items` on the streaming result. `collected_items`, captured in-band during
+    # streaming from the same RunItemStreamEvent payloads, is the safe fallback.
     new_items: list[RunItem] = getattr(streaming_result, "new_items", None) or []
+    if not new_items and collected_items:
+        logger.info(
+            "streaming_result.new_items is empty after an externally-consumed stream; "
+            "falling back to collected_items for final persistence."
+        )
+        new_items = list(collected_items)
     if not new_items:
         logger.warning(
-            "streaming_result.new_items is empty or missing - skipping final persistence. "
+            "streaming_result.new_items and collected_items are both empty - skipping final persistence. "
             "This may indicate a guardrail trip (expected) or an SDK issue (unexpected)."
         )
         return
