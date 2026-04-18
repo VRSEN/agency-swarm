@@ -2,7 +2,7 @@
 
 Guidance for AI coding agents contributing to this repository.
 
-Instruction File means the shared policy file surfaced as `AGENTS.md` and as `CLAUDE.md`; `CLAUDE.md` must be a symlink to `AGENTS.md`.
+This policy is surfaced as both `AGENTS.md` and `CLAUDE.md`; `CLAUDE.md` must remain a symlink to `AGENTS.md`.
 
 Default to high-effort, proactive, rigorous, and persistent execution so user goals are carried to completion instead of being handed back prematurely; treat tests as strong signals, and aim to reduce codebase entropy with each change.
 
@@ -13,17 +13,18 @@ North Star: keep the user's general intent and direction clear; read intent betw
 - User requests come first unless they conflict with system or developer rules; move fast within those limits.
 
 ## Instruction File Maintenance
-- Treat the Instruction File as the highest-priority maintenance file; it should stay a short codification of normal collaborator common sense, and you should refactor it to reduce entropy and improve clarity when needed.
+- Treat the Instruction File as the highest-priority maintenance file; keep it short, practical, and human-readable. Only keep rules that should apply in every session. Move path-specific or multi-step playbooks into skills, scoped rules, or referenced docs, and refactor the file whenever that reduces entropy or clarifies behavior.
 - After every chat summarization or compaction event, re-read the current repo's live Instruction File from the default-branch source of truth before continuing.
 - Before relying on the Instruction File or shipping any Instruction File edit, verify that `CLAUDE.md` still exists as a symlink to `AGENTS.md`; if it does not, treat that as stale state to repair or escalate before you rely on the policy text.
 - For any update anywhere in the repo, apply `remove > update > add` when the outcome is equivalent; do not add new code, docs, tests, or rules until you have ruled out deleting, tightening, or reusing the existing path.
-- At task start, identify your role from available tools because the same Instruction File (`AGENTS.md` / `CLAUDE.md`) governs managers and subagents: agents with the Subagent tool are managers, not chatbots, and must run the execution loop; agents without it are subagents, must stay inside delegated scope, report blockers, and must not claim they can delegate.
+- At task start, identify your role from available tools because the same Instruction File (`AGENTS.md` / `CLAUDE.md`) governs managers and subagents: agents with the Subagent tool are managers/execution-loop coordinators, not chatbots, and must run the execution loop; agents without it are subagents, must stay inside delegated scope, report blockers, and must not claim they can delegate.
 - Protect the context window. Avoid tool calls with unbounded or irrelevant output, prefer bounded reads/searches, and use delegated agents for broad exploration only when available through the real Subagent tool so the main context receives relevant findings.
 - Managers with the real Subagent tool stay at manager altitude: coordination, reprioritization, delegation, review, critical-path decisions, and bounded verification. They are not chatbots and should follow the delegation rules below instead of defaulting to low-level solo work.
 - For any non-trivial task (more than a one-line edit), use the smallest possible native-subagent mandate; reserve main-thread edits for trivial mechanical changes only.
 - If one subagent cannot cover the task cleanly, split the work into two scoped subagents instead of broadening one mandate.
 - Why: recent broad manager-owned edits made request ownership hard to trace and burned main-thread context.
 - After delegating work, do not interrupt, rush, or repeatedly ping subagents; block and wait for their result unless the user changes scope or you have clear evidence of a hard failure.
+- Start every subagent task with enough context for the handoff: the task, relevant background, and the higher-level intent it serves.
 - Each subagent prompt must include the full relevant context, source of truth, scope, non-goals, constraints, source pointers, and success condition; avoid vague one-off labels such as "cleanup" unless the prompt defines the exact work.
 - Keep subagent prompts goal-based and avoid unnecessary scripting; do not script exact file edits. If the exact edit is already known, apply it in the main thread and use the subagent for review or finalization.
 - PR-specific work belongs to subagents, not the manager. If no suitable native subagent is available, stop and surface the blocker or use Codex CLI only as the fallback review path.
@@ -58,6 +59,7 @@ Context
 - When a request has multiple things to consider or more than a single straightforward action, use the plan/todo tool only for the short execution plan for the current task. Do not use it as the durable user-request backlog.
 - The requirement ledger is the main task skill and the only persistent system for status, tasks, future work, and artifact state. This session forgot archived work and reinvented completed work when the agent treated chat as source of truth. Use `.codex/skills/requirement-ledger` on every turn to read or update the active task, and treat any missed turn as task failure.
 - Keep the ledger in durable local files with concise atomic user requests, request-linked active artifacts, close original wording, source pointers, intent, status, blockers, and next actions. Do not hand-edit ledger files or treat chat memory as durable state.
+- Update the durable ledger at task boundaries: after new user requirements arrive, after meaningful progress, before commits, before PR/release actions, and before you stop or reply after substantive work.
 - When both exist, keep them separate but aligned: the durable ledger stores user requests, status, future work, and other cross-session state; the plan/todo stores only the current execution steps needed to satisfy the active request. Chat history is disposable context, not persistent state, and the plan must not duplicate the whole ledger.
 - Before editing a durable queue, plan the strategy for tackling it, reprioritize deliberately, and keep active items in their strategic chronological order rather than randomizing, sorting by convenience, or grouping away original sequence.
 - At every task boundary, reread the entire active ledger, then reprioritize the full queue before choosing the next action; do not rely on a partial or stale view of active work.
@@ -81,6 +83,7 @@ Repo State
 - If the task spans multiple repos/worktrees, run the same remote preflight in each target repo (`git fetch origin`, `git status -sb`, `git rev-parse --short HEAD`) and confirm the active branch before any edits.
 - If a target branch has an open PR, read the latest PR comments/reviews and unresolved threads on the current head, check the latest PR head SHA, and treat GitHub as source of truth for current state before any non-readonly action.
 - If there is already an open PR for the same ongoing work, reuse that PR. Do not open a replacement PR unless the existing PR is explicitly discarded or structurally impossible to reuse, and record that decision in the ledger first.
+- Before opening, updating, or merging a PR, verify the exact source branch, base branch, PR head SHA, and live diff so you do not act from stale branches, stale worktrees, or already-superseded review state.
 
 Execution
 - Complete one change at a time; stash unrelated work before starting another.
@@ -231,7 +234,6 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - Debug with systematic source analysis, logging, and minimal unit testing.
 - MANDATORY: Before fixing any error, reproduce it locally first. Run the exact command or test that triggers the error and confirm you see the same failure. Never apply a fix without first observing the error yourself.
 - MANDATORY: End-user QA is the only accepted proof of a fix. A bug is "fixed" only after you re-run the exact end-user flow that surfaced it (same installed binary or same release artifact, same starting state, same commands) and observe the failure no longer reproduces. Unit tests and PR checks are necessary but never sufficient. If the bug was reported from a TUI session, prove the fix in a TUI session against the released build (drive it via pty/pexpect/expect/script if you have no human at the keyboard); if from a CLI subcommand, prove it by running that subcommand against the released build; if from an installed package, install the released artifact fresh and retry. Do not claim a fix as complete and do not close a REQ until that end-user proof exists and is cited.
-- MANDATORY: End-user QA is the only accepted proof of a fix. A bug is "fixed" only after you re-run the exact end-user flow that surfaced it (same installed binary or same release artifact, same starting state, same commands) and observe the failure no longer reproduces. Unit tests and PR checks are necessary but never sufficient. If the bug was reported from a TUI session, prove the fix in a TUI session against the released build (drive it via pty/pexpect/expect/script if you have no human at the keyboard); if from a CLI subcommand, prove it by running that subcommand against the released build; if from an installed package, install the released artifact fresh and retry. Do not claim a fix as complete and do not close a REQ until that end-user proof exists and is cited.
 - For bug fixes, encode the report in an automated test before touching runtime code; confirm it fails with the same error you saw in the report.
 - Edit incrementally: make small, focused changes, validating each with tests when practical.
 - After changes affecting data flow or order, scan for related patterns and remove obsolete ones when in scope.
@@ -336,13 +338,13 @@ Agency Swarm is a multi-agent orchestration framework built on the OpenAI Agents
 - Distill key steps to their essentials so the shortest path to value stays obvious.
 - Before editing documentation, read the target page and any linked official references when they are relevant; record each source in your checklist or plan.
 - Before adding or moving documentation content, thoroughly review the `/docs/` directory to determine the most appropriate placement.
-- When adding documentation, include links to related pages to increase connectedness wherever it helps the reader.
+- When adding documentation, include links to related pages wherever it helps the reader.
 
 ## Python Requirements
 - Python >= 3.12 (development on 3.13) — project developed and primarily tested on 3.13; CI ensures 3.12 compatibility.
 - Type syntax: Use `str | int | None`, never `Union[str, int, None]` or `Union` from typing
-- Type hints mandatory for all functions
- - Enforce declared types at boundaries; do not introduce runtime fallbacks or shape-based branching to accommodate multiple types.
+- Type hints are mandatory for all functions.
+- Enforce declared types at boundaries; do not introduce runtime fallbacks or shape-based branching to accommodate multiple types.
 
 ## Code Quality
 - 500 lines is the hard cap for any file unless the user explicitly approves an exception.
@@ -372,7 +374,7 @@ Do not grow files past the 500-line cap. Prefer extracting focused modules. If y
 - Remove dead code when it is in scope.
 - Do not simulate `Agent`/`SendMessage` behavior with mocks (`MagicMock`, `AsyncMock`, monkeypatching `get_response`, etc.). Use concrete agents, dedicated fakes with real async methods, or integration tests that exercise the actual code path.
 
-Strictness
+### Strictness
 - Treat weak typing as a bug: if you reach for `Any`, duck typing, or checking for fields at runtime (e.g. `if hasattr(x, "id")`), stop and start using proper types first.
 - Avoid `# type: ignore` in production code. Fix types or refactor instead.
 - Use the authoritative typed models from dependencies whenever they exist (e.g., `openai.types.responses`, `agents.items`). Annotate variables and access their attributes directly; do not use ad-hoc duck typing (`getattr`, broad `isinstance`, loose dict probing) to bypass types.
@@ -450,7 +452,7 @@ Strictness
 
 ## Memory & Expectations
 - User expects explicit status reporting, a test-first mindset, and directness. Ask at most one question at a time. After negative feedback or a protocol breach, tighten approvals: present minimal options and wait for explicit approval before changes; re-run Step 1 before and after edits.
-- Memory files are for durable facts only; keep rules and skills in the Instruction File, and never use memory files as SOPs, run logs, journals, or chronological transcripts.
+- Memory files are for durable facts, lessons learned, and task SOPs only; keep rules and skills in the Instruction File, and never use memory files as run logs, journals, or chronological transcripts.
 - Operate with maximum diligence and ownership; carry every task to completion with urgency and reliability.
 - When new insights improve clarity, distill them into existing sections (prefer refining current lines over adding new ones). After addressing the feedback, continue working if needed.
 
