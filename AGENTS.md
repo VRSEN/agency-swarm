@@ -142,6 +142,7 @@ Ask only for design decisions or true blocking decisions; otherwise proceed auto
 - For release notes, re-check the exact compare range and the exact shipped PR set right before drafting or editing. If tags, versions, or the compare base changed since the last draft, throw the old draft away and rebuild it from fresh evidence.
 - If GitHub releases/tags, package-index state, and repo version files disagree, treat that as recovery work. Stop, identify the actual shipped version and commit first, and get approval for the exact repair instead of cutting another release to paper over the mismatch.
 - Never merge, tag, draft, publish, yank, unpublish, or edit release notes to make the state "look right" before you prove what is already live.
+- MANDATORY Codex pre-release gate: no tag, GitHub release, PyPI publish, or npm publish may happen without a green Codex CLI review (model `gpt-5.4`, reasoning `extra-high`) of the exact commit being released. Run `codex review --base origin/main -c model_reasoning_effort="extra-high"` (or equivalent `codex exec` review when `codex review` is unavailable), save the output to `/tmp/codex_review_<short_sha>.txt`, and only proceed when the verdict is clean. If Codex flags any P1/P2, stop and surface the findings to the user. This gate applies to every repo whose release state the agent mutates (agency-swarm, agentswarm-cli, agency-starter-template, and any other published artifact).
 
 ## 🔴 TESTS, EXAMPLES & DOCS ARE KEY EVIDENCE
 
