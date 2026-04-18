@@ -55,8 +55,8 @@ Begin each task after reviewing this readiness checklist:
 
 Context
 - When a request has multiple things to consider or more than a single straightforward action, use the plan/todo tool only for the short execution plan for the current task. Do not use it as the durable user-request backlog.
-- If task context can outlive the chat, maintain a durable local ledger file with concise atomic user requests, request-linked active artifacts, close original wording, source pointers, intent, status, blockers, and next actions.
-- Use `.codex/skills/requirement-ledger` for durable ledger operations; do not hand-edit ledger files.
+- The requirement ledger is the main task skill. This session showed that skipping it even once broke task tracking. Use `.codex/skills/requirement-ledger` on every turn to read or update the active task, and treat any missed turn as task failure.
+- Keep the ledger in durable local files with concise atomic user requests, request-linked active artifacts, close original wording, source pointers, intent, status, blockers, and next actions. Do not hand-edit ledger files.
 - When both exist, keep them separate but aligned: the durable ledger stores user requests and request-linked cross-session state; the plan/todo stores the current execution steps needed to satisfy the active request. Do not duplicate the whole ledger into the plan.
 - Before editing a durable queue, plan the strategy for tackling it, reprioritize deliberately, and keep active items in their strategic chronological order rather than randomizing, sorting by convenience, or grouping away original sequence.
 - At every task boundary, reread the entire active ledger, then reprioritize the full queue before choosing the next action; do not rely on a partial or stale view of active work.
@@ -184,8 +184,8 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 ## Self-Improvement (High Priority)
 - On each user message, decide whether the Instruction File needs a policy adjustment to keep standing user instructions from this chat derivable from it and to prevent repeated mistakes, user-visible failures, or recurring slowdown; if a standing user instruction is not derivable from the Instruction File, update it promptly without derailing the active critical path.
 - When adding or changing an Instruction File rule, include or preserve the rule's concrete motivation: what observed failure, risk, or recurring slowdown it prevents. Do not add abstract rules that cannot be grounded in real task experience.
-- Instruction File and policy edits are red-zone work because process mistakes slow execution. Use one native subagent run by default for review or finalization, start with the root cause and enough background for the handoff, avoid unnecessary scripting, and follow `remove > update > add`. Use Codex CLI only when suitable native subagents are unavailable.
-- Before treating Instruction File edits as ready, review the local diff for concrete motivation, duplication, conflict with existing rules, and harmful process overhead; keep critical priming paths non-duplicative by updating or moving an existing rule instead of restating it, and keep rule updates out of unrelated feature PRs so self-improvement remains fast, reviewed, and isolated from product diffs.
+- Instruction File and policy edits are red-zone work because this session showed that policy work broke when it left Codex or used lower reasoning. If any non-Codex agent touched a policy diff, revert that policy work first.
+- Route every policy update through Codex only: use one native Codex subagent by default for review or finalization, or Codex CLI only when no native Codex subagent is available. In every case, use the maximum reasoning effort available, start with the root cause and enough background for the handoff, avoid unnecessary scripting, review the local diff for concrete motivation, duplication, conflict, and process overhead, keep critical priming paths non-duplicative by updating or moving an existing rule instead of restating it, keep rule updates out of unrelated feature PRs, and follow `remove > update > add`.
 - For policy/rule updates you make on your own initiative, request user approval before editing; do not pause normal coding/testing/review loops for extra approval requests.
 
 ### Writing Style (User Responses Only)
