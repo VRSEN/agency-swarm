@@ -1,5 +1,6 @@
 """Tests for the ChatKit adapter module."""
 
+import asyncio
 import json
 from types import SimpleNamespace
 
@@ -104,6 +105,71 @@ class TestChatkitMessagesToChatHistory:
         history = ChatkitAdapter.chatkit_messages_to_chat_history(items)
 
         assert history[0]["content"] == "Part 1. Part 2."
+
+
+class TestChatkitMessagesToAgentInput:
+    """Tests for official ChatKit -> Agents SDK conversion."""
+
+    def test_converts_messages_with_official_converter(self):
+        """User and assistant messages become Agents SDK input items."""
+        items = [
+            {
+                "id": "user-1",
+                "type": "user_message",
+                "thread_id": "thread-1",
+                "created_at": 1,
+                "content": [{"type": "input_text", "text": "Hello world"}],
+                "attachments": [],
+                "quoted_text": None,
+                "inference_options": {},
+            },
+            {
+                "id": "asst-1",
+                "type": "assistant_message",
+                "thread_id": "thread-1",
+                "created_at": 2,
+                "content": [{"type": "output_text", "text": "Hi there", "annotations": []}],
+            },
+        ]
+
+        history = asyncio.run(ChatkitAdapter.chatkit_messages_to_agent_input(items))
+
+        assert history == [
+            {
+                "role": "user",
+                "type": "message",
+                "content": [{"type": "input_text", "text": "Hello world"}],
+            },
+            {
+                "role": "assistant",
+                "type": "message",
+                "content": [{"type": "output_text", "text": "Hi there", "annotations": [], "logprobs": None}],
+            },
+        ]
+
+    def test_normalizes_tool_arguments_for_official_converter(self):
+        """Stringified tool arguments are normalized before conversion."""
+        items = [
+            {
+                "id": "tool-1",
+                "type": "client_tool_call",
+                "thread_id": "thread-1",
+                "created_at": 1,
+                "call_id": "call-123",
+                "name": "search",
+                "arguments": '{"query": "test"}',
+                "status": "completed",
+                "output": "Result data",
+            }
+        ]
+
+        history = asyncio.run(ChatkitAdapter.chatkit_messages_to_agent_input(items))
+
+        assert history[0]["type"] == "function_call"
+        assert history[0]["call_id"] == "call-123"
+        assert history[0]["arguments"] == '{"query": "test"}'
+        assert history[1]["type"] == "function_call_output"
+        assert history[1]["output"] == '"Result data"'
 
 
 class TestChatkitAdapterEventCreation:

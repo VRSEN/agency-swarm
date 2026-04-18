@@ -22,7 +22,13 @@ import time
 import uuid
 from typing import Any
 
+from chatkit.agents import simple_to_agent_input
+from chatkit.types import ThreadItem
+from pydantic import TypeAdapter
+
 logger = logging.getLogger(__name__)
+
+_THREAD_ITEMS_ADAPTER = TypeAdapter(list[ThreadItem])
 
 
 class ChatkitAdapter:
@@ -476,6 +482,13 @@ class ChatkitAdapter:
 
         return None, None, None
 
+    @classmethod
+    async def chatkit_messages_to_agent_input(cls, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Convert ChatKit thread items into official Agents SDK input items."""
+        normalized_items = [cls._normalize_thread_item(item) for item in items]
+        thread_items = _THREAD_ITEMS_ADAPTER.validate_python(normalized_items)
+        return await simple_to_agent_input(thread_items)
+
     @staticmethod
     def chatkit_messages_to_chat_history(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """
@@ -537,3 +550,42 @@ class ChatkitAdapter:
                     )
 
         return messages
+
+    @staticmethod
+    def _normalize_thread_item(item: dict[str, Any]) -> dict[str, Any]:
+        """Normalize stored ChatKit items so they validate against the official SDK types."""
+        normalized = dict(item)
+        item_type = normalized.get("type")
+
+        if item_type == "user_message":
+            normalized.setdefault("attachments", [])
+            normalized.setdefault("quoted_text", None)
+            normalized.setdefault("inference_options", {})
+            return normalized
+
+        if item_type == "assistant_message":
+            content = []
+            for part in normalized.get("content", []):
+                if isinstance(part, dict) and part.get("type") == "output_text":
+                    normalized_part = dict(part)
+                    normalized_part.setdefault("annotations", [])
+                    content.append(normalized_part)
+                else:
+                    content.append(part)
+            normalized["content"] = content
+            return normalized
+
+        if item_type == "client_tool_call":
+            arguments = normalized.get("arguments", {})
+            if isinstance(arguments, str):
+                try:
+                    parsed_arguments = json.loads(arguments) if arguments else {}
+                except json.JSONDecodeError:
+                    parsed_arguments = {"raw": arguments}
+                arguments = parsed_arguments
+            if not isinstance(arguments, dict):
+                arguments = {"value": arguments}
+            normalized["arguments"] = arguments
+            return normalized
+
+        return normalized

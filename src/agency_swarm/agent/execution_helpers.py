@@ -75,6 +75,10 @@ async def perform_single_run(
             hooks=hooks_override,
             run_config=run_config_override or RunConfig(),
             max_turns=kwargs.get("max_turns", 1000000),
+            previous_response_id=kwargs.get("previous_response_id"),
+            auto_previous_response_id=kwargs.get("auto_previous_response_id", False),
+            conversation_id=kwargs.get("conversation_id"),
+            session=kwargs.get("session"),
         )
     return result
 

@@ -11,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from agency_swarm import Agency, Agent, run_fastapi
+from agency_swarm.agent.execution_stream_response import StreamingRunResponse
 
 
 @dataclass
@@ -19,10 +20,20 @@ class ChatkitContextTracker:
 
     last_context: dict[str, Any] | None = None
     last_message: str | None = None
+    last_previous_response_id: str | None = None
+    last_run_config: Any = None
+    response_counter: int = 0
 
     def reset(self) -> None:
         self.last_context = None
         self.last_message = None
+        self.last_previous_response_id = None
+        self.last_run_config = None
+
+    def next_response_id(self) -> str:
+        """Return a deterministic response id for the current test process."""
+        self.response_counter += 1
+        return f"resp-{self.response_counter}"
 
 
 class ChatkitTestAgent(Agent):
@@ -39,30 +50,41 @@ class ChatkitTestAgent(Agent):
         context_override: dict[str, Any] | None = None,
         **kwargs: Any,
     ):
+        response_id = self._tracker.next_response_id()
+        message_id = f"msg-{self._tracker.response_counter}"
         # Extract last user message from history list
         if isinstance(message, list):
             for msg in reversed(message):
                 if isinstance(msg, dict) and msg.get("role") == "user":
-                    self._tracker.last_message = msg.get("content", "")
+                    content = msg.get("content", "")
+                    if isinstance(content, list):
+                        text_parts = []
+                        for part in content:
+                            if isinstance(part, dict) and part.get("type") == "input_text":
+                                text_parts.append(part.get("text", ""))
+                        self._tracker.last_message = "".join(text_parts)
+                    else:
+                        self._tracker.last_message = str(content)
                     break
         else:
             self._tracker.last_message = str(message)
         self._tracker.last_context = context_override
+        self._tracker.last_previous_response_id = kwargs.get("previous_response_id")
+        self._tracker.last_run_config = kwargs.get("run_config_override")
 
-        async def _generator():
-            # Simulate streaming events
+        async def _events():
             yield SimpleNamespace(
                 type="raw_response_event",
                 data=SimpleNamespace(
                     type="response.output_item.added",
-                    item=SimpleNamespace(type="message", role="assistant", id="msg-1"),
+                    item=SimpleNamespace(type="message", role="assistant", id=message_id),
                 ),
             )
             yield SimpleNamespace(
                 type="raw_response_event",
                 data=SimpleNamespace(
                     type="response.output_text.delta",
-                    item_id="msg-1",
+                    item_id=message_id,
                     delta="Hello from ChatKit!",
                 ),
             )
@@ -70,11 +92,13 @@ class ChatkitTestAgent(Agent):
                 type="raw_response_event",
                 data=SimpleNamespace(
                     type="response.output_item.done",
-                    item=SimpleNamespace(type="message", id="msg-1"),
+                    item=SimpleNamespace(type="message", id=message_id),
                 ),
             )
 
-        return _generator()
+        stream = StreamingRunResponse(_events())
+        stream._resolve_final_result(SimpleNamespace(last_response_id=response_id))
+        return stream
 
 
 @dataclass
@@ -229,3 +253,103 @@ def test_chatkit_endpoint_coexists_with_standard_endpoints(chatkit_factory: Chat
     }
     with client.stream("POST", "/chatkit_test/chatkit", json=payload) as response:
         assert response.status_code == 200
+
+
+def test_chatkit_endpoint_persists_items_and_reuses_previous_response_id(chatkit_factory: ChatkitAgencyFactory):
+    """Verify thread items persist in memory and subsequent turns reuse response chaining."""
+    app = run_fastapi(
+        agencies={"chatkit_test": chatkit_factory},
+        return_app=True,
+        app_token_env="",
+        enable_chatkit=True,
+    )
+    client = TestClient(app)
+
+    create_payload = {
+        "type": "threads.create",
+        "params": {
+            "input": {"content": [{"type": "input_text", "text": "Hello ChatKit!"}]},
+        },
+    }
+
+    thread_id = None
+    with client.stream("POST", "/chatkit_test/chatkit", json=create_payload) as response:
+        assert response.status_code == 200
+        for line in response.iter_lines():
+            if not line.startswith("data: "):
+                continue
+            event = json.loads(line[6:])
+            if event.get("type") == "thread.created":
+                thread_id = event["thread"]["id"]
+
+    assert isinstance(thread_id, str)
+
+    items_response = client.post(
+        "/chatkit_test/chatkit",
+        json={"type": "items.list", "params": {"thread_id": thread_id}},
+    )
+    assert items_response.status_code == 200
+    items_payload = items_response.json()
+    assert [item["type"] for item in items_payload["data"]] == ["assistant_message", "user_message"]
+
+    followup_payload = {
+        "type": "threads.add_user_message",
+        "params": {
+            "thread_id": thread_id,
+            "input": {"content": [{"type": "input_text", "text": "Follow up"}]},
+        },
+    }
+
+    with client.stream("POST", "/chatkit_test/chatkit", json=followup_payload) as response:
+        assert response.status_code == 200
+        list(response.iter_lines())
+
+    assert chatkit_factory.tracker.last_previous_response_id == "resp-1"
+
+    thread_response = client.post(
+        "/chatkit_test/chatkit",
+        json={"type": "threads.get_by_id", "params": {"thread_id": thread_id}},
+    )
+    assert thread_response.status_code == 200
+    thread_payload = thread_response.json()
+    assert thread_payload["metadata"]["previous_response_id"] == "resp-2"
+    assert [item["type"] for item in thread_payload["items"]["data"]] == [
+        "assistant_message",
+        "user_message",
+        "assistant_message",
+        "user_message",
+    ]
+
+
+def test_chatkit_endpoint_applies_inference_options(chatkit_factory: ChatkitAgencyFactory):
+    """Verify ChatKit inference options map onto Agents SDK run overrides."""
+    app = run_fastapi(
+        agencies={"chatkit_test": chatkit_factory},
+        return_app=True,
+        app_token_env="",
+        enable_chatkit=True,
+    )
+    client = TestClient(app)
+
+    payload = {
+        "type": "threads.create",
+        "params": {
+            "input": {
+                "content": [{"type": "input_text", "text": "Use overrides"}],
+                "inference_options": {
+                    "model": "gpt-4.1-mini",
+                    "tool_choice": {"id": "search"},
+                },
+            }
+        },
+    }
+
+    with client.stream("POST", "/chatkit_test/chatkit", json=payload) as response:
+        assert response.status_code == 200
+        list(response.iter_lines())
+
+    run_config = chatkit_factory.tracker.last_run_config
+    assert run_config is not None
+    assert run_config.model == "gpt-4.1-mini"
+    assert run_config.model_settings is not None
+    assert run_config.model_settings.tool_choice == "search"

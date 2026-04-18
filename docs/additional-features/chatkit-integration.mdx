@@ -82,7 +82,13 @@ export default defineConfig({
 
 ## Persistence
 
-By default, ChatKit is stateless. For conversation persistence, pass custom `RunHooks` via `hooks_override` parameter in `get_response` or `get_response_stream`:
+The built-in ChatKit endpoint keeps per-thread items in memory while the FastAPI process is running, and it reuses the OpenAI Agents SDK `simple_to_agent_input(...)` plus `previous_response_id` chain for subsequent turns on the same thread. That keeps the request-input path close to OpenAI's own ChatKit server pattern instead of rebuilding history conversion from scratch.
+
+The default store is still in-process only. If your server restarts, ChatKit threads are lost. For durable persistence, replace the in-memory thread storage with your own database-backed implementation.
+
+ChatKit `input.inference_options` are also passed through to the run request, so per-message model or tool-choice hints can override the default agent configuration.
+
+Agency-level `RunHooks` are still available if you need extra side effects around each run:
 
 ```python
 from agents import RunHooks
