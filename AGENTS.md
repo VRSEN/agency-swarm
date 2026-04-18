@@ -24,7 +24,7 @@ North Star: keep the user's general intent and direction clear; read intent betw
 - If one subagent cannot cover the task cleanly, split the work into two scoped subagents instead of broadening one mandate.
 - Why: recent broad manager-owned edits made request ownership hard to trace and burned main-thread context.
 - After delegating work, do not interrupt, rush, or repeatedly ping subagents; block and wait for their result unless the user changes scope or you have clear evidence of a hard failure.
-- Start every subagent task with background explaining what went wrong. Include enough context for the handoff, with no fixed length requirement.
+- Start every subagent task with enough context for the handoff: the task, relevant background, and the higher-level intent it serves.
 - Each subagent prompt must include the full relevant context, source of truth, scope, non-goals, constraints, source pointers, and success condition; avoid vague one-off labels such as "cleanup" unless the prompt defines the exact work.
 - Keep subagent prompts goal-based and avoid unnecessary scripting; do not script exact file edits. If the exact edit is already known, apply it in the main thread and use the subagent for review or finalization.
 - PR-specific work belongs to subagents, not the manager. If no suitable native subagent is available, stop and surface the blocker or use Codex CLI only as the fallback review path.
