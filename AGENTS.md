@@ -98,6 +98,8 @@ Execution
 - Actionable work and observable waits both count as unfinished work. Do not stop while there is a live command to poll, a review or verification step you can still run, a cleanup step you own, or any other next action inside mandate that advances the task.
 - Ending your turn while an external workflow can still be polled is forbidden. If CI, a release publish, a hosted review, or any other external event is in flight and the agent can sleep, retry, or otherwise advance toward its terminal state, keep the loop running instead of handing off.
 - Exercise normal collaborator common sense: do not accumulate local drift; local-only state is fragile and may disappear with the machine, so once work is verified and approval to ship is clear, commit and push it to GitHub promptly, and if it is not correct, remove it promptly.
+- Before any commit, PR, or release, run a separate drift audit against the relevant upstream baseline or last known clean state and flag anything not traceable to a deliberate, documented requirement; revert or justify it before shipping.
+  - **Why:** preserve rebuild-from-upstream capability and stop silent drift.
 - Never keep verified changes local except while waiting for explicit user approval to ship or while preparing the exact commit/push the user already approved.
 - Do not leave verified local changes sitting uncommitted or unpushed while approval to ship is already clear and fresh; persist them remotely or discard them.
 - Mark blockers inside the plan/todo list. Pending approvals, merges, commits, pushes, reviews, and similar live dependencies are blockers only when they stop the critical path. Remove dead branches of work from the plan immediately instead of carrying stale tasks forward.
@@ -143,6 +145,8 @@ Ask only for design decisions or true blocking decisions; otherwise proceed auto
 - If GitHub releases/tags, package-index state, and repo version files disagree, treat that as recovery work. Stop, identify the actual shipped version and commit first, and get approval for the exact repair instead of cutting another release to paper over the mismatch.
 - Never merge, tag, draft, publish, yank, unpublish, or edit release notes to make the state "look right" before you prove what is already live.
 - MANDATORY Codex pre-release gate: no tag, GitHub release, PyPI publish, or npm publish may happen without a green Codex CLI review (model `gpt-5.4`, reasoning `extra-high`) of the exact commit being released. Run `codex review --base origin/main -c model_reasoning_effort="extra-high"` (or equivalent `codex exec` review when `codex review` is unavailable), save the output to `/tmp/codex_review_<short_sha>.txt`, and only proceed when the verdict is clean. If Codex flags any P1/P2, stop and surface the findings to the user. This gate applies to every repo whose release state the agent mutates (agency-swarm, agentswarm-cli, agency-starter-template, and any other published artifact).
+- Before any release or safety claim for `agentswarm-cli`, `agency-swarm`, or a 1.9.x Agency Swarm build, launch `agentswarm` (or the equivalent CLI) against `/Users/nick/Desktop/agentswarm-test/my-agency`, send a real first message through the connected conversation, and verify a non-empty streaming assistant response renders. Auth-smoke CI alone never satisfies this gate; any launch failure, including environment, credential, dependency, or TUI-transition issues, is a release blocker until reproduced and root-caused.
+  - **Why:** release claims were repeated while the installed binary still failed before a usable conversation.
 
 ## 🔴 TESTS, EXAMPLES & DOCS ARE KEY EVIDENCE
 
@@ -160,6 +164,8 @@ Prime Directive: Rigorously compare every user request with patterns established
 5. ESCALATE UNFAMILIAR CHANGES: If diffs include files outside your intended change set or changes you cannot attribute to your edits or hooks, assume they were made by the user; stop immediately, surface a blocking question, and do not touch the file again or reapply any prior edit unless the user explicitly requests it.
 6. EVIDENCE OVER INTUITION: Base all decisions on verifiable evidence—tests, git history, logs, actual code behavior—and never misstate or invent facts; if evidence is missing, say so and escalate. Integrity is absolute.
 7. SELF-IMPROVEMENT: Treat user feedback as a signal to improve this document and your behavior; generalize the lesson and apply it immediately.
+8. MINIMAL FORK DISCIPLINE: When work in this repo changes or claims safety for the `agentswarm-cli` fork, keep that fork rebuildable from upstream OpenCode: before any non-trivial edit that affects the fork, prove it is strictly required for Agency Swarm integration, required fork packaging/release work, or approved branding; unrelated refactors, reformatting, stylistic drift, while-you're-here cleanup, and speculative abstractions are forbidden. Every fork-only change must be intentional and documented, and its commit message or PR body must state why upstream behavior is insufficient.
+   - **Why:** keep the fork rebuildable from upstream with a small, auditable delta.
 
 ## 🔴 FILE REQUIREMENTS
 These requirements apply to every file in the repository. Bullets prefixed with “In this document” are scoped to the Instruction File only.
