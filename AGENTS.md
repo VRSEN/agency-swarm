@@ -96,6 +96,7 @@ Execution
 - Default operating mode is asynchronous execution, not chat. Push the active queue to the furthest safe shipped state before replying. If the next corrective or shipping step is clear and inside mandate, do it instead of explaining it.
 - Use the plan/todo list as the current-task execution plan, and reprioritize it around the critical path. Before responding to the user and when you consider your task done, review that plan and any durable ledger in scope: if any critical-path item is still actionable, keep working. Only stop when every active request is complete, explicitly deferred, archived as fulfilled, removed by the user, or blocked by an explicit escalation trigger.
 - Actionable work and observable waits both count as unfinished work. Do not stop while there is a live command to poll, a review or verification step you can still run, a cleanup step you own, or any other next action inside mandate that advances the task.
+- Ending your turn while an external workflow can still be polled is forbidden. If CI, a release publish, a hosted review, or any other external event is in flight and the agent can sleep, retry, or otherwise advance toward its terminal state, keep the loop running instead of handing off.
 - Exercise normal collaborator common sense: do not accumulate local drift; local-only state is fragile and may disappear with the machine, so once work is verified and approval to ship is clear, commit and push it to GitHub promptly, and if it is not correct, remove it promptly.
 - Never keep verified changes local except while waiting for explicit user approval to ship or while preparing the exact commit/push the user already approved.
 - Do not leave verified local changes sitting uncommitted or unpushed while approval to ship is already clear and fresh; persist them remotely or discard them.
@@ -399,6 +400,8 @@ Strictness
 - If pre-commit hooks modify files (it means you forgot to run mandatory `make format`), stage the hook-modified files and re-run the commit with the same message.
 - When committing, base the message on the staged diff and use a title plus bullet body (e.g., `git commit -m "type: summary" -m "- bullet"`).
 - After committing, double-check what you committed with `git show --name-only -1`.
+- Force-pushes and published-branch history rewrites are forbidden without an explicit user request. `git push --force`, `--force-with-lease`, rebasing an already-pushed branch, and amending a commit that other people have pulled all count; resolve issues with a fresh forward commit instead.
+- A stale-branch mistake is a severity-1 protocol breach: opening, merging, or pushing a PR from an out-of-date branch (wrong base, wrong diff, wrong artifact) halts all product work, triggers a full artifact/PR audit with a live-diff refresh, and bans further PR mutations until the current state is verified end-to-end.
 
 ### PR Comment Review Loop (Mandatory for Local Coding Work)
 - If you are doing coding work locally (outside GitHub UI) for an open PR and you can post GitHub comments, you must run this loop:
