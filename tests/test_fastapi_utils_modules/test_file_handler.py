@@ -24,9 +24,35 @@ async def test_upload_from_urls_rejects_unsupported_sources() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(sys.platform == "win32", reason="On Windows, // paths are treated as UNC")
-async def test_upload_from_urls_rejects_protocol_relative_on_non_windows() -> None:
-    """Protocol-relative URLs should be rejected before download on non-Windows hosts."""
+async def test_upload_from_urls_handles_double_slash_sources_across_platforms(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Double-slash inputs should follow platform-specific URL vs UNC parsing rules."""
+    if sys.platform == "win32":
+        file_path = tmp_path / "doc.txt"
+        file_path.write_text("hello", encoding="utf-8")
+
+        async def fake_upload(path: str) -> str:
+            return f"uploaded:{Path(path).name}"
+
+        async def fake_wait(_file_id: str) -> None:
+            return None
+
+        monkeypatch.setattr(
+            "agency_swarm.integrations.fastapi_utils.file_handler.upload_to_openai",
+            fake_upload,
+        )
+        monkeypatch.setattr(
+            "agency_swarm.integrations.fastapi_utils.file_handler._wait_for_file_processed",
+            fake_wait,
+        )
+
+        unc_style = f"//{tmp_path.parts[0].rstrip(':')}/{'/'.join(tmp_path.parts[1:])}/doc.txt"
+        with pytest.raises((PermissionError, FileNotFoundError)):
+            await upload_from_urls({"doc.txt": unc_style}, allowed_local_dirs=[str(tmp_path)])
+        return
+
     protocol_relative_urls = ["//example.com/file.pdf", "//cdn.example.com/file.js"]
 
     for source in protocol_relative_urls:
@@ -277,33 +303,6 @@ async def test_upload_from_urls_remote_only_skips_allowlist_validation(
     )
 
     assert result == {"doc.txt": "uploaded:doc.txt"}
-
-
-@pytest.mark.asyncio
-@pytest.mark.skipif(sys.platform != "win32", reason="UNC paths are Windows-specific")
-async def test_upload_from_urls_uploads_unc_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """UNC paths (//server/share) should be treated as local on Windows."""
-    file_path = tmp_path / "doc.txt"
-    file_path.write_text("hello", encoding="utf-8")
-
-    async def fake_upload(path: str) -> str:
-        return f"uploaded:{Path(path).name}"
-
-    async def fake_wait(_file_id: str) -> None:
-        return None
-
-    monkeypatch.setattr(
-        "agency_swarm.integrations.fastapi_utils.file_handler.upload_to_openai",
-        fake_upload,
-    )
-    monkeypatch.setattr(
-        "agency_swarm.integrations.fastapi_utils.file_handler._wait_for_file_processed",
-        fake_wait,
-    )
-
-    unc_style = f"//{tmp_path.parts[0].rstrip(':')}/{'/'.join(tmp_path.parts[1:])}/doc.txt"
-    with pytest.raises((PermissionError, FileNotFoundError)):
-        await upload_from_urls({"doc.txt": unc_style}, allowed_local_dirs=[str(tmp_path)])
 
 
 @pytest.mark.asyncio
