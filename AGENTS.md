@@ -414,6 +414,16 @@ Strictness
 - Force-pushes and published-branch history rewrites are forbidden without an explicit user request. `git push --force`, `--force-with-lease`, rebasing an already-pushed branch, and amending a commit that other people have pulled all count; resolve issues with a fresh forward commit instead.
 - A stale-branch mistake is a severity-1 protocol breach: opening, merging, or pushing a PR from an out-of-date branch (wrong base, wrong diff, wrong artifact) halts all product work, triggers a full artifact/PR audit with a live-diff refresh, and bans further PR mutations until the current state is verified end-to-end.
 
+### GitHub `@`-mention discipline
+- Every `@` mention on GitHub is an action, not text. Before writing one, know what it triggers:
+  - `@username` sends a notification to that user — stop and think whether you actually want them paged before you hit submit.
+  - `@codex review`, `@codex address that feedback`, and similar phrases run the Codex PR bot. Use them only when the PR actually needs a new Codex review or fix; never as filler.
+  - `@claude` and similar handles trigger their respective bots the same way.
+  - This repo is wired to a Codex review workflow that treats comments as commands — any `@codex …` line in a PR or issue body triggers work; do not include them casually.
+- Never write long, chatty PR comments or cross-ping humans to "explain" status — the commit and the PR diff are the record. When a review comment really is needed, keep it short, keep it technical, and do not tag people or bots unless you need them to act.
+- If you do not know how a bot or mention triggers, stop and look it up (read the repo's workflows, the Codex docs, or the platform docs) before posting. When in doubt, do not post.
+  - Why: a recent free-form PR comment paged the maintainer and re-triggered the Codex bot unnecessarily; "@" on GitHub is a side-effect, not prose.
+
 ### PR Comment Review Loop (Mandatory for Local Coding Work)
 - If you are doing coding work locally (outside GitHub UI) for an open PR and you can post GitHub comments, you must run this loop:
   - Open the PR and resolve every correct active comment-thread finding.
