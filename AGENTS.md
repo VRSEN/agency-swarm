@@ -17,9 +17,9 @@ North Star: keep the user's general intent and direction clear; read intent betw
 - After every chat summarization or compaction event, re-read the current repo's live Instruction File from the default-branch source of truth before continuing.
 - Before relying on the Instruction File or shipping any Instruction File edit, verify that `CLAUDE.md` still exists as a symlink to `AGENTS.md`; if it does not, treat that as stale state to repair or escalate before you rely on the policy text.
 - For any update anywhere in the repo, apply `remove > update > add` when the outcome is equivalent; do not add new code, docs, tests, or rules until you have ruled out deleting, tightening, or reusing the existing path.
-- At task start, identify your role from available tools because the same Instruction File (`AGENTS.md` / `CLAUDE.md`) governs managers and subagents: agents with the Subagent tool are managers/execution-loop coordinators; agents without it are subagents, must stay inside delegated scope, report blockers, and must not claim they can delegate.
+- At task start, identify your role from available tools because the same Instruction File (`AGENTS.md` / `CLAUDE.md`) governs managers and subagents: agents with the Subagent tool are managers, not chatbots, and must run the execution loop; agents without it are subagents, must stay inside delegated scope, report blockers, and must not claim they can delegate.
 - Protect the context window. Avoid tool calls with unbounded or irrelevant output, prefer bounded reads/searches, and use delegated agents for broad exploration only when available through the real Subagent tool so the main context receives relevant findings.
-- Managers with the real Subagent tool stay at manager altitude: coordination, reprioritization, review, critical-path decisions, and bounded verification.
+- Managers with the real Subagent tool stay at manager altitude: coordination, reprioritization, delegation, review, critical-path decisions, and bounded verification. They are not chatbots and should follow the delegation rules below instead of defaulting to low-level solo work.
 - Managers delegate only when it clearly shortens the critical path or removes main-thread context load; use the bare minimum number of subagents, defaulting to one.
 - Combine related delegated work when one subagent can cover it; add another only when it clearly shortens the critical path.
 - After delegating work, do not interrupt, rush, or repeatedly ping subagents; block and wait for their result unless the user changes scope or you have clear evidence of a hard failure.
@@ -55,9 +55,9 @@ Begin each task after reviewing this readiness checklist:
 
 Context
 - When a request has multiple things to consider or more than a single straightforward action, use the plan/todo tool only for the short execution plan for the current task. Do not use it as the durable user-request backlog.
-- The requirement ledger is the main task skill. This session showed that skipping it even once broke task tracking. Use `.codex/skills/requirement-ledger` on every turn to read or update the active task, and treat any missed turn as task failure.
-- Keep the ledger in durable local files with concise atomic user requests, request-linked active artifacts, close original wording, source pointers, intent, status, blockers, and next actions. Do not hand-edit ledger files.
-- When both exist, keep them separate but aligned: the durable ledger stores user requests and request-linked cross-session state; the plan/todo stores the current execution steps needed to satisfy the active request. Do not duplicate the whole ledger into the plan.
+- The requirement ledger is the main task skill and the only persistent system for status, tasks, future work, and artifact state. This session forgot archived work and reinvented completed work when the agent treated chat as source of truth. Use `.codex/skills/requirement-ledger` on every turn to read or update the active task, and treat any missed turn as task failure.
+- Keep the ledger in durable local files with concise atomic user requests, request-linked active artifacts, close original wording, source pointers, intent, status, blockers, and next actions. Do not hand-edit ledger files or treat chat memory as durable state.
+- When both exist, keep them separate but aligned: the durable ledger stores user requests, status, future work, and other cross-session state; the plan/todo stores only the current execution steps needed to satisfy the active request. Chat history is disposable context, not persistent state, and the plan must not duplicate the whole ledger.
 - Before editing a durable queue, plan the strategy for tackling it, reprioritize deliberately, and keep active items in their strategic chronological order rather than randomizing, sorting by convenience, or grouping away original sequence.
 - At every task boundary, reread the entire active ledger, then reprioritize the full queue before choosing the next action; do not rely on a partial or stale view of active work.
 - Keep durable ledgers active-only: record unfulfilled user requests and requirements, remove non-requirement and duplicate noise without deleting, flattening, or overcompressing the user's actual requests, and move completed, fulfilled, deferred, failed, or noise items to a concise archive that preserves source pointers and original wording.
@@ -91,7 +91,7 @@ Execution
 
 ## Continuous Work Rule
 - Track the escalation state of each surfaced item: not yet surfaced to the user, already surfaced and waiting on the user, or resolved and no longer needs a user decision.
-- If earlier task details are forgotten and they affect the current work, recover the relevant transcript or task history before proceeding, including `.codex` session history when it is part of the source of truth.
+- If earlier task details are needed, recover them from the ledger first. Use transcript or `.codex` session history only to repair or verify the ledger when needed; they are recovery inputs, not the persistent source of truth.
 
 - Default operating mode is asynchronous execution, not chat. Push the active queue to the furthest safe shipped state before replying. If the next corrective or shipping step is clear and inside mandate, do it instead of explaining it.
 - Use the plan/todo list as the current-task execution plan, and reprioritize it around the critical path. Before responding to the user and when you consider your task done, review that plan and any durable ledger in scope: if any critical-path item is still actionable, keep working. Only stop when every active request is complete, explicitly deferred, archived as fulfilled, removed by the user, or blocked by an explicit escalation trigger.
