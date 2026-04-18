@@ -51,8 +51,10 @@ class ChatkitDemoLauncher:
         agency_name = getattr(agency_instance, "name", None) or "agency"
         agency_name = agency_name.replace(" ", "_")
 
+        backend_host = "127.0.0.1" if host == "0.0.0.0" else host
+
         # Set environment variables for the Vite frontend
-        os.environ["CHATKIT_BACKEND_URL"] = f"http://{host}:{port}"
+        os.environ["CHATKIT_BACKEND_URL"] = f"http://{backend_host}:{port}"
         os.environ["CHATKIT_FRONTEND_PORT"] = str(frontend_port)
         os.environ["CHATKIT_AGENCY_NAME"] = agency_name
 

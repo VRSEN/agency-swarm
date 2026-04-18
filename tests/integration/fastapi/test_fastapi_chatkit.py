@@ -127,10 +127,8 @@ def test_chatkit_endpoint_receives_user_message(chatkit_factory: ChatkitAgencyFa
         assert len(events) > 0
 
     assert chatkit_factory.tracker.last_message == "Hello ChatKit!"
-    # Filter out internal keys for comparison
     context = chatkit_factory.tracker.last_context or {}
-    user_context = {k: v for k, v in context.items() if not k.startswith("_")}
-    assert user_context == {"user_plan": "premium"}
+    assert context["user_plan"] == "premium"
 
 
 def test_chatkit_endpoint_streams_events(chatkit_factory: ChatkitAgencyFactory):

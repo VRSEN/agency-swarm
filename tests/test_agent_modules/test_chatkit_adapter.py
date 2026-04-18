@@ -125,11 +125,13 @@ class TestChatkitAdapterEventCreation:
             "item-1",
             "assistant_message",
             {"content": [{"type": "output_text", "text": "Hello"}]},
+            thread_id="thread-123",
         )
 
         assert event["type"] == "thread.item.added"
         assert event["item"]["id"] == "item-1"
         assert event["item"]["type"] == "assistant_message"
+        assert event["item"]["thread_id"] == "thread-123"
         assert event["item"]["content"][0]["text"] == "Hello"
 
     def test_create_item_updated_event(self):
@@ -147,15 +149,15 @@ class TestChatkitAdapterEventCreation:
     def test_create_item_done_event(self):
         """Creates a valid thread.item.done event."""
         adapter = ChatkitAdapter()
-        event = adapter._create_item_done_event("item-1")
+        event = adapter._create_item_done_event({"id": "item-1", "type": "assistant_message"})
 
         assert event["type"] == "thread.item.done"
-        assert event["item_id"] == "item-1"
+        assert event["item"]["id"] == "item-1"
 
     def test_create_assistant_message_item(self):
         """Creates assistant message item structure."""
         adapter = ChatkitAdapter()
-        item = adapter._create_assistant_message_item("item-1", "Hello world")
+        item = adapter._create_assistant_message_item("Hello world")
 
         assert item["content"][0]["type"] == "output_text"
         assert item["content"][0]["text"] == "Hello world"
@@ -196,6 +198,7 @@ class TestChatkitAdapterEventConversion:
 
         assert result["type"] == "thread.item.added"
         assert result["item"]["type"] == "assistant_message"
+        assert result["item"]["thread_id"] == "thread-1"
 
     def test_text_delta_event(self):
         """Converts text delta event."""
@@ -266,6 +269,8 @@ class TestChatkitAdapterEventConversion:
         result = adapter.openai_to_chatkit_events(done_event, run_id="run-1", thread_id="thread-1")
 
         assert result["type"] == "thread.item.done"
+        assert result["item"]["id"] == "msg-1"
+        assert result["item"]["thread_id"] == "thread-1"
 
     def test_tool_call_start(self):
         """Converts tool call start event."""
@@ -288,6 +293,7 @@ class TestChatkitAdapterEventConversion:
         assert result["type"] == "thread.item.added"
         assert result["item"]["type"] == "client_tool_call"
         assert result["item"]["name"] == "search"
+        assert result["item"]["thread_id"] == "thread-1"
 
     def test_tool_call_without_call_id_is_ignored(self):
         """Tool call without call_id returns None."""
@@ -384,6 +390,10 @@ class TestChatkitAdapterEventConversion:
         assert len(result) == 2
         assert result[0]["type"] == "thread.item.updated"
         assert result[1]["type"] == "thread.item.done"
+        assert result[1]["item"]["id"]
+        assert result[1]["item"]["thread_id"] == "thread-1"
+        assert result[1]["item"]["arguments"] == '{"q": "test"}'
+        assert result[1]["item"]["status"] == "completed"
 
     def test_handles_exception_with_error_event(self):
         """Exceptions are converted to thread.error events."""
@@ -438,6 +448,7 @@ class TestChatkitAdapterRunItemStream:
             "item_id_by_call": {"call-1": "chatkit-item-1"},
             "current_message_id": None,
             "accumulated_text": {},
+            "tool_output_by_call": {},
         }
 
         item = SimpleNamespace(
@@ -461,6 +472,7 @@ class TestChatkitAdapterRunItemStream:
             "item_id_by_call": {},
             "current_message_id": None,
             "accumulated_text": {},
+            "tool_output_by_call": {},
         }
 
         item = SimpleNamespace(raw_item={}, call_id=None, output="Result")

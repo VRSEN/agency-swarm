@@ -71,6 +71,8 @@ class ChatkitAdapter:
         item_id: str,
         item_type: str,
         content: dict[str, Any] | None = None,
+        *,
+        thread_id: str | None = None,
     ) -> dict[str, Any]:
         """Create a thread.item.added event."""
         item: dict[str, Any] = {
@@ -78,6 +80,8 @@ class ChatkitAdapter:
             "type": item_type,
             "created_at": int(time.time()),
         }
+        if thread_id is not None:
+            item["thread_id"] = thread_id
         if content:
             item.update(content)
         return {
@@ -97,16 +101,15 @@ class ChatkitAdapter:
             "update": update,
         }
 
-    def _create_item_done_event(self, item_id: str) -> dict[str, Any]:
+    def _create_item_done_event(self, item: dict[str, Any]) -> dict[str, Any]:
         """Create a thread.item.done event to finalize an item."""
         return {
             "type": "thread.item.done",
-            "item_id": item_id,
+            "item": item,
         }
 
     def _create_assistant_message_item(
         self,
-        item_id: str,
         text: str = "",
     ) -> dict[str, Any]:
         """Create an assistant_message item structure."""
@@ -118,6 +121,16 @@ class ChatkitAdapter:
                     "annotations": [],
                 }
             ],
+        }
+
+    def _create_assistant_done_item(self, item_id: str, thread_id: str, text: str) -> dict[str, Any]:
+        """Create a finalized assistant message item for thread.item.done."""
+        return {
+            "id": item_id,
+            "type": "assistant_message",
+            "thread_id": thread_id,
+            "created_at": int(time.time()),
+            **self._create_assistant_message_item(text),
         }
 
     def _create_tool_call_item(
@@ -138,6 +151,24 @@ class ChatkitAdapter:
         if output is not None:
             item["output"] = output
         return item
+
+    def _create_tool_done_item(
+        self,
+        item_id: str,
+        thread_id: str,
+        call_id: str,
+        name: str,
+        arguments: str = "{}",
+        output: str | None = None,
+    ) -> dict[str, Any]:
+        """Create a finalized client_tool_call item for thread.item.done."""
+        return {
+            "id": item_id,
+            "type": "client_tool_call",
+            "thread_id": thread_id,
+            "created_at": int(time.time()),
+            **self._create_tool_call_item(call_id, name, arguments, "completed", output),
+        }
 
     def openai_to_chatkit_events(
         self,
@@ -164,6 +195,7 @@ class ChatkitAdapter:
                 "item_id_by_call": {},
                 "current_message_id": None,
                 "accumulated_text": {},
+                "tool_output_by_call": {},
             },
         )
         call_id_by_item: dict[str, str] = state["call_id_by_item"]
@@ -181,6 +213,7 @@ class ChatkitAdapter:
                     item_id_by_call,
                     accumulated_text,
                     state,
+                    thread_id,
                 )
 
             if getattr(event, "type", None) == "run_item_stream_event":
@@ -206,6 +239,7 @@ class ChatkitAdapter:
         item_id_by_call: dict[str, str],
         accumulated_text: dict[str, str],
         state: dict[str, Any],
+        thread_id: str,
     ) -> dict[str, Any] | list[dict[str, Any]] | None:
         """Translate raw_response_event.data into ChatKit events."""
         etype = getattr(oe, "type", "")
@@ -225,7 +259,8 @@ class ChatkitAdapter:
                 return self._create_item_added_event(
                     msg_id,
                     "assistant_message",
-                    self._create_assistant_message_item(msg_id, ""),
+                    self._create_assistant_message_item(""),
+                    thread_id=thread_id,
                 )
 
             # Tool call start
@@ -241,6 +276,7 @@ class ChatkitAdapter:
                     item_id,
                     "client_tool_call",
                     self._create_tool_call_item(call_id, tool_name or "tool", "{}", "in_progress"),
+                    thread_id=thread_id,
                 )
 
         # --- Text delta --------------------------------------------------------
@@ -272,7 +308,13 @@ class ChatkitAdapter:
             if getattr(raw_item, "type", "") == "message":
                 msg_id = state.get("current_message_id") or getattr(raw_item, "id", None)
                 if msg_id:
-                    return self._create_item_done_event(msg_id)
+                    return self._create_item_done_event(
+                        self._create_assistant_done_item(
+                            msg_id,
+                            thread_id,
+                            accumulated_text.get(msg_id, ""),
+                        )
+                    )
                 logger.warning("raw_response_event ignored: message done without id")
                 return None
 
@@ -283,6 +325,7 @@ class ChatkitAdapter:
                     return None
                 chatkit_item_id: str | None = item_id_by_call.get(call_id)
                 if chatkit_item_id:
+                    tool_output_by_call: dict[str, str] = state["tool_output_by_call"]
                     return [
                         self._create_item_updated_event(
                             chatkit_item_id,
@@ -291,7 +334,16 @@ class ChatkitAdapter:
                                 "arguments": arguments or "{}",
                             },
                         ),
-                        self._create_item_done_event(chatkit_item_id),
+                        self._create_item_done_event(
+                            self._create_tool_done_item(
+                                chatkit_item_id,
+                                thread_id,
+                                call_id,
+                                tool_name or "tool",
+                                arguments or "{}",
+                                tool_output_by_call.get(call_id),
+                            )
+                        ),
                     ]
                 return None
 
@@ -341,6 +393,7 @@ class ChatkitAdapter:
             if not output_text:
                 return None
 
+            accumulated_text[msg_id] = output_text
             # Final message snapshot
             return self._create_item_updated_event(
                 msg_id,
@@ -371,6 +424,8 @@ class ChatkitAdapter:
             output_text = getattr(output_item, "output", None)
             item_id = item_id_by_call.get(call_id)
             if item_id and output_text:
+                tool_output_by_call: dict[str, str] = state["tool_output_by_call"]
+                tool_output_by_call[call_id] = output_text
                 return self._create_item_updated_event(
                     item_id,
                     {
