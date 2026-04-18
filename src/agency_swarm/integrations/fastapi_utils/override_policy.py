@@ -27,6 +27,7 @@ class RequestOverridePolicy:
             or self.config.api_key is not None
             or self.config.default_headers is not None
             or self.config.litellm_keys is not None
+            or self.config.litellm_base_url is not None
         )
 
     @property
