@@ -128,20 +128,60 @@ _AGENCY_REQUEST_STATES_GUARD = threading.Lock()
 
 
 def _apply_request_model_override(agent: Agent, model_name: str) -> None:
-    """Set ``agent.model`` to ``model_name`` for this request (restored via snapshot)."""
-    if _is_litellm_model(model_name):
-        if not _LITELLM_AVAILABLE or LitellmModel is None:
-            logger.warning(
-                "Cannot apply client_config.model to agent '%s': model %r requires litellm "
-                "(install openai-agents[litellm])",
-                agent.name,
-                model_name,
-            )
+    """Set ``agent.model`` to ``model_name`` for this request, preserving existing wiring.
+
+    A per-request model swap must not silently discard the agent's embedded
+    OpenAI client, wrapped model subtype, or LiteLLM credentials. Replace only
+    the ``.model`` attribute of the current wrapper and keep everything else.
+
+    - ``OpenAIResponsesModel`` / ``OpenAIChatCompletionsModel`` keep their
+      embedded ``AsyncOpenAI`` client and their transport (Responses vs
+      ChatCompletions). The model name is swapped in place.
+    - ``LitellmModel`` keeps its existing ``base_url`` / ``api_key`` and only
+      the model identifier is swapped.
+    - Bare-string agents become bare strings (or a minimal ``LitellmModel`` for
+      ``litellm/...`` names).
+    """
+    model = agent.model
+
+    if isinstance(model, OpenAIResponsesModel):
+        if _is_litellm_model(model_name):
+            _apply_request_litellm_model(agent, model_name)
             return
-        actual = model_name[8:] if model_name.startswith("litellm/") else model_name
-        agent.model = LitellmModel(model=actual, base_url=None, api_key=None)
+        agent.model = OpenAIResponsesModel(model=model_name, openai_client=model._client)
         return
+
+    if isinstance(model, OpenAIChatCompletionsModel):
+        if _is_litellm_model(model_name):
+            _apply_request_litellm_model(agent, model_name)
+            return
+        agent.model = OpenAIChatCompletionsModel(model=model_name, openai_client=model._client)
+        return
+
+    if _LITELLM_AVAILABLE and LitellmModel is not None and isinstance(model, LitellmModel):
+        actual = model_name[8:] if model_name.startswith("litellm/") else model_name
+        agent.model = LitellmModel(model=actual, base_url=model.base_url, api_key=model.api_key)
+        return
+
+    if _is_litellm_model(model_name):
+        _apply_request_litellm_model(agent, model_name)
+        return
+
     agent.model = model_name
+
+
+def _apply_request_litellm_model(agent: Agent, model_name: str) -> None:
+    """Build a fresh ``LitellmModel`` for the request when the original wrapper was not LiteLLM."""
+    if not _LITELLM_AVAILABLE or LitellmModel is None:
+        logger.warning(
+            "Cannot apply client_config.model to agent '%s': model %r requires litellm "
+            "(install openai-agents[litellm])",
+            agent.name,
+            model_name,
+        )
+        return
+    actual = model_name[8:] if model_name.startswith("litellm/") else model_name
+    agent.model = LitellmModel(model=actual, base_url=None, api_key=None)
 
 
 def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:

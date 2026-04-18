@@ -285,6 +285,75 @@ def test_model_override_applies_to_all_agents() -> None:
     assert a2.model == "gpt-4.1"
 
 
+def test_model_override_preserves_openai_responses_client() -> None:
+    """config.model on an OpenAIResponsesModel agent keeps the embedded client + transport."""
+    pytest.importorskip("agents")
+
+    from agents import OpenAIResponsesModel
+    from openai import AsyncOpenAI
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    embedded = AsyncOpenAI(api_key="sk-agent", base_url="https://api.agent.test/v1")
+    original = OpenAIResponsesModel(model="gpt-4o", openai_client=embedded)
+    agent = Agent(name="A", instructions="x", model=original)
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(agency, ClientConfig(model="gpt-4.1"))
+
+    assert isinstance(agent.model, OpenAIResponsesModel)
+    assert agent.model.model == "gpt-4.1"
+    assert agent.model._client is embedded
+
+
+def test_model_override_preserves_chat_completions_transport() -> None:
+    """config.model on an OpenAIChatCompletionsModel agent keeps the ChatCompletions transport + client."""
+    pytest.importorskip("agents")
+
+    from agents import OpenAIChatCompletionsModel
+    from openai import AsyncOpenAI
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    embedded = AsyncOpenAI(api_key="sk-agent", base_url="https://chat.agent.test/v1")
+    original = OpenAIChatCompletionsModel(model="gpt-4o", openai_client=embedded)
+    agent = Agent(name="A", instructions="x", model=original)
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(agency, ClientConfig(model="gpt-4.1"))
+
+    assert isinstance(agent.model, OpenAIChatCompletionsModel)
+    assert agent.model.model == "gpt-4.1"
+    assert agent.model._client is embedded
+
+
+def test_model_override_preserves_litellm_credentials() -> None:
+    """config.model on a LitellmModel agent keeps the existing base_url + api_key."""
+    pytest.importorskip("agents")
+    pytest.importorskip("agents.extensions.models.litellm_model")
+
+    from agents.extensions.models.litellm_model import LitellmModel
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    original = LitellmModel(model="anthropic/claude-sonnet-4", base_url="http://litellm.local", api_key="sk-existing")
+    agent = Agent(name="A", instructions="x", model=original)
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(agency, ClientConfig(model="litellm/anthropic/claude-opus-4"))
+
+    assert isinstance(agent.model, LitellmModel)
+    assert agent.model.model == "anthropic/claude-opus-4"
+    assert agent.model.base_url == "http://litellm.local"
+    assert agent.model.api_key == "sk-existing"
+
+
 def test_non_openai_custom_model_skips_openai_client_build(monkeypatch) -> None:
     """Custom non-OpenAI model names should skip OpenAI client construction entirely."""
     pytest.importorskip("agents")
