@@ -211,49 +211,61 @@ def _rebuild_openai_responses_model(
 ) -> OpenAIResponsesModel:
     """Rebuild ``OpenAIResponsesModel`` while preserving OpenClaw-scoped aliases.
 
-    - ``_agency_swarm_default_model_name`` drives OpenClaw default-settings lookup
-      and must survive the rebuild whenever the source carried it.
-    - ``_agency_swarm_usage_model_name`` maps the wrapper's ``.model`` to an
-      upstream provider model for cost tracking. It is only valid for the exact
-      source model name — carrying it across a model-name change would mis-label
-      usage (e.g. ``openclaw:main`` -> ``gpt-4.1`` still reporting OpenClaw's
-      upstream). Copy it only when the rebuilt model name matches the source.
+    Both ``_agency_swarm_default_model_name`` (drives OpenClaw default-settings
+    lookup) and ``_agency_swarm_usage_model_name`` (maps the wrapper's ``.model``
+    to an upstream provider model for cost tracking) are scoped to the exact
+    (model name, base URL) OpenClaw registration that produced them. Carrying
+    either across a change in model name OR base URL would apply the wrong
+    family defaults / mis-label usage — e.g. keeping ``openclaw:main`` but
+    pointing at a new gateway invalidates the original registration. Only copy
+    the aliases when BOTH identifiers still match the source.
     """
     rebuilt = OpenAIResponsesModel(model=model_name, openai_client=client)
+    same_identity = rebuilt.model == source.model and _client_base_url(client) == _client_base_url(source._client)
+    if not same_identity:
+        return rebuilt
     default_alias = getattr(source, "_agency_swarm_default_model_name", None)
     if isinstance(default_alias, str) and default_alias:
         rebuilt._agency_swarm_default_model_name = default_alias  # type: ignore[attr-defined]
     usage_alias = getattr(source, "_agency_swarm_usage_model_name", None)
-    if isinstance(usage_alias, str) and usage_alias and rebuilt.model == source.model:
+    if isinstance(usage_alias, str) and usage_alias:
         rebuilt._agency_swarm_usage_model_name = usage_alias  # type: ignore[attr-defined]
     return rebuilt
 
 
-def _refresh_framework_defaults_after_model_swap(agent: Agent) -> None:
-    """Re-layer framework defaults for the new ``agent.model`` without losing headers.
+def _client_base_url(client: AsyncOpenAI) -> str:
+    """Return the normalized base URL for an OpenAI client, for identity comparison."""
+    base_url = getattr(client, "base_url", None)
+    return str(base_url).rstrip("/") if base_url is not None else ""
 
-    ``Agent.__init__`` calls ``apply_framework_defaults`` to layer model-family
-    defaults (e.g. GPT-5 reasoning effort). After a request-time model swap we
-    replay that logic with a fresh ``ModelSettings()`` so every field recomputes
-    from the new model name — otherwise fields from the OLD settings (e.g. a
-    ``reasoning.effort`` baked for GPT-5) would stick when swapping to GPT-4o.
-    Only caller-set ``extra_headers`` from the pre-swap ``model_settings`` are
-    carried forward so previously applied request headers survive the refresh.
+
+# Fields that `agents.models.default_models.get_default_model_settings` varies by
+# model family (currently the GPT-5 family sets these non-None). Keep this list
+# in lockstep with that SDK helper — refreshing any other fields would drop
+# caller-explicit generation tuning on a per-request model swap.
+_MODEL_FAMILY_DEFAULT_FIELDS: tuple[str, ...] = ("reasoning", "verbosity")
+
+
+def _refresh_framework_defaults_after_model_swap(agent: Agent) -> None:
+    """Re-layer model-family defaults for the new ``agent.model`` without wiping caller fields.
+
+    ``apply_framework_defaults`` treats any non-None field on the input
+    ``ModelSettings`` as caller-explicit and preserves it. So to force a fresh
+    model-family default (e.g. GPT-5's ``reasoning.effort`` / ``verbosity``
+    bleeding into a GPT-4o swap) we clear ONLY the family-scoped fields on a
+    copy of the previous settings and let ``apply_framework_defaults`` recompute
+    them for the new model. Every other caller-tuned field (``temperature``,
+    ``max_tokens``, ``top_p``, ``parallel_tool_calls``, ``extra_headers``, ...)
+    survives untouched.
     """
     previous: ModelSettings | None = getattr(agent, "model_settings", None)
-    preserved_headers = dict(previous.extra_headers) if previous is not None and previous.extra_headers else None
+    cleared = copy.deepcopy(previous) if previous is not None else ModelSettings()
+    for field_name in _MODEL_FAMILY_DEFAULT_FIELDS:
+        setattr(cleared, field_name, None)
 
-    # Pass a fresh ModelSettings() so apply_framework_defaults doesn't treat
-    # stale fields from the previous model as caller-explicit overrides.
-    kwargs: dict[str, Any] = {"model": agent.model, "model_settings": ModelSettings()}
+    kwargs: dict[str, Any] = {"model": agent.model, "model_settings": cleared}
     apply_framework_defaults(kwargs)
-
-    refreshed = cast(ModelSettings, kwargs["model_settings"])
-    if preserved_headers:
-        existing = dict(refreshed.extra_headers or {})
-        existing.update(preserved_headers)
-        refreshed.extra_headers = existing
-    agent.model_settings = refreshed
+    agent.model_settings = cast(ModelSettings, kwargs["model_settings"])
 
 
 def _apply_request_litellm_model(agent: Agent, model_name: str) -> None:
