@@ -146,7 +146,6 @@ def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
         and config.api_key is None
         and config.default_headers is None
         and config.litellm_keys is None
-        and config.litellm_base_url is None
     ):
         return  # Nothing to override
 
@@ -154,10 +153,7 @@ def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
         config.base_url is not None or config.api_key is not None or config.default_headers is not None
     )
     litellm_overrides_present = (
-        config.base_url is not None
-        or config.api_key is not None
-        or config.litellm_keys is not None
-        or config.litellm_base_url is not None
+        config.base_url is not None or config.api_key is not None or config.litellm_keys is not None
     )
 
     # Apply to all agents in the agency
@@ -1094,12 +1090,7 @@ def _apply_client_to_agent(agent: Agent, client: AsyncOpenAI | None, config: Cli
     For LiteLLM models, creates a new LitellmModel with base_url and api_key from config.
     """
     model = agent.model
-    has_litellm_overrides = (
-        config.base_url is not None
-        or config.api_key is not None
-        or config.litellm_keys is not None
-        or config.litellm_base_url is not None
-    )
+    has_litellm_overrides = config.base_url is not None or config.api_key is not None or config.litellm_keys is not None
 
     if isinstance(model, str):
         if _is_litellm_model(model):
@@ -1155,7 +1146,8 @@ def _apply_client_to_agent(agent: Agent, client: AsyncOpenAI | None, config: Cli
             agent.model = OpenAIChatCompletionsModel(model=model.model, openai_client=client)
     elif _LITELLM_AVAILABLE and LitellmModel is not None and isinstance(model, LitellmModel):
         if has_litellm_overrides:
-            base_url = _resolve_litellm_base_url(model.model, config, existing_base_url=model.base_url)
+            # Preserve existing settings unless explicitly overridden.
+            base_url = config.base_url if config.base_url is not None else model.base_url
             api_key = _resolve_litellm_api_key(model.model, config, existing_api_key=model.api_key)
             agent.model = LitellmModel(model=model.model, base_url=base_url, api_key=api_key)
     elif isinstance(model, Model):
@@ -1240,18 +1232,14 @@ def _resolve_litellm_api_key(
                 if key_str == provider:
                     return value
         # Provider missing in litellm_keys:
-        # - For models whose route positively targets OpenAI (including nested
-        #   gateway paths like openrouter/openai/... and providerless names that
-        #   LiteLLM treats as OpenAI), allow falling back to config.api_key.
-        # - Otherwise keep existing (or env if None) — don't leak an OpenAI-side
-        #   api_key into an Anthropic/Gemini or other non-OpenAI LiteLLM call.
-        if _model_name_targets_openai(model_name):
+        # - For openai-based providers, allow falling back to config.api_key.
+        # - Otherwise keep existing (or env if None).
+        if _is_openai_based_litellm_provider(provider):
             return config.api_key if config.api_key is not None else existing_api_key
         return existing_api_key
 
-    # No litellm_keys provided: only use config.api_key for models that positively
-    # target OpenAI. Providerless or non-OpenAI names keep their existing key.
-    if _model_name_targets_openai(model_name):
+    # No litellm_keys provided: only use config.api_key for openai-based providers.
+    if _is_openai_based_litellm_provider(provider):
         return config.api_key if config.api_key is not None else existing_api_key
     return existing_api_key
 
@@ -1269,73 +1257,12 @@ def _apply_litellm_config(agent: Agent, model_name: str, config: ClientConfig) -
     actual_model = model_name[8:] if model_name.startswith("litellm/") else model_name
 
     api_key = _resolve_litellm_api_key(model_name, config, existing_api_key=None)
-    base_url = _resolve_litellm_base_url(model_name, config, existing_base_url=None)
 
     agent.model = LitellmModel(
         model=actual_model,
-        base_url=base_url,
+        base_url=config.base_url,
         api_key=api_key,
     )
-
-
-_OPENAI_BASED_LITELLM_PROVIDERS: frozenset[str] = frozenset(
-    {"openai", "text-completion-openai", "azure", "azure_ai", "openai_compatible"}
-)
-
-
-def _litellm_route_target_provider(model_name: str) -> str | None:
-    """Return the provider LiteLLM will actually use when routing ``model_name``.
-
-    Uses LiteLLM's own ``get_llm_provider`` so the detection matches the real
-    dispatcher instead of guessing from path segments. ``None`` when LiteLLM
-    cannot resolve a provider (e.g. LiteLLM missing or model unknown).
-    """
-    if not _LITELLM_AVAILABLE:
-        return None
-    cleaned = model_name[8:] if model_name.startswith("litellm/") else model_name
-    try:
-        from litellm import get_llm_provider
-
-        _model, provider, *_ = get_llm_provider(cleaned)
-        return provider if isinstance(provider, str) and provider else None
-    except Exception:
-        return None
-
-
-def _model_name_targets_openai(model_name: str) -> bool:
-    """Return True when LiteLLM resolves ``model_name`` to an OpenAI-based provider."""
-    provider = _litellm_route_target_provider(model_name)
-    return provider in _OPENAI_BASED_LITELLM_PROVIDERS
-
-
-def _resolve_litellm_base_url(
-    model_name: str,
-    config: ClientConfig,
-    existing_base_url: str | None = None,
-) -> str | None:
-    """Decide what base_url to hand to LiteLLM for a per-request client override.
-
-    Rules, in priority order:
-    1. An explicit `litellm_base_url` always wins. Use it for a LiteLLM proxy
-       regardless of which provider the agent uses.
-    2. If the model name positively targets an OpenAI-based endpoint (any path
-       segment is openai/azure/azure_ai/openai_compatible, including nested
-       gateway routes like ``openrouter/openai/...``), fall back to
-       `config.base_url` so an OpenAI gateway override still reaches those
-       LiteLLM agents.
-    3. Otherwise (explicit non-OpenAI providers like anthropic/gemini, or
-       providerless names where the route cannot be positively identified as
-       OpenAI), never leak `config.base_url` into the LiteLLM call; keep the
-       existing `model.base_url`. Callers that want a LiteLLM-side proxy for
-       these agents must set `config.litellm_base_url` explicitly.
-    """
-    if config.litellm_base_url is not None:
-        return config.litellm_base_url
-
-    if _model_name_targets_openai(model_name) and config.base_url is not None:
-        return config.base_url
-
-    return existing_base_url
 
 
 def _snapshot_agency_state(
