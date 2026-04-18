@@ -46,6 +46,13 @@ class ClientConfig(BaseModel):
             "variables; OpenAI-compatible providers may fall back to 'api_key'."
         ),
     )
+    model: str | None = Field(
+        default=None,
+        description=(
+            "If set, every agent in the agency uses this model name for the request only "
+            "(same string forms as Agent.model: OpenAI names, 'openai/…', 'litellm/…', provider paths, etc.)."
+        ),
+    )
 
     @field_validator("litellm_keys")
     @classmethod
@@ -86,7 +93,7 @@ class RunAgentInputCustom(RunAgentInput):
     )
     client_config: ClientConfig | None = Field(
         default=None,
-        description="Override client configuration (base_url, api_key, litellm_keys) for this request only.",
+        description="Override client configuration (base_url, api_key, litellm_keys, model) for this request only.",
     )
 
 
@@ -120,7 +127,7 @@ class BaseRequest(BaseModel):
     )
     client_config: ClientConfig | None = Field(
         default=None,
-        description="Override client configuration (base_url, api_key, litellm_keys) for this request only.",
+        description="Override client configuration (base_url, api_key, litellm_keys, model) for this request only.",
     )
 
 
