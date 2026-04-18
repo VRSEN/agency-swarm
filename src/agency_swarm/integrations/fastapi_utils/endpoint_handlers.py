@@ -127,25 +127,44 @@ _AGENCY_REQUEST_STATES: WeakKeyDictionary[Agency, dict[asyncio.AbstractEventLoop
 _AGENCY_REQUEST_STATES_GUARD = threading.Lock()
 
 
+def _apply_request_model_override(agent: Agent, model_name: str) -> None:
+    """Set ``agent.model`` to ``model_name`` for this request (restored via snapshot)."""
+    if _is_litellm_model(model_name):
+        if not _LITELLM_AVAILABLE or LitellmModel is None:
+            logger.warning(
+                "Cannot apply client_config.model to agent '%s': model %r requires litellm "
+                "(install openai-agents[litellm])",
+                agent.name,
+                model_name,
+            )
+            return
+        actual = model_name[8:] if model_name.startswith("litellm/") else model_name
+        agent.model = LitellmModel(model=actual, base_url=None, api_key=None)
+        return
+    agent.model = model_name
+
+
 def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
     """Apply custom OpenAI client configuration to all agents in the agency.
 
     Creates a new AsyncOpenAI client with the provided base_url and/or api_key,
-    then updates each agent's model to use this client. This allows per-request
-    client configuration without rebuilding templates.
+    optionally sets every agent's model from ``config.model``, then updates each
+    agent's model to use this client. This allows per-request client configuration
+    without rebuilding templates.
 
     Parameters
     ----------
     agency : Agency
         The agency instance to configure.
     config : ClientConfig
-        Configuration containing base_url and/or api_key overrides.
+        Configuration containing base_url, api_key, optional ``model``, and other overrides.
     """
     if (
         config.base_url is None
         and config.api_key is None
         and config.default_headers is None
         and config.litellm_keys is None
+        and config.model is None
     ):
         return  # Nothing to override
 
@@ -158,6 +177,9 @@ def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
 
     # Apply to all agents in the agency
     for agent in agency.agents.values():
+        if config.model is not None:
+            _apply_request_model_override(agent, config.model)
+
         # File attachment handling uses agent.client / agent.client_sync directly.
         # Keep those clients request-scoped too, so file_ids work without server env keys.
         if openai_overrides_present:

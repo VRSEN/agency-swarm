@@ -26,7 +26,13 @@ from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest, 
         ),
         (
             {},
-            {"base_url": None, "api_key": None, "default_headers": None, "litellm_keys": None},
+            {
+                "base_url": None,
+                "api_key": None,
+                "default_headers": None,
+                "litellm_keys": None,
+                "model": None,
+            },
         ),
     ],
 )
@@ -259,6 +265,24 @@ def test_snapshot_restore_preserves_model_settings_headers() -> None:
     _restore_agency_state(agency, snapshot)
 
     assert agent.model_settings.extra_headers == {"x-orig": "1"}
+
+
+def test_model_override_applies_to_all_agents() -> None:
+    """client_config.model should replace every agent's model for the request."""
+    pytest.importorskip("agents")
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    a1 = Agent(name="A1", instructions="x", model="gpt-4o-mini")
+    a2 = Agent(name="A2", instructions="y", model="gpt-4o")
+    agency = type("Agency", (), {"agents": {"A1": a1, "A2": a2}})()
+
+    apply_openai_client_config(agency, ClientConfig(model="gpt-4.1"))
+
+    assert a1.model == "gpt-4.1"
+    assert a2.model == "gpt-4.1"
 
 
 def test_non_openai_custom_model_skips_openai_client_build(monkeypatch) -> None:

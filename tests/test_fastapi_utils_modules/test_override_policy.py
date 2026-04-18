@@ -20,6 +20,10 @@ def test_request_override_policy_flags() -> None:
     assert policy.has_client_overrides is True
     assert policy.has_openai_overrides is True
 
+    model_only = RequestOverridePolicy(ClientConfig(model="gpt-4o-mini"))
+    assert model_only.has_client_overrides is True
+    assert model_only.has_openai_overrides is False
+
     litellm_cfg = cast(
         ClientConfig,
         SimpleNamespace(
