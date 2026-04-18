@@ -22,12 +22,15 @@ Run it from your project root. If you are starting fresh, run it in a new empty 
 
 You do not need to install the TUI globally first.
 
-<CardGroup cols={2}>
+<CardGroup cols={3}>
   <Card title="Agent Builder mode" icon="sparkles">
-    The launcher prepares a local project, starts the local bridge, and opens the TUI in that project.
+    Build and test agents locally. All model providers are available. This is the default when you run `npx @vrsen/agentswarm` from a project directory.
   </Card>
-  <Card title="Connected agency mode" icon="plug">
-    The launcher connects the TUI to an Agency Swarm server that is already running.
+  <Card title="Run mode" icon="plug">
+    Chat with a live Agency Swarm server. Provider choices are limited to what Agency Swarm supports: OpenAI and Anthropic. Activated when you connect to a running agency server.
+  </Card>
+  <Card title="Plan mode" icon="map">
+    Read-only exploration and planning. All model providers are available. Use it to analyze your agency structure without running agents.
   </Card>
 </CardGroup>
 
@@ -78,6 +81,18 @@ Once the TUI is running, you get:
 - direct access to local project files for prompt context
 
 ![Agent Swarm TUI agent picker](/images/agent-swarm-cli-agent-selection.png)
+
+## TUI Modes
+
+The TUI operates in one of three modes depending on whether you are connected to a running agency server.
+
+**Agent Builder mode** is the default. You work directly on a local Agency Swarm project. All model providers you have configured are available, so you can use any supported model while building and testing agents.
+
+**Run mode** is active when the TUI is connected to a live Agency Swarm server (either a locally started server or a remote one you connected to). In this mode, provider choices are limited to OpenAI and Anthropic — the two providers that Agency Swarm supports natively. If you only have an Anthropic key configured, Run mode still works; it just routes through Anthropic.
+
+**Plan mode** lets you explore your agency structure and plan changes without actually running agents. Like Agent Builder mode, all configured providers are available.
+
+The mode the TUI is in is shown in the status bar. If you switch from Agent Builder to connected agency, the provider list updates automatically to reflect Run mode's constraints.
 
 ## Optional Paths
 
