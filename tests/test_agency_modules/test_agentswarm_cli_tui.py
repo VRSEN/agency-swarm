@@ -1,3 +1,4 @@
+import asyncio
 import importlib
 import json
 import logging
@@ -250,7 +251,32 @@ def test_agentswarm_cli_tui_reports_bridge_output_on_failure(monkeypatch, capsys
     assert state["server"].stopped is True
 
 
-def test_agentswarm_cli_tui_capture_redirects_other_threads(capsys, tmp_path):
+def test_agentswarm_cli_tui_capture_includes_bridge_worker_threads(capsys, tmp_path):
+    log = tmp_path / "bridge.log"
+    logger = logging.getLogger("test.agentswarm_cli.capture.worker")
+    handler = logging.StreamHandler(sys.stderr)
+    logger.handlers = [handler]
+    logger.setLevel(logging.WARNING)
+    logger.propagate = False
+
+    def worker() -> None:
+        sys.stdout.write("bridge worker stdout\n")
+        sys.stderr.write("bridge worker stderr\n")
+        logger.warning("bridge worker logger")
+
+    try:
+        with agentswarm_cli_demo._contain_bridge_output(log):
+            asyncio.run(asyncio.to_thread(worker))
+    finally:
+        logger.handlers = []
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+    assert log.read_text() == "bridge worker stdout\nbridge worker stderr\nbridge worker logger\n"
+
+
+def test_agentswarm_cli_tui_capture_keeps_other_threads_on_real_streams(capsys, tmp_path):
     log = tmp_path / "bridge.log"
     logger = logging.getLogger("test.agentswarm_cli.capture")
     handler = logging.StreamHandler(sys.stderr)
@@ -275,16 +301,9 @@ def test_agentswarm_cli_tui_capture_redirects_other_threads(capsys, tmp_path):
         logger.handlers = []
 
     captured = capsys.readouterr()
-    assert captured.out == ""
-    assert captured.err == ""
-    assert log.read_text() == (
-        "other thread stdout\n"
-        "other thread stderr\n"
-        "other thread logger\n"
-        "server thread stdout\n"
-        "server thread stderr\n"
-        "server thread logger\n"
-    )
+    assert captured.out == "other thread stdout\n"
+    assert captured.err == "other thread stderr\nother thread logger\n"
+    assert log.read_text() == "server thread stdout\nserver thread stderr\nserver thread logger\n"
 
 
 def test_agentswarm_cli_tui_downloads_platform_cli(monkeypatch, tmp_path):
