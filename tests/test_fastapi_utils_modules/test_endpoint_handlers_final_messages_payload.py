@@ -1,3 +1,4 @@
+import asyncio
 import json
 from collections.abc import AsyncGenerator
 from typing import Any, cast
@@ -9,6 +10,7 @@ from agents.stream_events import RawResponsesStreamEvent
 from openai.types.responses.response_output_message import ResponseOutputMessage
 from openai.types.responses.response_text_delta_event import ResponseTextDeltaEvent
 
+import agency_swarm.integrations.fastapi_utils.endpoint_handlers as endpoint_handlers_module
 from agency_swarm import Agency, Agent
 from agency_swarm.agent.execution_stream_response import StreamingRunResponse
 from agency_swarm.integrations.fastapi_utils.endpoint_handlers import (
@@ -17,6 +19,7 @@ from agency_swarm.integrations.fastapi_utils.endpoint_handlers import (
     make_cancel_endpoint,
     make_stream_endpoint,
 )
+from agency_swarm.integrations.fastapi_utils.oauth_support import FastAPIOAuthConfig, OAuthStateRegistry
 from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest, CancelRequest
 
 
@@ -242,6 +245,51 @@ async def test_stream_endpoint_final_payload_rewrites_fake_ids(monkeypatch: pyte
     ]
     assert len(assistant_ids) == 2
     assert len(set(assistant_ids)) == 2
+
+
+@pytest.mark.asyncio
+async def test_stream_endpoint_emits_keepalive_comments_while_oauth_pending(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OAuth-pending stream should emit SSE keepalive comments periodically."""
+
+    async def _oauth_wait_attach(_agency: Any) -> None:
+        from agency_swarm.mcp.oauth import get_oauth_runtime_context
+
+        runtime_context = get_oauth_runtime_context()
+        assert runtime_context is not None
+        assert runtime_context.redirect_handler_factory is not None
+
+        redirect_handler = runtime_context.redirect_handler_factory("demo-server")
+        await redirect_handler("https://idp.example.com/authorize?state=keepalive-state")
+        await asyncio.sleep(0.03)
+
+    monkeypatch.setattr(
+        endpoint_handlers_module,
+        "attach_persistent_mcp_servers",
+        _oauth_wait_attach,
+    )
+    monkeypatch.setattr(endpoint_handlers_module, "OAUTH_KEEPALIVE_SECONDS", 0.01)
+
+    thread_manager = _StubThreadManager()
+    stream = StreamingRunResponse(_empty_stream())
+    agency = _StubAgency(stream, thread_manager)
+
+    def agency_factory(**_kwargs: Any) -> _StubAgency:
+        return agency
+
+    handler = make_stream_endpoint(
+        BaseRequest,
+        agency_factory,
+        lambda: None,
+        ActiveRunRegistry(),
+        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry()),
+    )
+    response = await handler(http_request=_StubRequest(), request=BaseRequest(message="hi"), token=None, user_id="u1")
+    chunks = [chunk async for chunk in response.body_iterator]
+
+    assert any(chunk.startswith(": keepalive ") for chunk in chunks)
+    assert any("event: oauth_redirect" in chunk for chunk in chunks)
 
 
 @pytest.mark.asyncio

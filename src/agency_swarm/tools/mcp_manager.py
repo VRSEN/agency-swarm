@@ -2,13 +2,190 @@ import asyncio
 import inspect
 import logging
 import threading
+from collections.abc import Awaitable, Callable, Coroutine
 from concurrent.futures import Future
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, TypedDict, cast
+
+from agency_swarm.mcp.oauth_user import build_oauth_user_segment
+from agency_swarm.tools.hosted_mcp_oauth import (
+    enable_hosted_mcp_tool_oauth,
+    is_hosted_mcp_tool_oauth_enabled,
+)
+
+_HostedMCPTool: type[Any] | None
+try:
+    from agents.tool import HostedMCPTool as _HostedMCPTool
+except ImportError:  # pragma: no cover - compatibility with older Agents SDKs
+    _HostedMCPTool = None
 
 if TYPE_CHECKING:
+    from mcp.client.auth import OAuthClientProvider
+
     from agency_swarm.agent.core import Agent
+    from agency_swarm.mcp.oauth import MCPServerOAuth
 
 logger = logging.getLogger(__name__)
+
+OAuthRedirectHandler = Callable[[str], Awaitable[None]]
+OAuthCallbackHandler = Callable[[], Awaitable[tuple[str, str | None]]]
+
+
+class OAuthHandlerMap(TypedDict, total=False):
+    redirect: OAuthRedirectHandler
+    callback: OAuthCallbackHandler
+
+
+# OAuth support - imported conditionally to avoid circular imports
+_OAUTH_AVAILABLE = False
+_MCPServerOAuth: type | None = None
+_MCPServerOAuthClient: type | None = None
+_create_oauth_provider: Callable[..., Coroutine[object, object, "OAuthClientProvider"]] | None = None
+_set_oauth_user_id: Callable[[str | None], None] | None = None
+_get_oauth_user_id: Callable[[], str | None] | None = None
+_set_oauth_runtime_context: Callable[[Any | None], None] | None = None
+_get_oauth_runtime_context: Callable[[], Any | None] | None = None
+
+try:
+    from agency_swarm.mcp.oauth import (
+        MCPServerOAuth as _MCPServerOAuth_impl,
+        create_oauth_provider as _create_oauth_provider_impl,
+        get_oauth_runtime_context as _get_oauth_runtime_context_impl,
+        get_oauth_user_id as _get_oauth_user_id_impl,
+        set_oauth_runtime_context as _set_oauth_runtime_context_impl,
+        set_oauth_user_id as _set_oauth_user_id_impl,
+    )
+    from agency_swarm.mcp.oauth_client import MCPServerOAuthClient as _MCPServerOAuthClient_impl
+
+    _MCPServerOAuth = _MCPServerOAuth_impl
+    _MCPServerOAuthClient = _MCPServerOAuthClient_impl
+    _create_oauth_provider = _create_oauth_provider_impl
+    _set_oauth_user_id = _set_oauth_user_id_impl
+    _get_oauth_user_id = _get_oauth_user_id_impl
+    _set_oauth_runtime_context = _set_oauth_runtime_context_impl
+    _get_oauth_runtime_context = _get_oauth_runtime_context_impl
+    _OAUTH_AVAILABLE = True
+except ImportError:
+    logger.debug("OAuth support not available - install MCP SDK to enable")
+
+_HOSTED_MCP_OAUTH_ORIGINAL_TOOL_ATTR = "_agency_swarm_hosted_mcp_oauth_original_tool"
+_MANAGED_OAUTH_CACHE_DIR_ATTR = "_agency_swarm_managed_oauth_cache_dir"
+
+
+def _sanitize_oauth_registry_user_id(user_id: str) -> str:
+    return build_oauth_user_segment(user_id, max_prefix_length=96)
+
+
+def _oauth_store_key_segment(config: Any) -> str:
+    storage = getattr(config, "storage", None)
+    if storage is not None:
+        return _sanitize_oauth_registry_user_id(f"storage:{id(storage)}")
+
+    storage_factory = getattr(config, "storage_factory", None)
+    if storage_factory is not None:
+        return _sanitize_oauth_registry_user_id(f"storage_factory:{id(storage_factory)}")
+
+    cache_dir = getattr(config, "cache_dir", None)
+    if cache_dir is not None:
+        path = Path(cache_dir).expanduser().resolve(strict=False)
+        return _sanitize_oauth_registry_user_id(f"cache:{path}")
+
+    return "default"
+
+
+def _oauth_endpoint_key_segment(config: Any) -> str:
+    url = getattr(config, "url", None)
+    if not isinstance(url, str) or url == "":
+        return "unknown-url"
+    return _sanitize_oauth_registry_user_id(f"url:{url}")
+
+
+def _oauth_request_key_suffix(request_id: str) -> str:
+    return f"::{_sanitize_oauth_registry_user_id(f'request:{request_id}')}"
+
+
+def _build_persistence_key(server: Any, oauth_user_id: str | None) -> str:
+    """Build process-level persistence key for MCP servers.
+
+    OAuth clients are keyed by (server_name, endpoint_url, user_id, token_store) to avoid
+    cross-user or cross-agency session/token reuse. Non-OAuth servers keep
+    name-only keys.
+    """
+    actual = getattr(server, "_server", server)
+    name = getattr(actual, "name", None)
+    if not isinstance(name, str) or name == "":
+        return ""
+    if _MCPServerOAuthClient is None or not isinstance(actual, _MCPServerOAuthClient):
+        return name
+    if not isinstance(oauth_user_id, str) or oauth_user_id == "":
+        user_segment = "default"
+    else:
+        user_segment = _sanitize_oauth_registry_user_id(oauth_user_id)
+    oauth_client = cast(Any, actual)
+    endpoint_segment = _oauth_endpoint_key_segment(oauth_client.oauth_config)
+    store_segment = _oauth_store_key_segment(oauth_client.oauth_config)
+    runtime_context = _get_oauth_runtime_context() if _get_oauth_runtime_context is not None else None
+    runtime_request_id = getattr(runtime_context, "request_id", None) if runtime_context is not None else None
+    if getattr(runtime_context, "mode", None) == "saas_stream" and isinstance(runtime_request_id, str):
+        key_prefix = f"{name}::oauth::{endpoint_segment}::{user_segment}::{store_segment}"
+        return f"{key_prefix}{_oauth_request_key_suffix(runtime_request_id)}"
+    return f"{name}::oauth::{endpoint_segment}::{user_segment}::{store_segment}"
+
+
+def apply_managed_oauth_cache_dir(config: Any, cache_dir: Path | None) -> None:
+    """Apply an Agency-managed OAuth cache dir without overwriting explicit server config."""
+    if cache_dir is None:
+        return
+    if getattr(config, "cache_dir", None) is None or bool(getattr(config, _MANAGED_OAUTH_CACHE_DIR_ATTR, False)):
+        config.cache_dir = cache_dir
+        setattr(config, _MANAGED_OAUTH_CACHE_DIR_ATTR, True)
+
+
+def _clone_oauth_candidate(server: Any) -> Any:
+    """Return a fresh OAuth client when the current object is already user-bound."""
+    if not _OAUTH_AVAILABLE or _MCPServerOAuthClient is None:
+        return server
+
+    actual = getattr(server, "_server", server)
+    if not isinstance(actual, _MCPServerOAuthClient):
+        return server
+    client = cast(Any, actual)
+
+    runtime_context = _get_oauth_runtime_context() if _get_oauth_runtime_context is not None else None
+    preserve_client_handlers = runtime_context is None or (
+        client.oauth_config.redirect_handler is not None or client.oauth_config.callback_handler is not None
+    )
+    handlers: OAuthHandlerMap = {}
+    if preserve_client_handlers and client._redirect_handler is not None:
+        handlers["redirect"] = client._redirect_handler
+    if preserve_client_handlers and client._callback_handler is not None:
+        handlers["callback"] = client._callback_handler
+    return _MCPServerOAuthClient(client.oauth_config, handlers or None)
+
+
+def _current_oauth_handlers(client: Any) -> OAuthHandlerMap:
+    """Return the handlers that should be active for the current OAuth request."""
+    handlers: OAuthHandlerMap = {}
+    if client._redirect_handler is not None:
+        handlers["redirect"] = client._redirect_handler
+    if client._callback_handler is not None:
+        handlers["callback"] = client._callback_handler
+
+    runtime_context = _get_oauth_runtime_context() if _get_oauth_runtime_context is not None else None
+    if runtime_context is not None:
+        if "redirect" not in handlers and runtime_context.redirect_handler_factory is not None:
+            handlers["redirect"] = runtime_context.redirect_handler_factory(client.name)
+        if "callback" not in handlers and runtime_context.callback_handler_factory is not None:
+            handlers["callback"] = runtime_context.callback_handler_factory(client.name)
+
+    if "redirect" not in handlers and client.oauth_config.redirect_handler is not None:
+        handlers["redirect"] = client.oauth_config.redirect_handler
+    if "callback" not in handlers and client.oauth_config.callback_handler is not None:
+        handlers["callback"] = client.oauth_config.callback_handler
+    return handlers
+
+
+_OAUTH_LIST_TOOLS_TIMEOUT_SECONDS = 620.0
 
 
 class PersistentMCPServerManager:
@@ -40,6 +217,25 @@ class PersistentMCPServerManager:
         # Server -> driver mapping (driver runs on background loop in a single task)
         self._drivers: dict[Any, dict[str, Any]] = {}
 
+    def _resolve_method_timeout(self, server: Any, method_name: str) -> float:
+        """Resolve timeout for a method call, extending OAuth discovery waits only when needed."""
+        timeout = self._timeouts.get(method_name, 30.0)
+        if method_name != "list_tools":
+            return timeout
+
+        actual = getattr(server, "_server", server)
+        if _MCPServerOAuthClient is None or not isinstance(actual, _MCPServerOAuthClient):
+            return timeout
+
+        if _get_oauth_runtime_context is None:
+            return _OAUTH_LIST_TOOLS_TIMEOUT_SECONDS
+
+        runtime_context = _get_oauth_runtime_context()
+        runtime_timeout = getattr(runtime_context, "timeout", None) if runtime_context is not None else None
+        if isinstance(runtime_timeout, (int, float)) and runtime_timeout > 0:
+            return float(runtime_timeout)
+        return _OAUTH_LIST_TOOLS_TIMEOUT_SECONDS
+
     def _ensure_driver(self, server: Any) -> None:
         # Create a per-server driver task with a command queue if missing
         real_server = getattr(server, "_server", server)
@@ -51,12 +247,28 @@ class PersistentMCPServerManager:
         ready_evt = threading.Event()
         # Unwrap proxy to operate on the real server inside the driver (same task)
 
+        # Check if this is an OAuth client (two-phase auth)
+        is_oauth_client = _MCPServerOAuthClient is not None and isinstance(real_server, _MCPServerOAuthClient)
+
         async def _driver():
             # Connect once in this driver task to bind cancel scope and session
             try:
-                if getattr(real_server, "session", None) is None:
-                    logger.info(f"Connecting server {getattr(real_server, 'name', '<unnamed>')}")
-                    await real_server.connect()
+                if getattr(real_server, "session", None) is None and not getattr(
+                    real_server, "_discovery_session", None
+                ):
+                    server_name = getattr(real_server, "name", "<unnamed>")
+                    if is_oauth_client:
+                        # Two-phase auth: defer all connections to on-demand calls
+                        logger.info(
+                            f"Skipping eager discovery connect for OAuth server {server_name}; will connect on demand."
+                        )
+                    else:
+                        # Regular server: full connection
+                        logger.info(f"Connecting server {server_name}")
+                        await real_server.connect()
+            except Exception as conn_err:
+                # Log but don't crash - allow driver to start for retry/recovery
+                logger.error(f"Connection failed for {getattr(real_server, 'name', '<unnamed>')}: {conn_err}")
             finally:
                 ready_evt.set()
 
@@ -70,18 +282,31 @@ class PersistentMCPServerManager:
                     args = cmd.get("args", ())
                     kwargs = cmd.get("kwargs", {})
                     result_fut: Future = cmd["result_fut"]
+                    if _set_oauth_user_id is not None:
+                        _set_oauth_user_id(cast("str | None", cmd.get("oauth_user_id")))
+                    if _set_oauth_runtime_context is not None:
+                        _set_oauth_runtime_context(cmd.get("oauth_runtime_context"))
                     try:
                         method = getattr(real_server, method_name)
                         res = await method(*args, **kwargs)
                         result_fut.set_result(res)
-                    except Exception as e:  # noqa: BLE001
+                    except BaseException as e:  # noqa: BLE001
                         result_fut.set_exception(e)
+                    finally:
+                        if _set_oauth_runtime_context is not None:
+                            _set_oauth_runtime_context(None)
+                        if _set_oauth_user_id is not None:
+                            _set_oauth_user_id(None)
                 elif typ == "shutdown":
                     result_fut: Future = cmd["result_fut"]
                     try:
-                        await real_server.cleanup()
+                        cleanup = getattr(real_server, "cleanup", None)
+                        if callable(cleanup):
+                            cleanup_result = cleanup()
+                            if inspect.isawaitable(cleanup_result):
+                                await cleanup_result
                         result_fut.set_result(True)
-                    except Exception as e:  # noqa: BLE001
+                    except BaseException as e:  # noqa: BLE001
                         result_fut.set_exception(e)
                     break
                 elif typ == "force_stop":
@@ -91,14 +316,21 @@ class PersistentMCPServerManager:
                     break
 
         # Start driver
-        asyncio.run_coroutine_threadsafe(_driver(), loop)
+        driver_future = asyncio.run_coroutine_threadsafe(_driver(), loop)
         # Wait until driver has connected
         if not ready_evt.wait(timeout=self._timeouts.get("connect", 20.0)):
             # Handle timeout explicitly
             raise TimeoutError(f"Server {getattr(server, 'name', '<unnamed>')} failed to connect within timeout")
-        # Track whether this driver created the session to decide who cleans up
-        created_by_driver = getattr(real_server, "session", None) is not None
-        self._drivers[real_server] = {"queue": queue, "real": real_server, "created_by_driver": created_by_driver}
+        # Track whether this driver created a session (regular or discovery)
+        has_session = getattr(real_server, "session", None) is not None
+        has_discovery = getattr(real_server, "_discovery_session", None) is not None
+        created_by_driver = has_session or has_discovery
+        self._drivers[real_server] = {
+            "queue": queue,
+            "real": real_server,
+            "created_by_driver": created_by_driver,
+            "driver_future": driver_future,
+        }
 
     async def ensure_connected(self, server: Any) -> None:
         # Ensure the per-server driver is running and connected
@@ -195,9 +427,20 @@ class PersistentMCPServerManager:
                     self._bg_loop = None
                     self._bg_thread = None
 
-    def register(self, server: Any) -> Any:
-        """Register (or reuse) a server by name and return the canonical instance."""
-        name = getattr(server, "name", None)
+    async def unregister_keys_ending_with(self, suffix: str) -> None:
+        """Cleanup and remove registered servers whose persistence keys end with suffix."""
+        if suffix == "":
+            return
+        async with self._lock:
+            matches = [key for key in self._servers if key.endswith(suffix)]
+            for key in matches:
+                server = self._servers.pop(key, None)
+                if server is not None:
+                    await self._shutdown_server_unlocked(server)
+
+    def register(self, server: Any, *, key: str | None = None) -> Any:
+        """Register (or reuse) a server by key and return the canonical instance."""
+        name = key or getattr(server, "name", None)
         if not isinstance(name, str) or name == "":
             # Do not persist unnamed servers
             return server
@@ -212,6 +455,66 @@ class PersistentMCPServerManager:
 
     def all(self) -> list[Any]:
         return list(self._servers.values())
+
+    def update_oauth_cache_dir(self, cache_dir: Path | None) -> None:
+        """Update cache_dir for all OAuth-enabled servers registered with this manager."""
+        if not _OAUTH_AVAILABLE:
+            return
+        normalized = None
+        if cache_dir is not None:
+            normalized = cache_dir.expanduser()
+        for server in self._servers.values():
+            self._apply_cache_dir_to_server(server, normalized)
+        # Update drivers as well (LoopAffineAsyncProxy->real server)
+        for entry in self._drivers.values():
+            real_server = entry.get("real")
+            if real_server is not None:
+                self._apply_cache_dir_to_server(real_server, normalized)
+
+    def _apply_cache_dir_to_server(self, server: Any, cache_dir: Path | None) -> None:
+        """Internal helper to apply cache_dir to both configs and instantiated clients."""
+        if server is None:
+            return
+        actual = getattr(server, "_server", server)
+        if _MCPServerOAuth is not None and isinstance(actual, _MCPServerOAuth):
+            oauth_config = cast("MCPServerOAuth", actual)
+            apply_managed_oauth_cache_dir(oauth_config, cache_dir)
+            return
+        try:
+            from agency_swarm.mcp.oauth_client import MCPServerOAuthClient
+        except ImportError:  # pragma: no cover - optional dependency missing
+            return
+
+        if isinstance(actual, MCPServerOAuthClient):
+            config = actual.oauth_config
+            apply_managed_oauth_cache_dir(config, cache_dir)
+            oauth_provider = getattr(actual, "_oauth_provider", None)
+            storage = getattr(oauth_provider, "storage", None) if oauth_provider else None
+            if storage and hasattr(storage, "base_cache_dir") and cache_dir is not None:
+                storage.base_cache_dir = cache_dir
+
+    async def _shutdown_server_unlocked(self, server: Any) -> None:
+        real_server = getattr(server, "_server", server)
+        state = self._drivers.pop(real_server, None)
+        if state is not None:
+            queue: asyncio.Queue = state["queue"]
+            fut: Future = Future()
+            loop = self._ensure_bg_loop()
+            loop.call_soon_threadsafe(lambda: queue.put_nowait({"type": "shutdown", "result_fut": fut}))
+            running_loop = asyncio.get_running_loop()
+            try:
+                await running_loop.run_in_executor(None, fut.result, self._timeouts.get("cleanup", 10.0))
+            except TimeoutError:
+                driver_future = state.get("driver_future")
+                if isinstance(driver_future, Future):
+                    driver_future.cancel()
+            return
+
+        cleanup = getattr(real_server, "cleanup", None)
+        if callable(cleanup):
+            cleanup_result = cleanup()
+            if inspect.isawaitable(cleanup_result):
+                await cleanup_result
 
     def _ensure_bg_loop(self) -> asyncio.AbstractEventLoop:
         if self._bg_loop is not None:
@@ -231,6 +534,36 @@ class PersistentMCPServerManager:
     def _submit_to_loop(self, coro: Any) -> Future:
         loop = self._ensure_bg_loop()
         return asyncio.run_coroutine_threadsafe(coro, loop)
+
+    def _submit_driver_call(self, server: Any, method: str, args: tuple[Any, ...], kwargs: dict[str, Any]) -> Future:
+        """Schedule a coroutine method call on the server's long-lived driver task."""
+        real_server = getattr(server, "_server", server)
+        self._ensure_driver(real_server)
+        state = self._drivers.get(real_server)
+        if state is None:
+            raise RuntimeError(f"Driver not initialized for server {getattr(real_server, 'name', '<unnamed>')}")
+
+        queue: asyncio.Queue = state["queue"]
+        fut: Future = Future()
+
+        def _post_call() -> None:
+            oauth_user_id = _get_oauth_user_id() if _get_oauth_user_id is not None else None
+            oauth_runtime_context = _get_oauth_runtime_context() if _get_oauth_runtime_context is not None else None
+            queue.put_nowait(
+                {
+                    "type": "call",
+                    "method": method,
+                    "args": args,
+                    "kwargs": kwargs,
+                    "oauth_user_id": oauth_user_id,
+                    "oauth_runtime_context": oauth_runtime_context,
+                    "result_fut": fut,
+                }
+            )
+
+        loop = self._ensure_bg_loop()
+        loop.call_soon_threadsafe(_post_call)
+        return fut
 
     async def _await_future(self, fut: Future, timeout: float | None = None) -> Any:  # noqa: ANN401
         loop = asyncio.get_running_loop()
@@ -288,10 +621,13 @@ class LoopAffineAsyncProxy:
         target = getattr(self._server, "__aenter__", None)
         if target is None:
             raise TypeError(f"Server {self._server!r} does not support asynchronous context management")
+        timeout = self._manager._timeouts.get("__aenter__", 30.0)
+        if inspect.iscoroutinefunction(target):
+            fut = self._manager._submit_driver_call(self._server, "__aenter__", (), {})
+            return await self._manager._await_future(fut, timeout=timeout)
         result = target()
         if inspect.isawaitable(result):
             fut = self._manager._submit_to_loop(result)
-            timeout = self._manager._timeouts.get("__aenter__", 30.0)
             return await self._manager._await_future(fut, timeout=timeout)
         return result
 
@@ -299,10 +635,13 @@ class LoopAffineAsyncProxy:
         target = getattr(self._server, "__aexit__", None)
         if target is None:
             raise TypeError(f"Server {self._server!r} does not support asynchronous context management")
+        timeout = self._manager._timeouts.get("__aexit__", 30.0)
+        if inspect.iscoroutinefunction(target):
+            fut = self._manager._submit_driver_call(self._server, "__aexit__", (exc_type, exc, tb), {})
+            return await self._manager._await_future(fut, timeout=timeout)
         result = target(exc_type, exc, tb)
         if inspect.isawaitable(result):
             fut = self._manager._submit_to_loop(result)
-            timeout = self._manager._timeouts.get("__aexit__", 30.0)
             return await self._manager._await_future(fut, timeout=timeout)
         return result
 
@@ -310,11 +649,25 @@ class LoopAffineAsyncProxy:
         target = getattr(self._server, name)
 
         if inspect.iscoroutinefunction(target):
-            timeout = self._manager._timeouts.get(name, 30.0)
 
             async def _proxy(*args, **kwargs):  # noqa: ANN001
-                fut = self._manager._submit_to_loop(target(*args, **kwargs))
-                return await self._manager._await_future(fut, timeout=timeout)
+                timeout = self._manager._resolve_method_timeout(self._server, name)
+                fut = self._manager._submit_driver_call(self._server, name, args, kwargs)
+                server_name = getattr(self._server, "name", "<unnamed>")
+                try:
+                    return await self._manager._await_future(fut, timeout=timeout)
+                except TimeoutError as exc:
+                    raise TimeoutError(
+                        f"MCP call '{name}' timed out after {timeout:.1f}s on server '{server_name}'"
+                    ) from exc
+                except asyncio.CancelledError as exc:
+                    current_task = asyncio.current_task()
+                    if current_task is not None and current_task.cancelling():
+                        raise
+                    raise RuntimeError(
+                        f"MCP call '{name}' was cancelled on server '{server_name}'. "
+                        "Check MCP server availability and OAuth configuration."
+                    ) from exc
 
             return _proxy
 
@@ -322,6 +675,207 @@ class LoopAffineAsyncProxy:
 
 
 default_mcp_manager = PersistentMCPServerManager()
+
+
+def _process_oauth_servers(agent: Any, servers: list[Any]) -> None:
+    """Process OAuth-enabled MCP servers and convert them to authenticated clients.
+
+    Args:
+        agent: The agent instance
+        servers: List of MCP server instances (may include MCPServerOAuth)
+    """
+    if not _OAUTH_AVAILABLE or _MCPServerOAuth is None:
+        return
+
+    # Import OAuth client here to avoid circular import
+    from agency_swarm.mcp.oauth_client import MCPServerOAuthClient
+
+    handler_factory = getattr(agent, "mcp_oauth_handler_factory", None)
+    factory: Callable[[str], OAuthHandlerMap] | None = None
+    if callable(handler_factory):
+        factory = cast("Callable[[str], OAuthHandlerMap]", handler_factory)
+
+    # Convert OAuth configs to OAuth clients
+    for i, srv in enumerate(list(servers)):
+        if not isinstance(srv, _MCPServerOAuth):
+            continue
+
+        oauth_srv = cast("MCPServerOAuth", srv)
+        logger.info(f"Creating OAuth client for MCP server: {oauth_srv.name}")
+
+        try:
+            client_id = oauth_srv.get_client_id_optional()
+            if client_id:
+                logger.info(f"OAuth configured for {oauth_srv.name} (client_id: {client_id[:8]}...)")
+
+            # Build handlers: config-level first. Factory remains a compatibility fallback.
+            server_handlers: OAuthHandlerMap = {}
+            if oauth_srv.redirect_handler:
+                server_handlers["redirect"] = oauth_srv.redirect_handler
+            if oauth_srv.callback_handler:
+                server_handlers["callback"] = oauth_srv.callback_handler
+
+            if factory is not None and not server_handlers:
+                new_handlers = factory(oauth_srv.name)
+                server_handlers.update(new_handlers)
+
+            handlers_arg = server_handlers if server_handlers else None
+            oauth_client = MCPServerOAuthClient(
+                oauth_srv,
+                handlers_arg,
+            )
+
+            # Replace config with actual client
+            servers[i] = oauth_client
+            logger.info(f"OAuth client created for {oauth_srv.name}")
+
+        except Exception:
+            logger.exception(f"Failed to create OAuth client for {oauth_srv.name}")
+            raise
+
+
+async def _authorize_hosted_mcp_tools(agent: Any, *, cache_dir: Path | None) -> None:
+    """Ensure HostedMCPTool has an OAuth access token when missing.
+
+    OpenAI's remote MCP tool (`HostedMCPTool`) requires callers to supply an OAuth
+    access token via `tool_config.authorization` for OAuth-protected servers.
+
+    For FastAPI deployments, request-scoped OAuth context routes redirects and callbacks
+    through SSE events and callback endpoints.
+    """
+    if not _OAUTH_AVAILABLE or _MCPServerOAuth is None or _MCPServerOAuthClient is None:
+        return
+
+    tools = getattr(agent, "tools", None)
+    if not isinstance(tools, list) or len(tools) == 0:
+        return
+    if getattr(agent, "_hosted_mcp_oauth_enabled", False) is not True:
+        return
+    if not any(
+        getattr(tool, "name", None) == "hosted_mcp" and is_hosted_mcp_tool_oauth_enabled(tool) for tool in tools
+    ):
+        return
+    tools = list(tools)
+    agent.tools = tools
+
+    handler_factory = getattr(agent, "mcp_oauth_handler_factory", None)
+    factory: Callable[[str], OAuthHandlerMap] | None = None
+    if callable(handler_factory):
+        factory = cast("Callable[[str], OAuthHandlerMap]", handler_factory)
+
+    oauth_config_type = cast("type[MCPServerOAuth]", _MCPServerOAuth)
+    oauth_client_type = cast(type[Any], _MCPServerOAuthClient)
+
+    hosted_mcp_tool_type = _HostedMCPTool
+
+    for index, tool in enumerate(list(tools)):
+        if getattr(tool, "name", None) != "hosted_mcp":
+            continue
+        if not is_hosted_mcp_tool_oauth_enabled(tool):
+            continue
+        original_tool = getattr(tool, _HOSTED_MCP_OAUTH_ORIGINAL_TOOL_ATTR, None)
+        is_injected_tool = original_tool is not None
+        source_tool = original_tool or tool
+        tool_config = getattr(tool, "tool_config", None)
+        if not isinstance(tool_config, dict):
+            continue
+        source_tool_config = getattr(source_tool, "tool_config", None)
+        if not isinstance(source_tool_config, dict):
+            source_tool_config = tool_config
+
+        # Respect user-provided authorization tokens.
+        if not is_injected_tool and tool_config.get("authorization") not in (None, ""):
+            continue
+
+        server_label = source_tool_config.get("server_label")
+        server_url = source_tool_config.get("server_url")
+        if not isinstance(server_label, str) or server_label == "":
+            continue
+        if not isinstance(server_url, str) or server_url == "":
+            # Connector-based MCP tools have no server_url; token injection is not supported here.
+            continue
+
+        active_tool = tool
+        active_tool_config = tool_config
+        if hosted_mcp_tool_type is not None:
+            active_tool = enable_hosted_mcp_tool_oauth(
+                hosted_mcp_tool_type(
+                    tool_config=cast(dict[str, Any], dict(source_tool_config)),
+                    on_approval_request=getattr(source_tool, "on_approval_request", None),
+                )
+            )
+            setattr(active_tool, _HOSTED_MCP_OAUTH_ORIGINAL_TOOL_ATTR, source_tool)
+            tools[index] = active_tool
+            active_tool_config = cast(dict[str, Any], active_tool.tool_config)
+
+        oauth_srv = oauth_config_type(url=server_url, name=server_label, use_env_credentials=False)
+        apply_managed_oauth_cache_dir(oauth_srv, cache_dir)
+
+        server_handlers: OAuthHandlerMap = {}
+        if factory is not None:
+            server_handlers.update(factory(server_label))
+        handlers_arg = server_handlers if server_handlers else None
+        oauth_client = oauth_client_type(oauth_srv, handlers_arg)
+
+        try:
+            await oauth_client.connect()
+            provider = getattr(oauth_client, "_oauth_provider", None)
+            if provider is None:
+                continue
+            tokens = await provider.context.storage.get_tokens()
+            if tokens is None or not getattr(tokens, "access_token", None):
+                continue
+            active_tool_config["authorization"] = tokens.access_token
+        finally:
+            await oauth_client.cleanup()
+
+
+def restore_hosted_mcp_oauth_tools(agency: Any) -> None:
+    """Restore HostedMCPTool definitions replaced by request-scoped OAuth injection."""
+    agents_map = getattr(agency, "agents", None)
+    if not isinstance(agents_map, dict):
+        return
+    for agent in agents_map.values():
+        tools = getattr(agent, "tools", None)
+        if not isinstance(tools, list):
+            continue
+        for index, tool in enumerate(list(tools)):
+            original_tool = getattr(tool, _HOSTED_MCP_OAUTH_ORIGINAL_TOOL_ATTR, None)
+            if original_tool is not None:
+                tools[index] = original_tool
+
+
+def _sync_oauth_client_handlers(persistent: object, candidate: object) -> bool:
+    """Update cached OAuth client with per-request handlers from a new instance.
+
+    Returns False because sessions are no longer invalidated when handlers refresh.
+    """
+    if not _OAUTH_AVAILABLE or _MCPServerOAuthClient is None:
+        return False
+
+    existing_client = getattr(persistent, "_server", persistent)
+    new_client = getattr(candidate, "_server", candidate)
+
+    if not isinstance(existing_client, _MCPServerOAuthClient) or not isinstance(new_client, _MCPServerOAuthClient):
+        return False
+
+    server_handlers = _current_oauth_handlers(cast(Any, new_client))
+    if not server_handlers:
+        return False
+
+    client = cast(Any, existing_client)
+    if "redirect" in server_handlers:
+        client._redirect_handler = server_handlers["redirect"]
+    if "callback" in server_handlers:
+        client._callback_handler = server_handlers["callback"]
+    provider = getattr(client, "_oauth_provider", None)
+    provider_context = getattr(provider, "context", None) if provider is not None else None
+    if provider_context is not None:
+        if "redirect" in server_handlers:
+            provider_context.redirect_handler = server_handlers["redirect"]
+        if "callback" in server_handlers:
+            provider_context.callback_handler = server_handlers["callback"]
+    return False
 
 
 async def attach_persistent_mcp_servers(agency: Any) -> None:
@@ -334,18 +888,36 @@ async def attach_persistent_mcp_servers(agency: Any) -> None:
     agents_map = getattr(agency, "agents", None)
     if not isinstance(agents_map, dict):
         return
+    cache_dir: Path | None = None
+    oauth_token_path = getattr(agency, "oauth_token_path", None)
+    if isinstance(oauth_token_path, str) and oauth_token_path != "":
+        cache_dir = Path(oauth_token_path).expanduser()
+    oauth_user_id = _get_oauth_user_id() if _get_oauth_user_id is not None else None
     for agent in agents_map.values():
+        ensure_mcp_tools = getattr(agent, "ensure_mcp_tools", None)
+        if callable(ensure_mcp_tools):
+            ensure_mcp_tools()
+        await _authorize_hosted_mcp_tools(agent, cache_dir=cache_dir)
         servers = getattr(agent, "mcp_servers", None)
         if not isinstance(servers, list):
             continue
+        if _OAUTH_AVAILABLE:
+            _process_oauth_servers(agent, servers)
         for i, srv in enumerate(list(servers)):
             name = getattr(srv, "name", None)
             if not isinstance(name, str) or name == "":
                 raise ValueError(f"Server {srv} has no name provided")
 
-            persistent = default_mcp_manager.get(name)
+            candidate = _clone_oauth_candidate(srv)
+            key = _build_persistence_key(candidate, oauth_user_id)
+            if key == "":
+                raise ValueError(f"Server {srv} has no valid persistence key")
+
+            persistent = default_mcp_manager.get(key)
             if persistent is None:
-                persistent = default_mcp_manager.register(srv)
+                persistent = default_mcp_manager.register(candidate, key=key)
+            else:
+                _sync_oauth_client_handlers(persistent, candidate)
             # Replace the reference so future runs reuse the same object and ensure loop‑affine proxy
             replacement = (
                 persistent
@@ -359,24 +931,43 @@ async def attach_persistent_mcp_servers(agency: Any) -> None:
             await default_mcp_manager.ensure_connected(srv)
 
 
+async def cleanup_oauth_runtime_mcp_servers() -> None:
+    """Remove request-scoped OAuth MCP clients for the active runtime context."""
+    runtime_context = _get_oauth_runtime_context() if _get_oauth_runtime_context is not None else None
+    request_id = getattr(runtime_context, "request_id", None) if runtime_context is not None else None
+    if getattr(runtime_context, "mode", None) != "saas_stream" or not isinstance(request_id, str):
+        return
+    await default_mcp_manager.unregister_keys_ending_with(_oauth_request_key_suffix(request_id))
+
+
 def register_and_connect_agent_servers(agent: Any) -> None:
     """Register an agent's MCP servers in the persistent manager and connect them.
 
     This is a synchronous facade that safely handles both sync and async contexts:
     - If an event loop is running, schedules an async task to connect servers.
     - Otherwise, creates a temporary loop to connect synchronously.
+    - Supports OAuth-enabled servers via MCPServerOAuth instances.
     """
     servers = getattr(agent, "mcp_servers", None)
     if not isinstance(servers, list) or len(servers) == 0:
         return
 
+    # Process OAuth servers first
+    if _OAUTH_AVAILABLE:
+        _process_oauth_servers(agent, servers)
+
     server_names = []
+    oauth_user_id = _get_oauth_user_id() if _get_oauth_user_id is not None else None
     # Replace each server with the persistent instance (by name) if available
     for i, srv in enumerate(list(servers)):
         name = getattr(srv, "name", None)
         if isinstance(name, str) and name != "" and name not in server_names:
             server_names.append(name)
-            persistent = default_mcp_manager.get(name) or default_mcp_manager.register(srv)
+            candidate = _clone_oauth_candidate(srv)
+            key = _build_persistence_key(candidate, oauth_user_id)
+            persistent = default_mcp_manager.get(key) or default_mcp_manager.register(candidate, key=key)
+            if persistent is not candidate:
+                _sync_oauth_client_handlers(persistent, candidate)
             if persistent is not servers[i]:
                 servers[i] = persistent
         elif name in server_names:
@@ -415,6 +1006,9 @@ def convert_mcp_servers_to_tools(agent: "Agent") -> None:
     servers = getattr(agent, "mcp_servers", None)
     if not isinstance(servers, list) or len(servers) == 0:
         return
+
+    if _OAUTH_AVAILABLE:
+        _process_oauth_servers(agent, servers)
 
     # Read convert_schemas_to_strict from agent's mcp_config
     mcp_config = getattr(agent, "mcp_config", None) or {}
