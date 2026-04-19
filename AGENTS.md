@@ -431,6 +431,14 @@
 16.13 Each Forked CLI Repo change shall be intentional and documented with the reason upstream behavior is insufficient.
   - Commentary: A small fork delta keeps rebuilds from upstream practical.
 
+16.14 Before planning or editing any Forked CLI Repo file that also exists upstream, read the upstream version and list every behavioral divergence.
+  - Commentary: Pre-edit gate, not a post-hoc review. Catches silent regressions like changing a fire-and-forget call to `await`.
+
+16.15 Every fork-only divergence shall be substantiated in the commit message or in `FORK_CHANGELOG.md` with the observed motivation and the expected upstream-merge impact.
+  - Commentary: Unsubstantiated divergences are forbidden because they cause merge conflicts and silently change behavior without the User's explicit intent.
+
+16.16 When a divergence is not strictly required to satisfy a fork directive, restore the upstream shape instead of carrying the divergence.
+
 ## 17. History and Review Operations
 17.1 Review status and full diffs before and after changes.
 17.2 Never commit or push without local verification of all touched behavior.
