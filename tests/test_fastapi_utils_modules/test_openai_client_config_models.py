@@ -185,6 +185,40 @@ def test_litellm_anthropic_does_not_use_generic_api_key_fallback() -> None:
     assert agent.model.api_key is None
 
 
+def test_litellm_anthropic_does_not_use_codex_base_url_fallback() -> None:
+    """Codex browser-auth base_url must not override non-OpenAI LiteLLM providers."""
+    pytest.importorskip("agents")
+    pytest.importorskip("agents.extensions.models.litellm_model")
+
+    from agents.extensions.models.litellm_model import LitellmModel
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    class _Agency:
+        def __init__(self, agent: Agent):
+            self.agents = {"A": agent}
+
+    original_model = LitellmModel(model="anthropic/claude-sonnet-4", base_url=None, api_key=None)
+    agent = Agent(name="A", instructions="x", model=original_model)
+    agency = _Agency(agent)
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(
+            api_key="sk-openai-gateway",
+            base_url="https://chatgpt.com/backend-api/codex",
+            litellm_keys={"anthropic": "sk-ant"},
+        ),
+    )
+
+    assert isinstance(agent.model, LitellmModel)
+    assert agent.model.model == "anthropic/claude-sonnet-4"
+    assert agent.model.base_url is None
+    assert agent.model.api_key == "sk-ant"
+
+
 def test_litellm_openai_provider_can_use_generic_api_key_fallback() -> None:
     """For openai-ish LiteLLM providers, config.api_key remains a valid fallback."""
     pytest.importorskip("agents")

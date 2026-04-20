@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from types import SimpleNamespace
 
 import pytest
 
@@ -379,3 +380,61 @@ def test_default_headers_only_uses_existing_upload_auth(
     assert isinstance(captured["headers"], dict)
     assert captured["headers"]["x-agency-id"] == "agency-orig"
     assert captured["headers"]["x-request-id"] == "req-1"
+
+
+def test_client_config_does_not_leak_codex_base_url_into_anthropic_litellm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Anthropic LiteLLM runs must ignore a forwarded Codex OAuth base_url."""
+    pytest.importorskip("agents.extensions.models.litellm_model")
+    from agents.extensions.models.litellm_model import LitellmModel
+
+    captured: dict[str, object] = {}
+
+    async def fake_get_response(self, message, **kwargs):
+        del message, kwargs
+        captured["model"] = self.model
+        return SimpleNamespace(final_output="ok")
+
+    monkeypatch.setattr(Agent, "get_response", fake_get_response)
+
+    def create_agency(load_threads_callback=None, save_threads_callback=None):
+        agent = Agent(
+            name="TestAgent",
+            instructions="You are a test agent.",
+            model="litellm/anthropic/claude-sonnet-4",
+        )
+        return Agency(
+            agent,
+            load_threads_callback=load_threads_callback,
+            save_threads_callback=save_threads_callback,
+        )
+
+    app = run_fastapi(
+        agencies={"test_agency": create_agency},
+        return_app=True,
+        app_token_env="",
+        enable_agui=False,
+    )
+    client = TestClient(app)
+
+    res = client.post(
+        "/test_agency/get_response",
+        json={
+            "message": "hi",
+            "client_config": {
+                "base_url": "https://chatgpt.com/backend-api/codex",
+                "api_key": "sk-openai-gateway",
+                "litellm_keys": {"anthropic": "sk-ant"},
+            },
+        },
+    )
+
+    assert res.status_code == 200
+    assert res.json()["response"] == "ok"
+
+    model = captured["model"]
+    assert isinstance(model, LitellmModel)
+    assert model.model == "anthropic/claude-sonnet-4"
+    assert model.base_url is None
+    assert model.api_key == "sk-ant"
