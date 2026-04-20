@@ -16,22 +16,11 @@ For most users, the right way to start is:
 npx @vrsen/agentswarm
 ```
 
-This is the main launch path. It handles first-run setup, then opens the terminal UI in local `Agent Builder` mode.
+This is the main launch path. It handles first-run setup, then connects the terminal UI to your Agency Swarm server.
 
 Run it from your project root. If you are starting fresh, run it in a new empty folder.
 
 You do not need to install the TUI globally first.
-
-<CardGroup cols={2}>
-  <Card title="Agent Builder mode" icon="sparkles">
-    The launcher prepares a local project, starts the local bridge, and opens the TUI in that project.
-  </Card>
-  <Card title="Connected agency mode" icon="plug">
-    The launcher connects the TUI to an Agency Swarm server that is already running.
-  </Card>
-</CardGroup>
-
-For most first-time users, the right path is local `Agent Builder` mode.
 
 ![Agent Swarm TUI startup screen](/images/agent-swarm-cli-preview.png)
 
@@ -52,14 +41,14 @@ On first launch, you will usually see this flow:
   <Step title="Start the launcher">
     Start with `npx @vrsen/agentswarm`.
   </Step>
-  <Step title="Choose a launch mode">
+  <Step title="Point the launcher at an agency">
     The launcher can reuse the current Agency Swarm project, create a starter project, or connect to an agency that is already running.
   </Step>
   <Step title="Set up the project environment">
     The launcher checks for a project `.venv`. If it needs to create one, it asks first and then installs the project dependencies before opening the TUI.
   </Step>
   <Step title="Open the TUI and add auth if needed">
-    The TUI opens in your project directory in local `Agent Builder` mode. If you do not already have a usable model provider configured, use `/auth`.
+    The TUI opens connected to your agency. If you do not already have a usable model provider configured, use `/auth`.
   </Step>
 </Steps>
 
@@ -83,8 +72,8 @@ Once the TUI is running, you get:
 
 If this is your first run, you can ignore everything below.
 
-<Accordion title="Optional: Connect to an existing agency" defaultOpen={false}>
-Use the same `npx @vrsen/agentswarm` command, then choose **Connect to an existing agency** during onboarding.
+<Accordion title="Connect to a running agency (optional)" defaultOpen={false}>
+Use the same `npx @vrsen/agentswarm` command, then choose **Connect to a running agency** during onboarding.
 
 This is the optional `/connect` path.
 
@@ -100,9 +89,7 @@ Use it when:
 - you want to connect to a remote Agency Swarm server
 - the server is protected and needs a bearer token
 
-This mode opens the TUI in connected agency mode instead of local `Agent Builder` mode.
-
-Current limitations in connected agency mode:
+Current limitations for this path:
 
 - `/models` does not switch the models configured inside your Agency Swarm backend yet
 - local file tools are not available; if you want the TUI to work directly on project files, start with `npx @vrsen/agentswarm` from that project directory instead
@@ -123,7 +110,7 @@ Then start your project the usual way:
 python agency.py
 ```
 
-This path stays bound to the exact `Agency` instance you passed in Python. It starts the local bridge for that agency, then opens the TUI in connected agency mode.
+This path stays bound to the exact `Agency` instance you passed in Python. It starts the local bridge for that agency, then opens the TUI connected to it.
 
 Use it when your team already starts the project from Python and you want a quick TUI test path without switching directories or changing entrypoints.
 </Accordion>
