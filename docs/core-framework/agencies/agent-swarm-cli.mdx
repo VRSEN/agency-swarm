@@ -22,10 +22,6 @@ Run it from your project root. If you are starting fresh, run it in a new empty 
 
 You do not need to install the TUI globally first.
 
-<Card title="Connected agency mode" icon="plug">
-  The launcher connects the TUI to an Agency Swarm server, whether it is your local project or a remote server.
-</Card>
-
 ![Agent Swarm TUI startup screen](/images/agent-swarm-cli-preview.png)
 
 ## Before You Start
@@ -76,8 +72,8 @@ Once the TUI is running, you get:
 
 If this is your first run, you can ignore everything below.
 
-<Accordion title="Optional: Connect to an existing agency" defaultOpen={false}>
-Use the same `npx @vrsen/agentswarm` command, then choose **Connect to an existing agency** during onboarding.
+<Accordion title="Connect to a running agency (optional)" defaultOpen={false}>
+Use the same `npx @vrsen/agentswarm` command, then choose **Connect to a running agency** during onboarding.
 
 This is the optional `/connect` path.
 
@@ -93,7 +89,7 @@ Use it when:
 - you want to connect to a remote Agency Swarm server
 - the server is protected and needs a bearer token
 
-Current limitations when connecting to a remote server:
+Current limitations for this path:
 
 - `/models` does not switch the models configured inside your Agency Swarm backend yet
 - local file tools are not available; if you want the TUI to work directly on project files, start with `npx @vrsen/agentswarm` from that project directory instead
