@@ -194,7 +194,9 @@ class TestTerminalCapsys:
 
     def test_handoff_chat_transfer(self, agency, capsys):
         """Test handoff chat transfer."""
-        input_provider = MockInputProvider(["Transfer to Developer", "Hi", "/exit"])
+        # Use the exact tool name so this test validates handoff persistence, not
+        # the live model's willingness to infer a handoff from natural language.
+        input_provider = MockInputProvider(["Use the transfer_to_Developer tool", "Hi", "/exit"])
 
         with patch("builtins.input", input_provider):
             with patch("agency_swarm.ui.demos.terminal.Application", new=_application_factory(input_provider)):
