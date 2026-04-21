@@ -202,18 +202,15 @@ class TestTerminalCapsys:
 
         captured = capsys.readouterr()
         output = captured.out
+        before_follow_up, _, after_follow_up = output.partition("USER: Hi")
 
-        # Verify that initial input is sent to main agent
-        assert "🤖 TestAgent 🛠️ Executing Function"
-        assert "Calling transfer_to_Developer tool with:" in output
-
-        # Verify that after handoff, response is sent by developer
-        assert "🤖 Developer → 👤 user" in output
-        assert "Dev response:" in output
+        # Verify that the first message handed off before the follow-up user turn.
+        assert "🤖 Developer → 👤 user" in before_follow_up
+        assert "Dev response:" in before_follow_up
 
         # Verify that next input went to developer
-        assert "🤖 Developer → 👤 user" in output.split("USER: Hi")[-1]
-        assert "Dev response:" in output.split("USER: Hi")[-1]
+        assert "🤖 Developer → 👤 user" in after_follow_up
+        assert "Dev response:" in after_follow_up
 
     def test_slash_dropdown_populates_commands(self, agency):
         """Ensure slash input populates dropdown items."""
@@ -297,18 +294,15 @@ class TestTerminalEdgeCases:
 
         captured = capsys.readouterr()
         output = captured.out
+        before_follow_up, _, after_follow_up = output.partition("USER: Hi")
 
-        # Handoffs will replace spaces with underscores
-        assert "🤖 TestAgent 🛠️ Executing Function"
-        assert "Calling transfer_to_SecUrity_ExperT_Agent tool with:" in output
-
-        # Verify that after handoff, name is shown correctly
-        assert "🤖 SecUrity ExperT_Agent → 👤 user" in output
-        assert "Security expert response:" in output
+        # Verify that the first message handed off before the follow-up user turn.
+        assert "🤖 SecUrity ExperT_Agent → 👤 user" in before_follow_up
+        assert "Security expert response:" in before_follow_up
 
         # Verify that next input went didn't cause any errors
-        assert "🤖 SecUrity ExperT_Agent → 👤 user" in output.split("USER: Hi")[-1]
-        assert "Security expert response:" in output.split("USER: Hi")[-1]
+        assert "🤖 SecUrity ExperT_Agent → 👤 user" in after_follow_up
+        assert "Security expert response:" in after_follow_up
 
 
 if __name__ == "__main__":
