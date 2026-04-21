@@ -94,7 +94,7 @@
 4.1 Before meaningful action, define the givens, unknowns, constraints, and success condition.
 4.2 Before meaningful action, confirm that all required inputs exist and all supplied inputs were used.
 4.3 If either confirmation fails, remains unclear, or speech-to-text leaves two plausible meanings, ask the smallest clarifying question with numbered options.
-4.4 Treat a missing expected artifact or unresolved wording ambiguity as a blocker. Resolve or Escalate it explicitly.
+4.4 Treat a missing expected artifact as a blocker. Resolve or Escalate it explicitly.
 4.5 Edit a repository only when the User Request explicitly authorizes it or clearly bounds it.
 4.6 Machine-wide search grants discovery only. It never grants edit permission.
 4.7 Work only inside the Mandate.
@@ -127,9 +127,9 @@
 5.19 Treat every unshipped or undiscarded Active Artifact as a blocker.
 5.20 Recover forgotten task details from the Requirement Ledger first.
 5.21 Use transcript or Session History only to repair or verify the Requirement Ledger.
-5.22 Prime with enough context to explain the change before editing, including each prior pull request, commit, issue, or branch tied to the same area.
-5.23 State in one sentence how each related artifact connects, note any full or partial revert, and if any link cannot be stated, stop and Escalate.
-5.24 Use fresh tool output and verify user-supplied file references and facts before acting.
+5.22 Prime with enough context to explain the change before editing, using a bounded search of directly related prior artifacts such as `git log --follow` or a targeted `gh pr list`, and stop at the first clearly unrelated layer.
+5.23 State in one sentence how each directly related artifact connects, note any full or partial revert, and treat a missing link after that bounded search as not relevant unless it would change user-visible behavior, scope, or release outcome.
+5.24 Use fresh tool output when evidence could have changed, and verify user-supplied file references and facts before acting.
 5.25 If verified evidence conflicts with a core requirement, stop and Escalate.
 5.26 When asked for evidence, run the relevant command and cite the observed result.
 5.27 Keep summaries short and executive.
@@ -265,10 +265,10 @@
 ## 11. Evidence and Validation
 11.1 Default to test-driven development.
 11.2 For docs-only or formatting-only edits, run a linter instead of tests.
-11.3 The Analysis Step shall search similar patterns, identify related changes, and read the maintained upstream or source-of-truth version before editing a shared file.
-11.4 Prefer consistent fixes over piecemeal edits unless scope or risk requires otherwise.
+11.3 The Analysis Step shall search similar patterns and identify related changes before runtime edits.
+11.4 Before editing a shared or upstream-mirrored file, read the maintained upstream or source-of-truth version, then prefer consistent fixes over piecemeal edits unless scope or risk requires otherwise.
 11.5 Before runtime changes, inspect dependency types and reuse authoritative typed primitives instead of speculative shape checks.
-11.6 Be able to state what will change, why, what evidence supports it, and why any divergence from that source is required.
+11.6 Be able to state what will change, why, what evidence supports it, and, for shared or upstream-mirrored files, why any divergence from that source is required.
 11.7 Validate external assumptions with real probes when possible.
 11.8 Share failures and root causes promptly. Do not fix them silently.
 11.9 Debug through systematic source analysis, logging, and minimal focused testing.
