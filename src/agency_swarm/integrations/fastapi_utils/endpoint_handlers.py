@@ -1317,7 +1317,7 @@ def _apply_client_to_agent(agent: Agent, client: AsyncOpenAI | None, config: Cli
     elif _LITELLM_AVAILABLE and LitellmModel is not None and isinstance(model, LitellmModel):
         if has_litellm_overrides:
             # Preserve existing settings unless explicitly overridden.
-            base_url = config.base_url if config.base_url is not None else model.base_url
+            base_url = _resolve_litellm_base_url(model.model, config, existing_base_url=model.base_url)
             api_key = _resolve_litellm_api_key(model.model, config, existing_api_key=model.api_key)
             agent.model = LitellmModel(model=model.model, base_url=base_url, api_key=api_key)
     elif isinstance(model, Model):
@@ -1414,6 +1414,24 @@ def _resolve_litellm_api_key(
     return existing_api_key
 
 
+def _resolve_litellm_base_url(
+    model_name: str,
+    config: ClientConfig,
+    existing_base_url: str | None = None,
+) -> str | None:
+    provider = _get_litellm_provider(model_name)
+
+    if config.base_url is None:
+        return existing_base_url
+
+    # Preserve generic LiteLLM proxy support, but never leak the Codex browser-auth
+    # endpoint into non-OpenAI-compatible providers like Anthropic or Gemini.
+    if _is_codex_base_url(config.base_url) and not _is_openai_based_litellm_provider(provider):
+        return existing_base_url
+
+    return config.base_url
+
+
 def _apply_litellm_config(agent: Agent, model_name: str, config: ClientConfig) -> None:
     """Apply config to a LiteLLM model by creating a new LitellmModel instance."""
     if not _LITELLM_AVAILABLE or LitellmModel is None:
@@ -1427,10 +1445,11 @@ def _apply_litellm_config(agent: Agent, model_name: str, config: ClientConfig) -
     actual_model = model_name[8:] if model_name.startswith("litellm/") else model_name
 
     api_key = _resolve_litellm_api_key(model_name, config, existing_api_key=None)
+    base_url = _resolve_litellm_base_url(model_name, config, existing_base_url=None)
 
     agent.model = LitellmModel(
         model=actual_model,
-        base_url=config.base_url,
+        base_url=base_url,
         api_key=api_key,
     )
 
