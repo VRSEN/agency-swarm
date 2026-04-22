@@ -1184,12 +1184,97 @@ def _is_codex_base_url(value: str | None) -> bool:
     return value.rstrip("/") == "https://chatgpt.com/backend-api/codex"
 
 
+class _CodexAsyncStream:
+    """Async iterator wrapper that patches missing function calls in ResponseCompletedEvent.
+
+    Wraps the raw AsyncStream returned by _fetch_response so that function_call
+    items streamed via ResponseOutputItemDoneEvent but omitted from
+    ResponseCompletedEvent.response.output are injected back before the agents
+    SDK processes the completed response.
+    """
+
+    def __init__(self, stream):
+        self._stream = stream
+        self._iter = stream.__aiter__()
+        self._fn_calls: list = []
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        from openai.types.responses import (
+            ResponseCompletedEvent,
+            ResponseFunctionToolCall,
+            ResponseOutputItemDoneEvent,
+        )
+
+        chunk = await self._iter.__anext__()
+
+        if isinstance(chunk, ResponseOutputItemDoneEvent):
+            if isinstance(chunk.item, ResponseFunctionToolCall):
+                self._fn_calls.append(chunk.item)
+        elif isinstance(chunk, ResponseCompletedEvent) and self._fn_calls:
+            existing = {getattr(i, "call_id", None) for i in chunk.response.output}
+            missing = [fc for fc in self._fn_calls if fc.call_id not in existing]
+            if missing:
+                logger.debug(
+                    "Codex: injecting %d missing function call(s): %s",
+                    len(missing),
+                    [getattr(fc, "name", None) for fc in missing],
+                )
+                patched = list(chunk.response.output) + missing
+                try:
+                    chunk.response.output = patched
+                except Exception:
+                    try:
+                        object.__setattr__(chunk.response, "output", patched)
+                    except Exception as e:
+                        logger.warning("Codex: could not patch response.output: %s", e)
+
+        return chunk
+
+    def __getattr__(self, name: str):
+        return getattr(self._stream, name)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, exc_tb) -> None:
+        await self._stream.__aexit__(exc_type, exc, exc_tb)
+
+    async def aclose(self) -> None:
+        await self._iter.aclose()
+
+
 def _apply_codex_compatibility_model_settings(agent: Agent) -> None:
-    """Strip unsupported Responses parameters for the Codex browser-auth backend."""
+    """Strip unsupported Responses parameters for the Codex browser-auth backend.
+
+    Patch the model's _fetch_response on the instance (not via subclass) to
+    wrap the stream in _CodexAsyncStream, which injects any function-call items that
+    the Codex endpoint streams via ResponseOutputItemDoneEvent but omits from
+    ResponseCompletedEvent.response.output.
+    """
     current: ModelSettings = getattr(agent, "model_settings", None) or ModelSettings()
     current.store = False
     current.truncation = None
     agent.model_settings = current
+
+    model = agent.model
+    if not isinstance(model, OpenAIResponsesModel):
+        return
+    if getattr(model, "_codex_stream_patched", False):
+        return
+
+    _model_ref = model
+
+    async def _fetch_response_patched(*args, stream=False, **kwargs):
+        result = await OpenAIResponsesModel._fetch_response(_model_ref, *args, stream=stream, **kwargs)
+        if stream:
+            return _CodexAsyncStream(result)
+        return result
+
+    model._fetch_response = _fetch_response_patched  # type: ignore[method-assign]
+    model._codex_stream_patched = True  # type: ignore[attr-defined]
 
 
 def _is_litellm_model(model_name: str) -> bool:
