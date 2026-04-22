@@ -1194,6 +1194,7 @@ class _CodexAsyncStream:
     """
 
     def __init__(self, stream):
+        self._stream = stream
         self._iter = stream.__aiter__()
         self._fn_calls: list = []
 
@@ -1231,6 +1232,18 @@ class _CodexAsyncStream:
                         logger.warning("Codex: could not patch response.output: %s", e)
 
         return chunk
+
+    def __getattr__(self, name: str):
+        return getattr(self._stream, name)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, exc_tb) -> None:
+        await self._stream.__aexit__(exc_type, exc, exc_tb)
+
+    async def aclose(self) -> None:
+        await self._iter.aclose()
 
 
 def _apply_codex_compatibility_model_settings(agent: Agent) -> None:
