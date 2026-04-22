@@ -1,8 +1,14 @@
+from collections.abc import AsyncIterator
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-from agents import FunctionTool, ModelSettings, StopAtTools, WebSearchTool
+from agents import FunctionTool, ModelSettings, StopAtTools, Tool, WebSearchTool
+from agents.agent_output import AgentOutputSchemaBase
+from agents.handoffs import Handoff as SDKHandoff
+from agents.items import ModelResponse, TResponseInputItem, TResponseStreamEvent
+from agents.models.interface import Model, ModelTracing
+from openai.types.responses.response_prompt_param import ResponsePromptParam
 from openai.types.shared import Reasoning
 from pydantic import BaseModel, Field
 
@@ -413,6 +419,58 @@ def test_agent_initialization_model_objects_preserve_explicit_openclaw_alias_def
 
     assert agent.model_settings.reasoning is None
     assert agent.model_settings.verbosity is None
+
+
+def test_agent_initialization_model_objects_without_default_settings_alias_keep_explicit_settings() -> None:
+    class AnonymousModel(Model):
+        async def get_response(
+            self,
+            system_instructions: str | None,
+            input: str | list[TResponseInputItem],
+            model_settings: ModelSettings,
+            tools: list[Tool],
+            output_schema: AgentOutputSchemaBase | None,
+            handoffs: list[SDKHandoff],
+            tracing: ModelTracing,
+            *,
+            previous_response_id: str | None,
+            conversation_id: str | None,
+            prompt: ResponsePromptParam | None,
+        ) -> ModelResponse:
+            raise AssertionError("Model execution is not part of this initialization test")
+
+        def stream_response(
+            self,
+            system_instructions: str | None,
+            input: str | list[TResponseInputItem],
+            model_settings: ModelSettings,
+            tools: list[Tool],
+            output_schema: AgentOutputSchemaBase | None,
+            handoffs: list[SDKHandoff],
+            tracing: ModelTracing,
+            *,
+            previous_response_id: str | None,
+            conversation_id: str | None,
+            prompt: ResponsePromptParam | None,
+        ) -> AsyncIterator[TResponseStreamEvent]:
+            async def _stream() -> AsyncIterator[TResponseStreamEvent]:
+                if False:
+                    yield None
+                return
+
+            return _stream()
+
+    agent = Agent(
+        name="CustomModel",
+        instructions="Test",
+        model=AnonymousModel(),
+        model_settings=ModelSettings(temperature=0.3, reasoning=Reasoning(effort="minimal")),
+    )
+
+    assert agent.model_settings.temperature == 0.3
+    assert agent.model_settings.reasoning is not None
+    assert agent.model_settings.reasoning.effort == "minimal"
+    assert agent.model_settings.truncation == "auto"
 
 
 def test_agent_initialization_adapts_basetool_type():

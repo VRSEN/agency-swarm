@@ -5,6 +5,8 @@ from datetime import datetime
 from typing import Any
 
 import pytest
+from agents import FunctionTool
+from agents.tool_context import ToolContext
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -33,8 +35,10 @@ class DummyTypedTool:
 
     def __init__(self) -> None:
         self.calls: list[str] = []
+        self.contexts: list[Any] = []
 
     async def on_invoke_tool(self, context, input_json: str):
+        self.contexts.append(context)
         self.calls.append(input_json)
         return "ok"
 
@@ -87,13 +91,15 @@ async def test_make_tool_endpoint_serializes_non_json_types(monkeypatch):
         fake_build_request_model,
     )
 
-    handler = make_tool_endpoint(tool, verify_token=_fake_verify_token, context=None)
+    raw_context = {"scope": "raw"}
+    handler = make_tool_endpoint(tool, verify_token=_fake_verify_token, context=raw_context)
     request_data = TimestampModel(timestamp="2024-05-01T09:30:00Z")
 
     response = await handler(request_data=request_data, token="ignored")
 
     assert response == {"response": "ok"}
     assert tool.calls, "on_invoke_tool should receive serialized payload"
+    assert tool.contexts == [raw_context]
     payload = json.loads(tool.calls[0])
     assert payload == {"timestamp": "2024-05-01T09:30:00Z"}
 
@@ -137,6 +143,32 @@ async def test_make_tool_endpoint_generic_handler_handles_invalid_request_json()
     assert isinstance(response, JSONResponse)
     assert response.status_code == 500
     assert b"bad json" in response.body
+
+
+class GenericInvokeTool:
+    name = "GenericInvokeTool"
+
+    def __init__(self) -> None:
+        self.contexts: list[Any] = []
+        self.calls: list[str] = []
+
+    async def on_invoke_tool(self, context, input_json: str):
+        self.contexts.append(context)
+        self.calls.append(input_json)
+        return "ok"
+
+
+@pytest.mark.asyncio
+async def test_make_tool_endpoint_generic_handler_preserves_raw_context_for_non_function_tool() -> None:
+    tool = GenericInvokeTool()
+    raw_context = {"scope": "raw"}
+
+    handler = make_tool_endpoint(tool, verify_token=_fake_verify_token, context=raw_context)
+    response = await handler(request=_DummyRequest({"value": "ok"}), token="ignored")
+
+    assert response == {"response": "ok"}
+    assert tool.contexts == [raw_context]
+    assert json.loads(tool.calls[0]) == {"value": "ok"}
 
 
 @pytest.mark.asyncio
@@ -190,3 +222,37 @@ async def test_make_tool_endpoint_supports_params_json_schema(monkeypatch: pytes
 
     assert response == {"response": "OK"}
     assert tool.calls == ["ok"]
+
+
+@pytest.mark.asyncio
+async def test_make_tool_endpoint_wraps_context_for_sdk_function_tools(monkeypatch: pytest.MonkeyPatch) -> None:
+    contexts: list[ToolContext[Any]] = []
+    payloads: list[str] = []
+
+    async def on_invoke_tool(context: ToolContext[Any], input_json: str) -> str:
+        contexts.append(context)
+        payloads.append(input_json)
+        return "ok"
+
+    tool = FunctionTool(
+        name="SdkFunctionTool",
+        description="desc",
+        params_json_schema={"type": "object", "properties": {"value": {"type": "string"}}, "required": ["value"]},
+        on_invoke_tool=on_invoke_tool,
+    )
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.tool_endpoints.build_request_model",
+        lambda *_args, **_kwargs: ParamsModel,
+    )
+
+    raw_context = {"scope": "raw"}
+    handler = make_tool_endpoint(tool, verify_token=_fake_verify_token, context=raw_context)
+    response = await handler(request_data=ParamsModel(value="ok"), token="ignored")
+
+    assert response == {"response": "ok"}
+    assert len(contexts) == 1
+    assert isinstance(contexts[0], ToolContext)
+    assert contexts[0].context is raw_context
+    assert contexts[0].tool_name == "SdkFunctionTool"
+    assert contexts[0].tool_arguments == payloads[0]
+    assert json.loads(payloads[0]) == {"value": "ok"}

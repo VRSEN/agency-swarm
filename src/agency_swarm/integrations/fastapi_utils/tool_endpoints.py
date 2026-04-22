@@ -2,6 +2,7 @@ import asyncio
 import json
 from typing import Any, cast
 
+from agents import FunctionTool
 from fastapi import Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -12,6 +13,12 @@ from agency_swarm.tools.function_tool_compat import build_manual_tool_context
 from .tool_request_models import build_request_model
 
 
+def _get_tool_invoke_context(tool: Any, context: Any, *, input_json: str) -> Any:
+    if isinstance(tool, FunctionTool):
+        return build_manual_tool_context(context, tool_name=tool.name, input_json=input_json)
+    return context
+
+
 def make_tool_endpoint(tool, verify_token, context=None):
     async def generic_handler(request: Request, token: str = Depends(verify_token)):
         try:
@@ -19,7 +26,7 @@ def make_tool_endpoint(tool, verify_token, context=None):
             if hasattr(tool, "on_invoke_tool"):
                 input_json = json.dumps(data)
                 result = await tool.on_invoke_tool(
-                    build_manual_tool_context(context, tool_name=tool.name, input_json=input_json),
+                    _get_tool_invoke_context(tool, context, input_json=input_json),
                     input_json,
                 )
             elif isinstance(tool, type):
@@ -76,7 +83,7 @@ def make_tool_endpoint(tool, verify_token, context=None):
             if hasattr(tool, "on_invoke_tool"):
                 input_json = request_model.model_dump_json(exclude_unset=True)
                 result = await tool.on_invoke_tool(
-                    build_manual_tool_context(context, tool_name=tool.name, input_json=input_json),
+                    _get_tool_invoke_context(tool, context, input_json=input_json),
                     input_json,
                 )
             else:
