@@ -4,7 +4,6 @@ The end-to-end behavior is covered in integration tests under `tests/integration
 """
 
 import pytest
-from pydantic import ValidationError
 
 from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest, ClientConfig
 
@@ -43,18 +42,32 @@ def test_client_config_accepts_optional_overrides(payload: dict, expected: dict)
         assert getattr(config, key) == value
 
 
-def test_client_config_accepts_litellm_keys_when_available() -> None:
-    """litellm_keys should validate when LiteLLM is installed."""
-    try:
-        config = ClientConfig(
+def test_client_config_drops_litellm_keys_without_litellm(monkeypatch) -> None:
+    """litellm_keys should be ignored (with warning) when litellm is unavailable."""
+    import agency_swarm.integrations.fastapi_utils.request_models as request_models
+
+    monkeypatch.setattr(request_models, "_LITELLM_INSTALLED", False)
+    with pytest.warns(UserWarning, match="litellm_keys was provided"):
+        config = request_models.ClientConfig(
             litellm_keys={
                 "anthropic": "sk-ant-xxx",
                 "gemini": "AIza...",
             }
         )
-    except ValidationError as exc:
-        assert "litellm_keys requires litellm to be installed" in str(exc)
-        return
+    assert config.litellm_keys is None
+
+
+def test_client_config_litellm_keys_roundtrip_when_available(monkeypatch) -> None:
+    """litellm_keys should still be accepted when litellm is available."""
+    import agency_swarm.integrations.fastapi_utils.request_models as request_models
+
+    monkeypatch.setattr(request_models, "_LITELLM_INSTALLED", True)
+    config = request_models.ClientConfig(
+        litellm_keys={
+            "anthropic": "sk-ant-xxx",
+            "gemini": "AIza...",
+        }
+    )
     assert config.litellm_keys is not None
     assert config.litellm_keys["anthropic"] == "sk-ant-xxx"
     assert config.litellm_keys["gemini"] == "AIza..."

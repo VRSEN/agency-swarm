@@ -1,3 +1,4 @@
+import warnings
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -57,11 +58,15 @@ class ClientConfig(BaseModel):
     @field_validator("litellm_keys")
     @classmethod
     def validate_litellm_installed(cls, v: dict | None) -> dict | None:
-        """Raise error if litellm_keys provided but litellm not installed."""
+        """Warn and drop litellm_keys when litellm is unavailable."""
         if v is not None and not _LITELLM_INSTALLED:
-            raise ValueError(
-                "litellm_keys requires litellm to be installed. Install with: pip install 'openai-agents[litellm]'"
+            warnings.warn(
+                "litellm_keys was provided, but litellm is not installed. "
+                "These overrides are ignored. Install with `openai-agents[litellm]` "
+                "to enable provider-key routing.",
+                stacklevel=2,
             )
+            return None
         return v
 
 
