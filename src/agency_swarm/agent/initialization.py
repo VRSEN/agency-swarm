@@ -181,7 +181,7 @@ def apply_framework_defaults(kwargs: dict[str, Any]) -> None:
         kwargs: The initialization keyword arguments (modified in place)
     """
     model_arg = kwargs.get("model")
-    model_name = get_default_settings_model_name(model_arg)
+    model_name = FRAMEWORK_DEFAULT_MODEL if model_arg is None else get_default_settings_model_name(model_arg)
     base_defaults = _get_framework_default_model_settings(model_name)
 
     existing_settings = kwargs.get("model_settings")
