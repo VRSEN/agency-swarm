@@ -127,9 +127,9 @@
 5.19 Treat every unshipped or undiscarded Active Artifact as a blocker.
 5.20 Recover forgotten task details from the Requirement Ledger first.
 5.21 Use transcript or Session History only to repair or verify the Requirement Ledger.
-5.22 Prime with enough context to explain the change before editing, using a bounded search of directly related prior artifacts such as `git log --follow` or a targeted `gh pr list`, and stop at the first clearly unrelated layer.
-5.23 State in one sentence how each directly related artifact connects, note any full or partial revert, and treat a missing link after that bounded search as not relevant unless it would change user-visible behavior, scope, or release outcome.
-5.24 Use fresh tool output when evidence could have changed, and verify user-supplied file references and facts before acting.
+5.22 Prime with enough context to explain the change before editing.
+5.23 Use fresh tool output when evidence could have changed.
+5.24 Verify user-supplied file references and facts before acting.
 5.25 If verified evidence conflicts with a core requirement, stop and Escalate.
 5.26 When asked for evidence, run the relevant command and cite the observed result.
 5.27 Keep summaries short and executive.
@@ -266,9 +266,9 @@
 11.1 Default to test-driven development.
 11.2 For docs-only or formatting-only edits, run a linter instead of tests.
 11.3 The Analysis Step shall search similar patterns and identify related changes before runtime edits.
-11.4 Before editing a shared or upstream-mirrored file, read the maintained upstream or source-of-truth version, then prefer consistent fixes over piecemeal edits unless scope or risk requires otherwise.
+11.4 Prefer consistent fixes over piecemeal edits unless scope or risk requires otherwise.
 11.5 Before runtime changes, inspect dependency types and reuse authoritative typed primitives instead of speculative shape checks.
-11.6 Be able to state what will change, why, what evidence supports it, and, for shared or upstream-mirrored files, why any divergence from that source is required.
+11.6 Be able to state what will change, why, and what evidence supports it.
 11.7 Validate external assumptions with real probes when possible.
 11.8 Share failures and root causes promptly. Do not fix them silently.
 11.9 Debug through systematic source analysis, logging, and minimal focused testing.
