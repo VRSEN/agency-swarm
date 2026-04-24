@@ -438,3 +438,56 @@ def test_client_config_does_not_leak_codex_base_url_into_anthropic_litellm(
     assert model.model == "anthropic/claude-sonnet-4"
     assert model.base_url is None
     assert model.api_key == "sk-ant"
+
+
+def test_client_config_litellm_keys_dropped_when_litellm_unavailable(
+    openai_stub_base_url: str,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Forwarding `litellm_keys` to a bridge without litellm should warn-and-drop, not 422."""
+    from agency_swarm.integrations.fastapi_utils import request_models
+
+    monkeypatch.setattr(request_models, "_LITELLM_INSTALLED", False)
+
+    def create_agency(load_threads_callback=None, save_threads_callback=None):
+        original_client = AsyncOpenAI(api_key="sk-original", base_url="http://example.invalid")
+        agent = Agent(
+            name="TestAgent",
+            instructions="You are a test agent.",
+            model=OpenAIChatCompletionsModel(model="gpt-4o-mini", openai_client=original_client),
+        )
+        return Agency(
+            agent,
+            load_threads_callback=load_threads_callback,
+            save_threads_callback=save_threads_callback,
+        )
+
+    app = run_fastapi(
+        agencies={"test_agency": create_agency},
+        return_app=True,
+        app_token_env="",
+        enable_agui=False,
+    )
+    client = TestClient(app)
+
+    with caplog.at_level("WARNING", logger=request_models.__name__):
+        res = client.post(
+            "/test_agency/get_response",
+            json={
+                "message": "hi",
+                "client_config": {
+                    "base_url": f"{openai_stub_base_url}/v1",
+                    "api_key": "sk-test",
+                    "litellm_keys": {"anthropic": "sk-ant-xxx"},
+                },
+            },
+        )
+
+    assert res.status_code == 200
+    assert res.json()["response"] == "hello from stub"
+    assert any("litellm is not installed" in record.message for record in caplog.records)
+
+    seen = _ChatCompletionsStubHandler.requests_seen
+    assert len(seen) == 1
+    assert seen[0]["authorization"] == "Bearer sk-test"
