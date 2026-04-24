@@ -3,9 +3,11 @@
 The end-to-end behavior is covered in integration tests under `tests/integration/fastapi/`.
 """
 
-import pytest
-from pydantic import ValidationError
+import logging
 
+import pytest
+
+from agency_swarm.integrations.fastapi_utils import request_models
 from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest, ClientConfig
 
 
@@ -43,21 +45,29 @@ def test_client_config_accepts_optional_overrides(payload: dict, expected: dict)
         assert getattr(config, key) == value
 
 
-def test_client_config_accepts_litellm_keys_when_available() -> None:
-    """litellm_keys should validate when LiteLLM is installed."""
-    try:
-        config = ClientConfig(
-            litellm_keys={
-                "anthropic": "sk-ant-xxx",
-                "gemini": "AIza...",
-            }
-        )
-    except ValidationError as exc:
-        assert "litellm_keys requires litellm to be installed" in str(exc)
-        return
+def test_client_config_accepts_litellm_keys_when_available(monkeypatch: pytest.MonkeyPatch) -> None:
+    """litellm_keys should round-trip when litellm is available."""
+    monkeypatch.setattr(request_models, "_LITELLM_INSTALLED", True)
+    config = ClientConfig(
+        litellm_keys={
+            "anthropic": "sk-ant-xxx",
+            "gemini": "AIza...",
+        }
+    )
     assert config.litellm_keys is not None
     assert config.litellm_keys["anthropic"] == "sk-ant-xxx"
     assert config.litellm_keys["gemini"] == "AIza..."
+
+
+def test_client_config_drops_litellm_keys_when_litellm_missing(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Without litellm, litellm_keys should be dropped (not 422'd) and a warning logged."""
+    monkeypatch.setattr(request_models, "_LITELLM_INSTALLED", False)
+    with caplog.at_level(logging.WARNING, logger=request_models.__name__):
+        config = ClientConfig(litellm_keys={"anthropic": "sk-ant-xxx"})
+    assert config.litellm_keys is None
+    assert any("litellm is not installed" in record.message for record in caplog.records)
 
 
 def test_base_request_client_config_roundtrip() -> None:

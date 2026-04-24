@@ -1,3 +1,4 @@
+import logging
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -17,6 +18,8 @@ try:
 except ImportError:
     LiteLLMProvider = str  # type: ignore[misc, assignment]
     _LITELLM_INSTALLED = False
+
+logger = logging.getLogger(__name__)
 
 
 class ClientConfig(BaseModel):
@@ -57,11 +60,19 @@ class ClientConfig(BaseModel):
     @field_validator("litellm_keys")
     @classmethod
     def validate_litellm_installed(cls, v: dict | None) -> dict | None:
-        """Raise error if litellm_keys provided but litellm not installed."""
+        """Drop litellm_keys with a warning when litellm is not installed.
+
+        Older bridges or callers that always forward `litellm_keys` should not get a 422
+        when the receiving environment lacks the `[litellm]` extra. The keys are useless
+        without the dependency, so we drop them and let downstream code fall back to
+        OpenAI-only behavior.
+        """
         if v is not None and not _LITELLM_INSTALLED:
-            raise ValueError(
-                "litellm_keys requires litellm to be installed. Install with: pip install 'openai-agents[litellm]'"
+            logger.warning(
+                "Ignoring client_config.litellm_keys: litellm is not installed. "
+                "Install with `pip install 'openai-agents[litellm]'` to enable provider-key routing."
             )
+            return None
         return v
 
 
