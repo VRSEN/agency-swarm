@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from agency_swarm import Agency, Agent, BaseTool, function_tool, run_fastapi
 from agency_swarm.integrations.fastapi_utils import endpoint_handlers, tool_endpoints
 from agency_swarm.tools import ToolFactory
+from agency_swarm.utils.dry_run import is_dry_run
 
 
 @pytest.fixture
@@ -147,6 +148,81 @@ def test_metadata_includes_agent_capabilities():
     assert "tools" in capabilities
     assert "reasoning" in capabilities
     assert "file_search" in capabilities
+
+
+def test_metadata_materializes_lazy_mcp_tools():
+    """Metadata endpoint should materialize lazy MCP tools before building the payload."""
+
+    @function_tool
+    def deferred_tool() -> str:
+        """Tool added lazily for metadata coverage."""
+        return "ok"
+
+    class MetadataLazyAgent(Agent):
+        def __init__(self) -> None:
+            super().__init__(name="MetadataLazyAgent", instructions="Return metadata")
+            self._metadata_tool_added = False
+
+        def ensure_mcp_tools(self) -> None:
+            if self._metadata_tool_added:
+                return
+            self.add_tool(deferred_tool)
+            self._metadata_tool_added = True
+
+    def create_agency(load_threads_callback=None, save_threads_callback=None):
+        return Agency(
+            MetadataLazyAgent(),
+            load_threads_callback=load_threads_callback,
+            save_threads_callback=save_threads_callback,
+        )
+
+    app = run_fastapi(agencies={"test_agency": create_agency}, return_app=True, app_token_env="")
+    client = TestClient(app)
+
+    response = client.get("/test_agency/get_metadata")
+
+    assert response.status_code == 200
+    payload = response.json()
+    agent_node = next(node for node in payload["nodes"] if node["id"] == "MetadataLazyAgent")
+    tool_names = [tool["name"] for tool in agent_node["data"].get("tools", [])]
+    assert "deferred_tool" in tool_names
+
+
+def test_metadata_materializes_lazy_mcp_tools_inside_dry_run():
+    """Lazy MCP materialization for metadata must stay inside the dry-run boundary."""
+    observed_dry_run_states: list[bool] = []
+
+    @function_tool
+    def deferred_tool() -> str:
+        """Tool added lazily for metadata dry-run coverage."""
+        return "ok"
+
+    class MetadataDryRunAgent(Agent):
+        def __init__(self) -> None:
+            super().__init__(name="MetadataDryRunAgent", instructions="Return metadata")
+            self._metadata_tool_added = False
+
+        def ensure_mcp_tools(self) -> None:
+            observed_dry_run_states.append(is_dry_run())
+            if self._metadata_tool_added:
+                return
+            self.add_tool(deferred_tool)
+            self._metadata_tool_added = True
+
+    def create_agency(load_threads_callback=None, save_threads_callback=None):
+        return Agency(
+            MetadataDryRunAgent(),
+            load_threads_callback=load_threads_callback,
+            save_threads_callback=save_threads_callback,
+        )
+
+    app = run_fastapi(agencies={"test_agency": create_agency}, return_app=True, app_token_env="")
+    client = TestClient(app)
+
+    response = client.get("/test_agency/get_metadata")
+
+    assert response.status_code == 200
+    assert observed_dry_run_states == [True]
 
 
 def test_metadata_capabilities_empty_for_basic_agent():

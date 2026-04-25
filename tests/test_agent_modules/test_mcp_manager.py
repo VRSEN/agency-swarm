@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from concurrent.futures import Future
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
@@ -9,7 +11,18 @@ from unittest.mock import patch
 import pytest
 
 import agency_swarm.tools.mcp_manager as mcp_manager
-from agency_swarm.tools.mcp_manager import LoopAffineAsyncProxy, PersistentMCPServerManager
+from agency_swarm.mcp import MCPServerOAuth, MCPServerOAuthClient
+from agency_swarm.mcp.oauth import FileTokenStorage, OAuthRuntimeContext, set_oauth_runtime_context, set_oauth_user_id
+from agency_swarm.mcp.oauth_user import build_oauth_user_segment
+from agency_swarm.tools.mcp_manager import (
+    LoopAffineAsyncProxy,
+    PersistentMCPServerManager,
+    _build_persistence_key,
+    _sync_oauth_client_handlers,
+    attach_persistent_mcp_servers,
+    cleanup_oauth_runtime_mcp_servers,
+    default_mcp_manager,
+)
 
 
 class _DummyServer:
@@ -75,6 +88,38 @@ class _SyncContextServer(_DummyServer):
         return f"pong:{payload}"
 
 
+class _TaskAffinityServer(_DummyServer):
+    def __init__(self) -> None:
+        super().__init__()
+        self.task_ids: list[int] = []
+
+    async def get_task_id(self) -> int:
+        task = asyncio.current_task()
+        task_id = id(task)
+        self.task_ids.append(task_id)
+        return task_id
+
+
+class _ContextAwareServer(_DummyServer):
+    def __init__(self, cache_dir: Path) -> None:
+        super().__init__()
+        self.storage = FileTokenStorage(cache_dir=cache_dir, server_name="ctx-server")
+
+    async def get_user_bucket(self) -> str:
+        return self.storage._get_user_cache_dir().name
+
+
+class _NoCleanupServer:
+    def __init__(self, name: str = "dummy") -> None:
+        self.name = name
+        self.session = None
+        self.connect_calls = 0
+
+    async def connect(self) -> None:
+        self.connect_calls += 1
+        self.session = object()
+
+
 @pytest.mark.asyncio
 async def test_ensure_connected_reuses_driver_for_proxy() -> None:
     manager = PersistentMCPServerManager()
@@ -138,6 +183,18 @@ async def test_shutdown_logs_cleanup_exception(caplog: pytest.LogCaptureFixture)
 
 
 @pytest.mark.asyncio
+async def test_shutdown_skips_servers_without_cleanup(caplog: pytest.LogCaptureFixture) -> None:
+    manager = PersistentMCPServerManager()
+    server = _NoCleanupServer()
+    await manager.ensure_connected(server)
+
+    with caplog.at_level(logging.WARNING):
+        await manager.shutdown()
+
+    assert "Error during MCP server 'dummy' shutdown" not in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_proxy_supports_async_context_manager() -> None:
     manager = PersistentMCPServerManager()
     server = _AsyncContextServer()
@@ -189,6 +246,24 @@ async def test_proxy_supports_sync_context_and_method_proxying() -> None:
         assert server.context_exited == 1
     finally:
         await manager.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_proxy_coroutine_calls_stay_on_driver_task() -> None:
+    manager = PersistentMCPServerManager()
+    server = _TaskAffinityServer()
+
+    await manager.ensure_connected(server)
+    proxy = LoopAffineAsyncProxy(server, manager)
+
+    try:
+        first = await proxy.get_task_id()
+        second = await proxy.get_task_id()
+    finally:
+        await manager.shutdown()
+
+    assert first == second
+    assert len(set(server.task_ids)) == 1
 
 
 def test_register_get_all_and_mark_atexit() -> None:
@@ -333,7 +408,7 @@ async def test_attach_persistent_mcp_servers_registers_and_connects(monkeypatch:
         def get(self, name: str) -> Any | None:
             return store.get(name)
 
-        def register(self, server: Any) -> Any:
+        def register(self, server: Any, *, key: str | None = None) -> Any:
             store[server.name] = server
             return server
 
@@ -360,7 +435,7 @@ def test_register_and_connect_agent_servers_validates_inputs(monkeypatch: pytest
         def get(self, _name: str) -> None:
             return None
 
-        def register(self, server: Any) -> Any:
+        def register(self, server: Any, *, key: str | None = None) -> Any:
             return server
 
         def _ensure_driver(self, server: Any) -> None:
@@ -391,7 +466,7 @@ def test_register_and_connect_agent_servers_reuses_persistent_instances(monkeypa
                 return existing
             return None
 
-        def register(self, server: Any) -> Any:
+        def register(self, server: Any, *, key: str | None = None) -> Any:
             registered.append(server)
             return server
 
@@ -407,6 +482,46 @@ def test_register_and_connect_agent_servers_reuses_persistent_instances(monkeypa
     assert len(registered) == 1
     assert registered[0].name == "new"
     assert ensured == [existing, registered[0]]
+
+
+def test_register_and_connect_agent_servers_rebuilds_oauth_client_when_same_agent_is_reused_across_users(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registered: dict[str, Any] = {}
+    ensured: list[Any] = []
+
+    class _FakeManager:
+        def get(self, key: str) -> Any | None:
+            return registered.get(key)
+
+        def register(self, server: Any, *, key: str | None = None) -> Any:
+            assert key is not None
+            registered[key] = server
+            return server
+
+        def _ensure_driver(self, server: Any) -> None:
+            ensured.append(server)
+
+    monkeypatch.setattr(mcp_manager, "default_mcp_manager", _FakeManager())
+
+    agent = SimpleNamespace(mcp_servers=[MCPServerOAuth(url="http://localhost:8001/mcp", name="github")])
+
+    try:
+        set_oauth_user_id("user-a")
+        mcp_manager.register_and_connect_agent_servers(agent)
+        key_a = _build_persistence_key(agent.mcp_servers[0], "user-a")
+        client_a = registered[key_a]
+
+        set_oauth_user_id("user-b")
+        mcp_manager.register_and_connect_agent_servers(agent)
+        key_b = _build_persistence_key(agent.mcp_servers[0], "user-b")
+        client_b = registered[key_b]
+
+        assert client_a is not client_b
+        assert getattr(agent.mcp_servers[0], "_server", agent.mcp_servers[0]) is client_b
+        assert ensured == [client_a, client_b]
+    finally:
+        set_oauth_user_id(None)
 
 
 def test_convert_mcp_servers_to_tools(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -428,3 +543,429 @@ def test_convert_mcp_servers_to_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     }
     assert added_tools == ["a", "b"]
     assert agent.mcp_servers == []
+
+
+@pytest.mark.asyncio
+async def test_proxy_propagates_oauth_user_context_to_driver(tmp_path: Path) -> None:
+    manager = PersistentMCPServerManager()
+    server = _ContextAwareServer(tmp_path)
+
+    await manager.ensure_connected(server)
+    proxy = LoopAffineAsyncProxy(server, manager)
+
+    set_oauth_user_id("user_ctx")
+    try:
+        bucket = await proxy.get_user_bucket()
+    finally:
+        set_oauth_user_id(None)
+        await manager.shutdown()
+
+    assert bucket == build_oauth_user_segment("user_ctx", max_prefix_length=120)
+
+
+def test_update_oauth_cache_dir_updates_clients(tmp_path: Path) -> None:
+    manager = PersistentMCPServerManager()
+    server = MCPServerOAuth(url="http://localhost:8001/mcp", name="github")
+    client = MCPServerOAuthClient(server)
+    client._oauth_provider = SimpleNamespace(storage=SimpleNamespace(base_cache_dir=Path("/default-cache")))
+
+    manager.register(server)
+    manager._drivers[client] = {"real": client}
+
+    manager.update_oauth_cache_dir(tmp_path)
+
+    assert server.cache_dir == tmp_path
+    assert client.oauth_config.cache_dir == tmp_path
+    assert client._oauth_provider.storage.base_cache_dir == tmp_path
+
+
+def test_update_oauth_cache_dir_replaces_previous_managed_path(tmp_path: Path) -> None:
+    manager = PersistentMCPServerManager()
+    old_path = tmp_path / "old"
+    new_path = tmp_path / "new"
+    server = MCPServerOAuth(url="http://localhost:8001/mcp", name="github")
+    mcp_manager.apply_managed_oauth_cache_dir(server, old_path)
+    client = MCPServerOAuthClient(server)
+
+    manager.register(client)
+    manager.update_oauth_cache_dir(new_path)
+
+    assert client.oauth_config.cache_dir == new_path
+
+
+def test_update_oauth_cache_dir_preserves_explicit_server_path(tmp_path: Path) -> None:
+    manager = PersistentMCPServerManager()
+    explicit_path = tmp_path / "explicit"
+    new_path = tmp_path / "new"
+    server = MCPServerOAuth(url="http://localhost:8001/mcp", name="github", cache_dir=explicit_path)
+    client = MCPServerOAuthClient(server)
+
+    manager.register(client)
+    manager.update_oauth_cache_dir(new_path)
+
+    assert client.oauth_config.cache_dir == explicit_path
+
+
+def test_resolve_method_timeout_keeps_short_list_tools_for_non_oauth_servers() -> None:
+    manager = PersistentMCPServerManager()
+    timeout = manager._resolve_method_timeout(_DummyServer(), "list_tools")
+    assert timeout == 10.0
+
+
+def test_resolve_method_timeout_extends_list_tools_for_oauth_servers() -> None:
+    manager = PersistentMCPServerManager()
+    oauth_server = MCPServerOAuth(url="http://localhost:8001/mcp", name="github")
+    oauth_client = MCPServerOAuthClient(oauth_server)
+    timeout = manager._resolve_method_timeout(oauth_client, "list_tools")
+    assert timeout == 620.0
+
+
+def test_resolve_method_timeout_prefers_runtime_timeout_for_oauth_servers() -> None:
+    manager = PersistentMCPServerManager()
+    oauth_server = MCPServerOAuth(url="http://localhost:8001/mcp", name="github")
+    oauth_client = MCPServerOAuthClient(oauth_server)
+    set_oauth_runtime_context(
+        OAuthRuntimeContext(
+            mode="saas_stream",
+            user_id="user-1",
+            timeout=123.0,
+        )
+    )
+    try:
+        timeout = manager._resolve_method_timeout(oauth_client, "list_tools")
+    finally:
+        set_oauth_runtime_context(None)
+        set_oauth_user_id(None)
+    assert timeout == 123.0
+
+
+def test_sync_oauth_client_handlers_refreshes_runtime_handlers() -> None:
+    oauth_config = MCPServerOAuth(url="http://localhost:8001/mcp", name="github")
+
+    async def first_redirect(_auth_url: str) -> None:
+        return None
+
+    async def first_callback() -> tuple[str, str | None]:
+        return ("code-1", None)
+
+    async def second_redirect(_auth_url: str) -> None:
+        return None
+
+    async def second_callback() -> tuple[str, str | None]:
+        return ("code-2", None)
+
+    persistent = MCPServerOAuthClient(
+        oauth_config,
+        {"redirect": first_redirect, "callback": first_callback},
+    )
+    persistent.session = object()
+    persistent._authenticated = True
+    persistent._oauth_provider = SimpleNamespace(
+        context=SimpleNamespace(
+            redirect_handler=first_redirect,
+            callback_handler=first_callback,
+        )
+    )
+
+    candidate = MCPServerOAuthClient(oauth_config)
+
+    set_oauth_runtime_context(
+        OAuthRuntimeContext(
+            mode="saas_stream",
+            user_id="user-1",
+            redirect_handler_factory=lambda _server_name: second_redirect,
+            callback_handler_factory=lambda _server_name: second_callback,
+        )
+    )
+    try:
+        _sync_oauth_client_handlers(persistent, candidate)
+
+        assert persistent._redirect_handler is second_redirect
+        assert persistent._callback_handler is second_callback
+        assert persistent._oauth_provider is not None
+        assert persistent._oauth_provider.context.redirect_handler is second_redirect
+        assert persistent._oauth_provider.context.callback_handler is second_callback
+        assert persistent.session is not None
+        assert persistent._authenticated is True
+    finally:
+        set_oauth_runtime_context(None)
+        set_oauth_user_id(None)
+
+
+def test_sync_oauth_client_handlers_allows_static_server_handlers() -> None:
+    async def first_redirect(_auth_url: str) -> None:
+        return None
+
+    async def first_callback() -> tuple[str, str | None]:
+        return ("code-1", None)
+
+    async def second_redirect(_auth_url: str) -> None:
+        return None
+
+    async def second_callback() -> tuple[str, str | None]:
+        return ("code-2", None)
+
+    persistent = MCPServerOAuthClient(
+        MCPServerOAuth(
+            url="http://localhost:8001/mcp",
+            name="github",
+            redirect_handler=first_redirect,
+            callback_handler=first_callback,
+        ),
+        {"redirect": first_redirect, "callback": first_callback},
+    )
+    persistent._oauth_provider = SimpleNamespace(
+        context=SimpleNamespace(
+            redirect_handler=first_redirect,
+            callback_handler=first_callback,
+        )
+    )
+
+    candidate = MCPServerOAuthClient(
+        MCPServerOAuth(
+            url="http://localhost:8001/mcp",
+            name="github",
+            redirect_handler=second_redirect,
+            callback_handler=second_callback,
+        ),
+        {"redirect": second_redirect, "callback": second_callback},
+    )
+
+    _sync_oauth_client_handlers(persistent, candidate)
+
+    assert persistent._redirect_handler is second_redirect
+    assert persistent._callback_handler is second_callback
+    assert persistent._oauth_provider.context.redirect_handler is second_redirect
+    assert persistent._oauth_provider.context.callback_handler is second_callback
+
+
+@pytest.mark.asyncio
+async def test_attach_persistent_does_not_cache_request_scoped_oauth_handlers() -> None:
+    """Request-scoped OAuth handlers should come from contextvars, not cached clients."""
+    await default_mcp_manager.shutdown()
+
+    try:
+        set_oauth_runtime_context(
+            OAuthRuntimeContext(
+                mode="saas_stream",
+                user_id="user-1",
+                timeout=123.0,
+            )
+        )
+        first_agent = SimpleNamespace(
+            mcp_servers=[MCPServerOAuth(url="http://localhost:8001/mcp", name="github")],
+            mcp_oauth_handler_factory=lambda server_name: {
+                "redirect": lambda auth_url: ("req1", auth_url, server_name),
+                "callback": lambda: ("code1", server_name),
+            },
+        )
+        first_agency = SimpleNamespace(agents={"a": first_agent})
+        await attach_persistent_mcp_servers(first_agency)
+
+        key = _build_persistence_key(first_agent.mcp_servers[0], "user-1")
+        first_client = default_mcp_manager.get(key)
+        assert first_client is not None
+        first_redirect = getattr(first_client, "_redirect_handler", None)
+        first_callback = getattr(first_client, "_callback_handler", None)
+
+        second_agent = SimpleNamespace(
+            mcp_servers=[MCPServerOAuth(url="http://localhost:8001/mcp", name="github")],
+            mcp_oauth_handler_factory=lambda server_name: {
+                "redirect": lambda auth_url: ("req2", auth_url, server_name),
+                "callback": lambda: ("code2", server_name),
+            },
+        )
+        second_agency = SimpleNamespace(agents={"a": second_agent})
+        await attach_persistent_mcp_servers(second_agency)
+
+        reused_client = default_mcp_manager.get(key)
+        assert reused_client is not None
+        reused_redirect = getattr(reused_client, "_redirect_handler", None)
+        reused_callback = getattr(reused_client, "_callback_handler", None)
+
+        assert reused_client is first_client
+        assert first_redirect is None
+        assert first_callback is None
+        assert reused_redirect is None
+        assert reused_callback is None
+    finally:
+        set_oauth_runtime_context(None)
+        await default_mcp_manager.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_attach_persistent_isolates_oauth_clients_by_user_id() -> None:
+    """OAuth persistent clients should be keyed by (server_name, user_id)."""
+    await default_mcp_manager.shutdown()
+
+    try:
+        user_a_agent = SimpleNamespace(
+            mcp_servers=[MCPServerOAuth(url="http://localhost:8001/mcp", name="github")],
+        )
+        user_a_agency = SimpleNamespace(agents={"a": user_a_agent})
+        set_oauth_user_id("user-a")
+        await attach_persistent_mcp_servers(user_a_agency)
+
+        user_b_agent = SimpleNamespace(
+            mcp_servers=[MCPServerOAuth(url="http://localhost:8001/mcp", name="github")],
+        )
+        user_b_agency = SimpleNamespace(agents={"b": user_b_agent})
+        set_oauth_user_id("user-b")
+        await attach_persistent_mcp_servers(user_b_agency)
+
+        key_a = _build_persistence_key(user_a_agent.mcp_servers[0], "user-a")
+        key_b = _build_persistence_key(user_b_agent.mcp_servers[0], "user-b")
+        client_a = default_mcp_manager.get(key_a)
+        client_b = default_mcp_manager.get(key_b)
+
+        assert client_a is not None
+        assert client_b is not None
+        assert client_a is not client_b
+    finally:
+        set_oauth_user_id(None)
+        await default_mcp_manager.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_attach_persistent_rebuilds_oauth_client_when_same_agent_is_reused_across_users() -> None:
+    """Reusing one agent instance across users must not alias the first user's OAuth client."""
+    await default_mcp_manager.shutdown()
+
+    try:
+        agent = SimpleNamespace(
+            mcp_servers=[MCPServerOAuth(url="http://localhost:8001/mcp", name="github")],
+        )
+        agency = SimpleNamespace(agents={"a": agent})
+
+        set_oauth_user_id("user-a")
+        await attach_persistent_mcp_servers(agency)
+        key_a = _build_persistence_key(agent.mcp_servers[0], "user-a")
+        client_a = default_mcp_manager.get(key_a)
+
+        set_oauth_user_id("user-b")
+        await attach_persistent_mcp_servers(agency)
+        key_b = _build_persistence_key(agent.mcp_servers[0], "user-b")
+        client_b = default_mcp_manager.get(key_b)
+
+        assert client_a is not None
+        assert client_b is not None
+        assert client_a is not client_b
+        assert getattr(agent.mcp_servers[0], "_server", agent.mcp_servers[0]) is client_b
+    finally:
+        set_oauth_user_id(None)
+        await default_mcp_manager.shutdown()
+
+
+def test_build_persistence_key_keeps_distinct_user_ids_separate() -> None:
+    oauth_server = MCPServerOAuth(url="http://localhost:8001/mcp", name="github")
+    oauth_client = MCPServerOAuthClient(oauth_server)
+
+    key_plus = _build_persistence_key(oauth_client, "alice+bob")
+    key_underscore = _build_persistence_key(oauth_client, "alice_bob")
+
+    assert key_plus != key_underscore
+    assert key_plus.startswith("github::oauth::")
+    assert key_underscore.startswith("github::oauth::")
+
+
+def test_build_persistence_key_separates_oauth_cache_dirs(tmp_path: Path) -> None:
+    server_a = MCPServerOAuth(url="http://localhost:8001/mcp", name="github", cache_dir=tmp_path / "a")
+    server_b = MCPServerOAuth(url="http://localhost:8001/mcp", name="github", cache_dir=tmp_path / "b")
+
+    key_a = _build_persistence_key(MCPServerOAuthClient(server_a), "user-a")
+    key_b = _build_persistence_key(MCPServerOAuthClient(server_b), "user-a")
+
+    assert key_a != key_b
+    assert key_a.startswith("github::oauth::")
+    assert key_b.startswith("github::oauth::")
+
+
+def test_build_persistence_key_separates_oauth_server_urls() -> None:
+    server_a = MCPServerOAuth(url="http://localhost:8001/mcp", name="github")
+    server_b = MCPServerOAuth(url="http://localhost:8002/mcp", name="github")
+
+    key_a = _build_persistence_key(MCPServerOAuthClient(server_a), "user-a")
+    key_b = _build_persistence_key(MCPServerOAuthClient(server_b), "user-a")
+
+    assert key_a != key_b
+    assert key_a.startswith("github::oauth::")
+    assert key_b.startswith("github::oauth::")
+
+
+def test_build_persistence_key_separates_saas_oauth_requests() -> None:
+    oauth_server = MCPServerOAuth(url="http://localhost:8001/mcp", name="github")
+    oauth_client = MCPServerOAuthClient(oauth_server)
+
+    set_oauth_runtime_context(OAuthRuntimeContext(mode="saas_stream", user_id="user-a", request_id="request-a"))
+    try:
+        key_a = _build_persistence_key(oauth_client, "user-a")
+    finally:
+        set_oauth_runtime_context(None)
+
+    set_oauth_runtime_context(OAuthRuntimeContext(mode="saas_stream", user_id="user-a", request_id="request-b"))
+    try:
+        key_b = _build_persistence_key(oauth_client, "user-a")
+    finally:
+        set_oauth_runtime_context(None)
+        set_oauth_user_id(None)
+
+    assert key_a != key_b
+    assert key_a.startswith("github::oauth::")
+    assert key_b.startswith("github::oauth::")
+
+
+@pytest.mark.asyncio
+async def test_cleanup_oauth_runtime_mcp_servers_removes_request_scoped_clients() -> None:
+    await default_mcp_manager.shutdown()
+    runtime = OAuthRuntimeContext(mode="saas_stream", user_id="user-a", request_id="request-a")
+
+    try:
+        set_oauth_runtime_context(runtime)
+        agent = SimpleNamespace(mcp_servers=[MCPServerOAuth(url="http://localhost:8001/mcp", name="github")])
+        agency = SimpleNamespace(agents={"a": agent})
+
+        await attach_persistent_mcp_servers(agency)
+
+        key = _build_persistence_key(agent.mcp_servers[0], "user-a")
+        assert default_mcp_manager.get(key) is not None
+
+        await cleanup_oauth_runtime_mcp_servers()
+
+        assert default_mcp_manager.get(key) is None
+    finally:
+        set_oauth_runtime_context(None)
+        set_oauth_user_id(None)
+        await default_mcp_manager.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_unregister_keys_ending_with_cancels_busy_request_scoped_driver() -> None:
+    manager = PersistentMCPServerManager()
+    server = _DummyServer("busy")
+    key = "busy::oauth::url::user::store::request_suffix"
+    driver_future: Future = Future()
+    manager._timeouts["cleanup"] = 0.01
+    manager._servers[key] = server
+    manager._drivers[server] = {
+        "queue": asyncio.Queue(),
+        "real": server,
+        "created_by_driver": False,
+        "driver_future": driver_future,
+    }
+
+    await manager.unregister_keys_ending_with("::request_suffix")
+
+    assert manager.get(key) is None
+    assert driver_future.cancelled()
+
+
+def test_build_persistence_key_separates_custom_storage(tmp_path: Path) -> None:
+    storage_a = FileTokenStorage(cache_dir=tmp_path / "a", server_name="github")
+    storage_b = FileTokenStorage(cache_dir=tmp_path / "b", server_name="github")
+    server_a = MCPServerOAuth(url="http://localhost:8001/mcp", name="github", storage=storage_a)
+    server_b = MCPServerOAuth(url="http://localhost:8001/mcp", name="github", storage=storage_b)
+
+    key_a = _build_persistence_key(MCPServerOAuthClient(server_a), "user-a")
+    key_b = _build_persistence_key(MCPServerOAuthClient(server_b), "user-a")
+
+    assert key_a != key_b

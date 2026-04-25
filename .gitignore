@@ -191,3 +191,6 @@ debug_agency_data.json
 .claude/worktrees/
 
 work_context.md
+
+# Local OAuth tokens (may contain client secrets)
+/data/oauth-tokens/
