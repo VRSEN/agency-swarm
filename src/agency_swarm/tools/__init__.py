@@ -14,7 +14,6 @@ from agents import (
     ToolOutputText,
     ToolOutputTextDict,
     WebSearchTool,
-    function_tool,
 )
 from openai.types.responses.tool_param import (
     CodeInterpreter,
@@ -30,6 +29,7 @@ from openai.types.responses.tool_param import (
 from .base_tool import BaseTool
 from .built_in import LoadFileAttachment, PersistentShellTool, PresentFiles
 from .concurrency import ToolConcurrencyManager
+from .function_tool_compat import function_tool
 from .send_message import Handoff, SendMessage, SendMessageHandoff
 from .tool_factory import ToolFactory
 from .utils import (

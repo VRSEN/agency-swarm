@@ -1,8 +1,15 @@
+from collections.abc import AsyncIterator
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-from agents import FunctionTool, ModelSettings, StopAtTools, WebSearchTool
+from agents import FunctionTool, ModelSettings, StopAtTools, Tool, WebSearchTool
+from agents.agent_output import AgentOutputSchemaBase
+from agents.handoffs import Handoff as SDKHandoff
+from agents.items import ModelResponse, TResponseInputItem, TResponseStreamEvent
+from agents.models.interface import Model, ModelTracing
+from openai.types.responses.response_prompt_param import ResponsePromptParam
+from openai.types.shared import Reasoning
 from pydantic import BaseModel, Field
 
 from agency_swarm import Agent
@@ -49,6 +56,7 @@ def test_agent_initialization_core_configuration_variants():
     configured = Agent(
         name="ConfiguredAgent",
         instructions="Use tools",
+        model="gpt-4.1-mini",
         tools=[tool],
         model_settings=ModelSettings(
             temperature=0.3,
@@ -326,6 +334,9 @@ def test_agent_initialization_model_settings_defaults_and_overrides():
     """Initialization should keep SDK defaults and preserve explicit settings overrides."""
     default_agent = Agent(name="TruncDefault", instructions="Test")
     assert default_agent.model_settings.truncation == "auto"
+    assert default_agent.model_settings.reasoning is not None
+    assert default_agent.model_settings.reasoning.effort == "none"
+    assert default_agent.model_settings.verbosity == "low"
 
     explicit_agent = Agent(
         name="TruncDisabled",
@@ -336,11 +347,50 @@ def test_agent_initialization_model_settings_defaults_and_overrides():
 
     gpt5_agent = Agent(name="Gpt5", instructions="Test", model="gpt-5.4-mini")
     assert gpt5_agent.model_settings.reasoning is not None
-    assert gpt5_agent.model_settings.reasoning.effort == "low"
+    assert gpt5_agent.model_settings.reasoning.effort == "none"
 
     provider_prefixed_gpt5_agent = Agent(name="ProviderPrefixedGpt5", instructions="Test", model="openai/gpt-5.4-mini")
     assert provider_prefixed_gpt5_agent.model_settings.reasoning is None
     assert provider_prefixed_gpt5_agent.model_settings.verbosity is None
+
+
+@pytest.mark.parametrize(
+    ("model_name", "expected_effort"),
+    [
+        ("gpt-5.4-mini", "low"),
+        ("openai/gpt-5.4-mini", "low"),
+        ("gpt-5.4-pro", "medium"),
+    ],
+)
+def test_agent_initialization_normalizes_unsupported_gpt5_minimal_reasoning(
+    model_name: str,
+    expected_effort: str,
+) -> None:
+    with pytest.warns(UserWarning, match="does not support reasoning.effort='minimal'"):
+        agent = Agent(
+            name="CompatAgent",
+            instructions="Test",
+            model=model_name,
+            model_settings=ModelSettings(reasoning=Reasoning(effort="minimal")),
+        )
+
+    assert agent.model_settings.reasoning is not None
+    assert agent.model_settings.reasoning.effort == expected_effort
+
+
+@pytest.mark.parametrize("model_name", ["gpt-5.4-mini", "openai/gpt-5.4-mini", "o4-mini"])
+def test_agent_initialization_omits_temperature_for_models_with_unsupported_temperature(
+    model_name: str,
+) -> None:
+    with pytest.warns(UserWarning, match="does not support temperature"):
+        agent = Agent(
+            name="CompatAgent",
+            instructions="Test",
+            model=model_name,
+            model_settings=ModelSettings(temperature=0.3),
+        )
+
+    assert agent.model_settings.temperature is None
 
 
 @pytest.mark.parametrize("provider_model", ["openai/gpt-5.4-mini", "azure/gpt-5.4-mini"])
@@ -354,7 +404,7 @@ def test_agent_initialization_model_objects_use_openclaw_default_settings_alias(
     agent = Agent(name="UsageTrackedModel", instructions="Test", model=model)
 
     assert agent.model_settings.reasoning is not None
-    assert agent.model_settings.reasoning.effort == "low"
+    assert agent.model_settings.reasoning.effort == "none"
     assert agent.model_settings.verbosity == "low"
 
 
@@ -369,6 +419,58 @@ def test_agent_initialization_model_objects_preserve_explicit_openclaw_alias_def
 
     assert agent.model_settings.reasoning is None
     assert agent.model_settings.verbosity is None
+
+
+def test_agent_initialization_model_objects_without_default_settings_alias_keep_explicit_settings() -> None:
+    class AnonymousModel(Model):
+        async def get_response(
+            self,
+            system_instructions: str | None,
+            input: str | list[TResponseInputItem],
+            model_settings: ModelSettings,
+            tools: list[Tool],
+            output_schema: AgentOutputSchemaBase | None,
+            handoffs: list[SDKHandoff],
+            tracing: ModelTracing,
+            *,
+            previous_response_id: str | None,
+            conversation_id: str | None,
+            prompt: ResponsePromptParam | None,
+        ) -> ModelResponse:
+            raise AssertionError("Model execution is not part of this initialization test")
+
+        def stream_response(
+            self,
+            system_instructions: str | None,
+            input: str | list[TResponseInputItem],
+            model_settings: ModelSettings,
+            tools: list[Tool],
+            output_schema: AgentOutputSchemaBase | None,
+            handoffs: list[SDKHandoff],
+            tracing: ModelTracing,
+            *,
+            previous_response_id: str | None,
+            conversation_id: str | None,
+            prompt: ResponsePromptParam | None,
+        ) -> AsyncIterator[TResponseStreamEvent]:
+            async def _stream() -> AsyncIterator[TResponseStreamEvent]:
+                if False:
+                    yield None
+                return
+
+            return _stream()
+
+    agent = Agent(
+        name="CustomModel",
+        instructions="Test",
+        model=AnonymousModel(),
+        model_settings=ModelSettings(temperature=0.3, reasoning=Reasoning(effort="minimal")),
+    )
+
+    assert agent.model_settings.temperature == 0.3
+    assert agent.model_settings.reasoning is not None
+    assert agent.model_settings.reasoning.effort == "minimal"
+    assert agent.model_settings.truncation == "auto"
 
 
 def test_agent_initialization_adapts_basetool_type():

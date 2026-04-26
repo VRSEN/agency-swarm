@@ -11,7 +11,6 @@ To run:
 """
 
 import json
-import threading
 import time
 from typing import Literal
 
@@ -32,7 +31,7 @@ def test_regular_endpoint():
     # Initial request
     chat_history = []
     payload = {
-        "message": "Hi, I'm John, can you ask the second agent to call ExampleTool?",
+        "message": "Hi, I'm John. Please ask the second agent to multiply 12 by 7.",
         "chat_history": chat_history,
     }
 
@@ -126,9 +125,8 @@ def test_streaming_endpoint(message: str):
         accumulated_text = ""
         add_newline = False
 
-        for line in response.iter_lines():
-            if line:
-                line_str = line.decode("utf-8")
+        for line_str in response.iter_lines(chunk_size=1, decode_unicode=True):
+            if line_str:
                 if not PARSE_STREAM:
                     print(line_str)
                 else:
@@ -183,55 +181,96 @@ def test_cancel_endpoint(cancel_mode: Literal["immediate", "after_turn"] | None 
     print("Testing Cancel Endpoint")
     print("=" * 60)
 
-    stream_thread = None
     print("⚙️ Starting a streaming run to capture run_id automatically...")
     streaming_state["run_id"] = None
     streaming_state["completed"] = False
     streaming_state["cancelled"] = False
     streaming_state["accumulated_text"] = ""
-    stream_thread = threading.Thread(target=test_streaming_endpoint, args=("Write a 500 word poem.",))
-    stream_thread.start()
-
-    print("⏳ Waiting for run_id...")
-    timeout = 10
-    elapsed = 0.0
-    while streaming_state["run_id"] is None and elapsed < timeout:
-        time.sleep(0.1)
-        elapsed += 0.1
-
-    run_id = streaming_state["run_id"]
-    if run_id is None:
-        print("❌ Timeout waiting for run_id; cannot demonstrate cancel endpoint.")
-        stream_thread.join(timeout=5)
+    stream_url = "http://localhost:8080/my-agency/get_response_stream"
+    stream_payload = {
+        "message": "Write a 500 word poem.",
+        "chat_history": [],
+    }
+    stream_response = requests.post(stream_url, json=stream_payload, stream=True)
+    if stream_response.status_code != 200:
+        print(f"❌ Could not start streaming run: {stream_response.status_code}")
+        print(stream_response.text)
         return
-    print(f"✅ Captured run_id: {run_id}")
 
     cancel_mode = cancel_mode or "immediate"
-
     cancel_url = "http://localhost:8080/my-agency/cancel_response_stream"
-    payload = {"run_id": run_id}
-    if cancel_mode is not None:
-        payload["cancel_mode"] = cancel_mode
+    accumulated_text = ""
+    add_newline = False
+    run_id = None
+    cancelled = False
 
-    # Delay to wait for delta events to start coming in
-    time.sleep(3)
+    print("⏳ Waiting for run_id...")
+    for line_str in stream_response.iter_lines(chunk_size=1, decode_unicode=True):
+        if not line_str:
+            continue
+        if not PARSE_STREAM:
+            print(line_str)
+        if line_str.startswith("event: meta"):
+            continue
+        if not line_str.startswith("data: "):
+            continue
 
-    print(f"\n📤 Attempting to cancel run {run_id} (mode={cancel_mode or 'immediate'})")
-    response = requests.post(cancel_url, json=payload)
+        data_str = line_str[6:]
+        if data_str == "[DONE]":
+            print("\n\n✅ Stream complete")
+            break
 
-    if response.status_code == 404:
-        print(f"✅ Correctly returned 404: {response.json()}")
-    elif response.status_code == 200:
-        payload = response.json()
-        print("✅ Cancelled run; response payload:")
-        print(json.dumps(payload, indent=2))
-    else:
-        print(f"❌ Unexpected status: {response.status_code}")
-        print(response.text)
+        try:
+            data = json.loads(data_str)
+        except json.JSONDecodeError:
+            continue
 
-    if stream_thread is not None:
-        stream_thread.join(timeout=5)
-        print("🛑 Streaming helper thread stopped.")
+        if run_id is None and "run_id" in data:
+            run_id = data["run_id"]
+            streaming_state["run_id"] = run_id
+            print(f"✅ Captured run_id: {run_id}")
+            time.sleep(3)
+            print(f"\n📤 Attempting to cancel run {run_id} (mode={cancel_mode})")
+            payload = {"run_id": run_id, "cancel_mode": cancel_mode}
+            response = requests.post(cancel_url, json=payload)
+            if response.status_code == 404:
+                print(f"✅ Correctly returned 404: {response.json()}")
+            elif response.status_code == 200:
+                cancelled = True
+                payload = response.json()
+                print("✅ Cancelled run; response payload:")
+                print(json.dumps(payload, indent=2))
+            else:
+                print(f"❌ Unexpected status: {response.status_code}")
+                print(response.text)
+            continue
+
+        if "new_messages" in data:
+            print(f"\n📨 Final messages: {len(data.get('new_messages', []))} messages")
+            continue
+
+        if "data" in data and isinstance(data["data"], dict):
+            nested_data = data["data"]
+            if "data" in nested_data and isinstance(nested_data["data"], dict):
+                inner_data = nested_data["data"]
+                if "type" in inner_data and ".done" in inner_data["type"]:
+                    add_newline = True
+                elif "delta" in inner_data:
+                    delta_text = inner_data["delta"]
+                    if isinstance(delta_text, str):
+                        if add_newline:
+                            print("\n")
+                        print(delta_text, end="", flush=True)
+                        accumulated_text += delta_text
+                        add_newline = False
+
+    stream_response.close()
+    if run_id is None:
+        print("❌ Timeout waiting for run_id; cannot demonstrate cancel endpoint.")
+        return
+    print(f"\nSummary: Received {len(accumulated_text)} characters before completion")
+    if cancelled:
+        print("🛑 Streaming helper request cancelled successfully.")
 
 
 def test_metadata_endpoint():

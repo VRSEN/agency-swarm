@@ -25,8 +25,24 @@ from typing import Any
 # Path setup for standalone examples
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
-import agentops  # noqa: E402
-from langfuse import observe  # noqa: E402
+try:  # noqa: E402
+    import agentops  # type: ignore[import-not-found]
+except ImportError:  # pragma: no cover - exercised by example smoke test
+    agentops = None
+
+try:  # noqa: E402
+    from langfuse import observe  # type: ignore[import-not-found]
+except ImportError:  # pragma: no cover - exercised by example smoke test
+
+    def observe(*_args, **_kwargs):
+        def decorator(func):
+            return func
+
+        return decorator
+
+    _LANGFUSE_AVAILABLE = False
+else:
+    _LANGFUSE_AVAILABLE = True
 
 from agency_swarm import (  # noqa: E402
     Agency,
@@ -101,6 +117,8 @@ async def openai_tracing(input_message: str) -> str:
 
 @observe()
 async def langfuse_tracing(input_message: str) -> str:
+    if not _LANGFUSE_AVAILABLE:
+        raise ModuleNotFoundError("langfuse is not installed")
     if os.getenv("LANGFUSE_SECRET_KEY") is None or os.getenv("LANGFUSE_PUBLIC_KEY") is None:
         raise ValueError("LANGFUSE api keys are not set")
 
@@ -117,6 +135,8 @@ async def langfuse_tracing(input_message: str) -> str:
 
 
 async def agentops_tracing(input_message: str) -> str:
+    if agentops is None:
+        raise ModuleNotFoundError("agentops is not installed")
     if os.getenv("AGENTOPS_API_KEY") is None:
         raise ValueError("AGENTOPS_API_KEY is not set")
     agentops.init(auto_start_session=True, trace_name="Agentops tracing", tags=["openai", "agentops-example"])

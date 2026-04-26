@@ -11,6 +11,7 @@ from types import ModuleType
 from agents import FunctionTool
 
 from agency_swarm.tools.base_tool import BaseTool
+from agency_swarm.tools.function_tool_compat import normalize_function_tool
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,7 @@ def from_file(file_path: str | Path) -> list[type[BaseTool] | FunctionTool]:
 
     for obj in module.__dict__.values():
         if isinstance(obj, FunctionTool):
-            tools.append(obj)
+            tools.append(normalize_function_tool(obj))
 
     return tools
 
