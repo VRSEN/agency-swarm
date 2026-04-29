@@ -26,7 +26,7 @@ def echo_tool(message: str) -> str:
         name="TestAgent",
         instructions="You are a test agent. When asked to echo something, use the echo_tool with the provided message.",
         tools_folder=str(tools_dir),
-        model_settings=ModelSettings(temperature=0.0),
+        model_settings=ModelSettings(temperature=0.0, tool_choice="required"),
     )
 
     # Verify tool was loaded
@@ -36,9 +36,6 @@ def echo_tool(message: str) -> str:
     # Test real execution with OpenAI API
     result: RunResult = await agent.get_response("Use the echo tool to echo 'hello world'")
 
-    # Verify the tool was actually called and executed
-    # Check that both the tool output is present and 'hello world' is echoed
-    final_output_str = str(result.final_output)
-    assert "Tool executed: hello world" in final_output_str or (
-        "hello world" in final_output_str and "echo" in final_output_str.lower()
-    ), f"Expected tool execution or echo response not found in: {final_output_str}"
+    # Verify the tool was actually called and executed.
+    tool_outputs = [str(item.output) for item in result.new_items if hasattr(item, "output")]
+    assert "Tool executed: hello world" in tool_outputs

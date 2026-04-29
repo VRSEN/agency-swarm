@@ -5,17 +5,22 @@ import logging
 import os
 import threading
 import warnings
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, cast
 
 from agents import RunConfig, RunHooks, RunResult, Tool, TResponseInputItem
 
 from agency_swarm.agent.agent_flow import AgentFlow
 from agency_swarm.agent.core import AgencyContext, Agent
 from agency_swarm.agent.execution_streaming import StreamingRunResponse
-from agency_swarm.hooks import PersistenceHooks
+from agency_swarm.hooks import CompositeRunHooks, PersistenceHooks
 from agency_swarm.streaming.utils import EventStreamMerger
 from agency_swarm.tools import BaseTool
-from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers, default_mcp_manager
+from agency_swarm.tools.mcp_manager import (
+    apply_managed_oauth_cache_dir,
+    attach_persistent_mcp_servers,
+    default_mcp_manager,
+)
 from agency_swarm.utils.files import get_external_caller_directory
 from agency_swarm.utils.thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
 
@@ -30,6 +35,27 @@ from .setup import (
 
 if TYPE_CHECKING:
     from agency_swarm.agent.context_types import AgentRuntimeState
+    from agency_swarm.mcp.oauth import MCPServerOAuth as MCPServerOAuthType, OAuthStorageHooks as OAuthStorageHooksType
+    from agency_swarm.mcp.oauth_client import MCPServerOAuthClient as MCPServerOAuthClientType
+else:
+    MCPServerOAuthType = Any
+    OAuthStorageHooksType = Any
+    MCPServerOAuthClientType = Any
+
+MCPServerOAuthRuntime: type[MCPServerOAuthType] | None
+OAuthStorageHooksRuntime: type[OAuthStorageHooksType] | None
+MCPServerOAuthClientRuntime: type[MCPServerOAuthClientType] | None
+
+try:  # pragma: no cover - optional dependency
+    from agency_swarm.mcp.oauth import (
+        MCPServerOAuth as MCPServerOAuthRuntime,
+        OAuthStorageHooks as OAuthStorageHooksRuntime,
+    )
+    from agency_swarm.mcp.oauth_client import MCPServerOAuthClient as MCPServerOAuthClientRuntime
+except ImportError:  # pragma: no cover - OAuth extras not installed
+    MCPServerOAuthRuntime = None
+    OAuthStorageHooksRuntime = None
+    MCPServerOAuthClientRuntime = None
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +95,7 @@ class Agency:
     shared_tools_folder: str | None  # Folder path containing tools for all agents
     shared_files_folder: str | None  # Folder path containing files for all agents
     shared_mcp_servers: list[Any] | None  # MCP servers shared across all agents
+    oauth_token_path: str | None  # Base directory for OAuth token storage
     user_context: dict[str, Any]  # Shared user context for MasterContext
     send_message_tool_class: type | None  # Fallback SendMessage tool class when flows have no override
 
@@ -91,6 +118,7 @@ class Agency:
         load_threads_callback: ThreadLoadCallback | None = None,
         save_threads_callback: ThreadSaveCallback | None = None,
         user_context: dict[str, Any] | None = None,
+        oauth_token_path: str | None = None,
     ):
         """
         Initializes the Agency object.
@@ -124,6 +152,8 @@ class Agency:
             load_threads_callback (ThreadLoadCallback | None, optional): Callable to load conversation threads.
             save_threads_callback (ThreadSaveCallback | None, optional): Callable to save conversation threads.
             user_context (dict[str, Any] | None, optional): Initial shared context accessible to all agents.
+            oauth_token_path (str | None, optional): Base directory for OAuth token storage (defaults to
+                ~/.agency-swarm/mcp-tokens or $AGENCY_SWARM_MCP_CACHE_DIR when omitted).
 
         Raises:
             ValueError: If the agency structure is not defined, or if agent names are duplicated.
@@ -165,6 +195,7 @@ class Agency:
         self.shared_tools_folder = shared_tools_folder
         self.shared_files_folder = shared_files_folder
         self.shared_mcp_servers = shared_mcp_servers
+        self.oauth_token_path = oauth_token_path
         self.thread_manager = ThreadManager(
             load_threads_callback=load_threads_callback, save_threads_callback=save_threads_callback
         )
@@ -173,6 +204,11 @@ class Agency:
         if load_threads_callback and save_threads_callback:
             self.persistence_hooks = PersistenceHooks(load_threads_callback, save_threads_callback)
             logger.info("Persistence hooks enabled.")
+        self._default_run_hooks: list[RunHooks] = []
+        if self.persistence_hooks:
+            self._default_run_hooks.append(self.persistence_hooks)
+        self._oauth_storage_hook: RunHooks | None = None
+
         self.agents = {}
         self.entry_points = []
         register_all_agents_and_set_entry_points(self, _derived_entry_points, _derived_communication_flows)
@@ -190,6 +226,7 @@ class Agency:
         self._communication_tool_classes = _communication_tool_classes
         configure_agents(self, _derived_communication_flows)
         apply_shared_resources(self)
+        self._configure_oauth_support()
         for agent_name, agent_instance in self.agents.items():
             runtime_state = self._agent_runtime_state.get(agent_name)
             agent_instance.refresh_conversation_starters_cache(
@@ -202,6 +239,58 @@ class Agency:
         # Register MCP shutdown at process exit so persistent servers are cleaned in scripts
         if default_mcp_manager.mark_atexit_registered():
             atexit.register(default_mcp_manager.shutdown_sync)
+
+    def _configure_oauth_support(self) -> None:
+        """Apply oauth_token_path and enable per-user token hooks when available."""
+        if self._oauth_storage_hook and self._oauth_storage_hook in self._default_run_hooks:
+            self._default_run_hooks.remove(self._oauth_storage_hook)
+        self._oauth_storage_hook = None
+
+        if MCPServerOAuthRuntime is None:
+            return
+
+        cache_dir: Path | None = None
+        if self.oauth_token_path:
+            cache_dir = Path(self.oauth_token_path).expanduser()
+
+        has_oauth_servers = False
+        for agent in self.agents.values():
+            candidates: list[Any] = []
+            servers = getattr(agent, "mcp_servers", None)
+            if isinstance(servers, list):
+                candidates.extend(servers)
+            deferred_servers = getattr(agent, "_oauth_mcp_servers", None)
+            if isinstance(deferred_servers, dict):
+                candidates.extend(deferred_servers.values())
+
+            for server in candidates:
+                config: Any | None = None
+                if MCPServerOAuthRuntime is not None and isinstance(server, MCPServerOAuthRuntime):
+                    config = server
+                elif MCPServerOAuthClientRuntime is not None and isinstance(server, MCPServerOAuthClientRuntime):
+                    config = server.oauth_config
+                if config is None:
+                    continue
+                has_oauth_servers = True
+                apply_managed_oauth_cache_dir(config, cache_dir)
+
+        if has_oauth_servers and OAuthStorageHooksRuntime is not None:
+            self._oauth_storage_hook = cast(RunHooks, OAuthStorageHooksRuntime())
+            self._default_run_hooks.append(self._oauth_storage_hook)
+
+    @property
+    def default_run_hooks(self) -> RunHooks | None:
+        """Return the agency-level hooks applied to each run.
+
+        Notes:
+            The Agents SDK expects a single RunHooks instance, so multiple agency
+            hooks are composed into one wrapper before the run starts.
+        """
+        if not self._default_run_hooks:
+            return None
+        if len(self._default_run_hooks) == 1:
+            return self._default_run_hooks[0]
+        return CompositeRunHooks(list(self._default_run_hooks))
 
     def get_agent_context(
         self,

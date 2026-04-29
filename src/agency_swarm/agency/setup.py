@@ -15,7 +15,6 @@ from agency_swarm.agent.agent_flow import AgentFlow
 from agency_swarm.agent.context_types import AgentRuntimeState
 from agency_swarm.agent.core import Agent
 from agency_swarm.tools import BaseTool, ToolFactory
-from agency_swarm.tools.mcp_manager import convert_mcp_servers_to_tools
 from agency_swarm.tools.send_message import Handoff, SendMessage, SendMessageHandoff
 from agency_swarm.utils.dry_run import is_dry_run
 from agency_swarm.utils.files import get_external_caller_directory
@@ -470,7 +469,7 @@ def _apply_shared_files(agency: "Agency") -> None:
 
 
 def _apply_shared_mcp_servers(agency: "Agency") -> None:
-    """Add shared MCP servers to all agents and convert them into tools."""
+    """Attach shared MCP servers to all agents for lazy conversion on first run."""
     if not agency.shared_mcp_servers:
         return
 
@@ -491,6 +490,9 @@ def _apply_shared_mcp_servers(agency: "Agency") -> None:
             server_name = getattr(server, "name", None)
             if server_name:
                 existing_names = [getattr(s, "name", None) for s in agent_instance.mcp_servers]
+                deferred_servers = getattr(agent_instance, "_oauth_mcp_servers", None)
+                if isinstance(deferred_servers, dict):
+                    existing_names.extend(deferred_servers)
                 if server_name in existing_names:
                     logger.debug(f"MCP server '{server_name}' already exists for agent '{agent_name}'; skipping")
                     continue
@@ -499,9 +501,11 @@ def _apply_shared_mcp_servers(agency: "Agency") -> None:
             added_any = True
             logger.debug(f"Added shared MCP server '{server_name}' to agent '{agent_name}'")
 
-        # Convert only if we actually attached at least one new server. Conversion will
-        # clear agent.mcp_servers after creating FunctionTool instances.
         if added_any:
-            convert_mcp_servers_to_tools(agent_instance)
+            # Keep initialization lazy so OAuth discovery/auth is never forced at startup.
+            if hasattr(agent_instance, "_mcp_tools_initialized"):
+                agent_instance._mcp_tools_initialized = False
+            if hasattr(agent_instance, "_prepare_deferred_oauth_mcp_servers"):
+                agent_instance._prepare_deferred_oauth_mcp_servers()
 
     logger.info(f"Applied {len(agency.shared_mcp_servers)} shared MCP servers to {len(agency.agents)} agents")
