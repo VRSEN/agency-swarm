@@ -20,7 +20,7 @@ wheels = [
 
 [[package]]
 name = "agency-swarm"
-version = "1.9.3"
+version = "1.9.5"
 source = { editable = "." }
 dependencies = [
     { name = "ag-ui-protocol" },
