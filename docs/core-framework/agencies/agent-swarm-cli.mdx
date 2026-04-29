@@ -16,7 +16,7 @@ For most users, the right way to start is:
 npx @vrsen/agentswarm
 ```
 
-This is the main launch path. It handles first-run setup, then connects the terminal UI to your Agency Swarm server.
+This is the main launch path. It handles first-run setup, helps you choose or create an agency, and then opens the terminal UI.
 
 Run it from your project root. If you are starting fresh, run it in a new empty folder.
 
@@ -41,14 +41,14 @@ On first launch, you will usually see this flow:
   <Step title="Start the launcher">
     Start with `npx @vrsen/agentswarm`.
   </Step>
-  <Step title="Point the launcher at an agency">
+  <Step title="Choose or create an agency">
     The launcher can reuse the current Agency Swarm project, create a starter project, or connect to an agency that is already running.
   </Step>
   <Step title="Set up the project environment">
     The launcher checks for a project `.venv`. If it needs to create one, it asks first and then installs the project dependencies before opening the TUI.
   </Step>
   <Step title="Open the TUI and add auth if needed">
-    The TUI opens connected to your agency. If you do not already have a usable model provider configured, use `/auth`.
+    The TUI opens for the agency you selected during onboarding. If you do not already have a usable model provider configured, use `/auth`.
   </Step>
 </Steps>
 
@@ -59,12 +59,11 @@ This is the path we recommend for onboarding, videos, and first-time users.
 Once the TUI is running, you get:
 
 - a keyboard-first terminal workflow
-- session history, export, undo, redo, and `/compact`
-- `/agents` to switch between top-level agents
+- session history, export, and `/compact`
+- `/agents` to switch between the agency and its top-level agents
 - `@AgentName` mentions to route a prompt to a specific top-level agent
-- `@` file and resource references to attach local or MCP context in the same prompt flow
+- `@` file and resource references when local project context is available
 - `Tab` autocomplete for both agent mentions and file and resource references
-- direct access to local project files for prompt context
 
 ![Agent Swarm TUI agent picker](/images/agent-swarm-cli-agent-selection.png)
 
