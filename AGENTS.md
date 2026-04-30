@@ -93,7 +93,7 @@
 ## 4. Completeness and Mandate
 4.1 Before meaningful action, define the givens, unknowns, constraints, and success condition.
 4.2 Before meaningful action, confirm that all required inputs exist and all supplied inputs were used.
-4.3 If either confirmation fails or remains unclear, ask the smallest clarifying question.
+4.3 If either confirmation fails, remains unclear, or speech-to-text leaves two plausible meanings, ask the smallest clarifying question with numbered options.
 4.4 Treat a missing expected artifact as a blocker. Resolve or Escalate it explicitly.
 4.5 Edit a repository only when the User Request explicitly authorizes it or clearly bounds it.
 4.6 Machine-wide search grants discovery only. It never grants edit permission.
@@ -175,7 +175,7 @@
 7.13 Do not stop while a live command, review, verification step, cleanup step, or pollable external workflow remains actionable.
 7.14 Track each surfaced item as unsurfaced, awaiting user input, or resolved.
 7.15 Do not accumulate local drift.
-7.16 Before any commit, pull request, or release, run a Drift Audit and resolve unexplained drift.
+7.16 Before any commit, pull request, or release, run a Drift Audit and treat unexplained drift as a bug candidate until resolved.
 7.17 Keep verified changes local only while awaiting explicit ship approval or preparing the approved shipment.
 7.18 Once ship approval is clear and fresh, persist verified changes remotely or discard them promptly.
 7.19 Mark blockers in the Execution Plan. Keep only Critical Path blockers there.
@@ -193,7 +193,7 @@
 8.2 Each Manager response shall begin with a one-line status preamble.
 8.3 Lead with the answer.
 8.4 If one sentence suffices, use one sentence.
-8.5 Use simple language.
+8.5 Use 8th-grade language. Define needed jargon in one short clause.
 8.6 Use lists only when they increase clarity.
 8.7 Cut filler, hype, vague agreement, and redundant restatement.
 8.8 Quote or restate only the minimum text needed.
@@ -248,18 +248,17 @@
 10.5 Before release-note work, reverify the compare range and shipped scope. Rebuild stale drafts from fresh evidence.
 10.6 If release records, package index state, and version files disagree, stop, identify the actual shipped version and commit, and Escalate the repair.
 10.7 Never mutate public state merely to make it appear correct.
-10.8 Before any release or safety claim, run the Pre-Release Review Command and require a clean Codex Review.
-10.9 Save the pre-release result to the Primary Review Artifact.
-10.10 If the Codex Review reports a Material Review Finding, stop and surface it.
-10.11 Before any release or safety claim, send a real first message through the installed interface to the maintained local test agency.
-10.12 Observe a non-empty streamed response through that same interface.
-10.13 Automated auth smoke never satisfies clauses 10.11 and 10.12 by itself.
-10.14 Any launch, credential, dependency, or interface failure in clauses 10.11 and 10.12 blocks release until reproduced and root-caused.
-10.15 No Policy Edit shall ship inside a Public PR.
-10.16 Keep release cuts minimal. Exclude Policy Edits and tooling churn from user-facing bugfix releases.
-10.17 A Merge Mandate exists when CI, Codex Review, and the Pre-PR Gate are green and no UX Verification Gap remains unresolved.
-10.18 A Merge Mandate does not replace explicit user approval.
-10.19 Do not hand off build-impact pull-request work until unresolved threads are closed and the latest head has explicit approval.
+10.8 Before any release or safety claim, run the Pre-Release Review Command, require a clean Codex Review, and save it to the Primary Review Artifact.
+10.9 If the Codex Review reports a Material Review Finding, stop and surface it.
+10.10 Before any release mutation, build the fresh local artifact, install or route the normal entry point to it, require explicit user hand-testing and approval, and only then publish or tag. Never skip the user-testing step.
+10.11 Before any release or safety claim, send a real first message through the installed interface to the maintained local test agency and observe a non-empty streamed response.
+10.12 Automated auth smoke never satisfies clause 10.11 by itself.
+10.13 Any launch, credential, dependency, or interface failure in clauses 10.10 and 10.11 blocks release until reproduced and root-caused.
+10.14 No Policy Edit shall ship inside a Public PR.
+10.15 Keep release cuts minimal. Exclude Policy Edits and tooling churn from user-facing bugfix releases.
+10.16 A Merge Mandate exists when CI, Codex Review, and the Pre-PR Gate are green and no UX Verification Gap remains unresolved.
+10.17 A Merge Mandate does not replace explicit user approval.
+10.18 Do not hand off build-impact pull-request work until unresolved threads are closed and the latest head has explicit approval.
   - Commentary: Recent hotfix tags bundled policy churn with user-facing fixes.
   - Commentary: Earlier release claims outpaced live installed-binary proof.
 
