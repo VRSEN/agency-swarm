@@ -118,7 +118,7 @@ requires-dist = [
     { name = "nest-asyncio", marker = "extra == 'jupyter'", specifier = ">=1.6.0,<2.0.0" },
     { name = "numpy", marker = "python_full_version >= '3.10' and extra == 'voice'", specifier = ">=2.2.0,<3" },
     { name = "openai", specifier = ">=2.2,<3" },
-    { name = "openai-agents", specifier = "==0.9.3" },
+    { name = "openai-agents", specifier = "==0.14.2" },
     { name = "prompt-toolkit", specifier = ">=3.0.0,<4.0.0" },
     { name = "pydantic", specifier = ">=2.11,<3" },
     { name = "python-dotenv", specifier = ">=1.1.1,<2.0.0" },
@@ -935,15 +935,12 @@ wheels = [
 ]
 
 [[package]]
-name = "griffe"
-version = "1.7.3"
+name = "griffelib"
+version = "2.0.2"
 source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "colorama" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/a9/3e/5aa9a61f7c3c47b0b52a1d930302992229d191bf4bc76447b324b731510a/griffe-1.7.3.tar.gz", hash = "sha256:52ee893c6a3a968b639ace8015bec9d36594961e156e23315c8e8e51401fa50b", size = 395137, upload-time = "2025-04-23T11:29:09.147Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/9d/82/74f4a3310cdabfbb10da554c3a672847f1ed33c6f61dd472681ce7f1fe67/griffelib-2.0.2.tar.gz", hash = "sha256:3cf20b3bc470e83763ffbf236e0076b1211bac1bc67de13daf494640f2de707e", size = 166461, upload-time = "2026-03-27T11:34:51.091Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/58/c6/5c20af38c2a57c15d87f7f38bee77d63c1d2a3689f74fefaf35915dd12b2/griffe-1.7.3-py3-none-any.whl", hash = "sha256:c6b3ee30c2f0f17f30bcdef5068d6ab7a2a4f1b8bf1a3e74b56fffd21e1c5f75", size = 129303, upload-time = "2025-04-23T11:29:07.145Z" },
+    { url = "https://files.pythonhosted.org/packages/11/8c/c9138d881c79aa0ea9ed83cbd58d5ca75624378b38cee225dcf5c42cc91f/griffelib-2.0.2-py3-none-any.whl", hash = "sha256:925c857658fb1ba40c0772c37acbc2ab650bd794d9c1b9726922e36ea4117ea1", size = 142357, upload-time = "2026-03-27T11:34:46.275Z" },
 ]
 
 [[package]]
@@ -1862,7 +1859,7 @@ wheels = [
 
 [[package]]
 name = "openai"
-version = "2.21.0"
+version = "2.32.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -1874,27 +1871,28 @@ dependencies = [
     { name = "tqdm" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/92/e5/3d197a0947a166649f566706d7a4c8f7fe38f1fa7b24c9bcffe4c7591d44/openai-2.21.0.tar.gz", hash = "sha256:81b48ce4b8bbb2cc3af02047ceb19561f7b1dc0d4e52d1de7f02abfd15aa59b7", size = 644374, upload-time = "2026-02-14T00:12:01.577Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ed/59/bdcc6b759b8c42dd73afaf5bf8f902c04b37987a5514dbc1c64dba390fef/openai-2.32.0.tar.gz", hash = "sha256:c54b27a9e4cb8d51f0dd94972ffd1a04437efeb259a9e60d8922b8bd26fe55e0", size = 693286, upload-time = "2026-04-15T22:28:19.434Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/cc/56/0a89092a453bb2c676d66abee44f863e742b2110d4dbb1dbcca3f7e5fc33/openai-2.21.0-py3-none-any.whl", hash = "sha256:0bc1c775e5b1536c294eded39ee08f8407656537ccc71b1004104fe1602e267c", size = 1103065, upload-time = "2026-02-14T00:11:59.603Z" },
+    { url = "https://files.pythonhosted.org/packages/1e/c1/d6e64ccd0536bf616556f0cad2b6d94a8125f508d25cfd814b1d2db4e2f1/openai-2.32.0-py3-none-any.whl", hash = "sha256:4dcc9badeb4bf54ad0d187453742f290226d30150890b7890711bda4f32f192f", size = 1162570, upload-time = "2026-04-15T22:28:17.714Z" },
 ]
 
 [[package]]
 name = "openai-agents"
-version = "0.9.3"
+version = "0.14.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "griffe" },
+    { name = "griffelib" },
     { name = "mcp" },
     { name = "openai" },
     { name = "pydantic" },
     { name = "requests" },
     { name = "types-requests" },
     { name = "typing-extensions" },
+    { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/be/bb/22e3fceb0a969f98734de71b51c09df99e66fb0f38609b63415308d7d71f/openai_agents-0.9.3.tar.gz", hash = "sha256:65b150a86cae36f42da910a3a3793559ffbbe00c6fb8545e570867b84d25dbeb", size = 2388441, upload-time = "2026-02-20T22:56:22.531Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e2/2c/74fea5c1b20f107d19742af400045542e17eb449d044f950758a6f68f32f/openai_agents-0.14.2.tar.gz", hash = "sha256:fd4e1ae84e00aef4339ad39913468a0da34cba8ff5382925d38028ac3b435ef2", size = 5288888, upload-time = "2026-04-18T00:17:39.709Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4f/c3/5fc158f4503207af29ba9be68ffd328d24e2121843d36d861bea264d5e0d/openai_agents-0.9.3-py3-none-any.whl", hash = "sha256:d7e0824a9d1388d233f6b77c9f787624e710408425ae6a8ba8a36b447b868c83", size = 390193, upload-time = "2026-02-20T22:56:19.335Z" },
+    { url = "https://files.pythonhosted.org/packages/0b/02/bb3ddff9bca543cbcca0d362a645b03a0708b6c2cd6eb620d5f3de810bb3/openai_agents-0.14.2-py3-none-any.whl", hash = "sha256:acd75132f2ec70413a4e95680b629ccbc6f4f5d0d63414980153de09d409e695", size = 807364, upload-time = "2026-04-18T00:17:37.505Z" },
 ]
 
 [[package]]

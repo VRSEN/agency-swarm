@@ -5,9 +5,11 @@ This module handles the complex initialization process for agents,
 including setting up file management.
 """
 
+import copy
 import dataclasses
 import inspect
 import logging
+import re
 import warnings
 from functools import wraps
 from typing import TYPE_CHECKING, Any
@@ -27,6 +29,14 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _INPUT_GUARDRAIL_WRAPPED_ATTR = "_agency_swarm_input_guardrail_wrapped"
+_GPT_5_MINIMAL_REASONING_FALLBACKS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"^gpt-5(?:\.\d+)?(?:-mini|-nano|-codex)?(?:-\d{4}-\d{2}-\d{2})?$"), "low"),
+    (re.compile(r"^gpt-5(?:\.\d+)?-pro(?:-\d{4}-\d{2}-\d{2})?$"), "medium"),
+)
+_TEMPERATURE_UNSUPPORTED_MODEL_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^gpt-5\.4(?:-(?:mini|nano|pro))?(?:-\d{4}-\d{2}-\d{2})?$"),
+    re.compile(r"^o4-mini(?:-\d{4}-\d{2}-\d{2})?$"),
+)
 
 # Agency Swarm defaults applied when the SDK leaves a field unset
 # include_usage=True enables streaming usage tracking for LiteLLM models
@@ -42,6 +52,48 @@ def _get_framework_default_model_settings(model: str | None = None) -> ModelSett
         if getattr(base, field.name) is None and getattr(_FRAMEWORK_DEFAULT_MODEL_SETTINGS, field.name) is not None
     }
     return dataclasses.replace(base, **updates) if updates else base
+
+
+def _replace_reasoning_effort(reasoning: Any, effort: str) -> Any:
+    if hasattr(reasoning, "model_copy"):
+        return reasoning.model_copy(update={"effort": effort})
+    cloned = copy.copy(reasoning)
+    cloned.effort = effort
+    return cloned
+
+
+def normalize_incompatible_model_settings(model_name: str | None, settings: ModelSettings) -> ModelSettings:
+    """Downgrade user-specified settings that current model families reject."""
+    normalized = settings
+    canonical_model_name = model_name.split("/")[-1].lower() if model_name else None
+
+    if (
+        normalized.temperature is not None
+        and canonical_model_name
+        and any(pattern.fullmatch(canonical_model_name) for pattern in _TEMPERATURE_UNSUPPORTED_MODEL_PATTERNS)
+    ):
+        warnings.warn(
+            f"{canonical_model_name or model_name} does not support temperature; omitting the explicit value.",
+            UserWarning,
+            stacklevel=3,
+        )
+        normalized = dataclasses.replace(normalized, temperature=None)
+
+    reasoning = normalized.reasoning
+    if reasoning is None or getattr(reasoning, "effort", None) != "minimal" or not canonical_model_name:
+        return normalized
+
+    for pattern, fallback_effort in _GPT_5_MINIMAL_REASONING_FALLBACKS:
+        if pattern.fullmatch(canonical_model_name):
+            warnings.warn(
+                f"{canonical_model_name} does not support reasoning.effort='minimal'; "
+                f"using '{fallback_effort}' instead.",
+                UserWarning,
+                stacklevel=3,
+            )
+            return dataclasses.replace(normalized, reasoning=_replace_reasoning_effort(reasoning, fallback_effort))
+
+    return normalized
 
 
 _DEPRECATED_AGENT_KWARGS: dict[str, str] = {
@@ -129,7 +181,7 @@ def apply_framework_defaults(kwargs: dict[str, Any]) -> None:
         kwargs: The initialization keyword arguments (modified in place)
     """
     model_arg = kwargs.get("model")
-    model_name = get_default_settings_model_name(model_arg)
+    model_name = FRAMEWORK_DEFAULT_MODEL if model_arg is None else get_default_settings_model_name(model_arg)
     base_defaults = _get_framework_default_model_settings(model_name)
 
     existing_settings = kwargs.get("model_settings")
@@ -144,7 +196,8 @@ def apply_framework_defaults(kwargs: dict[str, Any]) -> None:
         raise TypeError("model_settings must be a ModelSettings instance or dict")
 
     # User-specified values override defaults; unset fields inherit framework+SDK defaults
-    kwargs["model_settings"] = base_defaults.resolve(existing_settings)
+    resolved_settings = base_defaults.resolve(existing_settings)
+    kwargs["model_settings"] = normalize_incompatible_model_settings(model_name, resolved_settings)
 
 
 def separate_kwargs(kwargs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:

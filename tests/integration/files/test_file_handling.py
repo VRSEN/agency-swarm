@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 import pytest
-from agents import ModelSettings, ToolCallItem
+from agents import ModelSettings, RunConfig, ToolCallItem
 from openai import AsyncOpenAI, NotFoundError
 
 from agency_swarm import Agency, Agent
@@ -413,6 +413,8 @@ async def test_code_interpreter_tool(real_openai_client: AsyncOpenAI, tmp_path: 
     tmp_dir.mkdir(exist_ok=True)
     tmp_file_path = tmp_dir / "test-python.py"
     shutil.copy(test_py_path, tmp_file_path)
+    folder_path = None
+    code_interpreter_agent = None
 
     try:
         code_interpreter_agent = Agent(
@@ -432,6 +434,7 @@ async def test_code_interpreter_tool(real_openai_client: AsyncOpenAI, tmp_path: 
 
         # Initialize agency for the agent
         agency = Agency(code_interpreter_agent, user_context=None)
+        code_interpreter_run_config = RunConfig(model_settings=ModelSettings(tool_choice="code_interpreter"))
 
         # Test the simple usage of the code interpreter tool (answer is always 37)
         # Use a deterministic script to avoid RNG differences across environments
@@ -440,15 +443,19 @@ async def test_code_interpreter_tool(real_openai_client: AsyncOpenAI, tmp_path: 
         ```print(sum([10, 20, 7]))```
         """
 
-        response_result = await agency.get_response(question)
+        response_result = await agency.get_response(question, run_config=code_interpreter_run_config)
 
         # Verify response
         assert response_result is not None
         assert "37" in response_result.final_output.lower()
 
         # Execute python script (answer is always 14910)
-        query = "Run test-python script, return me its results and tell me exactly what you did to get them."
-        response_result = await agency.get_response(query)
+        query = (
+            "Use the CodeInterpreter tool to execute the uploaded file named `test-python.py` exactly as provided. "
+            "Do not rewrite the program or compute the answer manually. "
+            "Return the exact integer that the file prints."
+        )
+        response_result = await agency.get_response(query, run_config=code_interpreter_run_config)
 
         assert response_result is not None
         # Handle various number formatting (with/without commas, LaTeX formatting, etc.)
@@ -462,17 +469,18 @@ async def test_code_interpreter_tool(real_openai_client: AsyncOpenAI, tmp_path: 
     finally:
         # Cleanup: Delete uploaded file from OpenAI and temp directory
         try:
-            for file in folder_path.glob("*"):
-                file_id = code_interpreter_agent.file_manager.get_id_from_file(file)
-                if file_id:
-                    await real_openai_client.files.delete(file_id=file_id)
-                    print(f"Cleaned up file {file.name}")
-                os.remove(file)
-            vector_store_id = folder_path.name.split("_vs_")[-1]
-            await real_openai_client.vector_stores.delete(vector_store_id=f"vs_{vector_store_id}")
-            print(f"Cleaned up vector store {folder_path.name}")
-            os.rmdir(folder_path)
-            print(f"Cleaned up folder {folder_path.name}")
+            if folder_path is not None and code_interpreter_agent is not None:
+                for file in folder_path.glob("*"):
+                    file_id = code_interpreter_agent.file_manager.get_id_from_file(file)
+                    if file_id:
+                        await real_openai_client.files.delete(file_id=file_id)
+                        print(f"Cleaned up file {file.name}")
+                    os.remove(file)
+                vector_store_id = folder_path.name.split("_vs_")[-1]
+                await real_openai_client.vector_stores.delete(vector_store_id=f"vs_{vector_store_id}")
+                print(f"Cleaned up vector store {folder_path.name}")
+                os.rmdir(folder_path)
+                print(f"Cleaned up folder {folder_path.name}")
 
             # Clean up the tmp directory if it's empty
             if tmp_dir.exists() and not any(tmp_dir.iterdir()):
