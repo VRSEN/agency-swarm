@@ -37,6 +37,8 @@ def run_fastapi(
     app_token_env: str = "APP_TOKEN",
     cors_origins: list[str] | None = None,
     enable_agui: bool = False,
+    enable_realtime: bool = False,
+    realtime_options: dict[str, Any] | None = None,
 ) -> None:
     """Serve this agency via the FastAPI integration.
 
@@ -57,6 +59,8 @@ def run_fastapi(
         app_token_env=app_token_env,
         cors_origins=cors_origins,
         enable_agui=enable_agui,
+        enable_realtime=enable_realtime,
+        realtime_options=realtime_options,
     )
 
 
@@ -95,6 +99,8 @@ def build_fastapi_agencies(agency: "Agency") -> dict[str, Callable[..., "Agency"
             load_threads_callback=load_threads_callback,
             save_threads_callback=save_threads_callback,
             user_context=deepcopy(agency.user_context),
+            randomize_agent_voices=bool(getattr(agency, "_randomize_agent_voices", False)),
+            voice_random_seed=getattr(agency, "_voice_random_seed", None),
         )
 
     return {agency.name or "agency": agency_factory}
