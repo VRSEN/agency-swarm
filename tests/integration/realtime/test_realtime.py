@@ -296,6 +296,37 @@ def test_run_realtime_xai_url_includes_selected_model(monkeypatch: pytest.Monkey
     assert provider_options.get("url") == "wss://api.x.ai/v1/realtime?encoding=pcm16&model=custom-voice-model"
 
 
+def test_run_realtime_xai_url_replaces_stale_model_query(monkeypatch: pytest.MonkeyPatch) -> None:
+    agent = Agent(name="ProviderAgent", instructions="Test")
+    agency = Agency(agent)
+    monkeypatch.setenv("XAI_API_KEY", "test-key")
+
+    from agency_swarm.integrations import realtime as realtime_module
+
+    captured: dict[str, object] = {}
+    original_init = realtime_module.RealtimeSessionFactory.__init__
+
+    def capture_init(self, realtime_agency, base_model_settings, **kwargs):  # type: ignore[no-untyped-def]
+        original_init(self, realtime_agency, base_model_settings, **kwargs)
+        captured["provider_options"] = dict(self._provider_options)
+
+    monkeypatch.setattr(realtime_module.RealtimeSessionFactory, "__init__", capture_init)
+
+    app = run_realtime(
+        agency=agency,
+        provider="xai",
+        model="selected-voice-model",
+        provider_options={"url": "wss://api.x.ai/v1/realtime?encoding=pcm16&model=stale-voice-model"},
+        return_app=True,
+    )
+    if app is None:
+        pytest.skip("FastAPI extras not installed")
+
+    provider_options = captured.get("provider_options")
+    assert isinstance(provider_options, dict)
+    assert provider_options.get("url") == "wss://api.x.ai/v1/realtime?encoding=pcm16&model=selected-voice-model"
+
+
 def test_run_realtime_rejects_unsupported_provider() -> None:
     agent = Agent(name="ProviderAgent", instructions="Test")
     agency = Agency(agent)
