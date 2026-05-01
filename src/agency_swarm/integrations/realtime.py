@@ -9,6 +9,7 @@ import os
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any, Literal, assert_never, cast
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from agents.realtime import RealtimeModelConfig, RealtimeRunner, RealtimeSession
 from agents.realtime.config import (
@@ -56,7 +57,7 @@ logger.setLevel(logging.INFO)
 __all__ = ["run_realtime", "RealtimeSessionFactory", "build_model_settings"]
 
 SUPPORTED_REALTIME_PROVIDERS = ("openai", "xai")
-XAI_DEFAULT_REALTIME_MODEL = "grok-voice-agent"
+XAI_DEFAULT_REALTIME_MODEL = "grok-voice-think-fast-1.0"
 XAI_DEFAULT_REALTIME_URL = "wss://api.x.ai/v1/realtime"
 
 
@@ -298,10 +299,14 @@ def build_model_settings(
 def _resolve_provider_options(
     provider: Literal["openai", "xai"],
     provider_options: Mapping[str, Any] | None,
+    *,
+    model_name: str | None = None,
 ) -> dict[str, Any]:
     resolved = dict(provider_options or {})
     if provider == "xai":
         resolved.setdefault("url", XAI_DEFAULT_REALTIME_URL)
+        if resolved.get("url") and model_name:
+            resolved["url"] = _with_xai_model_query(str(resolved["url"]), model_name)
         api_key_env = str(resolved.get("api_key_env") or "XAI_API_KEY")
         resolved.setdefault("api_key_env", api_key_env)
         if "api_key" not in resolved and api_key_env:
@@ -316,6 +321,13 @@ def _resolve_provider_options(
             if env_value:
                 resolved["api_key"] = env_value
     return resolved
+
+
+def _with_xai_model_query(url: str, model_name: str) -> str:
+    parts = urlsplit(url)
+    query_items = [(key, value) for key, value in parse_qsl(parts.query, keep_blank_values=True) if key != "model"]
+    query_items.append(("model", model_name))
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query_items), parts.fragment))
 
 
 def _create_runner_model(provider: Literal["openai", "xai"]):
@@ -370,7 +382,12 @@ class RealtimeSessionFactory:
         self._agency = realtime_agency
         self._base_model_settings = dict(base_model_settings)
         self._provider = _normalize_provider(provider)
-        self._provider_options = _resolve_provider_options(self._provider, provider_options)
+        model_name = self._base_model_settings.get("model_name")
+        self._provider_options = _resolve_provider_options(
+            self._provider,
+            provider_options,
+            model_name=str(model_name) if model_name else None,
+        )
 
     @property
     def default_voice(self) -> str | None:

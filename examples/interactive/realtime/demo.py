@@ -39,7 +39,7 @@ def main() -> None:
     if provider not in {"openai", "xai"}:
         raise ValueError("REALTIME_PROVIDER must be 'openai' or 'xai'.")
 
-    default_model = "grok-voice-agent" if provider == "xai" else "gpt-realtime"
+    default_model = "grok-voice-think-fast-1.0" if provider == "xai" else "gpt-realtime"
     default_voice = "rex" if provider == "xai" else "alloy"
     model = os.getenv("REALTIME_MODEL", default_model).strip()
     voice = os.getenv("REALTIME_VOICE", default_voice).strip()

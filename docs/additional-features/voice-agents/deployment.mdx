@@ -61,9 +61,11 @@ For xAI sessions:
 run_realtime(
     agency=agency,
     provider="xai",
-    model="grok-voice-agent",
+    model="grok-voice-think-fast-1.0",
 )
 ```
+
+Agency Swarm adds the selected xAI model to the realtime websocket URL as `?model=<model>` because xAI selects voice models from the connection query string.
 
 ## Serve the packaged browser client
 
