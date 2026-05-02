@@ -285,7 +285,7 @@ print("Response:", agency_response.json())
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `message` | string | Yes | User message to start or continue the conversation. |
+| `message` | string or list | Yes | User message to start or continue the conversation. Use a structured Responses input list for inline `input_image` or `input_file` attachments. |
 | `chat_history` | list | No | Flat list of prior messages with metadata (`agent`, `callerAgent`, `timestamp`) to preserve context. |
 | `recipient_agent` | string | No | Target agent when you want to direct the next turn. |
 | `file_ids` | list | No | IDs of already uploaded files to attach. |
@@ -423,6 +423,22 @@ Attach files to agency requests using `file_ids` or `file_urls` in the payload:
 {
   "message": "Summarize this document",
   "file_urls": {"report.pdf": "https://example.com/report.pdf"}
+}
+```
+
+For inline Responses attachments that should not be uploaded through the Files API, pass a structured `message`:
+
+```json
+{
+  "message": [
+    {
+      "role": "user",
+      "content": [
+        {"type": "input_image", "image_url": "data:image/png;base64,..."},
+        {"type": "input_text", "text": "Describe this image"}
+      ]
+    }
+  ]
 }
 ```
 

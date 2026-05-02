@@ -92,6 +92,62 @@ async def test_make_response_endpoint_builds_upload_client_after_lease(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_make_response_endpoint_forwards_structured_message_without_file_upload(monkeypatch) -> None:
+    """Structured message attachments should use the core message contract, not file_urls upload."""
+    pytest.importorskip("agents")
+
+    from agency_swarm.integrations.fastapi_utils import endpoint_handlers
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import make_response_endpoint
+    from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest
+
+    structured_message = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "input_image",
+                    "image_url": "data:image/png;base64,AAAA",
+                },
+                {"type": "input_text", "text": "Describe this image."},
+            ],
+        }
+    ]
+    seen_message = None
+
+    class _ThreadManager:
+        def get_all_messages(self):
+            return []
+
+    class _Response:
+        final_output = "ok"
+
+    class _Agency:
+        def __init__(self):
+            self.thread_manager = _ThreadManager()
+
+        async def get_response(self, **kwargs):
+            nonlocal seen_message
+            seen_message = kwargs["message"]
+            return _Response()
+
+    async def _attach_noop(_agency):
+        return None
+
+    async def _unexpected_upload(*_args, **_kwargs):
+        raise AssertionError("structured message input must not call file_urls upload")
+
+    monkeypatch.setattr(endpoint_handlers, "attach_persistent_mcp_servers", _attach_noop)
+    monkeypatch.setattr(endpoint_handlers, "upload_from_urls", _unexpected_upload)
+
+    handler = make_response_endpoint(BaseRequest, lambda **_: _Agency(), verify_token=lambda: None)
+    response = await handler(BaseRequest(message=structured_message), token=None)
+
+    assert response["response"] == "ok"
+    assert seen_message == structured_message
+    assert "file_ids_map" not in response
+
+
+@pytest.mark.asyncio
 async def test_make_response_endpoint_serializes_singleton_agency_requests(monkeypatch) -> None:
     """Concurrent requests against a cached agency should be serialized by the handler."""
     pytest.importorskip("agents")

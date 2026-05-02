@@ -21,6 +21,8 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+MessageInput = str | list[dict[str, Any]]
+
 
 class ClientConfig(BaseModel):
     """Configuration for overriding the OpenAI client per-request."""
@@ -109,7 +111,13 @@ class RunAgentInputCustom(RunAgentInput):
 
 
 class BaseRequest(BaseModel):
-    message: str
+    message: MessageInput = Field(
+        ...,
+        description=(
+            "User message to start or continue the conversation. Accepts plain text or structured Responses "
+            "input messages, including inline input_image/input_file content."
+        ),
+    )
     chat_history: list[dict[str, Any]] | None = Field(
         default=None,
         description=(

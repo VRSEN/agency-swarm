@@ -157,6 +157,71 @@ async def test_make_stream_endpoint_background_cleanup_without_stream_consumptio
 
 
 @pytest.mark.asyncio
+async def test_make_stream_endpoint_forwards_structured_message_without_file_upload(monkeypatch) -> None:
+    """Streaming FastAPI requests should preserve structured inline attachments."""
+    pytest.importorskip("agents")
+
+    from agency_swarm.agent.execution_stream_response import StreamingRunResponse
+    from agency_swarm.integrations.fastapi_utils import endpoint_handlers
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import ActiveRunRegistry, make_stream_endpoint
+    from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest
+
+    class _HttpRequest:
+        async def is_disconnected(self) -> bool:
+            return False
+
+    class _ThreadManager:
+        def get_all_messages(self):
+            return []
+
+    structured_message = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "input_file", "filename": "report.pdf", "file_data": "data:application/pdf;base64,AAAA"},
+                {"type": "input_text", "text": "Summarize this file."},
+            ],
+        }
+    ]
+    seen_message = None
+
+    class _Agency:
+        def __init__(self):
+            self.thread_manager = _ThreadManager()
+
+        def get_response_stream(self, **kwargs):
+            nonlocal seen_message
+            seen_message = kwargs["message"]
+
+            async def _stream():
+                if False:
+                    yield {}
+
+            return StreamingRunResponse(_stream())
+
+    async def _attach_noop(_agency):
+        return None
+
+    async def _unexpected_upload(*_args, **_kwargs):
+        raise AssertionError("structured message input must not call file_urls upload")
+
+    monkeypatch.setattr(endpoint_handlers, "attach_persistent_mcp_servers", _attach_noop)
+    monkeypatch.setattr(endpoint_handlers, "upload_from_urls", _unexpected_upload)
+
+    handler = make_stream_endpoint(
+        BaseRequest,
+        lambda **_: _Agency(),
+        verify_token=lambda: None,
+        run_registry=ActiveRunRegistry(),
+    )
+    response = await handler(http_request=_HttpRequest(), request=BaseRequest(message=structured_message), token=None)
+    chunks = [chunk async for chunk in response.body_iterator]
+
+    assert seen_message == structured_message
+    assert any(chunk.startswith("event: messages") for chunk in chunks)
+
+
+@pytest.mark.asyncio
 async def test_codex_streaming_reinjects_missing_tool_call_into_completed_event(monkeypatch) -> None:
     """Codex-configured streaming should surface a streamed function call in completed output."""
     from openai.types.responses import ResponseFunctionToolCall
