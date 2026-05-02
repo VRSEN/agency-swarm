@@ -8,6 +8,7 @@ import gc
 from weakref import WeakKeyDictionary
 
 import pytest
+from pydantic import ValidationError
 
 
 @pytest.mark.asyncio
@@ -107,6 +108,7 @@ async def test_make_response_endpoint_forwards_structured_message_without_file_u
                 {
                     "type": "input_image",
                     "image_url": "data:image/png;base64,AAAA",
+                    "detail": "auto",
                 },
                 {"type": "input_text", "text": "Describe this image."},
             ],
@@ -145,6 +147,40 @@ async def test_make_response_endpoint_forwards_structured_message_without_file_u
     assert response["response"] == "ok"
     assert seen_message == structured_message
     assert "file_ids_map" not in response
+
+
+def test_base_request_rejects_invalid_structured_messages() -> None:
+    """The public request model should reject loose object arrays at validation."""
+    from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest
+
+    invalid_messages = [
+        [],
+        [{"foo": "bar"}],
+        [{"role": "user"}],
+        [{"role": "user", "content": []}],
+        [{"role": "user", "content": [{"text": "Missing type"}]}],
+        [{"role": "user", "content": [{"type": "input_text"}]}],
+        [{"role": "user", "content": [{"type": "input_image", "detail": "auto"}]}],
+        [{"role": "user", "content": [{"type": "input_file", "filename": "report.pdf"}]}],
+    ]
+
+    for message in invalid_messages:
+        with pytest.raises(ValidationError):
+            BaseRequest.model_validate({"message": message})
+
+
+def test_base_request_message_schema_describes_structured_content() -> None:
+    """Generated OpenAPI should expose the structured Responses content contract."""
+    from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest
+
+    message_schema = BaseRequest.model_json_schema()["properties"]["message"]
+
+    assert message_schema["anyOf"][0] == {"type": "string"}
+    structured_schema = message_schema["anyOf"][1]
+    assert structured_schema["minItems"] == 1
+    content_schema = structured_schema["items"]["properties"]["content"]
+    content_types = {option["properties"]["type"]["const"] for option in content_schema["items"]["oneOf"]}
+    assert content_types == {"input_text", "input_image", "input_file"}
 
 
 @pytest.mark.asyncio
