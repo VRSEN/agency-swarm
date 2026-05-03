@@ -1255,10 +1255,15 @@ class _CodexStreamedOutputItem:
 
 def _codex_output_item_key(item: Any) -> tuple[str | None, str | None, str | None]:
     """Return a stable identity key for Codex streamed/completed output items."""
+    item_type = getattr(item, "type", None)
+    call_id = getattr(item, "call_id", None)
+    if item_type == "function_call" and call_id is not None:
+        return (item_type, None, call_id)
+
     return (
-        getattr(item, "type", None),
+        item_type,
         getattr(item, "id", None),
-        getattr(item, "call_id", None),
+        call_id,
     )
 
 

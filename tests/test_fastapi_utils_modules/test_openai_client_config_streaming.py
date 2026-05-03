@@ -302,6 +302,54 @@ async def test_codex_streaming_does_not_duplicate_tool_call_already_in_completed
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("completed_id", ["fc-regenerated", None])
+async def test_codex_streaming_dedupes_tool_call_by_call_id_when_completed_id_changes(
+    monkeypatch,
+    completed_id: str | None,
+) -> None:
+    """Codex may complete the same function call with a regenerated or absent item id."""
+    from openai.types.responses import ResponseFunctionToolCall
+    from openai.types.responses.response_completed_event import ResponseCompletedEvent
+    from openai.types.responses.response_output_item_done_event import ResponseOutputItemDoneEvent
+
+    streamed_tool_call = ResponseFunctionToolCall(
+        arguments='{"q":"weather"}',
+        call_id="call-1",
+        name="lookup_weather",
+        type="function_call",
+        id="fc-streamed",
+        status="completed",
+    )
+    completed_tool_call = ResponseFunctionToolCall.model_construct(
+        arguments='{"q":"weather"}',
+        call_id="call-1",
+        name="lookup_weather",
+        type="function_call",
+        id=completed_id,
+        status="completed",
+    )
+    observed = await _collect_codex_stream_events(
+        monkeypatch,
+        [
+            ResponseOutputItemDoneEvent(
+                item=streamed_tool_call,
+                output_index=0,
+                sequence_number=1,
+                type="response.output_item.done",
+            ),
+            ResponseCompletedEvent(
+                response=_build_response([completed_tool_call]),
+                sequence_number=2,
+                type="response.completed",
+            ),
+        ],
+    )
+
+    assert [item.call_id for item in observed[-1].response.output] == ["call-1"]
+    assert observed[-1].response.output == [completed_tool_call]
+
+
+@pytest.mark.asyncio
 async def test_codex_streaming_reinjects_missing_message_into_completed_event(monkeypatch) -> None:
     """Codex-configured streaming should surface streamed assistant text in completed output."""
     from openai.types.responses import ResponseOutputMessage, ResponseOutputText
