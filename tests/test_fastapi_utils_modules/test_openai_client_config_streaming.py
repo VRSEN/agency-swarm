@@ -302,6 +302,41 @@ async def test_codex_streaming_does_not_duplicate_tool_call_already_in_completed
 
 
 @pytest.mark.asyncio
+async def test_codex_streaming_reinjects_missing_message_into_completed_event(monkeypatch) -> None:
+    """Codex-configured streaming should surface streamed assistant text in completed output."""
+    from openai.types.responses import ResponseOutputMessage, ResponseOutputText
+    from openai.types.responses.response_completed_event import ResponseCompletedEvent
+    from openai.types.responses.response_output_item_done_event import ResponseOutputItemDoneEvent
+
+    message = ResponseOutputMessage(
+        id="msg-1",
+        content=[ResponseOutputText(annotations=[], logprobs=[], text="silver compass", type="output_text")],
+        role="assistant",
+        status="completed",
+        type="message",
+    )
+    observed = await _collect_codex_stream_events(
+        monkeypatch,
+        [
+            ResponseOutputItemDoneEvent(
+                item=message,
+                output_index=0,
+                sequence_number=1,
+                type="response.output_item.done",
+            ),
+            ResponseCompletedEvent(
+                response=_build_response([]),
+                sequence_number=2,
+                type="response.completed",
+            ),
+        ],
+    )
+
+    assert [event.type for event in observed] == ["response.output_item.done", "response.completed"]
+    assert observed[-1].response.output == [message]
+
+
+@pytest.mark.asyncio
 async def test_codex_streaming_passes_text_only_events_through_unchanged(monkeypatch) -> None:
     """Codex-configured streaming should leave text-only responses unchanged."""
     from openai.types.responses import ResponseOutputMessage, ResponseOutputText

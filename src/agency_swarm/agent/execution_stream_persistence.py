@@ -264,16 +264,26 @@ def _persist_streamed_items(
     if agency_context.thread_manager is None:
         return
 
-    # Get new_items directly from streaming_result - these are the same Python objects
-    # that were emitted during streaming via RunItemStreamEvent
+    # Prefer final SDK items. If a streaming wrapper completed successfully but the
+    # final result omitted new_items, fall back to the run items already observed
+    # in the stream so the turn is still committed for replay.
     new_items: list[RunItem] = getattr(streaming_result, "new_items", None) or []
     if not new_items:
-        logger.warning(
-            "streaming_result.new_items is empty or missing - skipping final persistence. "
-            "This may indicate a guardrail trip (expected) or an SDK issue (unexpected)."
-        )
-        return
-
+        if collected_items:
+            logger.warning(
+                "streaming_result.new_items is empty or missing - using %d collected streamed item(s) "
+                "for final persistence.",
+                len(collected_items),
+            )
+            new_items = collected_items
+        else:
+            if hasattr(agency_context.thread_manager, "persist"):
+                agency_context.thread_manager.persist()
+            logger.warning(
+                "streaming_result.new_items is empty or missing - skipping final item persistence. "
+                "This may indicate a guardrail trip (expected) or an SDK issue (unexpected)."
+            )
+            return
     assistant_messages = [item for item in collected_items if isinstance(item, MessageOutputItem)]
     citations_by_message = (
         extract_direct_file_annotations(assistant_messages, agent_name=agent.name) if assistant_messages else {}

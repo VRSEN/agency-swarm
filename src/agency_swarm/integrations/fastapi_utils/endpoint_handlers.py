@@ -1185,10 +1185,10 @@ def _is_codex_base_url(value: str | None) -> bool:
 
 
 class _CodexAsyncStream:
-    """Async iterator wrapper that patches missing function calls in ResponseCompletedEvent.
+    """Async iterator wrapper that patches missing output items in ResponseCompletedEvent.
 
-    Wraps the raw AsyncStream returned by _fetch_response so that function_call
-    items streamed via ResponseOutputItemDoneEvent but omitted from
+    Wraps the raw AsyncStream returned by _fetch_response so that items streamed
+    via ResponseOutputItemDoneEvent but omitted from
     ResponseCompletedEvent.response.output are injected back before the agents
     SDK processes the completed response.
     """
@@ -1196,7 +1196,7 @@ class _CodexAsyncStream:
     def __init__(self, stream):
         self._stream = stream
         self._iter = stream.__aiter__()
-        self._fn_calls: list = []
+        self._output_items: list = []
 
     def __aiter__(self):
         return self
@@ -1204,23 +1204,21 @@ class _CodexAsyncStream:
     async def __anext__(self):
         from openai.types.responses import (
             ResponseCompletedEvent,
-            ResponseFunctionToolCall,
             ResponseOutputItemDoneEvent,
         )
 
         chunk = await self._iter.__anext__()
 
         if isinstance(chunk, ResponseOutputItemDoneEvent):
-            if isinstance(chunk.item, ResponseFunctionToolCall):
-                self._fn_calls.append(chunk.item)
-        elif isinstance(chunk, ResponseCompletedEvent) and self._fn_calls:
-            existing = {getattr(i, "call_id", None) for i in chunk.response.output}
-            missing = [fc for fc in self._fn_calls if fc.call_id not in existing]
+            self._output_items.append(chunk.item)
+        elif isinstance(chunk, ResponseCompletedEvent) and self._output_items:
+            existing = {_codex_output_item_key(item) for item in chunk.response.output}
+            missing = [item for item in self._output_items if _codex_output_item_key(item) not in existing]
             if missing:
                 logger.debug(
-                    "Codex: injecting %d missing function call(s): %s",
+                    "Codex: injecting %d missing completed output item(s): %s",
                     len(missing),
-                    [getattr(fc, "name", None) for fc in missing],
+                    [getattr(item, "type", None) for item in missing],
                 )
                 patched = list(chunk.response.output) + missing
                 try:
@@ -1246,11 +1244,20 @@ class _CodexAsyncStream:
         await self._iter.aclose()
 
 
+def _codex_output_item_key(item: Any) -> tuple[str | None, str | None, str | None]:
+    """Return a stable identity key for Codex streamed/completed output items."""
+    return (
+        getattr(item, "type", None),
+        getattr(item, "id", None),
+        getattr(item, "call_id", None),
+    )
+
+
 def _apply_codex_compatibility_model_settings(agent: Agent) -> None:
     """Strip unsupported Responses parameters for the Codex browser-auth backend.
 
     Patch the model's _fetch_response on the instance (not via subclass) to
-    wrap the stream in _CodexAsyncStream, which injects any function-call items that
+    wrap the stream in _CodexAsyncStream, which injects any output items that
     the Codex endpoint streams via ResponseOutputItemDoneEvent but omits from
     ResponseCompletedEvent.response.output.
     """

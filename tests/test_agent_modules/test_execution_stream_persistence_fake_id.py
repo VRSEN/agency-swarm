@@ -136,6 +136,75 @@ def test_persist_streamed_items_keeps_structured_file_input_for_follow_up_replay
     assert replayed_user["content"][1] == file_part
 
 
+def test_persist_streamed_items_uses_collected_items_when_final_new_items_empty() -> None:
+    """Empty final new_items should still commit collected streamed output without dropping file input."""
+    file_part = {
+        "type": "input_file",
+        "filename": "proof.pdf",
+        "file_data": "data:application/pdf;base64,JVBERi0xLjQ=",
+    }
+    user_message = {
+        "type": "message",
+        "role": "user",
+        "content": [{"type": "input_text", "text": "Read phrase two."}, file_part],
+        "agent": "AttachmentReader",
+        "callerAgent": None,
+        "agent_run_id": "agent_run_attachment",
+        "history_protocol": MessageFormatter.HISTORY_PROTOCOL_RESPONSES,
+        "timestamp": 1,
+    }
+    assistant_item = _FakeRunItem(
+        {
+            "type": "message",
+            "id": "msg_attachment_answer",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "silver compass"}],
+        }
+    )
+
+    thread_manager = _DummyThreadManager(messages=[user_message])
+    agency_context = AgencyContext(agency_instance=None, thread_manager=thread_manager)
+    agent = Agent(name="AttachmentReader", instructions="noop")
+
+    _persist_streamed_items(
+        streaming_result=_DummyStreamResult([]),
+        metadata_store=StreamMetadataStore(
+            by_item={id(assistant_item): ("AttachmentReader", "agent_run_attachment", None, 2)}
+        ),
+        collected_items=[assistant_item],
+        agent=agent,
+        sender_name=None,
+        parent_run_id=None,
+        run_trace_id="trace",
+        fallback_agent_run_id="agent_run_attachment",
+        agency_context=agency_context,
+        initial_saved_count=0,
+    )
+
+    persisted = thread_manager.get_all_messages()
+    assert any(message.get("role") == "assistant" for message in persisted)
+    persisted_user = next(message for message in persisted if message.get("role") == "user")
+    assert persisted_user["content"][1] == file_part
+
+    follow_up_history = MessageFormatter.prepare_history_for_runner(
+        [{"role": "user", "content": "What follows phrase one?"}],
+        agent,
+        None,
+        agency_context,
+        agent_run_id="agent_run_follow_up",
+        run_trace_id="trace_follow_up",
+    )
+
+    replayed_user = next(
+        message
+        for message in follow_up_history
+        if message.get("role") == "user"
+        and isinstance(message.get("content"), list)
+        and any(part.get("type") == "input_file" for part in message["content"])
+    )
+    assert replayed_user["content"][1] == file_part
+
+
 @patch(
     "agency_swarm.agent.execution_stream_persistence.MessageFilter.remove_orphaned_messages",
     side_effect=lambda x: x,
