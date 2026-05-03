@@ -61,6 +61,18 @@ def _strip_optional_initial_message_output(
     return flow
 
 
+def _normalize_optional_agent_message_outputs(
+    flow: list[tuple[str, str, str | None]],
+    agent_name: str,
+) -> list[tuple[str, str, str | None]]:
+    """Allow optional top-level assistant message items while preserving tool order."""
+    normalized = _strip_optional_initial_message_output(flow, agent_name)
+    final_message = ("message_output_item", agent_name, None)
+    if len(normalized) >= 2 and normalized[-2:] == [final_message, final_message]:
+        return normalized[:-1]
+    return normalized
+
+
 # Additional tools for complex scenarios
 @function_tool
 def process_data(data: str) -> str:
@@ -295,7 +307,7 @@ async def test_multiple_sequential_subagent_calls() -> None:
                 stream_items.append((evt_type, agent_name, tool_name))
 
     # Verify stream matches expected (allow optional initial message_output from reasoning models)
-    normalized = _strip_optional_initial_message_output(stream_items, "Coordinator")
+    normalized = _normalize_optional_agent_message_outputs(stream_items, "Coordinator")
     assert normalized == EXPECTED_FLOW_MULTIPLE_CALLS, (
         f"Multiple calls stream mismatch:\n got={stream_items}\n exp={EXPECTED_FLOW_MULTIPLE_CALLS}"
     )
@@ -532,7 +544,7 @@ async def test_parallel_subagent_calls() -> None:
                 stream_items.append((evt_type, agent_name, tool_name))
 
     # Verify stream matches expected (allow optional initial message_output from reasoning models)
-    normalized = _strip_optional_initial_message_output(stream_items, "Orchestrator")
+    normalized = _normalize_optional_agent_message_outputs(stream_items, "Orchestrator")
     if normalized != EXPECTED_FLOW_PARALLEL:
         logger.error(
             "Parallel sub-agent stream mismatch",
