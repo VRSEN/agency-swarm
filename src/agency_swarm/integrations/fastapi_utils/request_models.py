@@ -29,78 +29,13 @@ _MESSAGE_SCHEMA: dict[str, Any] = {
             "minItems": 1,
             "items": {
                 "type": "object",
-                "additionalProperties": False,
-                "required": ["role", "content"],
-                "properties": {
-                    "role": {"type": "string", "enum": ["user", "system", "developer"]},
-                    "type": {"type": "string", "const": "message"},
-                    "status": {"type": "string", "enum": ["in_progress", "completed", "incomplete"]},
-                    "content": {
-                        "type": "array",
-                        "minItems": 1,
-                        "items": {
-                            "oneOf": [
-                                {
-                                    "type": "object",
-                                    "additionalProperties": False,
-                                    "required": ["type", "text"],
-                                    "properties": {
-                                        "type": {"type": "string", "const": "input_text"},
-                                        "text": {"type": "string"},
-                                    },
-                                },
-                                {
-                                    "type": "object",
-                                    "additionalProperties": False,
-                                    "required": ["type", "detail"],
-                                    "properties": {
-                                        "type": {"type": "string", "const": "input_image"},
-                                        "detail": {"type": "string", "enum": ["low", "high", "auto"]},
-                                        "file_id": {"type": ["string", "null"]},
-                                        "image_url": {"type": ["string", "null"]},
-                                    },
-                                    "anyOf": [
-                                        {"required": ["file_id"]},
-                                        {"required": ["image_url"]},
-                                    ],
-                                },
-                                {
-                                    "type": "object",
-                                    "additionalProperties": False,
-                                    "required": ["type"],
-                                    "properties": {
-                                        "type": {"type": "string", "const": "input_file"},
-                                        "file_data": {"type": "string"},
-                                        "file_id": {"type": ["string", "null"]},
-                                        "file_url": {"type": "string"},
-                                        "filename": {"type": "string"},
-                                    },
-                                    "anyOf": [
-                                        {"required": ["file_data"]},
-                                        {"required": ["file_id"]},
-                                        {"required": ["file_url"]},
-                                    ],
-                                },
-                            ]
-                        },
-                    },
-                },
+                "additionalProperties": True,
             },
         },
     ]
 }
 
 MessageInput = Annotated[str | list[dict[str, Any]], WithJsonSchema(_MESSAGE_SCHEMA)]
-
-_MESSAGE_KEYS = {"role", "content", "type", "status"}
-_MESSAGE_ROLES = {"user", "system", "developer"}
-_MESSAGE_STATUSES = {"in_progress", "completed", "incomplete"}
-_CONTENT_KEYS = {
-    "input_text": {"type", "text"},
-    "input_image": {"type", "detail", "file_id", "image_url"},
-    "input_file": {"type", "file_data", "file_id", "file_url", "filename"},
-}
-_IMAGE_DETAILS = {"low", "high", "auto"}
 
 
 class ClientConfig(BaseModel):
@@ -236,74 +171,9 @@ class BaseRequest(BaseModel):
         if not v:
             raise ValueError("message must contain at least one structured Responses message")
         for item in v:
-            _validate_structured_message(item)
+            if not isinstance(item, dict):
+                raise ValueError("structured Responses message items must be objects")
         return v
-
-
-def _validate_structured_message(message: dict[str, Any]) -> None:
-    extra_keys = set(message) - _MESSAGE_KEYS
-    if extra_keys:
-        raise ValueError(f"structured message contains unsupported fields: {sorted(extra_keys)}")
-
-    role = message.get("role")
-    if role not in _MESSAGE_ROLES:
-        raise ValueError("structured message role must be one of user, system, or developer")
-
-    if "type" in message and message["type"] != "message":
-        raise ValueError("structured message type must be 'message' when provided")
-
-    if "status" in message and message["status"] not in _MESSAGE_STATUSES:
-        raise ValueError("structured message status must be one of in_progress, completed, or incomplete")
-
-    content = message.get("content")
-    if not isinstance(content, list) or not content:
-        raise ValueError("structured message content must contain at least one item")
-
-    for item in content:
-        _validate_structured_content(item)
-
-
-def _validate_structured_content(content: Any) -> None:
-    if not isinstance(content, dict):
-        raise ValueError("structured message content items must be objects")
-
-    content_type = content.get("type")
-    if content_type not in _CONTENT_KEYS:
-        raise ValueError("structured message content type must be input_text, input_image, or input_file")
-
-    extra_keys = set(content) - _CONTENT_KEYS[content_type]
-    if extra_keys:
-        raise ValueError(f"structured message content contains unsupported fields: {sorted(extra_keys)}")
-
-    if content_type == "input_text":
-        _validate_text_content(content)
-    elif content_type == "input_image":
-        _validate_image_content(content)
-    else:
-        _validate_file_content(content)
-
-
-def _validate_text_content(content: dict[str, Any]) -> None:
-    if not isinstance(content.get("text"), str):
-        raise ValueError("input_text content requires string text")
-
-
-def _validate_image_content(content: dict[str, Any]) -> None:
-    if content.get("detail") not in _IMAGE_DETAILS:
-        raise ValueError("input_image content requires detail of low, high, or auto")
-    if not _has_non_empty_string(content, "file_id") and not _has_non_empty_string(content, "image_url"):
-        raise ValueError("input_image content requires file_id or image_url")
-
-
-def _validate_file_content(content: dict[str, Any]) -> None:
-    if not any(_has_non_empty_string(content, key) for key in ("file_data", "file_id", "file_url")):
-        raise ValueError("input_file content requires file_data, file_id, or file_url")
-    if "filename" in content and not isinstance(content["filename"], str):
-        raise ValueError("input_file content filename must be a string")
-
-
-def _has_non_empty_string(value: dict[str, Any], key: str) -> bool:
-    return isinstance(value.get(key), str) and bool(value[key])
 
 
 class LogRequest(BaseModel):

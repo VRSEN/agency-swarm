@@ -112,7 +112,8 @@ async def test_make_response_endpoint_forwards_structured_message_without_file_u
                 },
                 {"type": "input_text", "text": "Describe this image."},
             ],
-        }
+        },
+        {"role": "user", "content": "Describe this scene. How many trees do you see?"},
     ]
     seen_message = None
 
@@ -150,18 +151,12 @@ async def test_make_response_endpoint_forwards_structured_message_without_file_u
 
 
 def test_base_request_rejects_invalid_structured_messages() -> None:
-    """The public request model should reject loose object arrays at validation."""
+    """The public request model should reject non-object structured items."""
     from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest
 
     invalid_messages = [
         [],
-        [{"foo": "bar"}],
-        [{"role": "user"}],
-        [{"role": "user", "content": []}],
-        [{"role": "user", "content": [{"text": "Missing type"}]}],
-        [{"role": "user", "content": [{"type": "input_text"}]}],
-        [{"role": "user", "content": [{"type": "input_image", "detail": "auto"}]}],
-        [{"role": "user", "content": [{"type": "input_file", "filename": "report.pdf"}]}],
+        ["not an object"],
     ]
 
     for message in invalid_messages:
@@ -169,8 +164,35 @@ def test_base_request_rejects_invalid_structured_messages() -> None:
             BaseRequest.model_validate({"message": message})
 
 
-def test_base_request_message_schema_describes_structured_content() -> None:
-    """Generated OpenAPI should expose the structured Responses content contract."""
+def test_base_request_accepts_sdk_easy_input_message_string_content() -> None:
+    """EasyInputMessageParam content may be plain text in current OpenAI SDK types."""
+    from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest
+
+    message = [{"role": "user", "content": "Describe this scene. How many trees do you see?"}]
+
+    request = BaseRequest.model_validate({"message": message})
+
+    assert request.message == message
+
+
+def test_base_request_does_not_own_image_detail_literals() -> None:
+    """The OpenAI SDK/API should own image detail literals, not the FastAPI shim."""
+    from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest
+
+    message = [
+        {
+            "role": "user",
+            "content": [{"type": "input_image", "image_url": "data:image/png;base64,AAAA", "detail": "original"}],
+        }
+    ]
+
+    request = BaseRequest.model_validate({"message": message})
+
+    assert request.message == message
+
+
+def test_base_request_message_schema_keeps_responses_items_pass_through() -> None:
+    """Generated OpenAPI should avoid owning a partial Responses content schema."""
     from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest
 
     message_schema = BaseRequest.model_json_schema()["properties"]["message"]
@@ -178,9 +200,7 @@ def test_base_request_message_schema_describes_structured_content() -> None:
     assert message_schema["anyOf"][0] == {"type": "string"}
     structured_schema = message_schema["anyOf"][1]
     assert structured_schema["minItems"] == 1
-    content_schema = structured_schema["items"]["properties"]["content"]
-    content_types = {option["properties"]["type"]["const"] for option in content_schema["items"]["oneOf"]}
-    assert content_types == {"input_text", "input_image", "input_file"}
+    assert structured_schema["items"] == {"type": "object", "additionalProperties": True}
 
 
 @pytest.mark.asyncio
