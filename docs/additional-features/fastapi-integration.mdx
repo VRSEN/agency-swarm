@@ -442,6 +442,8 @@ For inline Responses attachments that should not be uploaded through the Files A
 }
 ```
 
+With manual `chat_history`, clients can keep structured attachment parts in history so follow-up turns work without reattaching. This may resend inline attachment content or references; it does not reuse server-managed state, `previous_response_id`, Conversations, or `file_id` values.
+
 The response includes `file_ids_map` with the uploaded file IDs:
 
 ```json
