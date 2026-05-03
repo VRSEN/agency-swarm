@@ -451,7 +451,7 @@ def _persist_streamed_items(
         run_id = existing_item.get("agent_run_id")
         if existing_key is not None and existing_key in keys_to_replace:
             continue
-        if isinstance(run_id, str) and run_id in run_ids_to_replace:
+        if isinstance(run_id, str) and run_id in run_ids_to_replace and not _is_initiating_input_message(existing_item):
             continue
         origin = existing_item.get("message_origin")
         if isinstance(origin, str):
@@ -484,3 +484,9 @@ def _message_key(message: TResponseInputItem) -> tuple[str, str | None, str | No
         return ("call", call_id, message.get("type"))
 
     return None
+
+
+def _is_initiating_input_message(message: TResponseInputItem) -> bool:
+    if not isinstance(message, dict):
+        return False
+    return message.get("type") == "message" and message.get("role") in {"user", "system", "developer"}

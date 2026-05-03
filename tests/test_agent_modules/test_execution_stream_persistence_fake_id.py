@@ -18,6 +18,7 @@ from agency_swarm.agent.execution_stream_persistence import (
     _compute_content_hash,
     _persist_streamed_items,
 )
+from agency_swarm.messages import MessageFormatter
 
 
 class _DummyThreadManager:
@@ -26,6 +27,19 @@ class _DummyThreadManager:
 
     def get_all_messages(self) -> list[dict]:
         return list(self._messages)
+
+    def get_conversation_history(self, agent: str, caller_agent: str | None = None) -> list[dict]:
+        if caller_agent is None:
+            return [message for message in self._messages if message.get("callerAgent") is None]
+        return [
+            message
+            for message in self._messages
+            if (message.get("agent") == agent and message.get("callerAgent") == caller_agent)
+            or (message.get("agent") == caller_agent and message.get("callerAgent") == agent)
+        ]
+
+    def add_messages(self, messages: list[dict]) -> None:
+        self._messages.extend(messages)
 
     def replace_messages(self, messages: list[dict]) -> None:
         self._messages = list(messages)
@@ -41,6 +55,85 @@ class _DummyStreamResult:
 
     def to_input_list(self) -> list[dict]:
         return list(self._input_list)
+
+
+class _FakeRunItem:
+    def __init__(self, item: dict) -> None:
+        self.raw_item = item
+        self.type = item.get("type")
+        self.id = item.get("id")
+        self.call_id = item.get("call_id")
+
+    def to_input_item(self) -> dict:
+        return dict(self.raw_item)
+
+
+def test_persist_streamed_items_keeps_structured_file_input_for_follow_up_replay() -> None:
+    """Streaming final persistence must not drop the initiating structured attachment message."""
+    file_part = {
+        "type": "input_file",
+        "filename": "proof.pdf",
+        "file_data": "data:application/pdf;base64,JVBERi0xLjQ=",
+    }
+    user_message = {
+        "type": "message",
+        "role": "user",
+        "content": [{"type": "input_text", "text": "Read phrase two."}, file_part],
+        "agent": "AttachmentReader",
+        "callerAgent": None,
+        "agent_run_id": "agent_run_attachment",
+        "history_protocol": MessageFormatter.HISTORY_PROTOCOL_RESPONSES,
+        "timestamp": 1,
+    }
+    assistant_item = _FakeRunItem(
+        {
+            "type": "message",
+            "id": "msg_attachment_answer",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "silver compass"}],
+        }
+    )
+
+    thread_manager = _DummyThreadManager(messages=[user_message])
+    agency_context = AgencyContext(agency_instance=None, thread_manager=thread_manager)
+    agent = Agent(name="AttachmentReader", instructions="noop")
+
+    _persist_streamed_items(
+        streaming_result=_DummyStreamResult([assistant_item]),
+        metadata_store=StreamMetadataStore(
+            by_item={id(assistant_item): ("AttachmentReader", "agent_run_attachment", None, 2)}
+        ),
+        collected_items=[assistant_item],
+        agent=agent,
+        sender_name=None,
+        parent_run_id=None,
+        run_trace_id="trace",
+        fallback_agent_run_id="agent_run_attachment",
+        agency_context=agency_context,
+        initial_saved_count=0,
+    )
+
+    persisted = thread_manager.get_all_messages()
+    persisted_user = next(message for message in persisted if message.get("role") == "user")
+    assert persisted_user["content"][1] == file_part
+
+    follow_up_history = MessageFormatter.prepare_history_for_runner(
+        [{"role": "user", "content": "What follows phrase one?"}],
+        agent,
+        None,
+        agency_context,
+        agent_run_id="agent_run_follow_up",
+        run_trace_id="trace_follow_up",
+    )
+
+    replayed_user = next(
+        message
+        for message in follow_up_history
+        if message.get("role") == "user"
+        and isinstance(message.get("content"), list)
+        and any(part.get("type") == "input_file" for part in message["content"])
+    )
+    assert replayed_user["content"][1] == file_part
 
 
 @patch(
