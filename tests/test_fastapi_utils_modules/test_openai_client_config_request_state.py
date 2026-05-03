@@ -8,6 +8,7 @@ import gc
 from weakref import WeakKeyDictionary
 
 import pytest
+from pydantic import ValidationError
 
 
 @pytest.mark.asyncio
@@ -89,6 +90,117 @@ async def test_make_response_endpoint_builds_upload_client_after_lease(monkeypat
 
     assert response["response"] == "ok"
     assert response["file_ids_map"] == {"doc.txt": "file-123"}
+
+
+@pytest.mark.asyncio
+async def test_make_response_endpoint_forwards_structured_message_without_file_upload(monkeypatch) -> None:
+    """Structured message attachments should use the core message contract, not file_urls upload."""
+    pytest.importorskip("agents")
+
+    from agency_swarm.integrations.fastapi_utils import endpoint_handlers
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import make_response_endpoint
+    from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest
+
+    structured_message = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "input_image",
+                    "image_url": "data:image/png;base64,AAAA",
+                    "detail": "auto",
+                },
+                {"type": "input_text", "text": "Describe this image."},
+            ],
+        },
+        {"role": "user", "content": "Describe this scene. How many trees do you see?"},
+    ]
+    seen_message = None
+
+    class _ThreadManager:
+        def get_all_messages(self):
+            return []
+
+    class _Response:
+        final_output = "ok"
+
+    class _Agency:
+        def __init__(self):
+            self.thread_manager = _ThreadManager()
+
+        async def get_response(self, **kwargs):
+            nonlocal seen_message
+            seen_message = kwargs["message"]
+            return _Response()
+
+    async def _attach_noop(_agency):
+        return None
+
+    async def _unexpected_upload(*_args, **_kwargs):
+        raise AssertionError("structured message input must not call file_urls upload")
+
+    monkeypatch.setattr(endpoint_handlers, "attach_persistent_mcp_servers", _attach_noop)
+    monkeypatch.setattr(endpoint_handlers, "upload_from_urls", _unexpected_upload)
+
+    handler = make_response_endpoint(BaseRequest, lambda **_: _Agency(), verify_token=lambda: None)
+    response = await handler(BaseRequest(message=structured_message), token=None)
+
+    assert response["response"] == "ok"
+    assert seen_message == structured_message
+    assert "file_ids_map" not in response
+
+
+def test_base_request_rejects_invalid_structured_messages() -> None:
+    """The public request model should reject non-object structured items."""
+    from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest
+
+    invalid_messages = [
+        [],
+        ["not an object"],
+    ]
+
+    for message in invalid_messages:
+        with pytest.raises(ValidationError):
+            BaseRequest.model_validate({"message": message})
+
+
+def test_base_request_accepts_sdk_easy_input_message_string_content() -> None:
+    """EasyInputMessageParam content may be plain text in current OpenAI SDK types."""
+    from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest
+
+    message = [{"role": "user", "content": "Describe this scene. How many trees do you see?"}]
+
+    request = BaseRequest.model_validate({"message": message})
+
+    assert request.message == message
+
+
+def test_base_request_does_not_own_image_detail_literals() -> None:
+    """The OpenAI SDK/API should own image detail literals, not the FastAPI shim."""
+    from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest
+
+    message = [
+        {
+            "role": "user",
+            "content": [{"type": "input_image", "image_url": "data:image/png;base64,AAAA", "detail": "original"}],
+        }
+    ]
+
+    request = BaseRequest.model_validate({"message": message})
+
+    assert request.message == message
+
+
+def test_base_request_message_schema_keeps_responses_items_pass_through() -> None:
+    """Generated OpenAPI should avoid owning a partial Responses content schema."""
+    from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest
+
+    message_schema = BaseRequest.model_json_schema()["properties"]["message"]
+
+    assert message_schema["anyOf"][0] == {"type": "string"}
+    structured_schema = message_schema["anyOf"][1]
+    assert structured_schema["minItems"] == 1
+    assert structured_schema["items"] == {"type": "object", "additionalProperties": True}
 
 
 @pytest.mark.asyncio

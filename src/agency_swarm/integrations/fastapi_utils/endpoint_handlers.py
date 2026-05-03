@@ -1185,10 +1185,10 @@ def _is_codex_base_url(value: str | None) -> bool:
 
 
 class _CodexAsyncStream:
-    """Async iterator wrapper that patches missing function calls in ResponseCompletedEvent.
+    """Async iterator wrapper that patches missing output items in ResponseCompletedEvent.
 
-    Wraps the raw AsyncStream returned by _fetch_response so that function_call
-    items streamed via ResponseOutputItemDoneEvent but omitted from
+    Wraps the raw AsyncStream returned by _fetch_response so that items streamed
+    via ResponseOutputItemDoneEvent but omitted from
     ResponseCompletedEvent.response.output are injected back before the agents
     SDK processes the completed response.
     """
@@ -1196,7 +1196,8 @@ class _CodexAsyncStream:
     def __init__(self, stream):
         self._stream = stream
         self._iter = stream.__aiter__()
-        self._fn_calls: list = []
+        self._output_items: list[_CodexStreamedOutputItem] = []
+        self._output_order_by_key: dict[tuple[str | None, str | None, str | None], tuple[int, int]] = {}
 
     def __aiter__(self):
         return self
@@ -1204,25 +1205,25 @@ class _CodexAsyncStream:
     async def __anext__(self):
         from openai.types.responses import (
             ResponseCompletedEvent,
-            ResponseFunctionToolCall,
             ResponseOutputItemDoneEvent,
         )
 
         chunk = await self._iter.__anext__()
 
         if isinstance(chunk, ResponseOutputItemDoneEvent):
-            if isinstance(chunk.item, ResponseFunctionToolCall):
-                self._fn_calls.append(chunk.item)
-        elif isinstance(chunk, ResponseCompletedEvent) and self._fn_calls:
-            existing = {getattr(i, "call_id", None) for i in chunk.response.output}
-            missing = [fc for fc in self._fn_calls if fc.call_id not in existing]
+            sort_key = _codex_output_sort_key(getattr(chunk, "output_index", None), len(self._output_items))
+            self._output_items.append(_CodexStreamedOutputItem(item=chunk.item, sort_key=sort_key))
+            self._output_order_by_key[_codex_output_item_key(chunk.item)] = sort_key
+        elif isinstance(chunk, ResponseCompletedEvent) and self._output_items:
+            existing = {_codex_output_item_key(item) for item in chunk.response.output}
+            missing = [entry for entry in self._output_items if _codex_output_item_key(entry.item) not in existing]
             if missing:
                 logger.debug(
-                    "Codex: injecting %d missing function call(s): %s",
+                    "Codex: injecting %d missing completed output item(s): %s",
                     len(missing),
-                    [getattr(fc, "name", None) for fc in missing],
+                    [getattr(entry.item, "type", None) for entry in missing],
                 )
-                patched = list(chunk.response.output) + missing
+                patched = _merge_codex_completed_output(chunk.response.output, missing, self._output_order_by_key)
                 try:
                     chunk.response.output = patched
                 except Exception:
@@ -1246,11 +1247,53 @@ class _CodexAsyncStream:
         await self._iter.aclose()
 
 
+@dataclass(frozen=True)
+class _CodexStreamedOutputItem:
+    item: Any
+    sort_key: tuple[int, int]
+
+
+def _codex_output_item_key(item: Any) -> tuple[str | None, str | None, str | None]:
+    """Return a stable identity key for Codex streamed/completed output items."""
+    return (
+        getattr(item, "type", None),
+        getattr(item, "id", None),
+        getattr(item, "call_id", None),
+    )
+
+
+def _codex_output_sort_key(output_index: Any, stream_position: int) -> tuple[int, int]:
+    if isinstance(output_index, bool):
+        return (1, stream_position)
+    if isinstance(output_index, int):
+        return (0, output_index)
+    return (1, stream_position)
+
+
+def _merge_codex_completed_output(
+    completed_output: Sequence[Any],
+    missing: Sequence[_CodexStreamedOutputItem],
+    output_order_by_key: dict[tuple[str | None, str | None, str | None], tuple[int, int]],
+) -> list[Any]:
+    entries: list[tuple[tuple[int, int], int, Any]] = []
+    fallback_offset = len(output_order_by_key)
+
+    for completed_index, item in enumerate(completed_output):
+        sort_key = output_order_by_key.get(_codex_output_item_key(item), (1, fallback_offset + completed_index))
+        entries.append((sort_key, completed_index, item))
+
+    missing_offset = len(completed_output)
+    for missing_index, entry in enumerate(missing):
+        entries.append((entry.sort_key, missing_offset + missing_index, entry.item))
+
+    return [item for _, _, item in sorted(entries)]
+
+
 def _apply_codex_compatibility_model_settings(agent: Agent) -> None:
     """Strip unsupported Responses parameters for the Codex browser-auth backend.
 
     Patch the model's _fetch_response on the instance (not via subclass) to
-    wrap the stream in _CodexAsyncStream, which injects any function-call items that
+    wrap the stream in _CodexAsyncStream, which injects any output items that
     the Codex endpoint streams via ResponseOutputItemDoneEvent but omits from
     ResponseCompletedEvent.response.output.
     """

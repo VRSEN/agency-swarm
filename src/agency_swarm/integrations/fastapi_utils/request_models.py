@@ -1,7 +1,7 @@
 import logging
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, WithJsonSchema, field_validator
 
 try:
     from ag_ui.core import RunAgentInput
@@ -20,6 +20,22 @@ except ImportError:
     _LITELLM_INSTALLED = False
 
 logger = logging.getLogger(__name__)
+
+_MESSAGE_SCHEMA: dict[str, Any] = {
+    "anyOf": [
+        {"type": "string"},
+        {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+                "type": "object",
+                "additionalProperties": True,
+            },
+        },
+    ]
+}
+
+MessageInput = Annotated[str | list[dict[str, Any]], WithJsonSchema(_MESSAGE_SCHEMA)]
 
 
 class ClientConfig(BaseModel):
@@ -109,7 +125,13 @@ class RunAgentInputCustom(RunAgentInput):
 
 
 class BaseRequest(BaseModel):
-    message: str
+    message: MessageInput = Field(
+        ...,
+        description=(
+            "User message to start or continue the conversation. Accepts plain text or structured Responses "
+            "input messages, including inline input_image/input_file content."
+        ),
+    )
     chat_history: list[dict[str, Any]] | None = Field(
         default=None,
         description=(
@@ -140,6 +162,18 @@ class BaseRequest(BaseModel):
         default=None,
         description="Override client configuration (base_url, api_key, litellm_keys, model) for this request only.",
     )
+
+    @field_validator("message")
+    @classmethod
+    def validate_message(cls, v: MessageInput) -> MessageInput:
+        if isinstance(v, str):
+            return v
+        if not v:
+            raise ValueError("message must contain at least one structured Responses message")
+        for item in v:
+            if not isinstance(item, dict):
+                raise ValueError("structured Responses message items must be objects")
+        return v
 
 
 class LogRequest(BaseModel):

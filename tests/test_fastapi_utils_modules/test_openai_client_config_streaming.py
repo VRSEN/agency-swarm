@@ -157,6 +157,71 @@ async def test_make_stream_endpoint_background_cleanup_without_stream_consumptio
 
 
 @pytest.mark.asyncio
+async def test_make_stream_endpoint_forwards_structured_message_without_file_upload(monkeypatch) -> None:
+    """Streaming FastAPI requests should preserve structured inline attachments."""
+    pytest.importorskip("agents")
+
+    from agency_swarm.agent.execution_stream_response import StreamingRunResponse
+    from agency_swarm.integrations.fastapi_utils import endpoint_handlers
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import ActiveRunRegistry, make_stream_endpoint
+    from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest
+
+    class _HttpRequest:
+        async def is_disconnected(self) -> bool:
+            return False
+
+    class _ThreadManager:
+        def get_all_messages(self):
+            return []
+
+    structured_message = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "input_file", "filename": "report.pdf", "file_data": "data:application/pdf;base64,AAAA"},
+                {"type": "input_text", "text": "Summarize this file."},
+            ],
+        }
+    ]
+    seen_message = None
+
+    class _Agency:
+        def __init__(self):
+            self.thread_manager = _ThreadManager()
+
+        def get_response_stream(self, **kwargs):
+            nonlocal seen_message
+            seen_message = kwargs["message"]
+
+            async def _stream():
+                if False:
+                    yield {}
+
+            return StreamingRunResponse(_stream())
+
+    async def _attach_noop(_agency):
+        return None
+
+    async def _unexpected_upload(*_args, **_kwargs):
+        raise AssertionError("structured message input must not call file_urls upload")
+
+    monkeypatch.setattr(endpoint_handlers, "attach_persistent_mcp_servers", _attach_noop)
+    monkeypatch.setattr(endpoint_handlers, "upload_from_urls", _unexpected_upload)
+
+    handler = make_stream_endpoint(
+        BaseRequest,
+        lambda **_: _Agency(),
+        verify_token=lambda: None,
+        run_registry=ActiveRunRegistry(),
+    )
+    response = await handler(http_request=_HttpRequest(), request=BaseRequest(message=structured_message), token=None)
+    chunks = [chunk async for chunk in response.body_iterator]
+
+    assert seen_message == structured_message
+    assert any(chunk.startswith("event: messages") for chunk in chunks)
+
+
+@pytest.mark.asyncio
 async def test_codex_streaming_reinjects_missing_tool_call_into_completed_event(monkeypatch) -> None:
     """Codex-configured streaming should surface a streamed function call in completed output."""
     from openai.types.responses import ResponseFunctionToolCall
@@ -234,6 +299,98 @@ async def test_codex_streaming_does_not_duplicate_tool_call_already_in_completed
 
     assert [item.call_id for item in observed[-1].response.output] == ["call-1"]
     assert observed[-1].response.output == [completed_tool_call]
+
+
+@pytest.mark.asyncio
+async def test_codex_streaming_reinjects_missing_message_into_completed_event(monkeypatch) -> None:
+    """Codex-configured streaming should surface streamed assistant text in completed output."""
+    from openai.types.responses import ResponseOutputMessage, ResponseOutputText
+    from openai.types.responses.response_completed_event import ResponseCompletedEvent
+    from openai.types.responses.response_output_item_done_event import ResponseOutputItemDoneEvent
+
+    message = ResponseOutputMessage(
+        id="msg-1",
+        content=[ResponseOutputText(annotations=[], logprobs=[], text="silver compass", type="output_text")],
+        role="assistant",
+        status="completed",
+        type="message",
+    )
+    observed = await _collect_codex_stream_events(
+        monkeypatch,
+        [
+            ResponseOutputItemDoneEvent(
+                item=message,
+                output_index=0,
+                sequence_number=1,
+                type="response.output_item.done",
+            ),
+            ResponseCompletedEvent(
+                response=_build_response([]),
+                sequence_number=2,
+                type="response.completed",
+            ),
+        ],
+    )
+
+    assert [event.type for event in observed] == ["response.output_item.done", "response.completed"]
+    assert observed[-1].response.output == [message]
+
+
+@pytest.mark.asyncio
+async def test_codex_streaming_reinjects_missing_items_in_output_index_order(monkeypatch) -> None:
+    """Missing streamed items should be merged back before later completed output items."""
+    from openai.types.responses import ResponseFunctionToolCall, ResponseOutputMessage, ResponseOutputText
+    from openai.types.responses.response_completed_event import ResponseCompletedEvent
+    from openai.types.responses.response_output_item_done_event import ResponseOutputItemDoneEvent
+
+    message = ResponseOutputMessage(
+        id="msg-1",
+        content=[ResponseOutputText(annotations=[], logprobs=[], text="first", type="output_text")],
+        role="assistant",
+        status="completed",
+        type="message",
+    )
+    streamed_tool_call = ResponseFunctionToolCall(
+        arguments='{"q":"weather"}',
+        call_id="call-1",
+        name="lookup_weather",
+        type="function_call",
+        id="fc-1",
+        status="completed",
+    )
+    completed_tool_call = ResponseFunctionToolCall(
+        arguments='{"q":"weather"}',
+        call_id="call-1",
+        name="lookup_weather",
+        type="function_call",
+        id="fc-1",
+        status="completed",
+    )
+
+    observed = await _collect_codex_stream_events(
+        monkeypatch,
+        [
+            ResponseOutputItemDoneEvent(
+                item=message,
+                output_index=0,
+                sequence_number=1,
+                type="response.output_item.done",
+            ),
+            ResponseOutputItemDoneEvent(
+                item=streamed_tool_call,
+                output_index=1,
+                sequence_number=2,
+                type="response.output_item.done",
+            ),
+            ResponseCompletedEvent(
+                response=_build_response([completed_tool_call]),
+                sequence_number=3,
+                type="response.completed",
+            ),
+        ],
+    )
+
+    assert observed[-1].response.output == [message, completed_tool_call]
 
 
 @pytest.mark.asyncio

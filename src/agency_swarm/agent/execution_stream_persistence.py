@@ -16,6 +16,12 @@ from agency_swarm.utils.citation_extractor import extract_direct_file_annotation
 
 logger = logging.getLogger(__name__)
 
+_GUARDRAIL_CONTROL_MESSAGE_ORIGINS = {
+    "input_guardrail_error",
+    "input_guardrail_message",
+    "output_guardrail_error",
+}
+
 # Type alias for metadata stored during streaming.
 # Tuple of (agent_name, agent_run_id, caller_name, emission_timestamp).
 # Used to match RunItems between streaming and final persistence.
@@ -264,16 +270,26 @@ def _persist_streamed_items(
     if agency_context.thread_manager is None:
         return
 
-    # Get new_items directly from streaming_result - these are the same Python objects
-    # that were emitted during streaming via RunItemStreamEvent
+    # Prefer final SDK items. If a streaming wrapper completed successfully but the
+    # final result omitted new_items, fall back to the run items already observed
+    # in the stream so the turn is still committed for replay.
     new_items: list[RunItem] = getattr(streaming_result, "new_items", None) or []
     if not new_items:
-        logger.warning(
-            "streaming_result.new_items is empty or missing - skipping final persistence. "
-            "This may indicate a guardrail trip (expected) or an SDK issue (unexpected)."
-        )
-        return
-
+        if collected_items:
+            logger.warning(
+                "streaming_result.new_items is empty or missing - using %d collected streamed item(s) "
+                "for final persistence.",
+                len(collected_items),
+            )
+            new_items = collected_items
+        else:
+            if hasattr(agency_context.thread_manager, "persist"):
+                agency_context.thread_manager.persist()
+            logger.warning(
+                "streaming_result.new_items is empty or missing - skipping final item persistence. "
+                "This may indicate a guardrail trip (expected) or an SDK issue (unexpected)."
+            )
+            return
     assistant_messages = [item for item in collected_items if isinstance(item, MessageOutputItem)]
     citations_by_message = (
         extract_direct_file_annotations(assistant_messages, agent_name=agent.name) if assistant_messages else {}
@@ -451,7 +467,7 @@ def _persist_streamed_items(
         run_id = existing_item.get("agent_run_id")
         if existing_key is not None and existing_key in keys_to_replace:
             continue
-        if isinstance(run_id, str) and run_id in run_ids_to_replace:
+        if isinstance(run_id, str) and run_id in run_ids_to_replace and not _is_initiating_input_message(existing_item):
             continue
         origin = existing_item.get("message_origin")
         if isinstance(origin, str):
@@ -484,3 +500,11 @@ def _message_key(message: TResponseInputItem) -> tuple[str, str | None, str | No
         return ("call", call_id, message.get("type"))
 
     return None
+
+
+def _is_initiating_input_message(message: TResponseInputItem) -> bool:
+    if not isinstance(message, dict):
+        return False
+    if message.get("message_origin") in _GUARDRAIL_CONTROL_MESSAGE_ORIGINS:
+        return False
+    return message.get("type") == "message" and message.get("role") in {"user", "system", "developer"}
