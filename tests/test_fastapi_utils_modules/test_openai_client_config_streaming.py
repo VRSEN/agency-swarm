@@ -337,6 +337,63 @@ async def test_codex_streaming_reinjects_missing_message_into_completed_event(mo
 
 
 @pytest.mark.asyncio
+async def test_codex_streaming_reinjects_missing_items_in_output_index_order(monkeypatch) -> None:
+    """Missing streamed items should be merged back before later completed output items."""
+    from openai.types.responses import ResponseFunctionToolCall, ResponseOutputMessage, ResponseOutputText
+    from openai.types.responses.response_completed_event import ResponseCompletedEvent
+    from openai.types.responses.response_output_item_done_event import ResponseOutputItemDoneEvent
+
+    message = ResponseOutputMessage(
+        id="msg-1",
+        content=[ResponseOutputText(annotations=[], logprobs=[], text="first", type="output_text")],
+        role="assistant",
+        status="completed",
+        type="message",
+    )
+    streamed_tool_call = ResponseFunctionToolCall(
+        arguments='{"q":"weather"}',
+        call_id="call-1",
+        name="lookup_weather",
+        type="function_call",
+        id="fc-1",
+        status="completed",
+    )
+    completed_tool_call = ResponseFunctionToolCall(
+        arguments='{"q":"weather"}',
+        call_id="call-1",
+        name="lookup_weather",
+        type="function_call",
+        id="fc-1",
+        status="completed",
+    )
+
+    observed = await _collect_codex_stream_events(
+        monkeypatch,
+        [
+            ResponseOutputItemDoneEvent(
+                item=message,
+                output_index=0,
+                sequence_number=1,
+                type="response.output_item.done",
+            ),
+            ResponseOutputItemDoneEvent(
+                item=streamed_tool_call,
+                output_index=1,
+                sequence_number=2,
+                type="response.output_item.done",
+            ),
+            ResponseCompletedEvent(
+                response=_build_response([completed_tool_call]),
+                sequence_number=3,
+                type="response.completed",
+            ),
+        ],
+    )
+
+    assert observed[-1].response.output == [message, completed_tool_call]
+
+
+@pytest.mark.asyncio
 async def test_codex_streaming_passes_text_only_events_through_unchanged(monkeypatch) -> None:
     """Codex-configured streaming should leave text-only responses unchanged."""
     from openai.types.responses import ResponseOutputMessage, ResponseOutputText

@@ -205,6 +205,61 @@ def test_persist_streamed_items_uses_collected_items_when_final_new_items_empty(
     assert replayed_user["content"][1] == file_part
 
 
+def test_persist_streamed_items_excludes_guardrail_retry_control_messages() -> None:
+    """Final persistence should keep initiating user input but drop same-run guardrail retry prompts."""
+    run_id = "agent_run_guardrail_retry"
+    user_message = {
+        "type": "message",
+        "role": "user",
+        "content": "Use only approved phrasing.",
+        "agent": "GuardedAgent",
+        "callerAgent": None,
+        "agent_run_id": run_id,
+        "history_protocol": MessageFormatter.HISTORY_PROTOCOL_RESPONSES,
+        "timestamp": 1,
+    }
+    guardrail_message = {
+        "type": "message",
+        "role": "system",
+        "content": "Rewrite the answer to satisfy the output guardrail.",
+        "message_origin": "output_guardrail_error",
+        "agent": "GuardedAgent",
+        "callerAgent": None,
+        "agent_run_id": run_id,
+        "history_protocol": MessageFormatter.HISTORY_PROTOCOL_RESPONSES,
+        "timestamp": 2,
+    }
+    assistant_item = _FakeRunItem(
+        {
+            "type": "message",
+            "id": "msg_guardrail_success",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "approved answer"}],
+        }
+    )
+
+    thread_manager = _DummyThreadManager(messages=[user_message, guardrail_message])
+    agency_context = AgencyContext(agency_instance=None, thread_manager=thread_manager)
+    agent = Agent(name="GuardedAgent", instructions="noop")
+
+    _persist_streamed_items(
+        streaming_result=_DummyStreamResult([assistant_item]),
+        metadata_store=StreamMetadataStore(by_item={id(assistant_item): ("GuardedAgent", run_id, None, 3)}),
+        collected_items=[assistant_item],
+        agent=agent,
+        sender_name=None,
+        parent_run_id=None,
+        run_trace_id="trace",
+        fallback_agent_run_id=run_id,
+        agency_context=agency_context,
+        initial_saved_count=0,
+    )
+
+    persisted = thread_manager.get_all_messages()
+    assert user_message in persisted
+    assert not any(message.get("message_origin") == "output_guardrail_error" for message in persisted)
+
+
 @patch(
     "agency_swarm.agent.execution_stream_persistence.MessageFilter.remove_orphaned_messages",
     side_effect=lambda x: x,

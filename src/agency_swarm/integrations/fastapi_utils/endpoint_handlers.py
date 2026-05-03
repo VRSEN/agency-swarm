@@ -1196,7 +1196,8 @@ class _CodexAsyncStream:
     def __init__(self, stream):
         self._stream = stream
         self._iter = stream.__aiter__()
-        self._output_items: list = []
+        self._output_items: list[_CodexStreamedOutputItem] = []
+        self._output_order_by_key: dict[tuple[str | None, str | None, str | None], tuple[int, int]] = {}
 
     def __aiter__(self):
         return self
@@ -1210,17 +1211,19 @@ class _CodexAsyncStream:
         chunk = await self._iter.__anext__()
 
         if isinstance(chunk, ResponseOutputItemDoneEvent):
-            self._output_items.append(chunk.item)
+            sort_key = _codex_output_sort_key(getattr(chunk, "output_index", None), len(self._output_items))
+            self._output_items.append(_CodexStreamedOutputItem(item=chunk.item, sort_key=sort_key))
+            self._output_order_by_key[_codex_output_item_key(chunk.item)] = sort_key
         elif isinstance(chunk, ResponseCompletedEvent) and self._output_items:
             existing = {_codex_output_item_key(item) for item in chunk.response.output}
-            missing = [item for item in self._output_items if _codex_output_item_key(item) not in existing]
+            missing = [entry for entry in self._output_items if _codex_output_item_key(entry.item) not in existing]
             if missing:
                 logger.debug(
                     "Codex: injecting %d missing completed output item(s): %s",
                     len(missing),
-                    [getattr(item, "type", None) for item in missing],
+                    [getattr(entry.item, "type", None) for entry in missing],
                 )
-                patched = list(chunk.response.output) + missing
+                patched = _merge_codex_completed_output(chunk.response.output, missing, self._output_order_by_key)
                 try:
                     chunk.response.output = patched
                 except Exception:
@@ -1244,6 +1247,12 @@ class _CodexAsyncStream:
         await self._iter.aclose()
 
 
+@dataclass(frozen=True)
+class _CodexStreamedOutputItem:
+    item: Any
+    sort_key: tuple[int, int]
+
+
 def _codex_output_item_key(item: Any) -> tuple[str | None, str | None, str | None]:
     """Return a stable identity key for Codex streamed/completed output items."""
     return (
@@ -1251,6 +1260,33 @@ def _codex_output_item_key(item: Any) -> tuple[str | None, str | None, str | Non
         getattr(item, "id", None),
         getattr(item, "call_id", None),
     )
+
+
+def _codex_output_sort_key(output_index: Any, stream_position: int) -> tuple[int, int]:
+    if isinstance(output_index, bool):
+        return (1, stream_position)
+    if isinstance(output_index, int):
+        return (0, output_index)
+    return (1, stream_position)
+
+
+def _merge_codex_completed_output(
+    completed_output: Sequence[Any],
+    missing: Sequence[_CodexStreamedOutputItem],
+    output_order_by_key: dict[tuple[str | None, str | None, str | None], tuple[int, int]],
+) -> list[Any]:
+    entries: list[tuple[tuple[int, int], int, Any]] = []
+    fallback_offset = len(output_order_by_key)
+
+    for completed_index, item in enumerate(completed_output):
+        sort_key = output_order_by_key.get(_codex_output_item_key(item), (1, fallback_offset + completed_index))
+        entries.append((sort_key, completed_index, item))
+
+    missing_offset = len(completed_output)
+    for missing_index, entry in enumerate(missing):
+        entries.append((entry.sort_key, missing_offset + missing_index, entry.item))
+
+    return [item for _, _, item in sorted(entries)]
 
 
 def _apply_codex_compatibility_model_settings(agent: Agent) -> None:

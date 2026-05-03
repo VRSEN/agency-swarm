@@ -16,6 +16,12 @@ from agency_swarm.utils.citation_extractor import extract_direct_file_annotation
 
 logger = logging.getLogger(__name__)
 
+_GUARDRAIL_CONTROL_MESSAGE_ORIGINS = {
+    "input_guardrail_error",
+    "input_guardrail_message",
+    "output_guardrail_error",
+}
+
 # Type alias for metadata stored during streaming.
 # Tuple of (agent_name, agent_run_id, caller_name, emission_timestamp).
 # Used to match RunItems between streaming and final persistence.
@@ -498,5 +504,7 @@ def _message_key(message: TResponseInputItem) -> tuple[str, str | None, str | No
 
 def _is_initiating_input_message(message: TResponseInputItem) -> bool:
     if not isinstance(message, dict):
+        return False
+    if message.get("message_origin") in _GUARDRAIL_CONTROL_MESSAGE_ORIGINS:
         return False
     return message.get("type") == "message" and message.get("role") in {"user", "system", "developer"}
