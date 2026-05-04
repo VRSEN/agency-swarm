@@ -1,6 +1,10 @@
 """Responses input helpers for manual replay paths."""
 
-from typing import Any, Literal
+from typing import Any, Literal, cast
+
+from agents import TResponseInputItem
+
+from agency_swarm.messages.message_filter import MessageFilter
 
 REASONING_ENCRYPTED_CONTENT_INCLUDE: Literal["reasoning.encrypted_content"] = "reasoning.encrypted_content"
 
@@ -18,11 +22,31 @@ def ensure_store_false_reasoning_encrypted_content(model_settings: Any) -> None:
 def sanitize_store_false_responses_input(history: list[Any]) -> list[dict[str, Any]]:
     """Drop reasoning items that cannot be replayed without server-side state."""
     sanitized: list[dict[str, Any]] = []
+    dropped_item_ids: set[str] = set()
+    skip_next = False
     for msg in history:
+        if skip_next:
+            if isinstance(msg, dict) and isinstance(msg.get("id"), str):
+                dropped_item_ids.add(msg["id"])
+            skip_next = False
+            continue
+        if isinstance(msg, dict) and msg.get("type") == "reasoning" and not msg.get("encrypted_content"):
+            if isinstance(msg.get("id"), str):
+                dropped_item_ids.add(msg["id"])
+            skip_next = True
+            continue
+        if (
+            isinstance(msg, dict)
+            and msg.get("type") == "item_reference"
+            and isinstance(msg.get("id"), str)
+            and msg["id"] in dropped_item_ids
+        ):
+            continue
         cleaned = _sanitize_store_false_responses_value(msg)
         if isinstance(cleaned, dict):
             sanitized.append(cleaned)
-    return sanitized
+    cleaned = MessageFilter.remove_orphaned_messages(cast(list[TResponseInputItem], sanitized))
+    return cast(list[dict[str, Any]], cleaned)
 
 
 def _sanitize_store_false_responses_value(value: Any) -> Any | None:

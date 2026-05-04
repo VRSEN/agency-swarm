@@ -43,6 +43,7 @@ _OPENRESPONSES_ALLOWED_KEYS: tuple[str, ...] = (
     "top_p",
     "metadata",
     "store",
+    "include",
     "previous_response_id",
     "reasoning",
     "truncation",
