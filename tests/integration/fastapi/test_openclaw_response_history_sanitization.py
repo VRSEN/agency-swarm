@@ -37,7 +37,10 @@ from agency_swarm.integrations.fastapi_utils.endpoint_handlers import (
     make_stream_endpoint,
 )
 from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest
-from agency_swarm.messages.response_input_sanitizer import REASONING_ENCRYPTED_CONTENT_INCLUDE
+from agency_swarm.messages.response_input_sanitizer import (
+    REASONING_ENCRYPTED_CONTENT_INCLUDE,
+    sanitize_store_false_responses_input,
+)
 
 
 class _TrackingResponsesModel(Model):
@@ -325,6 +328,33 @@ def _history_with_unencrypted_reasoning() -> list[dict[str, Any]]:
     return history
 
 
+def _history_with_unencrypted_reasoning_before_tool_pair() -> list[dict[str, Any]]:
+    return [
+        {
+            "type": "reasoning",
+            "id": "rs_reasoning_123",
+            "summary": [{"type": "summary_text", "text": "looked up the answer"}],
+            "status": "completed",
+        },
+        {
+            "type": "function_call",
+            "id": "fc_lookup_123",
+            "call_id": "call_lookup_123",
+            "name": "lookup",
+            "arguments": "{}",
+            "status": "completed",
+        },
+        {
+            "type": "function_call_output",
+            "id": "fc_output_123",
+            "call_id": "call_lookup_123",
+            "output": "42",
+            "status": "completed",
+        },
+        {"role": "user", "content": "again"},
+    ]
+
+
 def _assert_store_false_input_preserves_stateless_reasoning(model_input: str | list[TResponseInputItem]) -> None:
     assert isinstance(model_input, list)
     reasoning = next(item for item in model_input if isinstance(item, dict) and item.get("type") == "reasoning")
@@ -342,6 +372,7 @@ def _assert_store_false_input_preserves_stateless_reasoning(model_input: str | l
 def _assert_unencrypted_reasoning_is_dropped(model_input: str | list[TResponseInputItem]) -> None:
     assert isinstance(model_input, list)
     assert all(not (isinstance(item, dict) and item.get("type") == "reasoning") for item in model_input)
+    assert all(not (isinstance(item, dict) and item.get("id") == "msg_answer_123") for item in model_input)
     function_call = next(item for item in model_input if isinstance(item, dict) and item.get("type") == "function_call")
     tool_output = next(
         item for item in model_input if isinstance(item, dict) and item.get("type") == "function_call_output"
@@ -435,6 +466,12 @@ async def test_stream_endpoint_store_false_drops_only_unencrypted_reasoning() ->
 
     _assert_store_false_requests_encrypted_reasoning(model.seen_model_settings[0])
     _assert_unencrypted_reasoning_is_dropped(model.seen_inputs[0])
+
+
+def test_store_false_sanitizer_drops_dependent_followers_after_unencrypted_reasoning() -> None:
+    sanitized = sanitize_store_false_responses_input(_history_with_unencrypted_reasoning_before_tool_pair())
+
+    assert sanitized == [{"role": "user", "content": "again"}]
 
 
 @pytest.mark.asyncio
