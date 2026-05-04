@@ -32,10 +32,12 @@ from openai.types.responses.response_usage import InputTokensDetails, OutputToke
 from agency_swarm import Agency, Agent
 from agency_swarm.integrations.fastapi_utils.endpoint_handlers import (
     ActiveRunRegistry,
+    generate_chat_name,
     make_response_endpoint,
     make_stream_endpoint,
 )
 from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest
+from agency_swarm.messages.response_input_sanitizer import REASONING_ENCRYPTED_CONTENT_INCLUDE
 
 
 class _TrackingResponsesModel(Model):
@@ -44,6 +46,7 @@ class _TrackingResponsesModel(Model):
         self.issued_response_ids: list[str] = []
         self.seen_previous_response_ids: list[str | None] = []
         self.seen_inputs: list[str | list[TResponseInputItem]] = []
+        self.seen_model_settings: list[ModelSettings] = []
 
     async def get_response(
         self,
@@ -60,6 +63,7 @@ class _TrackingResponsesModel(Model):
         prompt: ResponsePromptParam | None,
     ) -> ModelResponse:
         self.seen_inputs.append(copy.deepcopy(input) if isinstance(input, list) else input)
+        self.seen_model_settings.append(copy.deepcopy(model_settings))
         self.seen_previous_response_ids.append(previous_response_id)
         response_id = self._issue_response_id()
         return _build_model_response(text="OK", response_id=response_id)
@@ -79,6 +83,7 @@ class _TrackingResponsesModel(Model):
         prompt: ResponsePromptParam | None,
     ) -> AsyncIterator[TResponseStreamEvent]:
         self.seen_inputs.append(copy.deepcopy(input) if isinstance(input, list) else input)
+        self.seen_model_settings.append(copy.deepcopy(model_settings))
         self.seen_previous_response_ids.append(previous_response_id)
         response_id = self._issue_response_id()
         return _stream_text_events(text="OK", model_name=self.model, response_id=response_id)
@@ -246,6 +251,111 @@ def _build_agency_factory(model: _TrackingResponsesModel):
     return create_agency
 
 
+def _build_store_false_agency_factory(model: _TrackingResponsesModel):
+    def create_agency(load_threads_callback=None, save_threads_callback=None):
+        agent = Agent(
+            name="TestAgent",
+            instructions="Base instructions",
+            model=model,
+            model_settings=ModelSettings(store=False, temperature=0.0),
+        )
+        return Agency(
+            agent,
+            load_threads_callback=load_threads_callback,
+            save_threads_callback=save_threads_callback,
+        )
+
+    return create_agency
+
+
+def _history_with_encrypted_reasoning() -> list[dict[str, Any]]:
+    return [
+        {
+            "type": "reasoning",
+            "id": "rs_reasoning_123",
+            "summary": [{"type": "summary_text", "text": "looked up the answer", "id": "rs_summary_123"}],
+            "content": [{"type": "reasoning_text", "text": "private", "id": "rs_content_123"}],
+            "encrypted_content": "encrypted_reasoning",
+            "previous_response_id": "resp_previous_123",
+            "status": "completed",
+            "agent": "TestAgent",
+            "callerAgent": None,
+            "timestamp": 1,
+        },
+        {
+            "type": "message",
+            "role": "assistant",
+            "id": "msg_answer_123",
+            "content": [{"type": "output_text", "text": "The answer is 42.", "annotations": [], "id": "msg_text_123"}],
+            "conversation_id": "conv_previous_123",
+            "status": "completed",
+            "agent": "TestAgent",
+            "callerAgent": None,
+            "timestamp": 2,
+        },
+        {
+            "type": "function_call",
+            "id": "fc_lookup_123",
+            "call_id": "call_lookup_123",
+            "name": "lookup",
+            "arguments": "{}",
+            "status": "completed",
+            "agent": "TestAgent",
+            "callerAgent": None,
+            "timestamp": 3,
+        },
+        {
+            "type": "function_call_output",
+            "id": "fc_output_123",
+            "call_id": "call_lookup_123",
+            "output": "42",
+            "status": "completed",
+            "agent": "TestAgent",
+            "callerAgent": None,
+            "timestamp": 4,
+        },
+        {"type": "item_reference", "id": "msg_answer_123", "agent": "TestAgent", "callerAgent": None, "timestamp": 5},
+    ]
+
+
+def _history_with_unencrypted_reasoning() -> list[dict[str, Any]]:
+    history = _history_with_encrypted_reasoning()
+    reasoning = next(item for item in history if item.get("type") == "reasoning")
+    reasoning.pop("encrypted_content")
+    return history
+
+
+def _assert_store_false_input_preserves_stateless_reasoning(model_input: str | list[TResponseInputItem]) -> None:
+    assert isinstance(model_input, list)
+    reasoning = next(item for item in model_input if isinstance(item, dict) and item.get("type") == "reasoning")
+    assert reasoning["id"] == "rs_reasoning_123"
+    assert reasoning["encrypted_content"] == "encrypted_reasoning"
+
+    function_call = next(item for item in model_input if isinstance(item, dict) and item.get("type") == "function_call")
+    tool_output = next(
+        item for item in model_input if isinstance(item, dict) and item.get("type") == "function_call_output"
+    )
+    assert function_call["call_id"] == "call_lookup_123"
+    assert tool_output["call_id"] == "call_lookup_123"
+
+
+def _assert_unencrypted_reasoning_is_dropped(model_input: str | list[TResponseInputItem]) -> None:
+    assert isinstance(model_input, list)
+    assert all(not (isinstance(item, dict) and item.get("type") == "reasoning") for item in model_input)
+    function_call = next(item for item in model_input if isinstance(item, dict) and item.get("type") == "function_call")
+    tool_output = next(
+        item for item in model_input if isinstance(item, dict) and item.get("type") == "function_call_output"
+    )
+    assert function_call["call_id"] == "call_lookup_123"
+    assert tool_output["call_id"] == "call_lookup_123"
+
+
+def _assert_store_false_requests_encrypted_reasoning(model_settings: ModelSettings) -> None:
+    assert model_settings.store is False
+    assert model_settings.response_include is not None
+    assert REASONING_ENCRYPTED_CONTENT_INCLUDE in model_settings.response_include
+
+
 def _assert_history_input_has_no_response_ids(model_input: str | list[TResponseInputItem]) -> None:
     assert isinstance(model_input, list)
     leaked_response_ids = [item for item in model_input if isinstance(item, dict) and "response_id" in item]
@@ -293,6 +403,69 @@ async def test_stream_endpoint_replays_returned_history_without_hidden_response_
 
     assert model.seen_previous_response_ids == [None, None]
     _assert_history_input_has_no_response_ids(model.seen_inputs[1])
+
+
+@pytest.mark.asyncio
+async def test_response_endpoint_store_false_requests_and_preserves_encrypted_reasoning() -> None:
+    model = _TrackingResponsesModel()
+    handler = make_response_endpoint(BaseRequest, _build_store_false_agency_factory(model), lambda: None)
+
+    await handler(BaseRequest(message="again", chat_history=_history_with_encrypted_reasoning()), token=None)
+
+    _assert_store_false_requests_encrypted_reasoning(model.seen_model_settings[0])
+    _assert_store_false_input_preserves_stateless_reasoning(model.seen_inputs[0])
+
+
+@pytest.mark.asyncio
+async def test_stream_endpoint_store_false_drops_only_unencrypted_reasoning() -> None:
+    model = _TrackingResponsesModel()
+    handler = make_stream_endpoint(
+        BaseRequest,
+        _build_store_false_agency_factory(model),
+        lambda: None,
+        ActiveRunRegistry(),
+    )
+
+    response = await handler(
+        http_request=_StubRequest(),
+        request=BaseRequest(message="again", chat_history=_history_with_unencrypted_reasoning()),
+        token=None,
+    )
+    _chunks = [chunk async for chunk in response.body_iterator]
+
+    _assert_store_false_requests_encrypted_reasoning(model.seen_model_settings[0])
+    _assert_unencrypted_reasoning_is_dropped(model.seen_inputs[0])
+
+
+@pytest.mark.asyncio
+async def test_codex_chat_name_store_false_uses_encrypted_reasoning_include() -> None:
+    captured_inputs: list[list[TResponseInputItem]] = []
+    captured_includes: list[list[str]] = []
+
+    class _TitleStream:
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            raise StopAsyncIteration
+
+    class _Responses:
+        async def create(self, **kwargs: Any) -> _TitleStream:
+            captured_inputs.append(copy.deepcopy(kwargs["input"]))
+            captured_includes.append(copy.deepcopy(kwargs["include"]))
+            return _TitleStream()
+
+    class _Client:
+        base_url = "https://chatgpt.com/backend-api/codex"
+        responses = _Responses()
+
+    with pytest.raises(ValueError, match="Generated chat name"):
+        await generate_chat_name(_history_with_encrypted_reasoning(), openai_client=_Client())  # type: ignore[arg-type]
+
+    assert captured_inputs
+    assert captured_includes
+    assert all(include == [REASONING_ENCRYPTED_CONTENT_INCLUDE] for include in captured_includes)
+    _assert_store_false_input_preserves_stateless_reasoning(captured_inputs[0])
 
 
 @pytest.mark.asyncio

@@ -58,6 +58,11 @@ from agency_swarm.integrations.fastapi_utils.override_policy import (
 )
 from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
 from agency_swarm.messages import MessageFilter, MessageFormatter
+from agency_swarm.messages.response_input_sanitizer import (
+    REASONING_ENCRYPTED_CONTENT_INCLUDE,
+    ensure_store_false_reasoning_encrypted_content,
+    sanitize_store_false_responses_input,
+)
 from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
 from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
 from agency_swarm.ui.core.agui_adapter import AguiAdapter
@@ -1039,15 +1044,20 @@ Rules:
             codex_input = [cast(TResponseInputItem, {"role": "user", "content": formatted_messages})]
         else:
             codex_input = cast(list[TResponseInputItem], stripped_messages)
+            codex_input = cast(list[TResponseInputItem], sanitize_store_false_responses_input(codex_input))
 
         retry_suffix = ""
         for _attempt in range(4):
-            response = await client.responses.create(
-                model="gpt-5.4-mini",
-                instructions=title_instructions + retry_suffix,
-                input=codex_input,
-                store=False,
-                stream=True,
+            response = cast(
+                Any,
+                await client.responses.create(
+                    model="gpt-5.4-mini",
+                    instructions=title_instructions + retry_suffix,
+                    input=codex_input,
+                    include=[REASONING_ENCRYPTED_CONTENT_INCLUDE],
+                    store=False,
+                    stream=True,
+                ),
             )
             text_parts: list[str] = []
             async for event in response:
@@ -1305,6 +1315,7 @@ def _apply_codex_compatibility_model_settings(agent: Agent) -> None:
     current: ModelSettings = getattr(agent, "model_settings", None) or ModelSettings()
     current.store = False
     current.truncation = None
+    ensure_store_false_reasoning_encrypted_content(current)
     agent.model_settings = current
 
     model = agent.model

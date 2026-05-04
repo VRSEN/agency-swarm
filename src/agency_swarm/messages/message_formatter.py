@@ -21,6 +21,11 @@ from openai.types.responses import (
 )
 from openai.types.responses.response_file_search_tool_call import Result as ResponseFileSearchResult
 
+from agency_swarm.messages.response_input_sanitizer import (
+    ensure_store_false_reasoning_encrypted_content,
+    sanitize_store_false_responses_input,
+)
+
 if TYPE_CHECKING:
     from agency_swarm.agent.core import AgencyContext, Agent
 
@@ -297,6 +302,9 @@ class MessageFormatter:
         # Strip agency metadata before sending to OpenAI
         history_for_runner = MessageFormatter.strip_agency_metadata(history_for_runner)
         history_for_runner = MessageFormatter.sanitize_replayed_tool_item_ids(history_for_runner)
+        if MessageFormatter._model_settings_store_false(agent):
+            ensure_store_false_reasoning_encrypted_content(agent.model_settings)
+            history_for_runner = sanitize_store_false_responses_input(history_for_runner)
         return history_for_runner  # type: ignore[return-value]
 
     @staticmethod
@@ -396,6 +404,11 @@ class MessageFormatter:
                 continue
             sanitized.append(msg)
         return sanitized
+
+    @staticmethod
+    def _model_settings_store_false(agent: "Agent") -> bool:
+        model_settings = getattr(agent, "model_settings", None)
+        return getattr(model_settings, "store", None) is False
 
     @staticmethod
     def add_citations_to_message(

@@ -280,6 +280,7 @@ def test_openai_client_override_applies_codex_compatibility_model_settings() -> 
     assert agent.model_settings is not None
     assert agent.model_settings.store is False
     assert agent.model_settings.truncation is None
+    assert "reasoning.encrypted_content" in (agent.model_settings.response_include or [])
 
 
 def test_snapshot_restore_preserves_model_settings_headers() -> None:
