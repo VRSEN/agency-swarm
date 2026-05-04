@@ -23,17 +23,18 @@ def sanitize_store_false_responses_input(history: list[Any]) -> list[dict[str, A
     """Drop reasoning items that cannot be replayed without server-side state."""
     sanitized: list[dict[str, Any]] = []
     dropped_item_ids: set[str] = set()
-    skip_next = False
+    previous_reasoning_dropped = False
     for msg in history:
-        if skip_next:
+        if previous_reasoning_dropped and _is_reasoning_dependent_response_item(msg):
             if isinstance(msg, dict) and isinstance(msg.get("id"), str):
                 dropped_item_ids.add(msg["id"])
-            skip_next = False
+            previous_reasoning_dropped = False
             continue
+        previous_reasoning_dropped = False
         if isinstance(msg, dict) and msg.get("type") == "reasoning" and not msg.get("encrypted_content"):
             if isinstance(msg.get("id"), str):
                 dropped_item_ids.add(msg["id"])
-            skip_next = True
+            previous_reasoning_dropped = True
             continue
         if (
             isinstance(msg, dict)
@@ -47,6 +48,21 @@ def sanitize_store_false_responses_input(history: list[Any]) -> list[dict[str, A
             sanitized.append(cleaned)
     cleaned = MessageFilter.remove_orphaned_messages(cast(list[TResponseInputItem], sanitized))
     return cast(list[dict[str, Any]], cleaned)
+
+
+def _is_reasoning_dependent_response_item(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+
+    msg_type = value.get("type")
+    if msg_type == "message":
+        return value.get("role") == "assistant"
+    return msg_type in (
+        MessageFilter.CALL_ID_CALL_TYPES
+        | MessageFilter.CALL_ID_OUTPUT_TYPES
+        | MessageFilter.MCP_APPROVAL_REQUEST_TYPES
+        | MessageFilter.MCP_APPROVAL_RESPONSE_TYPES
+    )
 
 
 def _sanitize_store_false_responses_value(value: Any) -> Any | None:

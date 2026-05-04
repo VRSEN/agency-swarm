@@ -355,6 +355,18 @@ def _history_with_unencrypted_reasoning_before_tool_pair() -> list[dict[str, Any
     ]
 
 
+def _history_with_unencrypted_reasoning_before_current_user_message() -> list[dict[str, Any]]:
+    return [
+        {
+            "type": "reasoning",
+            "id": "rs_reasoning_123",
+            "summary": [{"type": "summary_text", "text": "looked up the answer"}],
+            "status": "completed",
+        },
+        {"role": "user", "content": "again"},
+    ]
+
+
 def _assert_store_false_input_preserves_stateless_reasoning(model_input: str | list[TResponseInputItem]) -> None:
     assert isinstance(model_input, list)
     reasoning = next(item for item in model_input if isinstance(item, dict) and item.get("type") == "reasoning")
@@ -470,6 +482,12 @@ async def test_stream_endpoint_store_false_drops_only_unencrypted_reasoning() ->
 
 def test_store_false_sanitizer_drops_dependent_followers_after_unencrypted_reasoning() -> None:
     sanitized = sanitize_store_false_responses_input(_history_with_unencrypted_reasoning_before_tool_pair())
+
+    assert sanitized == [{"role": "user", "content": "again"}]
+
+
+def test_store_false_sanitizer_preserves_current_user_after_unencrypted_reasoning() -> None:
+    sanitized = sanitize_store_false_responses_input(_history_with_unencrypted_reasoning_before_current_user_message())
 
     assert sanitized == [{"role": "user", "content": "again"}]
 
