@@ -49,6 +49,16 @@ _OPENRESPONSES_ALLOWED_KEYS: tuple[str, ...] = (
     "truncation",
 )
 _ALLOWED_TOOL_CHOICE_VALUES = {"auto", "none", "required"}
+_OPENRESPONSES_ALLOWED_INCLUDE_VALUES = {
+    "file_search_call.results",
+    "web_search_call.results",
+    "web_search_call.action.sources",
+    "message.input_image.image_url",
+    "computer_call_output.output.image_url",
+    "code_interpreter_call.outputs",
+    "reasoning.encrypted_content",
+    "message.output_text.logprobs",
+}
 _PROVIDER_ENV_KEYS = ("OPENAI_API_KEY", "ANTHROPIC_API_KEY")
 _RESPONSE_HEADER_BLOCKLIST = {"content-length", "transfer-encoding", "connection"}
 _RESPONSE_HEADER_BLOCKLIST_DECODED = _RESPONSE_HEADER_BLOCKLIST | {"content-encoding"}
@@ -780,6 +790,13 @@ def _normalize_metadata(metadata: Any) -> dict[str, str] | None:
     return normalized
 
 
+def _normalize_response_include(include: Any) -> list[str] | None:
+    if not isinstance(include, list):
+        return None
+    normalized = [item for item in include if isinstance(item, str) and item in _OPENRESPONSES_ALLOWED_INCLUDE_VALUES]
+    return normalized or None
+
+
 def normalize_openclaw_responses_request(raw_payload: Mapping[str, Any]) -> dict[str, Any]:
     """Normalize Open Responses requests to OpenClaw-compatible shape."""
     payload = dict(raw_payload)
@@ -804,7 +821,7 @@ def normalize_openclaw_responses_request(raw_payload: Mapping[str, Any]) -> dict
     }
 
     for key in _OPENRESPONSES_ALLOWED_KEYS:
-        if key in {"model", "input", "tools", "tool_choice", "metadata"}:
+        if key in {"model", "input", "tools", "tool_choice", "metadata", "include"}:
             continue
         if key in payload:
             normalized[key] = payload[key]
@@ -823,6 +840,11 @@ def normalize_openclaw_responses_request(raw_payload: Mapping[str, Any]) -> dict
         normalized_metadata = _normalize_metadata(payload.get("metadata"))
         if normalized_metadata is not None:
             normalized["metadata"] = normalized_metadata
+
+    if "include" in payload:
+        normalized_include = _normalize_response_include(payload.get("include"))
+        if normalized_include is not None:
+            normalized["include"] = normalized_include
 
     return normalized
 

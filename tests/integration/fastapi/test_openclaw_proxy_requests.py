@@ -186,12 +186,11 @@ def test_openclaw_proxy_filters_request_keys_and_normalizes_payload(
         "top_p",
         "metadata",
         "store",
-        "include",
         "previous_response_id",
         "reasoning",
         "truncation",
     }
-    assert forwarded["include"] == ["response.output_text"]
+    assert "include" not in forwarded
     assert "parallel_tool_calls" not in forwarded
     assert forwarded["model"] == "openai/gpt-5.4-mini"
     assert forwarded["input"] == [
@@ -246,7 +245,7 @@ def test_openclaw_proxy_forwards_encrypted_reasoning_include(
         json={
             "model": "openclaw:main",
             "input": "hello",
-            "include": ["reasoning.encrypted_content"],
+            "include": ["response.output_text", "reasoning.encrypted_content"],
             "store": False,
         },
     )
