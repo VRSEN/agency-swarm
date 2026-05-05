@@ -166,6 +166,39 @@ def test_prepare_history_for_runner_uses_run_config_store_false_settings() -> No
     ]
 
 
+def test_prepare_history_for_runner_does_not_copy_agent_settings_into_run_config() -> None:
+    thread_manager = ThreadManager()
+    thread_manager._store.messages = [
+        {
+            "type": "reasoning",
+            "id": "rs_legacy",
+            "summary": [{"type": "summary_text", "text": "legacy"}],
+            "status": "completed",
+            "agent": "AgentA",
+            "callerAgent": None,
+            "history_protocol": MessageFormatter.HISTORY_PROTOCOL_RESPONSES,
+        }
+    ]
+    context = _make_context(thread_manager)
+    agent = _make_responses_agent("AgentA")
+    agent.model_settings = ModelSettings(store=False, temperature=0.5)
+    run_config = RunConfig(model_settings=ModelSettings())
+
+    history = MessageFormatter.prepare_history_for_runner(
+        [{"role": "user", "content": "again"}],
+        agent,
+        None,
+        context,
+        run_config_override=run_config,
+    )
+
+    assert history == [{"role": "user", "content": "again", "type": "message"}]
+    assert run_config.model_settings is not None
+    assert run_config.model_settings.store is None
+    assert run_config.model_settings.temperature is None
+    assert run_config.model_settings.response_include == [REASONING_ENCRYPTED_CONTENT_INCLUDE]
+
+
 def test_prepare_history_for_runner_without_store_false_keeps_reasoning_items() -> None:
     thread_manager = ThreadManager()
     thread_manager._store.messages = [

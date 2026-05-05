@@ -3,6 +3,7 @@
 import json
 import logging
 import time
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any, cast
 
 from agents import (
@@ -23,6 +24,7 @@ from openai.types.responses import (
 from openai.types.responses.response_file_search_tool_call import Result as ResponseFileSearchResult
 
 from agency_swarm.messages.response_input_sanitizer import (
+    REASONING_ENCRYPTED_CONTENT_INCLUDE,
     ensure_store_false_reasoning_encrypted_content,
     sanitize_store_false_responses_input,
 )
@@ -418,10 +420,17 @@ class MessageFormatter:
         if getattr(effective_settings, "store", None) is not False:
             return False
 
-        ensure_store_false_reasoning_encrypted_content(effective_settings)
         if run_config_override is not None and run_settings is not None:
-            run_config_override.model_settings = effective_settings
+            response_include = run_settings.response_include
+            if response_include is None and isinstance(agent_settings, ModelSettings):
+                response_include = agent_settings.response_include
+            response_include = list(response_include or [])
+            if REASONING_ENCRYPTED_CONTENT_INCLUDE not in response_include:
+                response_include.append(REASONING_ENCRYPTED_CONTENT_INCLUDE)
+            run_settings = replace(run_settings, response_include=response_include)
+            run_config_override.model_settings = run_settings
         else:
+            ensure_store_false_reasoning_encrypted_content(effective_settings)
             agent.model_settings = effective_settings
         return True
 
