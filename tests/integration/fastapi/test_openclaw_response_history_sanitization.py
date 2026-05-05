@@ -367,12 +367,81 @@ def _history_with_unencrypted_reasoning_before_current_user_message() -> list[di
     ]
 
 
+def _history_with_unencrypted_reasoning_before_builtin_tool_call() -> list[dict[str, Any]]:
+    return [
+        {
+            "type": "reasoning",
+            "id": "rs_reasoning_123",
+            "summary": [{"type": "summary_text", "text": "searched the web"}],
+            "status": "completed",
+        },
+        {
+            "type": "web_search_call",
+            "id": "ws_lookup_123",
+            "status": "completed",
+        },
+        {"role": "user", "content": "again"},
+    ]
+
+
+def _history_with_unencrypted_reasoning_before_tool_search_pair() -> list[dict[str, Any]]:
+    return [
+        {
+            "type": "reasoning",
+            "id": "rs_reasoning_123",
+            "summary": [{"type": "summary_text", "text": "searched local tools"}],
+            "status": "completed",
+        },
+        {
+            "type": "tool_search_call",
+            "id": "ts_lookup_123",
+            "call_id": "call_lookup_123",
+            "arguments": {},
+            "execution": "client",
+        },
+        {
+            "type": "tool_search_output",
+            "id": "ts_output_123",
+            "call_id": "call_lookup_123",
+            "tools": [],
+            "execution": "client",
+        },
+        {"role": "user", "content": "again"},
+    ]
+
+
+def _history_with_user_and_legacy_unencrypted_reasoning_turn() -> list[dict[str, Any]]:
+    return [
+        {"role": "user", "content": "what is 2+2?"},
+        {
+            "type": "reasoning",
+            "id": "rs_reasoning_123",
+            "summary": [{"type": "summary_text", "text": "calculated"}],
+            "status": "completed",
+        },
+        {
+            "type": "message",
+            "role": "assistant",
+            "id": "msg_answer_123",
+            "content": [{"type": "output_text", "text": "4", "annotations": []}],
+            "status": "completed",
+        },
+        {"role": "user", "content": "thanks"},
+    ]
+
+
 def _assert_store_false_input_preserves_stateless_reasoning(model_input: str | list[TResponseInputItem]) -> None:
     assert isinstance(model_input, list)
     reasoning = next(item for item in model_input if isinstance(item, dict) and item.get("type") == "reasoning")
     assert reasoning["id"] == "rs_reasoning_123"
     assert reasoning["encrypted_content"] == "encrypted_reasoning"
+    assert "previous_response_id" not in reasoning
+    assert all("id" not in item for item in reasoning["summary"])
+    assert all("id" not in item for item in reasoning["content"])
 
+    assistant_message = next(item for item in model_input if isinstance(item, dict) and item.get("type") == "message")
+    assert "conversation_id" not in assistant_message
+    assert all("id" not in item for item in assistant_message["content"])
     function_call = next(item for item in model_input if isinstance(item, dict) and item.get("type") == "function_call")
     tool_output = next(
         item for item in model_input if isinstance(item, dict) and item.get("type") == "function_call_output"
@@ -385,12 +454,7 @@ def _assert_unencrypted_reasoning_is_dropped(model_input: str | list[TResponseIn
     assert isinstance(model_input, list)
     assert all(not (isinstance(item, dict) and item.get("type") == "reasoning") for item in model_input)
     assert all(not (isinstance(item, dict) and item.get("id") == "msg_answer_123") for item in model_input)
-    function_call = next(item for item in model_input if isinstance(item, dict) and item.get("type") == "function_call")
-    tool_output = next(
-        item for item in model_input if isinstance(item, dict) and item.get("type") == "function_call_output"
-    )
-    assert function_call["call_id"] == "call_lookup_123"
-    assert tool_output["call_id"] == "call_lookup_123"
+    assert model_input == [{"role": "user", "content": "again", "type": "message"}]
 
 
 def _assert_store_false_requests_encrypted_reasoning(model_settings: ModelSettings) -> None:
@@ -480,6 +544,28 @@ async def test_stream_endpoint_store_false_drops_only_unencrypted_reasoning() ->
     _assert_unencrypted_reasoning_is_dropped(model.seen_inputs[0])
 
 
+@pytest.mark.asyncio
+async def test_stream_endpoint_store_false_drops_legacy_reasoning_span_and_keeps_current_user() -> None:
+    model = _TrackingResponsesModel()
+    handler = make_stream_endpoint(
+        BaseRequest,
+        _build_store_false_agency_factory(model),
+        lambda: None,
+        ActiveRunRegistry(),
+    )
+    legacy_history = _history_with_unencrypted_reasoning_before_tool_pair()[:-1]
+
+    response = await handler(
+        http_request=_StubRequest(),
+        request=BaseRequest(message="again", chat_history=legacy_history),
+        token=None,
+    )
+    _chunks = [chunk async for chunk in response.body_iterator]
+
+    _assert_store_false_requests_encrypted_reasoning(model.seen_model_settings[0])
+    assert model.seen_inputs[0] == [{"role": "user", "content": "again", "type": "message"}]
+
+
 def test_store_false_sanitizer_drops_dependent_followers_after_unencrypted_reasoning() -> None:
     sanitized = sanitize_store_false_responses_input(_history_with_unencrypted_reasoning_before_tool_pair())
 
@@ -490,6 +576,24 @@ def test_store_false_sanitizer_preserves_current_user_after_unencrypted_reasonin
     sanitized = sanitize_store_false_responses_input(_history_with_unencrypted_reasoning_before_current_user_message())
 
     assert sanitized == [{"role": "user", "content": "again"}]
+
+
+def test_store_false_sanitizer_drops_builtin_tool_follower_after_unencrypted_reasoning() -> None:
+    sanitized = sanitize_store_false_responses_input(_history_with_unencrypted_reasoning_before_builtin_tool_call())
+
+    assert sanitized == [{"role": "user", "content": "again"}]
+
+
+def test_store_false_sanitizer_drops_tool_search_pair_after_unencrypted_reasoning() -> None:
+    sanitized = sanitize_store_false_responses_input(_history_with_unencrypted_reasoning_before_tool_search_pair())
+
+    assert sanitized == [{"role": "user", "content": "again"}]
+
+
+def test_store_false_sanitizer_drops_full_legacy_reasoning_turn() -> None:
+    sanitized = sanitize_store_false_responses_input(_history_with_user_and_legacy_unencrypted_reasoning_turn())
+
+    assert sanitized == [{"role": "user", "content": "thanks"}]
 
 
 @pytest.mark.asyncio

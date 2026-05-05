@@ -9,6 +9,8 @@ from agents import (
 from agency_swarm.messages import MessageFormatter
 
 if TYPE_CHECKING:
+    from agents import RunConfig
+
     from .context_types import AgencyContext
     from .core import Agent
 
@@ -79,6 +81,7 @@ def append_guardrail_feedback(
     current_agent_run_id: str,
     exception: BaseException,
     include_assistant: bool,
+    run_config_override: "RunConfig | None" = None,
 ) -> list[TResponseInputItem]:
     """Persist guardrail feedback messages and rebuild history for retry.
 
@@ -146,4 +149,5 @@ def append_guardrail_feedback(
         agent_run_id=current_agent_run_id,
         parent_run_id=parent_run_id,
         run_trace_id=run_trace_id,
+        run_config_override=run_config_override,
     )

@@ -139,6 +139,7 @@ class Execution:
                 agent_run_id=current_agent_run_id,
                 parent_run_id=parent_run_id,
                 run_trace_id=run_trace_id,
+                run_config_override=run_config_override,
             )
             logger.debug(f"Running agent '{self.agent.name}' with history length {len(history_for_runner)}")
 
@@ -489,6 +490,7 @@ class Execution:
                     agent_run_id=current_agent_run_id,
                     parent_run_id=parent_run_id,
                     run_trace_id=run_trace_id,
+                    run_config_override=run_config_override,
                 )
 
                 logger.debug(

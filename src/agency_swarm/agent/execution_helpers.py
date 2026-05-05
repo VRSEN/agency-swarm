@@ -121,6 +121,7 @@ async def run_with_guardrails(
                 current_agent_run_id=current_agent_run_id,
                 exception=e,
                 include_assistant=True,
+                run_config_override=run_config_override,
             )
             if attempts_remaining <= 0:
                 raise e
@@ -145,6 +146,7 @@ async def run_with_guardrails(
                 current_agent_run_id=current_agent_run_id,
                 exception=e,
                 include_assistant=False,
+                run_config_override=run_config_override,
             )
             if not raise_input_guardrail_error:
                 from agents import RunContextWrapper  # local import to avoid cycle

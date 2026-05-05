@@ -323,6 +323,7 @@ def run_stream_with_guardrails(
                             current_agent_run_id=current_agent_run_id,
                             exception=e,
                             include_assistant=False,
+                            run_config_override=run_config_override,
                         )
                         exception_guardrail_guidance = guidance_text
                     except Exception:
@@ -522,6 +523,7 @@ def run_stream_with_guardrails(
                     current_agent_run_id=current_agent_run_id,
                     exception=guardrail_exception,
                     include_assistant=False,
+                    run_config_override=run_config_override,
                 )
                 continue
             except asyncio.CancelledError:

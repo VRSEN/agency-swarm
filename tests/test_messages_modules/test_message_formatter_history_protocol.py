@@ -1,10 +1,13 @@
 import pytest
+from agents import RunConfig
+from agents.model_settings import ModelSettings
 from agents.models.openai_chatcompletions import OpenAIChatCompletionsModel
 from agents.models.openai_responses import OpenAIResponsesModel
 from openai import AsyncOpenAI
 
 from agency_swarm import AgencyContext, Agent
 from agency_swarm.messages import IncompatibleChatHistoryError, MessageFormatter
+from agency_swarm.messages.response_input_sanitizer import REASONING_ENCRYPTED_CONTENT_INCLUDE
 from agency_swarm.utils.thread import ThreadManager
 
 
@@ -116,6 +119,51 @@ def test_prepare_history_for_runner_stores_responses_protocol_and_strips_runner_
     assert len(all_messages) == 2
     assert all(msg["history_protocol"] == MessageFormatter.HISTORY_PROTOCOL_RESPONSES for msg in all_messages)
     assert all("history_protocol" not in item for item in first_history)
+
+
+def test_prepare_history_for_runner_uses_run_config_store_false_settings() -> None:
+    thread_manager = ThreadManager()
+    thread_manager._store.messages = [
+        {
+            "type": "reasoning",
+            "id": "rs_legacy",
+            "summary": [{"type": "summary_text", "text": "legacy"}],
+            "status": "completed",
+            "agent": "AgentA",
+            "callerAgent": None,
+            "history_protocol": MessageFormatter.HISTORY_PROTOCOL_RESPONSES,
+        },
+        {
+            "type": "tool_search_call",
+            "id": "ts_legacy",
+            "call_id": "call_legacy",
+            "arguments": {},
+            "execution": "client",
+            "agent": "AgentA",
+            "callerAgent": None,
+            "history_protocol": MessageFormatter.HISTORY_PROTOCOL_RESPONSES,
+        },
+    ]
+    context = _make_context(thread_manager)
+    agent = _make_responses_agent("AgentA")
+    run_config = RunConfig(
+        model_settings=ModelSettings(store=False, response_include=["web_search_call.results"]),
+    )
+
+    history = MessageFormatter.prepare_history_for_runner(
+        [{"role": "user", "content": "again"}],
+        agent,
+        None,
+        context,
+        run_config_override=run_config,
+    )
+
+    assert history == [{"role": "user", "content": "again", "type": "message"}]
+    assert run_config.model_settings is not None
+    assert run_config.model_settings.response_include == [
+        "web_search_call.results",
+        REASONING_ENCRYPTED_CONTENT_INCLUDE,
+    ]
 
 
 def test_prepare_history_for_runner_rejects_inferred_protocol_mismatch() -> None:
