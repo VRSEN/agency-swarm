@@ -166,6 +166,41 @@ def test_prepare_history_for_runner_uses_run_config_store_false_settings() -> No
     ]
 
 
+def test_prepare_history_for_runner_without_store_false_keeps_reasoning_items() -> None:
+    thread_manager = ThreadManager()
+    thread_manager._store.messages = [
+        {
+            "type": "reasoning",
+            "id": "rs_legacy",
+            "summary": [{"type": "summary_text", "text": "legacy"}],
+            "status": "completed",
+            "agent": "AgentA",
+            "callerAgent": None,
+            "history_protocol": MessageFormatter.HISTORY_PROTOCOL_RESPONSES,
+        }
+    ]
+    context = _make_context(thread_manager)
+    agent = _make_responses_agent("AgentA")
+    agent.model_settings = None
+
+    history = MessageFormatter.prepare_history_for_runner(
+        [{"role": "user", "content": "again"}],
+        agent,
+        None,
+        context,
+    )
+
+    assert history == [
+        {
+            "type": "reasoning",
+            "id": "rs_legacy",
+            "summary": [{"type": "summary_text", "text": "legacy"}],
+            "status": "completed",
+        },
+        {"role": "user", "content": "again", "type": "message"},
+    ]
+
+
 def test_prepare_history_for_runner_rejects_inferred_protocol_mismatch() -> None:
     thread_manager = ThreadManager()
     thread_manager._store.messages = [

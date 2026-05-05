@@ -470,10 +470,12 @@ def test_openclaw_normalization_validation_error_paths() -> None:
             "input": "hello",
             "tool_choice": "unsupported",
             "metadata": "bad-metadata",
+            "include": "reasoning.encrypted_content",
         }
     )
     assert "tool_choice" not in normalized
     assert "metadata" not in normalized
+    assert "include" not in normalized
 
 
 def test_openclaw_header_helpers() -> None:
