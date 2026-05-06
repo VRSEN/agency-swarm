@@ -81,6 +81,14 @@ class _AgentState:
         self._openai_client = None
 
 
+class _CustomModelAgentState:
+    def __init__(self, name: str):
+        self.name = name
+        self.model = "custom-provider/custom-model"
+        self.model_settings = None
+        self._openai_client = None
+
+
 async def _attach_noop(_agency) -> None:
     return None
 
@@ -282,6 +290,44 @@ async def test_response_endpoint_uses_selected_or_default_agent_backend_in_mixed
 
 
 @pytest.mark.asyncio
+async def test_response_endpoint_keeps_non_openai_agent_replay_despite_codex_config(monkeypatch) -> None:
+    pytest.importorskip("agents")
+
+    from agency_swarm.integrations.fastapi_utils import codex_replay
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import make_response_endpoint
+    from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest, ClientConfig
+
+    _patch_endpoint_setup(monkeypatch)
+    monkeypatch.setattr(codex_replay, "get_default_openai_client", lambda: None)
+    replayed_history = [_preserved_message("web_search_preservation", agent="Custom")]
+    loaded_history: list[dict[str, Any]] = []
+    custom_agent = _CustomModelAgentState("Custom")
+    agents = {"Custom": custom_agent}
+
+    def _agency_factory(**kwargs):
+        return _ResponseAgency(
+            kwargs["load_threads_callback"](),
+            loaded_history,
+            agents=agents,
+            entry_points=[custom_agent],
+        )
+
+    handler = make_response_endpoint(BaseRequest, _agency_factory, verify_token=lambda: None)
+    response = await handler(
+        BaseRequest(
+            message="next",
+            chat_history=replayed_history,
+            client_config=ClientConfig(api_key="sk-request-key", base_url=CODEX_BASE_URL),
+        ),
+        token=None,
+    )
+
+    assert response["response"] == "ok"
+    assert _roles(loaded_history) == ["system"]
+    assert _roles(replayed_history) == ["system"]
+
+
+@pytest.mark.asyncio
 async def test_stream_endpoint_rewrites_codex_preservation_replay_without_mutating_input(monkeypatch) -> None:
     pytest.importorskip("agents")
 
@@ -305,9 +351,13 @@ async def test_stream_endpoint_rewrites_codex_preservation_replay_without_mutati
             self.agents = {}
             self.thread_manager = _ThreadManager(messages)
 
+    stream_agency: _StreamAgency | None = None
+
     def _agency_factory(**kwargs):
+        nonlocal stream_agency
         loaded_history[:] = kwargs["load_threads_callback"]()
-        return _StreamAgency(loaded_history)
+        stream_agency = _StreamAgency(loaded_history)
+        return stream_agency
 
     handler = make_stream_endpoint(
         BaseRequest,
@@ -326,7 +376,8 @@ async def test_stream_endpoint_rewrites_codex_preservation_replay_without_mutati
     )
 
     assert response.media_type == "text/event-stream"
-    assert _roles(loaded_history) == ["developer", "developer", "system"]
+    assert stream_agency is not None
+    assert _roles(stream_agency.thread_manager.get_all_messages()) == ["developer", "developer", "system"]
     assert _roles(replayed_history) == ["system", "system", "system"]
     if response.background is not None:
         await response.background()
@@ -350,10 +401,15 @@ async def test_agui_chat_endpoint_rewrites_codex_preservation_replay_without_mut
     class _AguiAgency:
         def __init__(self):
             self.agents = {}
+            self.thread_manager = _ThreadManager(loaded_history)
+
+    agui_agency: _AguiAgency | None = None
 
     def _agency_factory(**kwargs):
+        nonlocal agui_agency
         loaded_history[:] = kwargs["load_threads_callback"]()
-        return _AguiAgency()
+        agui_agency = _AguiAgency()
+        return agui_agency
 
     handler = make_agui_chat_endpoint(RunAgentInputCustom, _agency_factory, verify_token=lambda: None)
     response = await handler(
@@ -372,7 +428,8 @@ async def test_agui_chat_endpoint_rewrites_codex_preservation_replay_without_mut
     )
 
     assert response.media_type == "text/event-stream"
-    assert _roles(loaded_history) == ["developer", "developer", "system"]
+    assert agui_agency is not None
+    assert _roles(agui_agency.thread_manager.get_all_messages()) == ["developer", "developer", "system"]
     assert _roles(replayed_history) == ["system", "system", "system"]
     if response.background is not None:
         await response.background()

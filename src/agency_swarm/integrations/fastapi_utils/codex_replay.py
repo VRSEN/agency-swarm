@@ -63,15 +63,16 @@ def _uses_codex_backend(
     recipient_agent: str | None = None,
 ) -> bool:
     """Return True when the resolved request backend is Codex browser auth."""
-    if config is not None and config.base_url is not None:
-        return _is_codex_base_url(config.base_url)
-
     if agency is not None:
         selected_agent = _get_upload_client_agent(agency, recipient_agent=recipient_agent)
         if selected_agent is not None:
             agent_uses_codex = _agent_codex_backend_state(selected_agent)
             if agent_uses_codex is not None:
                 return agent_uses_codex
+            return False
+
+    if config is not None and config.base_url is not None:
+        return _is_codex_base_url(config.base_url)
 
     return _client_uses_codex_backend(get_default_openai_client())
 
@@ -80,9 +81,6 @@ def _agent_codex_backend_state(agent: Agent) -> bool | None:
     client = _get_openai_client_from_agent(agent)
     if client is not None:
         return _client_uses_codex_backend(client)
-    cached_client = getattr(agent, "_openai_client", None)
-    if isinstance(cached_client, AsyncOpenAI):
-        return _client_uses_codex_backend(cached_client)
     return None
 
 

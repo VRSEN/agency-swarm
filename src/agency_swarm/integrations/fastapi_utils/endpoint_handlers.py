@@ -50,7 +50,6 @@ from agency_swarm import (
 from agency_swarm.agent.execution_stream_response import StreamingRunResponse
 from agency_swarm.agent.initialization import apply_framework_defaults
 from agency_swarm.integrations.fastapi_utils.codex_replay import (
-    prepare_chat_history_for_client_config,
     prepare_loaded_chat_history_for_active_client,
 )
 from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_urls
@@ -452,11 +451,7 @@ def make_response_endpoint(
         if request.chat_history is not None:
             # Chat history is now a flat list
             def load_callback() -> list:
-                return prepare_chat_history_for_client_config(
-                    request.chat_history,
-                    request.client_config,
-                    recipient_agent=request.recipient_agent,
-                )
+                return list(request.chat_history)
         else:
 
             def load_callback() -> list:
@@ -557,11 +552,7 @@ def make_stream_endpoint(
         if request.chat_history is not None:
             # Chat history is now a flat list
             def load_callback() -> list:
-                return prepare_chat_history_for_client_config(
-                    request.chat_history,
-                    request.client_config,
-                    recipient_agent=request.recipient_agent,
-                )
+                return list(request.chat_history)
         else:
 
             def load_callback() -> list:
@@ -820,7 +811,7 @@ def make_agui_chat_endpoint(
         if request.chat_history is not None:
             # Chat history is now a flat list
             def load_callback() -> list:
-                return prepare_chat_history_for_client_config(request.chat_history, request.client_config)
+                return list(request.chat_history)
 
         elif request.messages is not None:
             # Pull the default agent from the agency
