@@ -32,7 +32,7 @@ def get_agent_context(agency: "Agency", agent_name: str) -> "AgencyContext":
 
 def run_fastapi(
     agency: "Agency",
-    host: str = "0.0.0.0",
+    host: str = "127.0.0.1",
     port: int = 8000,
     app_token_env: str = "APP_TOKEN",
     cors_origins: list[str] | None = None,

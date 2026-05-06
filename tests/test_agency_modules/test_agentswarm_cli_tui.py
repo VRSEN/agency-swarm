@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import hashlib
 import importlib
 import json
 import logging
@@ -316,7 +318,7 @@ def test_agentswarm_cli_tui_downloads_platform_cli(monkeypatch, tmp_path):
         info.mode = 0o755
         tar.addfile(info, BytesIO(data))
     data = blob.getvalue()
-    sha = agentswarm_cli_demo.hashlib.sha1(data).hexdigest()
+    integrity = "sha512-" + base64.b64encode(hashlib.sha512(data).digest()).decode("ascii")
     calls: list[str] = []
 
     class Response:
@@ -347,7 +349,7 @@ def test_agentswarm_cli_tui_downloads_platform_cli(monkeypatch, tmp_path):
             payload={
                 "dist": {
                     "tarball": "https://registry.npmjs.org/@vrsen/agentswarm-cli-darwin-arm64/-/pkg.tgz",
-                    "shasum": sha,
+                    "integrity": integrity,
                 }
             }
         )
@@ -373,6 +375,25 @@ def test_agentswarm_cli_tui_downloads_platform_cli(monkeypatch, tmp_path):
         "https://registry.npmjs.org/%40vrsen%2Fagentswarm-cli-darwin-arm64/1.2.27-test",
         "https://registry.npmjs.org/@vrsen/agentswarm-cli-darwin-arm64/-/pkg.tgz",
     ]
+
+
+def test_agentswarm_cli_tui_rejects_missing_integrity(monkeypatch):
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "dist": {
+                    "tarball": "https://registry.npmjs.org/@vrsen/agentswarm-cli-darwin-arm64/-/pkg.tgz",
+                    "shasum": "legacy-sha1",
+                }
+            }
+
+    monkeypatch.setattr(agentswarm_cli_demo.requests, "get", lambda url, timeout: Response())
+
+    with pytest.raises(RuntimeError, match="metadata is invalid"):
+        agentswarm_cli_demo._metadata("@vrsen/agentswarm-cli-darwin-arm64")
 
 
 def test_agentswarm_cli_tui_notifies_on_first_run(monkeypatch, tmp_path):

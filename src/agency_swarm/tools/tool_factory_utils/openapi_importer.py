@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import keyword
 import logging
+import re
 from typing import Any
 
 import httpx
@@ -30,7 +32,7 @@ def from_openai_schema(
     param_model: type[BaseModel] | None = None
     request_body_model: type[BaseModel] | None = None
     strict = schema.get("strict", False)
-    camel_func_name = "".join(word.capitalize() for word in function_name.replace("_", " ").split())
+    camel_func_name = _schema_model_name(function_name)
 
     if "parameters" in schema["properties"] and schema["properties"]["parameters"]:
         param_model = generate_model_from_schema(schema["properties"]["parameters"], camel_func_name, strict)
@@ -40,6 +42,17 @@ def from_openai_schema(
         request_body_model = generate_model_from_schema(request_body_schema, camel_func_name, strict)
 
     return param_model, request_body_model
+
+
+def _schema_model_name(function_name: str) -> str:
+    model_name = "".join(word.capitalize() for word in re.sub(r"[^0-9A-Za-z]+", " ", function_name).split())
+    if not model_name:
+        model_name = "GeneratedModel"
+    if model_name[0].isdigit():
+        model_name = f"Model{model_name}"
+    if keyword.iskeyword(model_name):
+        model_name = f"{model_name.title()}Model"
+    return model_name
 
 
 def from_openapi_schema(

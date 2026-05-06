@@ -190,7 +190,7 @@ def terminal_demo(agency: "Agency", show_reasoning: bool | None = None, reload: 
 
 def copilot_demo(
     agency: "Agency",
-    host: str = "0.0.0.0",
+    host: str = "127.0.0.1",
     port: int = 8000,
     frontend_port: int = 3000,
     cors_origins: list[str] | None = None,

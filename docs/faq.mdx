@@ -101,7 +101,7 @@ async def chat(user_request: UserRequest):
     return {"chat_id": chat_id, "response": response.final_output}
 
 # Or use the built-in FastAPI integration
-agency.run_fastapi(host="0.0.0.0", port=8000)
+agency.run_fastapi(host="127.0.0.1", port=8000)
 ```
 </Accordion>
 

@@ -255,6 +255,18 @@ def test_run_mcp_passes_uvicorn_config_to_fastmcp_run():
     _, kwargs = run_mock.call_args
     assert kwargs["transport"] == "sse"
     assert kwargs["uvicorn_config"] == {"timeout_graceful_shutdown": 1}
+    assert kwargs["stateless_http"] is True
+
+
+def test_run_mcp_return_app_preserves_stateless_http_default():
+    """Returned FastMCP apps should keep the stateless HTTP default for OpenAI Agents clients."""
+
+    app = run_mcp(tools=[sample_tool], app_token_env="", transport="streamable-http", return_app=True)
+
+    with patch("fastmcp.server.mixins.transport.create_streamable_http_app") as create_app:
+        app.http_app(transport="streamable-http")
+
+    assert create_app.call_args.kwargs["stateless_http"] is True
 
 
 def test_mcp_unsupported_tool_type():

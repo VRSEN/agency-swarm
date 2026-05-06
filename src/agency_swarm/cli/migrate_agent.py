@@ -1,7 +1,7 @@
 """Migrate OpenAI Assistant settings.json to Agency Swarm v1.x agent."""
 
 import os
-import platform
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -36,21 +36,19 @@ def check_node_dependencies() -> tuple[bool, str]:
     Returns:
         Tuple of (available, runner_name) where runner_name is 'tsx' or 'ts-node'
     """
-    is_windows = platform.system() == "Windows"
-
     # Node.js is required
-    if not _command_succeeds(["node", "--version"], shell=is_windows):
+    if not _command_succeeds(["node", "--version"]):
         return False, ""
 
     # Try tsx first (better ES module support)
-    if _command_succeeds(["npx", "tsx", "--version"], shell=is_windows):
+    if _command_succeeds(["npx", "tsx", "--version"]):
         return True, "tsx"
 
     # Fall back to ts-node
-    if _command_succeeds(["npx", "ts-node", "--version"], shell=is_windows):
+    if _command_succeeds(["npx", "ts-node", "--version"]):
         return True, "ts-node"
 
-    if _command_succeeds(["ts-node", "--version"], shell=is_windows):
+    if _command_succeeds(["ts-node", "--version"]):
         return True, "ts-node"
 
     return False, ""
@@ -62,8 +60,6 @@ def migrate_agent_command(settings_file: str, output_dir: str = ".") -> int:
     Returns:
         int: Exit code from the generator process when it executes, or 1 when a precondition fails.
     """
-    is_windows = platform.system() == "Windows"
-
     settings_path = Path(settings_file)
 
     if not settings_path.exists():
@@ -99,13 +95,13 @@ def migrate_agent_command(settings_file: str, output_dir: str = ".") -> int:
         os.chdir(output_path)
 
         # Run the TypeScript script with the detected runner
-        cmd = ["npx", runner, str(ts_script), settings_arg]
+        cmd = [*_runner_command(runner), str(ts_script), settings_arg]
 
         print(f"Running: {' '.join(cmd)}")
         print(f"Output directory: {output_path}")
         print(f"Settings file: {settings_arg}")
 
-        result = subprocess.run(cmd, capture_output=True, text=True, shell=is_windows)
+        result = subprocess.run(cmd, capture_output=True, text=True)
 
     except Exception as e:
         print(f"Error running agent generator: {e}", file=sys.stderr)
@@ -131,10 +127,64 @@ def migrate_agent_command(settings_file: str, output_dir: str = ".") -> int:
     return result.returncode if result else 1
 
 
-def _command_succeeds(command: list[str], *, shell: bool) -> bool:
+def _command_succeeds(command: list[str]) -> bool:
     """Check if a command runs successfully."""
+    executable = _safe_command(command[0])
+    if executable is None:
+        return False
     try:
-        subprocess.run(command, capture_output=True, check=True, shell=shell)
+        subprocess.run([*executable, *command[1:]], capture_output=True, check=True)
         return True
     except (subprocess.CalledProcessError, FileNotFoundError):
         return False
+
+
+def _runner_command(runner: str) -> list[str]:
+    """Build a shell-free command for the selected TypeScript runner."""
+    if runner == "tsx":
+        npx_command = _safe_command("npx")
+        if npx_command is None:
+            raise RuntimeError("npx was not found.")
+        return [*npx_command, runner]
+    if runner == "ts-node":
+        npx_command = _safe_command("npx")
+        if npx_command is not None and _command_succeeds(["npx", "ts-node", "--version"]):
+            return [*npx_command, runner]
+        ts_node_command = _safe_command("ts-node")
+        if ts_node_command is None:
+            raise RuntimeError("A safe ts-node executable was not found.")
+        return ts_node_command
+    raise RuntimeError(f"Unsupported TypeScript runner: {runner}")
+
+
+def _safe_command(command: str) -> list[str] | None:
+    """Resolve a command without invoking Windows batch shims directly."""
+    resolved = _resolve_executable(command)
+    if _is_windows_batch(resolved):
+        if command == "npx":
+            npx_cli = _find_npx_cli(resolved)
+            if npx_cli is not None:
+                return [_resolve_executable("node"), str(npx_cli)]
+        return None
+    return [resolved]
+
+
+def _resolve_executable(command: str) -> str:
+    """Resolve command shims, including Windows .cmd launchers, before shell-free subprocess calls."""
+    return shutil.which(command) or command
+
+
+def _is_windows_batch(command: str) -> bool:
+    return Path(command).suffix.lower() in {".cmd", ".bat"}
+
+
+def _find_npx_cli(npx_command: str) -> Path | None:
+    npx_path = Path(npx_command)
+    candidates = (
+        npx_path.parent / "node_modules" / "npm" / "bin" / "npx-cli.js",
+        npx_path.parent.parent / "node_modules" / "npm" / "bin" / "npx-cli.js",
+    )
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None

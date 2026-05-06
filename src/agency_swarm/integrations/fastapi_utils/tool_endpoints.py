@@ -48,7 +48,7 @@ def make_tool_endpoint(tool, verify_token, context=None):
         handler.__annotations__["request_data"] = RequestModel
         return handler
 
-    tool_name = tool.name if hasattr(tool, "name") else tool.__name__
+    tool_name = _tool_name(tool)
     parameters: dict[str, Any] | None = None
     strict_schema = False
     if hasattr(tool, "openai_schema"):
@@ -82,3 +82,13 @@ def make_tool_endpoint(tool, verify_token, context=None):
 
     handler.__annotations__["request_data"] = RequestModel
     return handler
+
+
+def _tool_name(tool: Any) -> str:
+    name = getattr(tool, "name", None)
+    if isinstance(name, str):
+        return name
+    function_name = getattr(tool, "__name__", None)
+    if isinstance(function_name, str):
+        return function_name
+    return tool.__class__.__name__

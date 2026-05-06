@@ -1,6 +1,7 @@
 import base64
 import ipaddress
 import json
+import keyword
 import logging
 import mimetypes
 import socket
@@ -422,6 +423,9 @@ def validate_openapi_spec(spec: str):
 
 
 def generate_model_from_schema(schema: dict, class_name: str, strict: bool) -> type:
+    if not class_name.isidentifier() or keyword.iskeyword(class_name):
+        raise ValueError(f"Invalid generated model class name: {class_name!r}")
+
     data_model_types = get_data_model_types(
         DataModelType.PydanticV2BaseModel,
         target_python_version=PythonVersion.PY_310,
@@ -462,7 +466,8 @@ def generate_model_from_schema(schema: dict, class_name: str, strict: bool) -> t
         "Literal": Literal,
         "Enum": Enum,
     }
-    exec(result, exec_globals)
+    # Class name is validated and code is generated from parsed JSON schema.
+    exec(result, exec_globals)  # nosec B102
     model = exec_globals.get(class_name)
     if not model:
         raise ValueError(f"Could not extract model from schema {class_name}")

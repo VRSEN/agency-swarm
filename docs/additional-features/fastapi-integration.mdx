@@ -37,7 +37,7 @@ agency.run_fastapi()
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| `host` | string | `"0.0.0.0"` | Interface to bind the server. |
+| `host` | string | `"127.0.0.1"` | Interface to bind the server. Use `"0.0.0.0"` only when you intentionally expose it outside your machine. |
 | `port` | integer | `8000` | Port to serve FastAPI on. |
 | `app_token_env` | string | `"APP_TOKEN"` | Env var name for the bearer token; if missing, auth is disabled. |
 | `return_app` | boolean | `false` | Return the FastAPI app instead of running the server. |

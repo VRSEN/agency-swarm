@@ -11,6 +11,7 @@ import pytest
 
 from agency_swarm import ToolOutputFileContent, ToolOutputImage
 from agency_swarm.tools.utils import (
+    generate_model_from_schema,
     tool_output_file_from_path,
     tool_output_file_from_url,
     tool_output_image_from_path,
@@ -45,6 +46,13 @@ def test_tool_output_image_from_path_rejects_unknown_type(tmp_path):
 
     with pytest.raises(ValueError, match="Unable to determine MIME type"):
         tool_output_image_from_path(image_path)
+
+
+def test_generate_model_from_schema_rejects_invalid_class_name():
+    schema = {"type": "object", "properties": {"name": {"type": "string"}}}
+
+    with pytest.raises(ValueError, match="Invalid generated model class name"):
+        generate_model_from_schema(schema, "Bad\n__import__('os')", strict=False)
 
 
 def test_tool_output_file_from_path_embeds_file_data(tmp_path):

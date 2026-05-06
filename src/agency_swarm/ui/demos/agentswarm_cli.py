@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import contextvars
 import hashlib
 import json
@@ -56,7 +57,7 @@ class _Package:
 
 class _Dist(TypedDict):
     tarball: str
-    shasum: str | None
+    integrity: str
 
 
 class _Meta(TypedDict):
@@ -255,7 +256,7 @@ def _install(pkg: _Package, root: Path, path: Path) -> None:
         archive = tmp / "cli.tgz"
         meta = _metadata(pkg.npm_name or pkg.name)
         _download(meta["dist"]["tarball"], archive)
-        if meta["dist"].get("shasum") and _sha1(archive) != meta["dist"]["shasum"]:
+        if not _verify_integrity(archive, meta["dist"]["integrity"]):
             raise RuntimeError("Agent Swarm CLI download checksum mismatch.")
         with tarfile.open(archive, "r:gz") as tar:
             tar.extractall(tmp, filter="data")
@@ -281,12 +282,16 @@ def _metadata(name: str) -> _Meta:
     response.raise_for_status()
     data = response.json()
     dist = data.get("dist") if isinstance(data, dict) else None
-    if not isinstance(dist, dict) or not isinstance(dist.get("tarball"), str):
+    if (
+        not isinstance(dist, dict)
+        or not isinstance(dist.get("tarball"), str)
+        or not isinstance(dist.get("integrity"), str)
+    ):
         raise RuntimeError("Agent Swarm CLI package metadata is invalid.")
     return {
         "dist": {
             "tarball": dist["tarball"],
-            "shasum": dist.get("shasum") if isinstance(dist.get("shasum"), str) else None,
+            "integrity": dist["integrity"],
         }
     }
 
@@ -300,12 +305,23 @@ def _download(url: str, path: Path) -> None:
                     file.write(chunk)
 
 
-def _sha1(path: Path) -> str:
-    hash = hashlib.sha1()
-    with path.open("rb") as file:
-        for chunk in iter(lambda: file.read(1 << 20), b""):
-            hash.update(chunk)
-    return hash.hexdigest()
+def _verify_integrity(path: Path, integrity: str) -> bool:
+    supported_algorithms = {
+        "sha512": hashlib.sha512,
+        "sha384": hashlib.sha384,
+        "sha256": hashlib.sha256,
+    }
+    for token in integrity.split():
+        algorithm, separator, expected_digest = token.partition("-")
+        if separator != "-" or algorithm not in supported_algorithms or not expected_digest:
+            continue
+        digest = supported_algorithms[algorithm]()
+        with path.open("rb") as file:
+            for chunk in iter(lambda: file.read(1 << 20), b""):
+                digest.update(chunk)
+        actual_digest = base64.b64encode(digest.digest()).decode("ascii")
+        return actual_digest == expected_digest
+    raise RuntimeError("Agent Swarm CLI package metadata has no supported integrity hash.")
 
 
 def _cache() -> Path:

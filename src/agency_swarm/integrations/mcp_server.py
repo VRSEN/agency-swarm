@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import sys
-from typing import Any
+from typing import Any, Literal
 
 from agents.run_context import RunContextWrapper
 from agents.tool import FunctionTool
@@ -19,6 +19,30 @@ from mcp.types import ErrorData
 from agency_swarm.tools import BaseTool, ToolFactory
 
 logger = logging.getLogger(__name__)
+
+
+class _StatelessFastMCP(FastMCP):
+    """FastMCP with stateless HTTP as the default for returned app callers."""
+
+    def http_app(
+        self,
+        path: str | None = None,
+        middleware: list[Any] | None = None,
+        json_response: bool | None = None,
+        stateless_http: bool | None = None,
+        transport: Literal["http", "streamable-http", "sse"] = "http",
+        event_store: Any | None = None,
+        retry_interval: int | None = None,
+    ) -> Any:
+        return super().http_app(
+            path=path,
+            middleware=middleware,
+            json_response=json_response,
+            stateless_http=True if stateless_http is None else stateless_http,
+            transport=transport,
+            event_store=event_store,
+            retry_interval=retry_interval,
+        )
 
 
 def _load_tools_from_directory(tools_dir: str) -> list[type[BaseTool] | FunctionTool]:
@@ -42,7 +66,7 @@ def _load_tools_from_directory(tools_dir: str) -> list[type[BaseTool] | Function
 
 def run_mcp(
     tools: list[type[BaseTool] | FunctionTool] | str,
-    host: str = "0.0.0.0",
+    host: str = "127.0.0.1",
     port: int = 8000,
     app_token_env: str | None = "APP_TOKEN",
     server_name: str = "mcp-tools-server",
@@ -78,8 +102,7 @@ def run_mcp(
         if not tools_list or len(tools_list) == 0:
             raise ValueError("No tools provided. Please provide at least one tool class.")
 
-    # stateless_http is required for oai agents
-    mcp: FastMCP = FastMCP(server_name, stateless_http=True)
+    mcp: FastMCP = _StatelessFastMCP(server_name)
 
     # Get authentication token
     app_token = os.getenv(app_token_env)
@@ -108,7 +131,10 @@ def run_mcp(
                         raise McpError(error)
                     return await call_next(ctx)
 
-            mcp.add_middleware(StaticBearer(app_token))
+            auth_middleware = StaticBearer(app_token)
+            mcp.add_middleware(auth_middleware)
+            if mcp.middleware and mcp.middleware[-1] is auth_middleware:
+                mcp.middleware.insert(0, mcp.middleware.pop())
 
     tool_registry = {}
 
@@ -139,11 +165,9 @@ def run_mcp(
 
                 def __init__(self, function_tool):
                     super().__init__(
-                        key=function_tool.name,
                         name=function_tool.name,
                         description=function_tool.description,
                         parameters=function_tool.params_json_schema,  # Use existing JSON schema directly
-                        enabled=True,
                     )
                     # Store the function_tool reference after super().__init__
                     object.__setattr__(self, "_function_tool", function_tool)
@@ -182,4 +206,4 @@ def run_mcp(
     if transport == "stdio":
         mcp.run(transport=transport)
     else:
-        mcp.run(transport=transport, host=host, port=port, uvicorn_config=uvicorn_config)
+        mcp.run(transport=transport, host=host, port=port, uvicorn_config=uvicorn_config, stateless_http=True)

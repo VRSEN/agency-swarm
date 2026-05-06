@@ -119,6 +119,17 @@ async def test_make_tool_endpoint_generic_handler_for_async_callable() -> None:
 
 
 @pytest.mark.asyncio
+async def test_make_tool_endpoint_generic_handler_for_callable_object() -> None:
+    class EchoCallable:
+        def __call__(self, value: str) -> str:
+            return f"callable:{value}"
+
+    handler = make_tool_endpoint(EchoCallable(), verify_token=_fake_verify_token, context=None)
+    response = await handler(request=_DummyRequest({"value": "ok"}), token="ignored")
+    assert response == {"response": "callable:ok"}
+
+
+@pytest.mark.asyncio
 async def test_make_tool_endpoint_generic_handler_returns_json_error() -> None:
     def failing_tool(value: str) -> str:  # noqa: ARG001
         raise RuntimeError("tool failed")

@@ -57,8 +57,7 @@ class PersistentShellTool(BaseTool):  # type: ignore[metaclass]
                 )
             else:
                 result = subprocess.run(
-                    self.command,
-                    shell=True,
+                    ["/bin/sh", "-c", self.command],
                     capture_output=True,
                     text=True,
                     cwd=cwd,

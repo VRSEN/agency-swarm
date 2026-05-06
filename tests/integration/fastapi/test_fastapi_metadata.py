@@ -369,6 +369,22 @@ def test_tool_endpoint_handles_nested_schema():
     assert response.json() == {"response": "Elm"}
 
 
+def test_tool_endpoint_handles_callable_object_instance():
+    """Callable tool instances without __name__ should still build generic endpoints."""
+
+    class EchoCallable:
+        def __call__(self, value: str) -> str:
+            return f"Echo: {value}"
+
+    app = run_fastapi(tools=[EchoCallable()], return_app=True, app_token_env="")
+    client = TestClient(app)
+
+    response = client.post("/tool/EchoCallable", json={"value": "hi"})
+
+    assert response.status_code == 200
+    assert response.json() == {"response": "Echo: hi"}
+
+
 def test_tool_endpoint_serializes_datetime_for_on_invoke(monkeypatch):
     """Ensure typed tool endpoints pass JSON strings to on_invoke_tool."""
 

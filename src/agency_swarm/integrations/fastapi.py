@@ -6,14 +6,15 @@ from agents.tool import FunctionTool
 
 from agency_swarm.agency import Agency
 from agency_swarm.agent.core import Agent
+from agency_swarm.tools import BaseTool
 
 logger = logging.getLogger(__name__)
 
 
 def run_fastapi(
     agencies: Mapping[str, Callable[..., Agency]] | None = None,
-    tools: list[type[FunctionTool]] | None = None,
-    host: str = "0.0.0.0",
+    tools: list[type[BaseTool] | FunctionTool | Callable[..., object]] | None = None,
+    host: str = "127.0.0.1",
     port: int = 8000,
     server_url: str | None = None,
     app_token_env: str = "APP_TOKEN",
@@ -33,7 +34,7 @@ def run_fastapi(
         The factory receives a ``load_threads_callback`` argument and is invoked
         on each request to provide a fresh agency instance with the
         conversation history preloaded.
-    tools : list[type[FunctionTool]] | None
+    tools : list[type[BaseTool] | FunctionTool | Callable[..., object]] | None
         Optional tools to expose under ``/tool`` routes.
     host, port, app_token_env, return_app, cors_origins :
         Standard FastAPI configuration options.
@@ -97,7 +98,7 @@ def run_fastapi(
 
     if server_url:
         base_url = server_url
-    elif host == "0.0.0.0":
+    elif _is_bind_all_host(host):
         base_url = f"http://localhost:{port}"
     else:
         base_url = f"http://{host}:{port}"
@@ -212,7 +213,7 @@ def run_fastapi(
 
     if tools:
         for tool in tools:
-            tool_name = tool.name if hasattr(tool, "name") else tool.__name__
+            tool_name = _tool_route_name(tool)
             tool_handler = make_tool_endpoint(tool, verify_token)
             app.add_api_route(
                 f"/tool/{tool_name}",
@@ -251,6 +252,7 @@ def run_fastapi(
             raise
         logger.warning("Uvicorn does not support ws='websockets-sansio'; falling back to default websocket stack")
         uvicorn.run(app, host=host, port=port)
+
     except ValueError as exc:
         message = str(exc).lower()
         if "websocket" not in message and "websockets-sansio" not in message:
@@ -262,3 +264,17 @@ def run_fastapi(
             raise
         logger.warning("Uvicorn import rejected ws='websockets-sansio'; falling back to default websocket stack")
         uvicorn.run(app, host=host, port=port)
+
+
+def _tool_route_name(tool: object) -> str:
+    name = getattr(tool, "name", None)
+    if isinstance(name, str):
+        return name
+    class_name = getattr(tool, "__name__", None)
+    if isinstance(class_name, str):
+        return class_name
+    return tool.__class__.__name__
+
+
+def _is_bind_all_host(host: str) -> bool:
+    return host in {".".join(("0", "0", "0", "0")), "::"}
