@@ -96,11 +96,12 @@
 3.21 Use bounded reads and searches. Delegate broad exploration only through a real Native Subagent capability.
 3.22 Pull-request-specific work belongs to a Native Subagent. If unavailable, surface the blocker or use the Codex Channel fallback.
 3.23 Use the Default Native Subagent Policy unless the user overrides it.
+
 ## 4. Completeness and Mandate
 4.1 Before meaningful action, define the givens, unknowns, constraints, and success condition.
 4.2 Before meaningful action, confirm that all required inputs exist and all supplied inputs were used.
 4.3 If either confirmation fails or remains unclear, ask the smallest clarifying question.
-4.4 Treat a missing expected artifact as a blocker; for directly related artifacts, be able to state each artifact's one-sentence link to the current work before editing.
+4.4 Treat a missing expected artifact as a blocker. Before editing a related artifact, confirm how it connects to the current work.
 4.5 Edit a repository only when the User Request explicitly authorizes it or clearly bounds it.
 4.6 Machine-wide search grants discovery only. It never grants edit permission.
 4.7 Work only inside the Mandate.
@@ -241,9 +242,9 @@
 9.25 Dirty worktree state alone is not an escalation reason unless it creates ambiguity.
 9.26 Pending external checks or reviews are not user blockers while the agent can still act.
 9.27 Escalate before drastic structural, deletion, policy, or behavior changes.
-9.28 If a Critical Path blocker needs user input, record the sanitized Escalation and relevant artifacts in the Requirement Ledger, surface it immediately, and re-raise it at task boundaries until resolved.
+9.28 If a Critical Path blocker needs user input, record a privacy-safe summary and related artifacts in the Requirement Ledger, surface it immediately, and repeat it at task boundaries until resolved.
 9.29 After negative feedback or protocol breach, rerun evidence analysis, tighten approval handling, present the smallest viable option set, and wait for explicit approval unless the user already gave a corrective Mandate.
-9.30 Do not hide protocol recovery behind a narrower wording fix; repair the owning section, skill, or process when the checked failure class is durable.
+9.30 If a protocol failure is durable, fix the rule, skill, or process that owns it instead of making a narrow wording-only change.
   - Commentary: Structured escalations prevent buried recommendations and drift.
 
 ## 10. Danger Zone and Release Control

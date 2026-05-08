@@ -44,7 +44,7 @@ If `codex review` is unavailable or stuck, use a narrow `codex exec` review prom
 Prompt shape:
 
 ```text
-Review the current diff against <base> for real correctness, regression, security, data-boundary, policy, repo-rule, PR compliance, review-gate, test/QA evidence, excessive-scope, and unintentional-drift issues. Treat real issues as P0/P1/P2 findings by risk, including missing required gates or evidence. Ignore style nits. Return exactly "No findings." if clean.
+Review the current diff against <base> for correctness, regressions, security or privacy risk, data-boundary issues, repo-policy and PR compliance, missing required gates or evidence, excessive scope, and unintended drift. Treat real issues as P0/P1/P2 findings under AGENTS.md. Ignore style nits. Return exactly "No findings." if clean.
 ```
 
 ## Finding Severity
