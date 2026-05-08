@@ -30,7 +30,7 @@ Use this skill when task state must survive beyond the current chat or when a re
 Run the bundled script from the repository root:
 
 ```bash
-python .codex/skills/requirement-ledger/scripts/requirement_ledger.py --help
+uv run python .codex/skills/requirement-ledger/scripts/requirement_ledger.py --help
 ```
 
 Default files:
@@ -42,16 +42,16 @@ Use `--ledger-dir <path>` for a temporary or task-specific ledger.
 
 New active ledger items must carry an `artifacts` list, even when it is empty. Use it for the live handles that already cover the work, such as `PR#123`, `branch:origin/main`, `tag:v1.2.3`, `release:v1.2.3`, or `gist:abc123`, so the next agent finds existing work before creating anything new.
 
-Legacy archive entries that predate `artifacts` stay readable; the tool treats missing archive artifacts as `[]` on read. Do not hand-edit archive data just to add the field.
+Legacy active ledgers that use schema `codex-requirement-ledger/v2` or predate active-item `artifacts` stay readable. The tool treats missing active artifacts as `[]` in memory and writes the current schema plus explicit `artifacts` on the next item-level update. Do not hand-edit active ledger data just to migrate it.
 
-Legacy Agency active ledgers using `codex-requirement-ledger/v2` are migrated on read to the current schema and backfilled with `artifacts: []` when needed. Current-schema active entries still require an explicit `artifacts` list.
+Legacy archive entries that predate `artifacts` stay readable; the tool treats missing archive artifacts as `[]` on read. Do not hand-edit archive data just to add the field.
 
 ## Commands
 
 Add an item:
 
 ```bash
-python .codex/skills/requirement-ledger/scripts/requirement_ledger.py add \
+uv run python .codex/skills/requirement-ledger/scripts/requirement_ledger.py add \
   --category tooling \
   --title "Build reusable requirement ledger skill" \
   --original "build a durable active requirement queue and archive workflow" \
@@ -64,7 +64,7 @@ python .codex/skills/requirement-ledger/scripts/requirement_ledger.py add \
 For long reviewed requirement text, read `original` from a file instead of the shell:
 
 ```bash
-python .codex/skills/requirement-ledger/scripts/requirement_ledger.py add \
+uv run python .codex/skills/requirement-ledger/scripts/requirement_ledger.py add \
   --category tooling \
   --title "Ingest reviewed user requests" \
   --original-file /tmp/sanitized_request.txt \
@@ -76,14 +76,14 @@ python .codex/skills/requirement-ledger/scripts/requirement_ledger.py add \
 Append linked artifacts on an existing item:
 
 ```bash
-python .codex/skills/requirement-ledger/scripts/requirement_ledger.py update REQ-20260415-001 \
+uv run python .codex/skills/requirement-ledger/scripts/requirement_ledger.py update REQ-20260415-001 \
   --artifact "PR#123"
 ```
 
 Update active state:
 
 ```bash
-python .codex/skills/requirement-ledger/scripts/requirement_ledger.py update REQ-20260415-001 \
+uv run python .codex/skills/requirement-ledger/scripts/requirement_ledger.py update REQ-20260415-001 \
   --status in_progress \
   --next-action "Run the focused smoke test."
 ```
@@ -91,21 +91,21 @@ python .codex/skills/requirement-ledger/scripts/requirement_ledger.py update REQ
 Move finished work to the archive:
 
 ```bash
-python .codex/skills/requirement-ledger/scripts/requirement_ledger.py complete REQ-20260415-001 \
+uv run python .codex/skills/requirement-ledger/scripts/requirement_ledger.py complete REQ-20260415-001 \
   --resolution "Skill and CLI smoke test completed."
 ```
 
 Mark rejected ledger revision as failed:
 
 ```bash
-python .codex/skills/requirement-ledger/scripts/requirement_ledger.py reject REQ-20260415-001 \
+uv run python .codex/skills/requirement-ledger/scripts/requirement_ledger.py reject REQ-20260415-001 \
   --resolution "Ledger revision was rejected and must be rebuilt from original sources."
 ```
 
 List current state:
 
 ```bash
-python .codex/skills/requirement-ledger/scripts/requirement_ledger.py list --archive
+uv run python .codex/skills/requirement-ledger/scripts/requirement_ledger.py list --archive
 ```
 
 ## Rules

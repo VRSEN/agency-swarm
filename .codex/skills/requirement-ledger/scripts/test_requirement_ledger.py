@@ -129,7 +129,7 @@ class RequirementLedgerCliTest(unittest.TestCase):
             self.assertEqual(stdout.getvalue(), "")
             self.assertIn("error: cannot decode original file as UTF-8:", stderr.getvalue())
 
-    def test_legacy_agency_active_schema_migrates_missing_artifacts(self) -> None:
+    def test_legacy_active_schema_lists_missing_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             ledger_dir = Path(tmpdir) / "ledger"
             ledger_dir.mkdir()
@@ -168,10 +168,10 @@ class RequirementLedgerCliTest(unittest.TestCase):
             self.assertEqual(stderr.getvalue(), "")
             self.assertIn("Active (1)", stdout.getvalue())
             active = json.loads((ledger_dir / "active.json").read_text(encoding="utf-8"))
-            self.assertEqual(active["schema"], MODULE.SCHEMA_VERSION)
-            self.assertEqual(active["items"][0]["artifacts"], [])
+            self.assertEqual(active["schema"], "codex-requirement-ledger/v2")
+            self.assertNotIn("artifacts", active["items"][0])
 
-    def test_active_items_require_artifacts_list(self) -> None:
+    def test_active_items_without_artifacts_stay_readable(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             ledger_dir = Path(tmpdir) / "ledger"
             ledger_dir.mkdir()
@@ -206,9 +206,60 @@ class RequirementLedgerCliTest(unittest.TestCase):
             with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
                 exit_code = MODULE.main(["--ledger-dir", str(ledger_dir), "list"])
 
-            self.assertEqual(exit_code, 2)
-            self.assertEqual(stdout.getvalue(), "")
-            self.assertIn("error: active ledger is missing artifacts", stderr.getvalue())
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(stderr.getvalue(), "")
+            self.assertIn("Active (1)", stdout.getvalue())
+
+    def test_update_persists_legacy_schema_and_missing_artifacts_migration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ledger_dir = Path(tmpdir) / "ledger"
+            ledger_dir.mkdir()
+            (ledger_dir / "active.json").write_text(
+                json.dumps(
+                    {
+                        "schema": "codex-requirement-ledger/v2",
+                        "items": [
+                            {
+                                "id": "REQ-20260429-001",
+                                "created_at": "2026-04-29T00:00:00Z",
+                                "updated_at": "2026-04-29T00:00:00Z",
+                                "status": "open",
+                                "category": "tooling",
+                                "title": "test",
+                                "original": "Track the active requirement.",
+                                "intent": "Keep state durable.",
+                                "next_action": "Review the queue.",
+                                "source_pointers": ["chat:1"],
+                            }
+                        ],
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (ledger_dir / "archive.jsonl").write_text("", encoding="utf-8")
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                exit_code = MODULE.main(
+                    [
+                        "--ledger-dir",
+                        str(ledger_dir),
+                        "update",
+                        "REQ-20260429-001",
+                        "--next-action",
+                        "Run the next check.",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(stderr.getvalue(), "")
+            active = json.loads((ledger_dir / "active.json").read_text(encoding="utf-8"))
+            self.assertEqual(active["schema"], MODULE.SCHEMA_VERSION)
+            self.assertEqual(active["items"][0]["artifacts"], [])
+            self.assertEqual(active["items"][0]["next_action"], "Run the next check.")
 
     def test_archive_entries_without_artifacts_stay_readable(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

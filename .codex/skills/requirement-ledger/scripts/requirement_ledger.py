@@ -231,15 +231,12 @@ def _load_active(path: Path) -> dict[str, Any]:
     schema = data.get("schema")
     if schema not in (SCHEMA_VERSION, *LEGACY_ACTIVE_SCHEMA_VERSIONS) or not isinstance(data.get("items"), list):
         raise LedgerError(f"unsupported active ledger schema: {path}")
-    migrated = schema != SCHEMA_VERSION
-    if migrated:
+    if schema != SCHEMA_VERSION:
         data["schema"] = SCHEMA_VERSION
     for item in data["items"]:
-        if migrated and "artifacts" not in item:
+        if "artifacts" not in item:
             item["artifacts"] = []
         _validate_item(item, "active ledger", ACTIVE_STATUSES)
-    if migrated:
-        _write_active(path, data)
     return data
 
 

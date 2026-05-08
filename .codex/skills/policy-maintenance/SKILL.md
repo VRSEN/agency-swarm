@@ -40,15 +40,17 @@ Use this skill for policy, workflow-rule, and repo-skill changes. Repo skills ar
 Run these before commit:
 
 ```bash
-git diff --check
-make format
-make check
+uv run python .codex/skills/requirement-ledger/scripts/requirement_ledger.py list
+git diff --check -- AGENTS.md .codex/skills
 ```
 
 For Requirement Ledger script changes, also run:
 
 ```bash
-python .codex/skills/requirement-ledger/scripts/test_requirement_ledger.py
+uv run ruff check .codex/skills/requirement-ledger/scripts/requirement_ledger.py .codex/skills/requirement-ledger/scripts/test_requirement_ledger.py
+uv run ruff format --check .codex/skills/requirement-ledger/scripts/requirement_ledger.py .codex/skills/requirement-ledger/scripts/test_requirement_ledger.py
+uv run python -m py_compile .codex/skills/requirement-ledger/scripts/requirement_ledger.py
+uv run pytest .codex/skills/requirement-ledger/scripts/test_requirement_ledger.py
 ```
 
 For repo-skill changes, also reread the changed `SKILL.md` files and verify their descriptions trigger only the intended work.
