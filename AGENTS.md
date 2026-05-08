@@ -72,6 +72,28 @@
 2.17 Every modification shall rest on tests, logs, or clear specification. Missing evidence requires disclosure and Escalation.
 2.18 If User Requests conflict with checked facts or this contract, surface the conflict instead of silently reinterpreting intent.
 
+## Core Rule Buckets
+
+- User Words / Truth: exact user wording is the highest source of truth. Reconcile it against checked evidence, policy, and live state before action.
+- Mandates / Boundaries: every action shall stay inside the authorized action, repository, branch, artifact, visibility, and permission boundary.
+- Escalations: stop and ask one concrete question when evidence cannot resolve a real user decision or rule conflict.
+- Ledger / Artifacts: durable state, active artifacts, blockers, source links, and handoffs belong in the Requirement Ledger. Exact private wording belongs in user-words files; ledger entries should be proofread and privacy-preserving.
+- Evidence / Reality: current files, diffs, tests, logs, live state, and original transcripts outrank summaries, memory, assumptions, and worker output.
+- Manager / Delegation: managers own queue control, mandate control, scoped delegation, final review, and Critical Path decisions; workers return evidence, not final truth.
+- Policy Maintenance: policy is executable agent code. Keep it short, hierarchical, current, and enforced by intent; move playbooks into skills.
+- PR / Review / Danger Zone: public or irreversible mutations require fresh live-state checks, review gates, explicit approval, and no stale summaries.
+- Code / Fork / Type Rules: repository-specific code rules shall preserve local patterns, type safety, fork discipline, and the smallest coherent diff.
+- Skills Parity: repo and global skills shall mirror reusable `agentswarm-cli` manager discipline for ledger, policy, delegation, testing, and review behavior.
+
+## Core Skill Routing
+
+- Use `.codex/skills/requirement-ledger` for durable task state, active artifacts, blockers, source links, and handoffs.
+- Use `.codex/skills/policy-maintenance` for changes to `AGENTS.md`, `CLAUDE.md`, or `.codex/skills/**`.
+- Use `.codex/skills/delegation-management` before scoped worker prompts, worker reuse decisions, or delegated-output review.
+- Use `.codex/skills/test-workflow` when choosing proof for tests, integration, manual QA, installed-build checks, or release proof.
+- Use `.codex/skills/codex-cli-review` before pull-request review gates, hosted review fallback, or saved Codex review artifacts.
+- Use `.codex/skills/claude-cli-review` only as supporting review evidence when the active policy allows it.
+
 ## 3. Instruction File Governance
 3.1 Keep the Instruction File short, practical, and human-readable.
 3.2 Keep only session-wide rules here and mirror `VRSEN/agentswarm-cli` shared policy as a strict subset or necessary Python/Agency adaptation.
@@ -127,7 +149,7 @@
 5.13 Keep only unfulfilled work in the Active Queue. Archive fulfilled, deferred, failed, and noise items concisely.
 5.14 Keep the Active Queue concise without deleting or flattening real User Requests.
 5.15 Add each new User Request immediately and keep it active until resolution.
-5.16 Before presenting a ledger revision, list each active unfulfilled requirement with close wording and source pointer.
+5.16 Before presenting a ledger revision, list each active unfulfilled requirement with proofread, privacy-preserving wording and source pointer.
 5.17 If a ledger revision is rejected, mark it failed and rebuild from original sources.
 5.18 Track every Active Artifact in the Requirement Ledger.
 5.19 Treat every unshipped or undiscarded Active Artifact as a blocker.
