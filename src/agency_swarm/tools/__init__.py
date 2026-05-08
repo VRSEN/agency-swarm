@@ -17,28 +17,99 @@ from .utils import (
 )
 
 _SDK_TOOL_EXPORT_NAMES = {
-    name
-    for name in _agents.__all__
-    if (
-        "Tool" in name
-        or "Computer" in name
-        or name.startswith("ApplyPatch")
-        or name.startswith("Shell")
-        or name.startswith("MCP")
-        or name
-        in {
-            "Button",
-            "CustomTool",
-            "Environment",
-            "FunctionToolResult",
-            "LocalShellCommandRequest",
-            "LocalShellExecutor",
-        }
-    )
+    "AgentToolInvocation",
+    "AgentToolStreamEvent",
+    "ApplyPatchEditor",
+    "ApplyPatchOperation",
+    "ApplyPatchResult",
+    "ApplyPatchTool",
+    "AsyncComputer",
+    "Button",
+    "CodeInterpreterTool",
+    "Computer",
+    "ComputerProvider",
+    "ComputerTool",
+    "CustomTool",
+    "Environment",
+    "FileSearchTool",
+    "FunctionTool",
+    "FunctionToolResult",
+    "HostedMCPTool",
+    "ImageGenerationTool",
+    "LocalShellCommandRequest",
+    "LocalShellExecutor",
+    "LocalShellTool",
+    "MCPApprovalRequestItem",
+    "MCPApprovalResponseItem",
+    "MCPListToolsSpanData",
+    "MCPToolApprovalFunction",
+    "MCPToolApprovalFunctionResult",
+    "MCPToolApprovalRequest",
+    "ShellActionRequest",
+    "ShellCallData",
+    "ShellCallOutcome",
+    "ShellCommandOutput",
+    "ShellCommandRequest",
+    "ShellExecutor",
+    "ShellResult",
+    "ShellTool",
+    "ShellToolContainerAutoEnvironment",
+    "ShellToolContainerNetworkPolicy",
+    "ShellToolContainerNetworkPolicyAllowlist",
+    "ShellToolContainerNetworkPolicyDisabled",
+    "ShellToolContainerNetworkPolicyDomainSecret",
+    "ShellToolContainerReferenceEnvironment",
+    "ShellToolContainerSkill",
+    "ShellToolEnvironment",
+    "ShellToolHostedEnvironment",
+    "ShellToolInlineSkill",
+    "ShellToolInlineSkillSource",
+    "ShellToolLocalEnvironment",
+    "ShellToolLocalSkill",
+    "ShellToolSkillReference",
+    "StopAtTools",
+    "Tool",
+    "ToolApprovalItem",
+    "ToolCallItem",
+    "ToolCallOutputItem",
+    "ToolErrorFormatter",
+    "ToolErrorFormatterArgs",
+    "ToolGuardrailFunctionOutput",
+    "ToolInputGuardrail",
+    "ToolInputGuardrailData",
+    "ToolInputGuardrailResult",
+    "ToolInputGuardrailTripwireTriggered",
+    "ToolOrigin",
+    "ToolOriginType",
+    "ToolOutputFileContent",
+    "ToolOutputFileContentDict",
+    "ToolOutputGuardrail",
+    "ToolOutputGuardrailData",
+    "ToolOutputGuardrailResult",
+    "ToolOutputGuardrailTripwireTriggered",
+    "ToolOutputImage",
+    "ToolOutputImageDict",
+    "ToolOutputText",
+    "ToolOutputTextDict",
+    "ToolSearchTool",
+    "ToolTimeoutError",
+    "ToolsToFinalOutputFunction",
+    "ToolsToFinalOutputResult",
+    "WebSearchTool",
+    "default_tool_error_function",
+    "dispose_resolved_computers",
+    "function_tool",
+    "mcp_tools_span",
+    "resolve_computer",
+    "tool_input_guardrail",
+    "tool_namespace",
+    "tool_output_guardrail",
 }
 _SDK_TOOL_SHADOWED_EXPORTS = {"function_tool"}
 for _sdk_name in _SDK_TOOL_EXPORT_NAMES:
     if _sdk_name not in _SDK_TOOL_SHADOWED_EXPORTS:
+        if _sdk_name not in _agents.__all__:
+            raise ImportError(f"Agents SDK export {_sdk_name!r} is not available")
         globals()[_sdk_name] = getattr(_agents, _sdk_name)
 
 _TOOL_PARAM_IGNORED_EXPORTS = {
