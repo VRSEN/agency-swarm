@@ -10,8 +10,9 @@ Use this skill when delegation affects correctness, queue control, review qualit
 ## Manager Duties
 
 - Stay at manager height: own the queue, mandate, critical path, final review, merge/release decisions, and destructive-action decisions.
-- Managers may inspect, review, run tests, integrate worker output, and perform allowed mechanical git operations. Managers must not author file edits except the global `USER_WORDS.md` standing exception or when the user explicitly assigns an isolated worker scope.
+- Managers may inspect, review, run tests, integrate worker output, and perform allowed mechanical git operations. `USER_WORDS.md` captures are the only manager-write exception. If the user assigns an isolated worker scope, the agent acts as a worker inside that scope.
 - Worker output is evidence, not final truth. Verify it before relying on it or presenting it as final.
+- Managers must not pass custom worker or subagent model overrides unless a user or platform instruction explicitly allows that exact override.
 - When reviewing delegated output, load and follow the same relevant skill or skills the worker was told to use, and verify whether the worker actually used them.
 - Treat subagents as focused independent contributors or counsel inside their mandate, not narrow command executors.
 
