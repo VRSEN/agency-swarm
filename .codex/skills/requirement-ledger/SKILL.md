@@ -1,6 +1,6 @@
 ---
 name: requirement-ledger
-description: Use when a task needs a durable active requirement queue and archive workflow. Captures only real user requests or requirements with proofread, sanitized requirement text, source pointers, category, intent, status, next action, and linked artifacts; avoids noisy transcript dumps without erasing user intent.
+description: Use when a task needs a durable active requirement queue and archive workflow. Captures only real active work state changes with proofread, sanitized requirement text, source pointers, category, intent, status, next action, and linked artifacts; avoids noisy transcript dumps without erasing user intent.
 ---
 
 # Requirement Ledger
@@ -9,7 +9,7 @@ Use this skill when task state must survive beyond the current chat or when a re
 
 ## Workflow
 
-1. Record only real user requests, explicit requirements, blockers, or decisions that change the work.
+1. Record only real user requests, explicit requirements, blockers, or decisions that change active work state.
 2. Store a proofread, privacy-preserving requirement restatement in `original`; do not copy exact private wording, profanity, speech errors, or raw transcript phrasing. Preserve meaning, source pointers, context, and auditability.
 3. Add a source pointer for each item, such as `chat:2026-04-15 user#2`, `PR#123 comment 456`, or `docs/foo.md:42`.
 4. Plan the strategy for tackling the active queue before editing it, then reread the full active ledger and reprioritize deliberately at each task boundary.
@@ -17,7 +17,7 @@ Use this skill when task state must survive beyond the current chat or when a re
 6. Before presenting a revised ledger, list every active unfulfilled requirement with sanitized `original` and source pointers.
 7. When an item is done, run `complete` so it moves out of the active queue and into the archive.
 8. If a ledger revision is rejected, run `reject`; failed revision output is not source of truth and must be rebuilt from original sources.
-9. Consider the ledger on every user message; update it only when the message creates or changes a real request, requirement, decision, blocker, artifact, status, or critical-path fact.
+9. Consider the ledger on every user message; update it only when the message creates or changes a real request, requirement, decision, blocker, artifact, status, or critical-path fact. Do not update it for petty, transient, redundant, or low-value comments that do not change active work.
 10. Update the ledger at task switches, meaningful progress points, artifact state changes, before commits, before pull-request or release actions, and before a substantive reply or stop when one of those events changes real ledger state.
 11. Register every active artifact you touch as a ledger-linked item or note: repos, worktrees, branches, PRs, conflicted states, temp artifacts, and generated review artifacts that still matter.
 12. Treat every unshipped or undiscarded artifact as a blocker; do not let it fall out of the active queue until it is shipped, explicitly discarded, or archived with resolution.
@@ -40,11 +40,9 @@ Default files:
 
 Use `--ledger-dir <path>` for a temporary or task-specific ledger.
 
-New active ledger items must carry an `artifacts` list, even when it is empty. Use it for the live handles that already cover the work, such as `PR#123`, `branch:origin/main`, `tag:v1.2.3`, `release:v1.2.3`, or `gist:abc123`, so the next agent finds existing work before creating anything new.
+New active ledger items must carry an `artifacts` list, even when it is empty. Use it for the live handles that already cover the work, such as `PR#123`, `branch:<name>`, `tag:v1.2.3`, `release:v1.2.3`, or `gist:abc123`, so the next agent finds existing work before creating anything new.
 
 Legacy archive entries that predate `artifacts` stay readable; the tool treats missing archive artifacts as `[]` on read. Do not hand-edit archive data just to add the field.
-
-Legacy Agency active ledgers using `codex-requirement-ledger/v2` are migrated on read to the current schema and backfilled with `artifacts: []` when needed. Current-schema active entries still require an explicit `artifacts` list.
 
 ## Commands
 
@@ -58,7 +56,7 @@ python .codex/skills/requirement-ledger/scripts/requirement_ledger.py add \
   --intent "Future agents need a compact active queue and archive workflow." \
   --next-action "Create the skill files and run a CLI smoke test." \
   --source-pointer "chat:2026-04-15 user#2" \
-  --artifact "branch:origin/main"
+  --artifact "branch:<name>"
 ```
 
 For long reviewed requirement text, read `original` from a file instead of the shell:
@@ -110,7 +108,7 @@ python .codex/skills/requirement-ledger/scripts/requirement_ledger.py list --arc
 
 ## Rules
 
-- Do not add raw user-message dumps, images, logs, stack traces, exact private wording, profanity, speech errors, or other private data to durable ledger text. If exact source text matters, keep it outside the ledger and point to it with a source pointer.
+- Do not add raw user-message dumps, images, logs, stack traces, exact private wording, profanity, speech errors, or other private data to durable ledger text. If exact source text matters under the global `USER_WORDS` threshold, keep it outside the ledger and point to it with a source pointer.
 - Noise reduction may remove non-requirement chatter and duplicates, but it must not delete, flatten, or overcompress the user's actual request.
 - Keep the tooling simple: validate required fields, but avoid arbitrary caps or normalization that distorts meaning.
 - Never rewrite the whole queue file. Use item-level `add`, `update`, `complete`, or `reject` operations so source pointers, sanitized requirement text, and order survive.
