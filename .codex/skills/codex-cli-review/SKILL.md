@@ -5,7 +5,7 @@ description: Use when a local Codex CLI review, pull-request opening or update c
 
 # Codex CLI Review
 
-Use this skill for local Codex review artifacts and pull-request review loops. Repo-specific `AGENTS.md` rules override the global defaults.
+Use this skill for local Codex review artifacts and pull-request review loops. Repo-specific `AGENTS.md` rules may tighten global defaults but must not weaken them.
 
 ## Governance Primer
 
@@ -33,7 +33,7 @@ Use this skill for local Codex review artifacts and pull-request review loops. R
 ## Canonical Review
 
 ```bash
-codex review --base <base> -m gpt-5.5 -c model_reasoning_effort="medium" > /tmp/codex_review_$(git rev-parse --short HEAD).txt 2>&1
+codex review --base <base> -m gpt-5.5 -c model_reasoning_effort="high" > /tmp/codex_review_$(git rev-parse --short HEAD).txt 2>&1
 ```
 
 If GPT-5.5 is unavailable, use the strongest available GPT-5.x review path, record the exact model, and do not rely on unknown defaults.
