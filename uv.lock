@@ -21,7 +21,7 @@ wheels = [
 
 [[package]]
 name = "agency-swarm"
-version = "1.9.8"
+version = "1.9.9"
 source = { editable = "." }
 dependencies = [
     { name = "ag-ui-protocol" },
@@ -119,7 +119,7 @@ requires-dist = [
     { name = "nest-asyncio", marker = "extra == 'jupyter'", specifier = ">=1.6.0,<2.0.0" },
     { name = "numpy", marker = "python_full_version >= '3.10' and extra == 'voice'", specifier = ">=2.2.0,<3" },
     { name = "openai", specifier = ">=2.2,<3" },
-    { name = "openai-agents", specifier = "==0.14.2" },
+    { name = "openai-agents", specifier = "==0.14.8" },
     { name = "prompt-toolkit", specifier = ">=3.0.0,<4.0.0" },
     { name = "pydantic", specifier = ">=2.11,<3" },
     { name = "python-dotenv", specifier = ">=1.1.1,<2.0.0" },
@@ -1878,7 +1878,7 @@ wheels = [
 
 [[package]]
 name = "openai-agents"
-version = "0.14.2"
+version = "0.14.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "griffelib" },
@@ -1890,9 +1890,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e2/2c/74fea5c1b20f107d19742af400045542e17eb449d044f950758a6f68f32f/openai_agents-0.14.2.tar.gz", hash = "sha256:fd4e1ae84e00aef4339ad39913468a0da34cba8ff5382925d38028ac3b435ef2", size = 5288888, upload-time = "2026-04-18T00:17:39.709Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d5/8a/d36ab647f05e790ec97dda9e4c0eb39d8840269d6a5194887b5dec92bd0d/openai_agents-0.14.8.tar.gz", hash = "sha256:fe1cb58b4150a07292a94f15d8fd5217ee9195bd6bcd8a6a46fdb1d9b08a70b7", size = 5314520, upload-time = "2026-04-29T03:40:07.6Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0b/02/bb3ddff9bca543cbcca0d362a645b03a0708b6c2cd6eb620d5f3de810bb3/openai_agents-0.14.2-py3-none-any.whl", hash = "sha256:acd75132f2ec70413a4e95680b629ccbc6f4f5d0d63414980153de09d409e695", size = 807364, upload-time = "2026-04-18T00:17:37.505Z" },
+    { url = "https://files.pythonhosted.org/packages/af/6e/1e9adcedcde7b163579b88a68f765a4915be4ead0713270386d9432cfd2f/openai_agents-0.14.8-py3-none-any.whl", hash = "sha256:2937ef582ccaa45d59e89839ed8948cb2a6d808bc9940f0881793c21f37f7776", size = 817332, upload-time = "2026-04-29T03:40:05.68Z" },
 ]
 
 [[package]]

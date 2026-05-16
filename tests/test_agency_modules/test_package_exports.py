@@ -6,7 +6,7 @@ import agency_swarm.tools as agency_tools
 
 ROOT_SHADOWED_SDK_EXPORTS = {"Agent", "Handoff", "function_tool", "__version__"}
 TOOLS_SHADOWED_SDK_EXPORTS = {"function_tool"}
-EXPECTED_OPENAI_AGENTS_VERSION = "0.14.2"
+EXPECTED_OPENAI_AGENTS_VERSION = "0.14.8"
 EXPECTED_SDK_TOOL_EXPORTS = {
     "AgentToolInvocation",
     "AgentToolStreamEvent",
