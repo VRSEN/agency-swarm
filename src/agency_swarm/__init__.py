@@ -1,21 +1,37 @@
 import importlib
 import importlib.util
 
-import agents as _agents
 from dotenv import load_dotenv
 
 # Automatically load environment variables from .env when the package is imported
 load_dotenv(override=True)
 
-# Re-export Agents SDK utilities for simpler imports in docs/examples.
-_SDK_SHADOWED_EXPORTS = {"Agent", "Handoff", "function_tool", "__version__"}
-_SDK_EXPORT_ALIASES = {"Agent": "SDKAgent", "Handoff": "SDKHandoff"}
-
-for _sdk_name in _agents.__all__:
-    if _sdk_name in _SDK_EXPORT_ALIASES:
-        globals()[_SDK_EXPORT_ALIASES[_sdk_name]] = getattr(_agents, _sdk_name)
-    elif _sdk_name not in _SDK_SHADOWED_EXPORTS:
-        globals()[_sdk_name] = getattr(_agents, _sdk_name)
+# Re-export common Agents SDK utilities for simpler imports in docs/examples
+from agents import (  # noqa: E402
+    AgentHooks,
+    AgentOutputSchemaBase,
+    AsyncComputer,
+    Computer,
+    DynamicPromptFunction,
+    GenerateDynamicPromptData,
+    GuardrailFunctionOutput,
+    Handoff as SDKHandoff,
+    InputGuardrailTripwireTriggered,
+    Model,
+    ModelSettings,
+    OpenAIChatCompletionsModel,
+    OutputGuardrailTripwireTriggered,
+    RunContextWrapper,
+    RunHooks,
+    RunResult,
+    RunResultStreaming,
+    StopAtTools,
+    ToolsToFinalOutputFunction,
+    input_guardrail,
+    output_guardrail,
+    set_tracing_disabled,
+    trace,
+)
 
 # Optional: LitellmModel requires the litellm extra
 try:
@@ -48,10 +64,18 @@ from .tools import (  # noqa: E402
     CodeInterpreter,
     CodeInterpreterContainer,
     CodeInterpreterContainerCodeInterpreterToolAuto,
+    CodeInterpreterTool,
+    ComputerTool,
+    FileSearchTool,
+    FunctionTool,
+    FunctionToolResult,
     Handoff,
+    HostedMCPTool,
     ImageGeneration,
     ImageGenerationInputImageMask,
+    ImageGenerationTool,
     LoadFileAttachment,
+    LocalShellTool,
     Mcp,
     McpAllowedTools,
     McpRequireApproval,
@@ -63,6 +87,7 @@ from .tools import (  # noqa: E402
     ToolOutputImageDict,
     ToolOutputText,
     ToolOutputTextDict,
+    WebSearchTool,
     function_tool,
     tool_output_file_from_file_id,
     tool_output_file_from_path,
@@ -82,15 +107,37 @@ __all__ = [
     "ThreadManager",
     "PersistenceHooks",
     "SendMessage",
-    "Handoff",
     "run_fastapi",
     "run_mcp",
-    # Local names that intentionally shadow or alias Agents SDK exports
+    # Re-exports from Agents SDK
+    "ModelSettings",
+    "OpenAIChatCompletionsModel",
     "function_tool",
-    "SDKAgent",
-    "SDKHandoff",
-    # Additional OpenAI/OpenAI SDK response types
+    "FunctionTool",
+    "RunContextWrapper",
+    "output_guardrail",
+    "input_guardrail",
+    "GuardrailFunctionOutput",
+    "OutputGuardrailTripwireTriggered",
+    "InputGuardrailTripwireTriggered",
+    "HostedMCPTool",
+    "trace",
     "Reasoning",
+    "CodeInterpreterTool",
+    "ComputerTool",
+    "FileSearchTool",
+    "ImageGenerationTool",
+    "LoadFileAttachment",
+    "LocalShellTool",
+    "PersistentShellTool",
+    "WebSearchTool",
+    "Model",
+    "AgentHooks",
+    "RunHooks",
+    "RunResult",
+    "RunResultStreaming",
+    "set_tracing_disabled",
+    "AgentOutputSchemaBase",
     "CodeInterpreter",
     "ImageGeneration",
     "Mcp",
@@ -101,14 +148,19 @@ __all__ = [
     "AsyncComputer",
     "McpAllowedTools",
     "McpRequireApproval",
+    "DynamicPromptFunction",
+    "GenerateDynamicPromptData",
+    "Handoff",
+    "SDKHandoff",
+    "FunctionToolResult",
+    "StopAtTools",
+    "ToolsToFinalOutputFunction",
     "Headers",
     "ToolChoice",
     "MCPToolChoice",
     "Query",
     "Body",
     "ResponseIncludable",
-    "LoadFileAttachment",
-    "PersistentShellTool",
     "ToolOutputText",
     "ToolOutputTextDict",
     "ToolOutputImage",
@@ -121,7 +173,6 @@ __all__ = [
     "tool_output_file_from_url",
     "tool_output_file_from_file_id",
 ]
-__all__.extend(name for name in _agents.__all__ if name not in _SDK_SHADOWED_EXPORTS and name not in __all__)
 
 _OPENCLAW_EXPORTS = {
     "OpenClawIntegrationConfig",
