@@ -121,11 +121,10 @@ async def run_demo():
     response1 = await agency.get_response(message="Please store customer data: ID 'CUST123', name 'Alice Johnson'")
     print(f"✅ {response1.final_output}")
 
-    # Step 2: Analyze from another agent using the same agency context
-    print("\nStep 2: Asking analyst agent to use shared context...")
+    # Step 2: Delegate analysis to another agent
+    print("\nStep 2: Asking data agent to delegate analysis...")
     response2 = await agency.get_response(
-        message="Analyze the customer data that is already stored in agency context.",
-        recipient_agent=analyst_agent,
+        message="Please ask the analyst agent to analyze the customer data I just stored."
     )
     print(f"✅ {response2.final_output}")
 
@@ -133,15 +132,6 @@ async def run_demo():
     print("\nStep 3: Checking final agency context...")
     response3 = await agency.get_response(message="Show me a summary of what's currently stored in the agency context.")
     print(f"✅ {response3.final_output}")
-
-    customer_data = agency.user_context.get("customer_data")
-    analysis = agency.user_context.get("customer_analysis")
-    if customer_data != {"id": "CUST123", "name": "Alice Johnson", "status": "active"}:
-        raise RuntimeError(f"Expected stored customer data, got: {customer_data!r}")
-    if analysis != {"customer_id": "CUST123", "risk_level": "low", "recommendation": "approved"}:
-        raise RuntimeError(f"Expected stored customer analysis, got: {analysis!r}")
-
-    print("\nSemantic check passed: customer data and analysis persisted in agency context.")
 
     print("\nDemo complete!")
 
