@@ -71,7 +71,8 @@ Use this skill for test strategy, test edits, focused validation, release proof,
 - Run the smallest high-signal focused command first, usually `uv run pytest <path>` or `uv run pytest <path>::<test_name>`.
 - If you modify a module, run its focused tests.
 - If you modify an example, run it when it is non-interactive.
-- Run `make format` after code or docs changes unless the task is read-only or the change is policy-only and a diff check is the better proof.
+- Run `make format` after code changes unless the task is read-only or the change is policy-only and a diff check is the better proof.
+- For docs-only changes, use docs-aware proof: `git diff --check`, docs render or lint when applicable, and a targeted reread of changed pages.
 - Run `make check` before staging, committing, pushing, or asking for review.
 - Run `make ci` before a pull request, merge-readiness claim, release-readiness claim, or repository-wide health claim.
 - For long-running commands, use timeouts that match the real wait window instead of stopping early.
