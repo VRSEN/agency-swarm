@@ -191,7 +191,7 @@ The manager must verify this before creating a user-facing escalation.
 
 Before surfacing:
 
-- If the same active item is `blocked` or `waiting`, do not ask again; update supported fields only when source facts changed.
+- If the same active item is `blocked` or `waiting`, do not create a duplicate ledger item or invent a new question. Reuse the existing escalation, re-raise it at task boundaries when it still blocks the critical path, and update supported fields only when source facts changed.
 - If the same active item is `in_progress`, finish the manager or worker evidence step before surfacing.
 - If the same item is archived as completed, apply the recorded resolution.
 - If the same item is archived as failed, create a new item only when source facts changed.
