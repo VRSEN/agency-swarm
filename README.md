@@ -240,3 +240,155 @@ Agency Swarm is open-source and licensed under [MIT](https://opensource.org/lice
 ## Need Help?
 
 If you need help creating custom agent swarms for your business, check out our [Agents-as-a-Service](https://agents.vrsen.ai/) subscription, or schedule a consultation with me at https://calendly.com/vrsen/ai-readiness-call
+---
+
+## ❓ FAQ
+
+### What is Agency Swarm?
+
+Agency Swarm is a **multi-agent framework** built on the OpenAI Agents SDK. It provides structured orchestration for collaborative AI agent swarms, thinking about automation in terms of real-world organizational structures.
+
+### Why use Agency Swarm instead of LangChain or CrewAI?
+
+| Feature | Agency Swarm | LangChain | CrewAI |
+|---------|--------------|-----------|--------|
+| **Agent roles** | ✅ CEO, VA, Developer roles | ⚠️ Generic | ✅ Role-based |
+| **Communication flows** | ✅ Explicit directional flows | ⚠️ Manual | ⚠️ Limited |
+| **SDK foundation** | ✅ OpenAI Agents SDK native | ❌ Custom | ❌ Custom |
+| **Type-safe tools** | ✅ Pydantic validation | ⚠️ Manual | ⚠️ Limited |
+| **Production-ready** | ✅ 92% test coverage | ⚠️ Varies | ⚠️ Varies |
+
+Agency Swarm provides **real-world organizational thinking** — agents communicate like teams, not just chains.
+
+### What Python version is required?
+
+**Python 3.12+** is required. The framework targets modern Python features and the OpenAI Agents SDK.
+
+### How do I install Agency Swarm?
+
+```bash
+pip install -U agency-swarm
+```
+
+Set your OpenAI API key:
+```bash
+export OPENAI_API_KEY="your_key"
+```
+
+### What LLM providers are supported?
+
+- **Native**: OpenAI (GPT-5 family, GPT-4o, GPT-4.1)
+- **Via LiteLLM**: Anthropic (Claude), Google (Gemini), xAI (Grok)
+- **Azure**: Azure OpenAI endpoints
+- **Gateway**: OpenRouter for multi-provider access
+
+### How do I define agent roles?
+
+Agents have distinct roles with tailored instructions:
+
+```python
+from agency_swarm import Agent
+
+ceo = Agent(
+    name="CEO",
+    instructions="You are the CEO. Make strategic decisions and delegate tasks.",
+    tools=[...]
+)
+
+developer = Agent(
+    name="Developer",
+    instructions="You are a Developer. Implement features as requested.",
+    tools=[...]
+)
+```
+
+### How do agents communicate?
+
+Agents use a **dedicated `send_message` tool** with explicit directional `communication_flows`:
+
+```python
+from agency_swarm import Agency
+
+agency = Agency(
+    agents=[ceo, developer, va],
+    communication_flows=[
+        (ceo, developer),  # CEO → Developer
+        (developer, ceo),  # Developer → CEO (reports)
+        (ceo, va),         # CEO → VA
+    ]
+)
+```
+
+This ensures structured, predictable communication patterns.
+
+### How do I create tools?
+
+Use the `@function_tool` decorator for type-safe tools:
+
+```python
+from agency_swarm import function_tool
+
+@function_tool
+def my_custom_tool(param: str) -> str:
+    """Brief description of tool functionality."""
+    return f"Result: {param}"
+```
+
+Pydantic validates arguments automatically.
+
+### How do I persist conversation history?
+
+Provide `load_threads_callback` and `save_threads_callback` to the Agency:
+
+```python
+def load_threads(session_id):
+    # Load from database or file
+    return stored_threads
+
+def save_threads(session_id, threads):
+    # Save to database or file
+    db.save(threads)
+
+agency = Agency(
+    agents=[...],
+    load_threads_callback=load_threads,
+    save_threads_callback=save_threads,
+)
+```
+
+### What is the migration from v0.x?
+
+Agency Swarm v1.x targets the **OpenAI Agents SDK + Responses API**. If you're using v0.x, see the [Migration Guide](https://agency-swarm.ai/migration/guide) for:
+
+- Updated tool definitions
+- New communication flow syntax
+- SDK integration changes
+
+### How do I get started quickly?
+
+Use the **Agency Starter Template**:
+```bash
+gh repo clone agency-ai-solutions/agency-starter-template
+cd agency-starter-template
+pip install -r requirements.txt
+```
+
+### What test coverage does Agency Swarm have?
+
+**92% test coverage** — built for production reliability with comprehensive testing.
+
+### Is Agency Swarm open-source?
+
+Yes. Agency Swarm is **MIT licensed** — free to use, modify, and distribute.
+
+### Where can I get help?
+
+- **Docs**: [agency-swarm.ai](https://agency-swarm.ai)
+- **YouTube**: [@vrsen](https://youtube.com/@vrsen/)
+- **Twitter**: [@__vrsen__](https://twitter.com/__vrsen__)
+- **Discord**: [Join Discord](https://discord.gg/cw2xBaWfFM)
+- **Agents-as-a-Service**: [vrsen.ai](https://agents.vrsen.ai) for business solutions
+
+---
+
+**Need custom agent swarms for your business?** Check out [Agents-as-a-Service](https://agents.vrsen.ai/) or schedule a consultation.
