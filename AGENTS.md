@@ -437,11 +437,12 @@
 17.1 Model and tool availability varies by machine; use the strongest available path that fits task risk and state any substitution before relying on it.
 17.2 General non-policy, non-release review may use the General Review Command unless a repo skill or user Mandate requires a stronger path.
 17.3 Pull-request mutation, review-thread work, and merge-readiness review shall use `.codex/skills/codex-cli-review` and its current canonical review command.
-17.4 Policy, repo-skill, and workflow-rule edits shall use the Policy Review Command through a separate isolated Codex Channel worker when available.
-17.5 Policy Review requires GPT-5.5 or an approved substitute with `xhigh` reasoning; `high` is not enough.
-17.6 Release and safety claims shall use the Pre-Release Review Command against the exact release commit.
-17.7 If the active model or review path is below the required floor for the task class, stop before relying on it and Escalate.
-17.8 Claude output and duplicate weaker runs may support high-reliability decisions but never replace the required Codex review path.
+17.4 Test selection, test writing, QA, docs-preview checks, examples, live-service proof, and release proof shall use `.codex/skills/test-workflow`.
+17.5 Policy, repo-skill, and workflow-rule edits shall use the Policy Review Command through a separate isolated Codex Channel worker when available.
+17.6 Policy Review requires GPT-5.5 or an approved substitute with `xhigh` reasoning; `high` is not enough.
+17.7 Release and safety claims shall use the Pre-Release Review Command against the exact release commit.
+17.8 If the active model or review path is below the required floor for the task class, stop before relying on it and Escalate.
+17.9 Claude output and duplicate weaker runs may support high-reliability decisions but never replace the required Codex review path.
 
 ## 18. History and Review Operations
 18.1 Review status and full diffs before and after changes.
