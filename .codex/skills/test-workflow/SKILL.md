@@ -44,11 +44,12 @@ Use this skill for test strategy, focused validation, QA evidence, examples, doc
 - Use the project virtual environment and repo task runner.
 - Run `make prime` when structure discovery adds value.
 - Run the smallest high-signal focused test first.
-- Run `make format` before staging or committing.
-- Run `make check` before staging or committing.
+- Run `make format` before claiming code completion, staging, or committing.
+- Run `make check` before claiming code completion, staging, or committing.
 - Run `make ci` before pull requests, merges, releases, or repo-wide health claims.
 - For Requirement Ledger script changes, run `python .codex/skills/requirement-ledger/scripts/test_requirement_ledger.py`.
-- If you modify an example, run that example or a non-interactive equivalent.
+- If you modify a non-interactive example, run it.
+- If you modify an interactive example, run a non-interactive equivalent instead of running it directly.
 - For long-running commands, use a timeout that matches the real wait window.
 
 ## Docs
@@ -57,15 +58,20 @@ Use this skill for test strategy, focused validation, QA evidence, examples, doc
 - Before substantial docs review, run `cd docs && mintlify dev` when the environment supports it and state whether it is running.
 - Read the target page, nearby docs, relevant code, and official references before adding or moving docs content.
 - Keep docs focused on user benefit first, then the needed technical steps.
+- Do not mention fork origins in user-facing docs unless the user asks.
 
 ## Live Services And Credentials
 
 - If planned proof needs a real model provider or live service, inspect local environment sources before saying credentials are missing.
-- When usable credentials exist, run the related integration or example coverage.
+- For provider-specific integration changes, when usable credentials exist, run the full related integration suite and examples.
+- For other live-service changes, when usable credentials exist, run the related live coverage.
 - Do not treat a credential-based skip as proof when live coverage is required.
 
 ## Release Proof
 
+- Immediately before a release or release-safety claim, verify the exact target commit, version inputs and files, public release state, and release scope.
+- Verify the target commit reaches `origin/main` and the target version already appears in the release inputs before any release mutation.
+- If release records, package index state, and version files disagree, stop, identify the actual shipped version and commit, and report the blocker.
 - Before a release or release-safety claim, run the relevant local proof, including `make ci` and any focused examples or integration suites for changed behavior.
 - Send a real first message through the installed interface to the maintained local test agency and observe a non-empty streamed response.
 - Automated auth smoke alone does not satisfy release proof.

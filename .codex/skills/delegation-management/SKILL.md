@@ -23,7 +23,7 @@ Use this skill when delegation affects correctness, queue control, review qualit
 4. For large work, use staged delegation when useful: analysis or discussion first, implementation second, review or polish third.
 5. Let workers ask questions, request scope extensions, return blockers, and surface tradeoffs. Do not force immediate delivery when missing facts could change the result.
 6. Keep local environment repair, credentials, and machine-specific setup on the manager thread unless the user delegates that work explicitly.
-7. Choose local review, delegated worker, and assistant model paths through `AGENTS.md` Tool And Model Policy before you delegate.
+7. Choose delegated worker paths through this skill and `AGENTS.md` skill routing; use `.codex/skills/codex-cli-review` only for review and pull-request paths.
 8. Keep pull-request-specific work off the manager thread when possible. Prefer `.codex/skills/codex-cli-review` when a bounded local Codex pass cleanly covers the task; use one fitting worker otherwise, and surface a blocker only if neither path works.
 9. After delegation starts, do not interrupt, rush, or repeatedly ping workers unless the user changes scope or you have clear proof of failure.
 

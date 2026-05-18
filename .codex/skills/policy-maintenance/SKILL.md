@@ -15,7 +15,7 @@ Use this skill for policy, workflow-rule, and repo-skill changes. Repo skills ar
 4. For delegated-output checks, also follow `.codex/skills/delegation-management`.
 5. When the edit responds to a material process mistake or repeated failure class, fix the largest durable rule or process gap in the right owner section or skill, not just the literal symptom. Use the ledger only for state tracking: active requests, decisions, blockers, evidence, artifacts, and source links.
 6. Preserve the active policy branch or artifact when one exists. Create a new branch or artifact only when the mandate needs one; create a pull request only when the user asks.
-7. Follow the Tool And Model Policy floor for policy, repo-skill, and workflow-rule edits: separate isolated policy worker every time, strongest available GPT-5.5 or approved substitute, `xhigh` reasoning required (`high` is not enough), and no policy edits if that path is unavailable.
+7. For policy, repo-skill, and workflow-rule edits, use `.codex/skills/codex-cli-review` as the public review owner: separate isolated policy worker, strongest available GPT-5.5 or approved substitute, `xhigh` reasoning required (`high` is not enough), and no policy edits if that path is unavailable.
 8. If the policy edit is self-initiated, ask the user before changing files.
 9. Stay tightly scoped: use `AGENTS.md`, the current diff, and directly authorized policy inputs. Avoid unrelated repo exploration unless the mandate requires it.
 10. Classify each rule before editing: universal policy, manager-only policy, repo-specific invariant, or skill procedure.
