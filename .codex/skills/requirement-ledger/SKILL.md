@@ -30,15 +30,17 @@ Use this skill when task state must survive beyond the current chat or when a re
 Run the bundled script from the repository root:
 
 ```bash
-python .codex/skills/requirement-ledger/scripts/requirement_ledger.py --help
+python .codex/skills/requirement-ledger/scripts/requirement_ledger.py \
+  --ledger-dir /Users/nick/.codex/requirements-ledger/agency-swarm \
+  --help
 ```
 
-Default files:
+Script defaults:
 
 - Active queue: `.codex/requirements-ledger/active.json`
 - Archive: `.codex/requirements-ledger/archive.jsonl`
 
-Use `--ledger-dir <path>` for a temporary or task-specific ledger.
+For Agency Swarm agent work, pass `--ledger-dir <path>` with a durable path under `/Users/nick/.codex`, keyed to the canonical project root. Do not store active ledger state inside the repo.
 
 New active ledger items must carry an `artifacts` list, even when it is empty. Use it for the live handles that already cover the work, such as `PR#123`, `branch:origin/main`, `tag:v1.2.3`, `release:v1.2.3`, or `gist:abc123`, so the next agent finds existing work before creating anything new.
 
@@ -51,7 +53,9 @@ Legacy Agency active ledgers using `codex-requirement-ledger/v2` are migrated on
 Add an item:
 
 ```bash
-python .codex/skills/requirement-ledger/scripts/requirement_ledger.py add \
+python .codex/skills/requirement-ledger/scripts/requirement_ledger.py \
+  --ledger-dir /Users/nick/.codex/requirements-ledger/agency-swarm \
+  add \
   --category tooling \
   --title "Build reusable requirement ledger skill" \
   --original "build a durable active requirement queue and archive workflow" \
@@ -64,7 +68,9 @@ python .codex/skills/requirement-ledger/scripts/requirement_ledger.py add \
 For long reviewed requirement text, read `original` from a file instead of the shell:
 
 ```bash
-python .codex/skills/requirement-ledger/scripts/requirement_ledger.py add \
+python .codex/skills/requirement-ledger/scripts/requirement_ledger.py \
+  --ledger-dir /Users/nick/.codex/requirements-ledger/agency-swarm \
+  add \
   --category tooling \
   --title "Ingest reviewed user requests" \
   --original-file /tmp/sanitized_request.txt \
@@ -76,14 +82,18 @@ python .codex/skills/requirement-ledger/scripts/requirement_ledger.py add \
 Append linked artifacts on an existing item:
 
 ```bash
-python .codex/skills/requirement-ledger/scripts/requirement_ledger.py update REQ-20260415-001 \
+python .codex/skills/requirement-ledger/scripts/requirement_ledger.py \
+  --ledger-dir /Users/nick/.codex/requirements-ledger/agency-swarm \
+  update REQ-20260415-001 \
   --artifact "PR#123"
 ```
 
 Update active state:
 
 ```bash
-python .codex/skills/requirement-ledger/scripts/requirement_ledger.py update REQ-20260415-001 \
+python .codex/skills/requirement-ledger/scripts/requirement_ledger.py \
+  --ledger-dir /Users/nick/.codex/requirements-ledger/agency-swarm \
+  update REQ-20260415-001 \
   --status in_progress \
   --next-action "Run the focused smoke test."
 ```
@@ -91,21 +101,27 @@ python .codex/skills/requirement-ledger/scripts/requirement_ledger.py update REQ
 Move finished work to the archive:
 
 ```bash
-python .codex/skills/requirement-ledger/scripts/requirement_ledger.py complete REQ-20260415-001 \
+python .codex/skills/requirement-ledger/scripts/requirement_ledger.py \
+  --ledger-dir /Users/nick/.codex/requirements-ledger/agency-swarm \
+  complete REQ-20260415-001 \
   --resolution "Skill and CLI smoke test completed."
 ```
 
 Mark rejected ledger revision as failed:
 
 ```bash
-python .codex/skills/requirement-ledger/scripts/requirement_ledger.py reject REQ-20260415-001 \
+python .codex/skills/requirement-ledger/scripts/requirement_ledger.py \
+  --ledger-dir /Users/nick/.codex/requirements-ledger/agency-swarm \
+  reject REQ-20260415-001 \
   --resolution "Ledger revision was rejected and must be rebuilt from original sources."
 ```
 
 List current state:
 
 ```bash
-python .codex/skills/requirement-ledger/scripts/requirement_ledger.py list --archive
+python .codex/skills/requirement-ledger/scripts/requirement_ledger.py \
+  --ledger-dir /Users/nick/.codex/requirements-ledger/agency-swarm \
+  list --archive
 ```
 
 ## Rules
