@@ -37,6 +37,7 @@ Use this skill for test strategy, focused validation, QA evidence, examples, doc
 - Avoid mocks unless they isolate an external service that is not under test.
 - Do not copy production logic into expected values.
 - Keep unit tests under `tests/test_*_modules/` and integration tests under `tests/integration/`, mirroring source layout when practical.
+- Target test coverage at ninety percent or higher.
 
 ## Commands
 

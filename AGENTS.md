@@ -16,41 +16,30 @@
 1.13 `Critical Path`: the shortest safe sequence that advances the highest-priority active item.
 1.14 `Default Branch`: the canonical remote-tracking main branch, currently `origin/main`.
 1.15 `Remote Preflight`: `git fetch origin`, `git status -sb`, and `git rev-parse --short HEAD`.
-1.16 `Structure Probe`: `make prime`.
-1.17 `Formatter`: `make format`.
-1.18 `Checker`: `make check`.
-1.19 `Full Suite`: `make ci`.
-1.20 `Docs Preview`: `cd docs && mintlify dev`.
-1.21 `Documentation Rule Set`: `.cursor/rules/writing-docs.mdc`.
-1.22 `Codex Review`: the required clean Codex review, whether local or hosted.
-1.23 `Codex Channel`: a native Codex subagent or the `codex` CLI.
-1.24 `General Review Command`: `codex review --base origin/main -c model_reasoning_effort="high"`.
-1.25 `Policy Review Command`: `codex -m gpt-5.5 review --base origin/main -c model_reasoning_effort="xhigh"`.
-1.26 `Pre-Release Review Command`: `codex -m gpt-5.5 review --base origin/main -c model_reasoning_effort="xhigh"`.
-1.27 `Fallback Review Command`: an equivalent `codex exec` diff review using the same base and reasoning class.
-1.28 `Primary Review Artifact`: `/tmp/codex_review_<short_sha>.txt`.
-1.29 `Pre-PR Gate`: the required local verification before pull-request mutation, including the Formatter, the Checker, focused tests, and docs lint when applicable.
-1.30 `CI`: the required continuous-integration status for the current change.
-1.31 `UX Verification Gap`: any unresolved mismatch between claimed user behavior and proved user behavior.
-1.32 `Merge Mandate`: the minimum internal merge-readiness state. It does not grant merge authority.
-1.33 `Danger Zone`: any Public Operation.
-1.34 `Public Operation`: any public or irreversible state mutation, including merge, tag, release note, publish, yank, or unpublish.
-1.35 `Public PR`: a pull request visible outside a private local workspace.
-1.36 `Policy Edit`: any change to the Instruction File, related symlink state, skills, policy tooling, or durable policy enforcement text.
-1.37 `Drift Audit`: a fresh comparison against the relevant upstream baseline or last known clean state.
-1.38 `End-User Proof`: rerunning the exact reported user flow in the same class of released or installed artifact and observing success.
-1.39 `Escalation`: the only allowed request for user direction inside a response.
-1.40 `Commentary`: a non-normative rationale bullet under a clause.
-1.41 `Preferred Vision Setting`: `GPT-5.4` with `detail=original`.
-1.42 `Hosted Review`: a pull-request-bound Codex review on the review platform.
-1.43 `Hosted Check`: a hosted CI or review status the agent can observe.
-1.44 `Action Mention`: any hosted `@` mention that notifies a person or triggers automation.
-1.45 `Session History`: local conversation history, including `.codex` session records.
-1.46 `Analysis Step`: the proactive analysis duties in Section 11.
-1.47 `Material Review Finding`: a severity `P1` or `P2` finding from Codex Review.
-1.48 `OpenClaw`: the repository runtime surface named `OpenClaw`.
-1.49 `Core Agent Messaging`: the runtime behavior of `Agent` and `SendMessage`.
-1.50 `Canonical Test Structure`: unit tests under `tests/test_*_modules/` and integration tests under `tests/integration/`, mirrored to source layout.
+1.16 `Codex Review`: the required clean Codex review, whether local or hosted.
+1.17 `Codex Channel`: a native Codex subagent or the `codex` CLI.
+1.18 `General Review Command`: `codex review --base origin/main -c model_reasoning_effort="high"`.
+1.19 `Policy Review Command`: `codex -m gpt-5.5 review --base origin/main -c model_reasoning_effort="xhigh"`.
+1.20 `Pre-Release Review Command`: `codex -m gpt-5.5 review --base origin/main -c model_reasoning_effort="xhigh"`.
+1.21 `Fallback Review Command`: an equivalent `codex exec` diff review using the same base and reasoning class.
+1.22 `Primary Review Artifact`: `/tmp/codex_review_<short_sha>.txt`.
+1.23 `Pre-PR Gate`: the required local verification before pull-request mutation.
+1.24 `CI`: the required continuous-integration status for the current change.
+1.25 `UX Verification Gap`: any unresolved mismatch between claimed user behavior and proved user behavior.
+1.26 `Merge Mandate`: the minimum internal merge-readiness state. It does not grant merge authority.
+1.27 `Danger Zone`: any Public Operation.
+1.28 `Public Operation`: any public or irreversible state mutation, including merge, tag, release note, publish, yank, or unpublish.
+1.29 `Public PR`: a pull request visible outside a private local workspace.
+1.30 `Policy Edit`: any change to the Instruction File, related symlink state, skills, policy tooling, or durable policy enforcement text.
+1.31 `Drift Audit`: a fresh comparison against the relevant upstream baseline or last known clean state.
+1.32 `Escalation`: the only allowed request for user direction inside a response.
+1.33 `Commentary`: a non-normative rationale bullet under a clause.
+1.34 `Preferred Vision Setting`: `GPT-5.4` with `detail=original`.
+1.35 `Hosted Review`: a pull-request-bound Codex review on the review platform.
+1.36 `Hosted Check`: a hosted CI or review status the agent can observe.
+1.37 `Action Mention`: any hosted `@` mention that notifies a person or triggers automation.
+1.38 `Session History`: local conversation history, including `.codex` session records.
+1.39 `Material Review Finding`: a severity `P1` or `P2` finding from Codex Review.
 
 ## 2. Purpose and Principles
 2.1 This Instruction File governs AI contributors to the repository.
@@ -254,246 +243,127 @@
 10.5 Before release-note work, reverify the compare range and shipped scope. Rebuild stale drafts from fresh evidence.
 10.6 If release records, package index state, and version files disagree, stop, identify the actual shipped version and commit, and Escalate the repair.
 10.7 Never mutate public state merely to make it appear correct.
-10.8 Before any release or safety claim, run the Pre-Release Review Command and require a clean Codex Review.
-10.9 Save the pre-release result to the Primary Review Artifact.
-10.10 If the Codex Review reports a Material Review Finding, stop and surface it.
-10.11 Before any release or safety claim, send a real first message through the installed interface to the maintained local test agency.
-10.12 Observe a non-empty streamed response through that same interface.
-10.13 Automated auth smoke never satisfies clauses 10.11 and 10.12 by itself.
-10.14 Any launch, credential, dependency, or interface failure in clauses 10.11 and 10.12 blocks release until reproduced and root-caused.
-10.15 No Policy Edit shall ship inside a Public PR.
-10.16 Keep release cuts minimal. Exclude Policy Edits and tooling churn from user-facing bugfix releases.
-10.17 A Merge Mandate exists when CI, Codex Review, and the Pre-PR Gate are green and no UX Verification Gap remains unresolved.
-10.18 A Merge Mandate does not replace explicit user approval.
-10.19 Do not hand off build-impact pull-request work until unresolved threads are closed and the latest head has explicit approval.
+10.8 Release safety claims must satisfy `.codex/skills/test-workflow` and `.codex/skills/codex-cli-review`.
+10.9 No Policy Edit shall ship inside a Public PR.
+10.10 Keep release cuts minimal. Exclude Policy Edits and tooling churn from user-facing bugfix releases.
+10.11 A Merge Mandate exists when CI, Codex Review, and the Pre-PR Gate are green and no UX Verification Gap remains unresolved.
+10.12 A Merge Mandate does not replace explicit user approval.
+10.13 Do not hand off build-impact pull-request work until unresolved threads are closed and the latest head has explicit approval.
   - Commentary: Recent hotfix tags bundled policy churn with user-facing fixes.
   - Commentary: Earlier release claims outpaced live installed-binary proof.
 
-## 11. Evidence and Validation
-11.1 Default to test-driven development.
-11.2 For docs-only or formatting-only edits, run a linter instead of tests.
-11.3 The Analysis Step shall search similar patterns and identify related changes before runtime edits.
-11.4 Prefer consistent fixes over piecemeal edits unless scope or risk requires otherwise.
-11.5 Before runtime changes, inspect dependency types and reuse authoritative typed primitives instead of speculative shape checks.
-11.6 Be able to state what will change, why, and what evidence supports it.
-11.7 Validate external assumptions with real probes when possible.
-11.8 Share failures and root causes promptly. Do not fix them silently.
-11.9 Debug through systematic source analysis, logging, and minimal focused testing.
-11.10 Reproduce each reported error locally before fixing it.
-11.11 For a bug fix, encode the report in an automated test before changing runtime code.
-11.12 End-User Proof is the only accepted proof of a fix.
-11.13 Perform End-User Proof in the same artifact class and starting state as the report.
-11.14 Unit tests and checks are necessary but never sufficient for clause 11.12.
-11.15 Do not close a requirement without cited End-User Proof.
-11.16 Edit incrementally and validate each step when practical.
-11.17 After changes to data flow or order, scan related patterns and remove obsolete ones when in scope.
-11.18 Seek approval for workarounds or behavior changes.
-11.19 If a User Request increases entropy, say so.
-11.20 Choose the shortest viable path and minimize context pollution.
-11.21 Use the Structure Probe when structure discovery adds value.
-11.22 Keep the plan aligned with the latest diff.
-11.23 If the user changes the working tree, do not reapply those changes unless asked.
-11.24 Use only the approval gates in this contract. Do not invent slower gates.
-11.25 After each meaningful tool call or edit, validate the result in one or two lines and self-correct on failure.
-11.26 Run the most relevant focused test first.
-11.27 Run the Formatter before each commit.
-11.28 Run the Checker before staging or committing.
-11.29 Run the Full Suite before a pull request, merge, or repository-wide health claim.
-11.30 After each change, run the Formatter, the Checker, and the most relevant focused tests unless the change is docs-only or formatting-only.
-11.31 Do not proceed if a required validation command fails.
-11.32 Update documentation and examples when behavior or interfaces change.
-11.33 Choose the smallest high-signal proof that reduces uncertainty fastest.
-11.34 Do not end work without minimal applicable validation.
-11.35 Do not misstate validation outcomes.
-11.36 Do not skip key safety steps without a reason.
-11.37 Do not stop in a non-terminal observable wait state.
-11.38 Do not introduce functional changes during refactoring without request.
-11.39 Do not add silent fallbacks, legacy shims, or workarounds. Prefer explicit, strict contracts.
+## 11. Evidence, Validation, And Docs
+11.1 Test selection, QA, docs-preview checks, examples, credentials, live-service proof, and release proof belong in `.codex/skills/test-workflow`.
+11.2 Runtime changes still require inspected dependency contracts and no silent fallbacks, shims, or unapproved behavior changes.
 
-## 12. Credentials, Environment, Examples, and Search
-12.1 If planned validation uses a real model provider, verify usable credentials before editing or running those checks.
-12.2 Inspect environment sources and relevant local environment files before claiming that credentials are missing.
-12.3 If usable credentials cannot be confirmed, stop, report the blocker, and wait before unrelated work.
-12.4 Clause 12.1 does not apply to docs-only work, pure unit tests, or fully mocked integrations.
-12.5 Use project virtual environments and repository task runners. Do not use global interpreters or absolute paths.
-12.6 For long-running commands, use a shell timeout that matches the real wait window.
-12.7 Run only non-interactive examples directly.
-12.8 Do not run interactive examples directly.
-12.9 Use an equivalent non-interactive snippet when interactive proof is needed.
-12.10 If you modify an example, run it.
-12.11 If you modify a module, run its tests.
-12.12 If a change affects a user flow, run the proof required for that path before commit.
-12.13 For provider-specific integrations, run the full related integration suite and examples when keys are available.
-12.14 Do not treat credential-based skips as acceptable coverage when real validation was required.
-12.15 After changes, search related patterns and clean them up when in scope.
-12.16 Search docs, examples, and dependency source before making framework assumptions or asking the user.
-
-## 13. Documentation Duties
-13.1 Documentation work shall follow the Documentation Rule Set.
-13.2 Before review of substantial documentation work, start the Docs Preview and state that it is running.
-13.3 Do not mention fork origins in user-facing docs unless the user asks.
-13.4 Treat documentation as high-priority user-facing work.
-13.5 For substantial docs edits, do one focused polish pass before review.
-13.6 Spend extra effort on screenshots or layout only when visuals change.
-13.7 When controllable, use the Preferred Vision Setting for documentation visuals.
-13.8 Reference the code files relevant to the documented behavior.
-13.9 Introduce features through user benefit before technical steps.
-13.10 In the main flow, prefer product language over implementation terms unless required.
-13.11 Spell out the workflows or use cases the change unlocks.
-13.12 Group information by topic and keep each full recipe in one place.
-13.13 Surface important notes in callouts.
-13.14 Avoid filler and repetition.
-13.15 Distill key steps to their essentials.
-13.16 Before editing docs, read the target page and relevant official references, and record those sources.
-13.17 Before adding or moving docs content, review the docs tree to choose the right location.
-13.18 When adding documentation, link related pages where helpful.
-
-## 14. Code, Types, and File Discipline
-14.1 Every line shall earn its place.
-14.2 Run a terminology-consistency polish pass on every code or docs change.
-14.3 If a code term and a product term diverge, propose or apply a matching rename in the same turn.
-14.4 When a product name changes, audit every identifier, route, test file, docstring, and doc reference before stopping.
-14.5 Every change shall have a clear reason.
-14.6 Do not edit formatting or whitespace without justification.
-14.7 Favor the fastest viable design when performance matters, and cite confirmed regressions with before-and-after evidence.
-14.8 Prefer clarity over verbosity.
-14.9 Keep code and docs dry within reason.
-14.10 Prefer updating existing code, docs, tests, and examples before adding new material.
-14.11 Place public modules, functions, and classes before private helpers.
-14.12 In the Instruction File, omit superfluous examples.
-14.13 In the Instruction File, make each clause understandable on its own.
-14.14 In the Instruction File, read the full file before editing, remove duplication, and prefer refinement over addition.
-14.15 If you cannot explain a line in the Instruction File, Escalate before further edits.
-14.16 Use verb phrases for functions and noun phrases for values.
-14.17 Learn signatures and patterns from existing code before adding new ones.
-14.18 Prefer the simplest elegant design that increases clarity.
-14.19 Remove dead code or redundant indirection when it is in scope.
-14.20 When a task needs surgical edits, keep the diff surgical and avoid adjacent rewording without explicit direction.
-14.21 Do not replace a full file when a focused edit will do.
-14.22 Prefer a single clear path when outcomes match.
-14.23 Avoid optional fallbacks unless requested.
-14.24 Supported Python versions start at 3.12.
-14.25 Development centers on 3.13. Compatibility with 3.12 remains required.
-14.26 Use pipe-union syntax, not legacy union imports.
-14.27 Type hints are mandatory for all functions.
-14.28 Enforce declared types at boundaries.
-14.29 Do not add runtime fallbacks or shape-based branching to accept multiple types.
-14.30 No file shall exceed five hundred lines without explicit user approval.
-14.31 Prefer methods between ten and forty lines, and keep them under one hundred lines.
-14.32 Target test coverage at ninety percent or higher.
-14.33 If you must edit an oversized file, keep the net change minimal and reduce size in the same change unless the user approves otherwise.
+## 12. Code, Types, and File Discipline
+12.1 Every line shall earn its place.
+12.2 Run a terminology-consistency polish pass on every code or docs change.
+12.3 If a code term and a product term diverge, propose or apply a matching rename in the same turn.
+12.4 When a product name changes, audit every identifier, route, test file, docstring, and doc reference before stopping.
+12.5 Every change shall have a clear reason.
+12.6 Do not edit formatting or whitespace without justification.
+12.7 Favor the fastest viable design when performance matters, and cite confirmed regressions with before-and-after evidence.
+12.8 Prefer clarity over verbosity.
+12.9 Keep code and docs dry within reason.
+12.10 Prefer updating existing code, docs, tests, and examples before adding new material.
+12.11 Place public modules, functions, and classes before private helpers.
+12.12 In the Instruction File, omit superfluous examples.
+12.13 In the Instruction File, make each clause understandable on its own.
+12.14 In the Instruction File, read the full file before editing, remove duplication, and prefer refinement over addition.
+12.15 If you cannot explain a line in the Instruction File, Escalate before further edits.
+12.16 Use verb phrases for functions and noun phrases for values.
+12.17 Learn signatures and patterns from existing code before adding new ones.
+12.18 Prefer the simplest elegant design that increases clarity.
+12.19 Remove dead code or redundant indirection when it is in scope.
+12.20 When a task needs surgical edits, keep the diff surgical and avoid adjacent rewording without explicit direction.
+12.21 Do not replace a full file when a focused edit will do.
+12.22 Prefer a single clear path when outcomes match.
+12.23 Avoid optional fallbacks unless requested.
+12.24 Supported Python versions start at 3.12.
+12.25 Development centers on 3.13. Compatibility with 3.12 remains required.
+12.26 Use pipe-union syntax, not legacy union imports.
+12.27 Type hints are mandatory for all functions.
+12.28 Enforce declared types at boundaries.
+12.29 Do not add runtime fallbacks or shape-based branching to accept multiple types.
+12.30 No file shall exceed five hundred lines without explicit user approval.
+12.31 Prefer methods between ten and forty lines, and keep them under one hundred lines.
+12.32 If you must edit an oversized file, keep the net change minimal and reduce size in the same change unless the user approves otherwise.
   - Commentary: Earlier terminology drift forced readers to translate between code and product terms.
 
-## 15. Testing and Strictness
-15.1 Keep tests deterministic, minimal, and behavior-focused.
-15.2 Keep each test under one hundred lines when practical.
-15.3 Let each test document one behavior through its name and docstring.
-15.4 Avoid private seams unless necessary.
-15.5 Use real framework objects when practical.
-15.6 Prefer authoritative typed dependency models over generic mocks.
-15.7 When behavior changes, update nearby coverage, usually by extending existing tests.
-15.8 Do not add a new test when nearby coverage can absorb the change cleanly.
-15.9 For non-functional changes, avoid new tests unless correctness or clarity requires them.
-15.10 Use focused test runs during debugging.
-15.11 Follow the testing pyramid and avoid duplicate assertions across levels.
-15.12 Use precise assertions, one canonical order, and no alternative-case assertions.
-15.13 Use descriptive, stable test names.
-15.14 Remove dead code uncovered during testing when it is in scope.
-15.15 Keep unit tests offline when practical.
-15.16 Keep unit-test mocks minimal, realistic, and free of fabricated module shims.
-15.17 Use integration tests only when real end-to-end wiring is needed.
-15.18 Keep integration coverage free of duplicate unit-test coverage.
-15.19 Honor the Canonical Test Structure and mirror source layout.
-15.20 Use isolated file systems for tests.
-15.21 Avoid slow or hanging tests. Skip them only with a clear fix note.
-15.22 Avoid tests that give false confidence.
-15.23 Prefer integration or end-to-end coverage for high-level runtime behavior.
-15.24 OpenClaw behavior requires integration or end-to-end coverage unless the code is a tiny pure helper.
-15.25 Do not cover OpenClaw runtime behavior with unit or mock-heavy tests.
-15.26 Do not simulate Core Agent Messaging with generic mocks or monkeypatched responses.
-15.27 Treat weak typing as a bug.
-15.28 Do not use `Any`, duck typing, or runtime field checks where proper types exist.
-15.29 Avoid type ignores in production code.
-15.30 Prefer authoritative typed models from dependencies.
-15.31 Explore types and adjacent patterns before changing runtime code.
-15.32 Avoid hardcoded temporary paths or ad hoc directories.
-15.33 Prefer top-level imports. If a local import is necessary, call it out.
-15.34 If a circular dependency appears, restructure or Escalate.
-15.35 Do not claim flakiness without observed evidence.
+## 13. Refactoring
+13.1 During refactoring, change structure only.
+13.2 Do not change logic, behavior, interfaces, or error handling during refactoring unless explicitly requested.
+13.3 Do not fix bugs during refactoring unless the task calls for it.
+13.4 You may document discovered bugs separately.
+13.5 Cross-check the current mainline when needed.
+13.6 Split large modules and preserve domain cohesion.
+13.7 Use clear interfaces and minimize coupling.
+13.8 Prefer clear descriptive names over artificial abstractions.
+13.9 Prefer action-oriented names over ambiguous terms.
+13.10 Apply renames atomically across imports, call sites, and docs.
 
-## 16. Refactoring
-16.1 During refactoring, change structure only.
-16.2 Do not change logic, behavior, interfaces, or error handling during refactoring unless explicitly requested.
-16.3 Do not fix bugs during refactoring unless the task calls for it.
-16.4 You may document discovered bugs separately.
-16.5 Cross-check the current mainline when needed.
-16.6 Split large modules and preserve domain cohesion.
-16.7 Use clear interfaces and minimize coupling.
-16.8 Prefer clear descriptive names over artificial abstractions.
-16.9 Prefer action-oriented names over ambiguous terms.
-16.10 Apply renames atomically across imports, call sites, and docs.
+## 14. Tool And Model Policy
+14.1 Model and tool availability varies by machine; use the strongest available path that fits task risk and state any substitution before relying on it.
+14.2 General non-policy, non-release review may use the General Review Command unless a repo skill or user Mandate requires a stronger path.
+14.3 Pull-request mutation, review-thread work, and merge-readiness review shall use `.codex/skills/codex-cli-review` and its current canonical review command.
+14.4 Policy, repo-skill, and workflow-rule edits shall use the Policy Review Command through a separate isolated Codex Channel worker when available.
+14.5 Policy Review requires GPT-5.5 or an approved substitute with `xhigh` reasoning; `high` is not enough.
+14.6 Release and safety claims shall use the Pre-Release Review Command against the exact release commit.
+14.7 If the active model or review path is below the required floor for the task class, stop before relying on it and Escalate.
+14.8 Claude output and duplicate weaker runs may support high-reliability decisions but never replace the required Codex review path.
 
-## 17. Tool And Model Policy
-17.1 Model and tool availability varies by machine; use the strongest available path that fits task risk and state any substitution before relying on it.
-17.2 General non-policy, non-release review may use the General Review Command unless a repo skill or user Mandate requires a stronger path.
-17.3 Pull-request mutation, review-thread work, and merge-readiness review shall use `.codex/skills/codex-cli-review` and its current canonical review command.
-17.4 Test selection, test writing, QA, docs-preview checks, examples, live-service proof, and release proof shall use `.codex/skills/test-workflow`.
-17.5 Policy, repo-skill, and workflow-rule edits shall use the Policy Review Command through a separate isolated Codex Channel worker when available.
-17.6 Policy Review requires GPT-5.5 or an approved substitute with `xhigh` reasoning; `high` is not enough.
-17.7 Release and safety claims shall use the Pre-Release Review Command against the exact release commit.
-17.8 If the active model or review path is below the required floor for the task class, stop before relying on it and Escalate.
-17.9 Claude output and duplicate weaker runs may support high-reliability decisions but never replace the required Codex review path.
+## 15. History and Review Operations
+15.1 Review status and full diffs before and after changes.
+15.2 Never commit or push without local verification of all touched behavior.
+15.3 Treat staging, committing, and pushing as user-approved actions.
+15.4 Once shipment approval exists and verification is complete, persist promptly instead of leaving local-only state.
+15.5 Do not modify staged changes unless the user asks.
+15.6 Use non-interactive git defaults.
+15.7 If stashing is required, separate staged and unstaged work when needed.
+15.8 If hooks modify files during commit, stage those files and rerun the same commit.
+15.9 Base commit messages on the staged diff and use a title with bullet body.
+15.10 After each commit, inspect the resulting commit.
+15.11 Do not rewrite published branch history without explicit user request.
+15.12 A stale-branch mistake is a severity-one breach.
+15.13 A stale-branch breach halts product work until a full artifact and live-diff audit completes.
+15.14 Treat every Action Mention as an action, not prose.
+15.15 Know the effect of each Action Mention before posting it.
+15.16 Do not write chatty status comments or unnecessary mentions on the review platform.
+15.17 Keep required review comments short and technical.
+15.18 If you do not know how a mention triggers, inspect the automation first. When in doubt, do not post.
+15.19 If local coding work targets an open pull request and comments can be posted, run the required review loop.
+15.20 Resolve every correct active thread finding on that pull request.
+15.21 Route pull-request-side mutation work through a Native Subagent by default.
+15.22 This includes thread review, replies, issue-link checks, and pull-request body edits.
+15.23 Keep the Manager on the local Critical Path. Add another Native Subagent only when it shortens that path.
+15.24 If no suitable Native Subagent exists, run the relevant command from Tool And Model Policy, or the Fallback Review Command if needed.
+15.25 Save fallback review output to the Primary Review Artifact.
+15.26 Read only targeted excerpts from review output in updates.
+15.27 Trigger a hosted review bot only when Native Subagent review and local Codex fallback are unavailable, the user asks, or merge evidence requires it.
+15.28 While any Hosted Check or Hosted Review remains pending, poll at least once per minute.
+15.29 If local or hosted review remains non-terminal for fifteen minutes, inspect output and retrigger once if service appears stuck.
+15.30 If required hosted CI remains non-terminal for thirty minutes, inspect output and retrigger once if service appears stuck.
+15.31 Escalate only after evidence of service failure, outage, or missing human approval.
+15.32 Repeat the review loop until unresolved threads are zero, review is clean, required checks are green, and the latest head has explicit approval.
+15.33 Skip clause 15.19 when current input already comes from review comments requesting hosted Codex review.
 
-## 18. History and Review Operations
-18.1 Review status and full diffs before and after changes.
-18.2 Never commit or push without local verification of all touched behavior.
-18.3 Treat staging, committing, and pushing as user-approved actions.
-18.4 Once shipment approval exists and verification is complete, persist promptly instead of leaving local-only state.
-18.5 Do not modify staged changes unless the user asks.
-18.6 Use non-interactive git defaults.
-18.7 If stashing is required, separate staged and unstaged work when needed.
-18.8 If hooks modify files during commit, stage those files and rerun the same commit.
-18.9 Base commit messages on the staged diff and use a title with bullet body.
-18.10 After each commit, inspect the resulting commit.
-18.11 Do not rewrite published branch history without explicit user request.
-18.12 A stale-branch mistake is a severity-one breach.
-18.13 A stale-branch breach halts product work until a full artifact and live-diff audit completes.
-18.14 Treat every Action Mention as an action, not prose.
-18.15 Know the effect of each Action Mention before posting it.
-18.16 Do not write chatty status comments or unnecessary mentions on the review platform.
-18.17 Keep required review comments short and technical.
-18.18 If you do not know how a mention triggers, inspect the automation first. When in doubt, do not post.
-18.19 If local coding work targets an open pull request and comments can be posted, run the required review loop.
-18.20 Resolve every correct active thread finding on that pull request.
-18.21 Route pull-request-side mutation work through a Native Subagent by default.
-18.22 This includes thread review, replies, issue-link checks, and pull-request body edits.
-18.23 Keep the Manager on the local Critical Path. Add another Native Subagent only when it shortens that path.
-18.24 If no suitable Native Subagent exists, run the relevant command from Tool And Model Policy, or the Fallback Review Command if needed.
-18.25 Save fallback review output to the Primary Review Artifact.
-18.26 Read only targeted excerpts from review output in updates.
-18.27 Trigger a hosted review bot only when Native Subagent review and local Codex fallback are unavailable, the user asks, or merge evidence requires it.
-18.28 While any Hosted Check or Hosted Review remains pending, poll at least once per minute.
-18.29 If local or hosted review remains non-terminal for fifteen minutes, inspect output and retrigger once if service appears stuck.
-18.30 If required hosted CI remains non-terminal for thirty minutes, inspect output and retrigger once if service appears stuck.
-18.31 Escalate only after evidence of service failure, outage, or missing human approval.
-18.32 Repeat the review loop until unresolved threads are zero, review is clean, required checks are green, and the latest head has explicit approval.
-18.33 Skip clause 18.19 when current input already comes from review comments requesting hosted Codex review.
-## 19. Memory, Policy, and Closeout
-19.1 Memory files store durable facts, lessons, and task procedures only.
-19.2 Do not use memory files as run logs, journals, or transcripts.
-19.3 Operate with maximum diligence and ownership.
-19.4 When new insight improves clarity, refine existing clauses instead of adding duplicates.
-19.5 Continue working after feedback when more work remains.
-19.6 On each User Request, decide whether a Policy Edit is needed to prevent repeated failure or slowdown.
-19.7 Treat even hinted negative performance signals as policy triggers.
-19.8 Ground each Policy Edit in a concrete failure pattern and preserve its motivation.
-19.9 If a non-Codex agent touched a Policy Edit, revert that policy work first.
-19.10 Route every Policy Edit through the Codex Channel and Tool And Model Policy.
-19.11 Supply root cause, enough background, and the live diff for every Policy Edit.
-19.12 Review each Policy Edit for motivation, duplication, conflict, and process cost.
-19.13 Keep critical priming non-duplicative. Update or move existing rules instead of restating them.
-19.14 For self-initiated Policy Edits, request user approval before editing.
-19.15 Do not pause normal coding, testing, or review loops solely to seek extra policy approval.
-19.16 Before stopping, confirm that all requirements are respected, documentation is updated where needed, regressions are absent, and validation is adequate.
-19.17 Before stopping, confirm that tests pass, review is clean, and affected examples or user flows ran as required.
-19.18 Iterate until further measurable improvement is impractical and all outstanding work is closed or validly blocked.
+## 16. Memory, Policy, and Closeout
+16.1 Memory files store durable facts, lessons, and task procedures only.
+16.2 Do not use memory files as run logs, journals, or transcripts.
+16.3 Operate with maximum diligence and ownership.
+16.4 When new insight improves clarity, refine existing clauses instead of adding duplicates.
+16.5 Continue working after feedback when more work remains.
+16.6 On each User Request, decide whether a Policy Edit is needed to prevent repeated failure or slowdown.
+16.7 Treat even hinted negative performance signals as policy triggers.
+16.8 Ground each Policy Edit in a concrete failure pattern and preserve its motivation.
+16.9 If a non-Codex agent touched a Policy Edit, revert that policy work first.
+16.10 Route every Policy Edit through the Codex Channel and Tool And Model Policy.
+16.11 Supply root cause, enough background, and the live diff for every Policy Edit.
+16.12 Review each Policy Edit for motivation, duplication, conflict, and process cost.
+16.13 Keep critical priming non-duplicative. Update or move existing rules instead of restating them.
+16.14 For self-initiated Policy Edits, request user approval before editing.
+16.15 Do not pause normal coding, testing, or review loops solely to seek extra policy approval.
+16.16 Before stopping, confirm that all requirements are respected, documentation is updated where needed, regressions are absent, and validation is adequate.
+16.17 Before stopping, confirm that tests pass, review is clean, and affected examples or user flows ran as required.
+16.18 Iterate until further measurable improvement is impractical and all outstanding work is closed or validly blocked.
