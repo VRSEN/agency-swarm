@@ -260,14 +260,48 @@ async def _cleanup_file_search_resources(real_openai_client: AsyncOpenAI, folder
         print(f"Error during cleanup: {e}")
 
 
-async def _assert_openai_file_absent(real_openai_client: AsyncOpenAI, file_id: str, timeout_seconds: int = 120) -> None:
-    """Polls until the given OpenAI file_id is confirmed deleted, mirroring FileSync waits."""
+async def _assert_vector_store_file_absent(
+    real_openai_client: AsyncOpenAI,
+    *,
+    vector_store_id: str,
+    file_id: str,
+    timeout_seconds: int = 30,
+) -> None:
+    """Polls until the given file_id is no longer attached to the vector store."""
     deadline = asyncio.get_event_loop().time() + timeout_seconds
+    confirmed_absences = 0
+    while True:
+        try:
+            await real_openai_client.vector_stores.files.retrieve(vector_store_id=vector_store_id, file_id=file_id)
+        except NotFoundError:
+            confirmed_absences += 1
+            if confirmed_absences >= 3:
+                return
+            await asyncio.sleep(0.5)
+            continue
+        confirmed_absences = 0
+        if asyncio.get_event_loop().time() >= deadline:
+            pytest.fail(
+                f"OpenAI file {file_id} is still attached to Vector Store {vector_store_id} "
+                f"after waiting {timeout_seconds} seconds"
+            )
+        await asyncio.sleep(1)
+
+
+async def _assert_openai_file_absent(real_openai_client: AsyncOpenAI, file_id: str, timeout_seconds: int = 120) -> None:
+    """Polls until the given OpenAI file_id is confirmed deleted."""
+    deadline = asyncio.get_event_loop().time() + timeout_seconds
+    confirmed_absences = 0
     while True:
         try:
             await real_openai_client.files.retrieve(file_id=file_id)
         except NotFoundError:
-            return
+            confirmed_absences += 1
+            if confirmed_absences >= 3:
+                return
+            await asyncio.sleep(0.5)
+            continue
+        confirmed_absences = 0
         if asyncio.get_event_loop().time() >= deadline:
             pytest.fail(f"OpenAI file {file_id} still exists after waiting {timeout_seconds} seconds")
         await asyncio.sleep(1)
@@ -594,7 +628,7 @@ async def test_agent_vision_capabilities(real_openai_client: AsyncOpenAI, tmp_pa
     reason="Requires live OpenAI API; skipped on CI to avoid upstream flake.",
 )
 async def test_vector_store_cleanup_on_init(real_openai_client: AsyncOpenAI, tmp_path: Path):
-    """Agent initialization synchronizes vector store with local files, removing orphaned files from VS and OpenAI."""
+    """Agent initialization synchronizes vector store attachments and OpenAI files with local files."""
     source_file = Path("tests/data/files/favorite_books.txt")
     assert source_file.exists(), f"Test file not found at {source_file}"
 
@@ -616,49 +650,75 @@ async def test_vector_store_cleanup_on_init(real_openai_client: AsyncOpenAI, tmp
         "tool_use_behavior": "stop_on_first_tool",
     }
 
-    # First init: uploads both files and creates VS
-    agent1 = Agent(**agent_kwargs)
-    agent1._openai_client = real_openai_client
-    Agency(agent1, user_context=None)
-    await _wait_for_vector_store(real_openai_client, agent1)
-
-    # Find VS folder and collect uploaded ids
-    candidates = list(files_dir.parent.glob(f"{files_dir.name}_vs_*"))
-    folder_path = candidates[0] if candidates else None
-    assert folder_path and folder_path.exists(), "No vector store folder found"
-
-    uploaded_ids = []
-    for f in folder_path.glob("*"):
-        if f.is_file():
-            fid = agent1.file_manager.get_id_from_file(f)
-            if fid:
-                uploaded_ids.append(fid)
-    assert len(uploaded_ids) == 2, f"Expected 2 uploaded files, got {len(uploaded_ids)}"
-
-    # Remove one local file
-    local_files = [p for p in folder_path.glob("*") if p.is_file()]
-    assert len(local_files) >= 2
-    removed_local = local_files[0]
-    removed_id = agent1.file_manager.get_id_from_file(removed_local)
-    os.remove(removed_local)
-
-    # Re-init: should detach removed from VS and delete OpenAI file object
-    agent2 = Agent(**agent_kwargs)
-    agent2._openai_client = real_openai_client
-    Agency(agent2, user_context=None)
-    await _wait_for_vector_store(real_openai_client, agent2)
-
-    vs_id = agent2._associated_vector_store_id
-    assert isinstance(vs_id, str) and vs_id
-
-    # Vector Store file listings are eventually consistent; do not assert immediate absence here.
-    await _assert_openai_file_absent(real_openai_client, removed_id)
-
-    # Cleanup
+    folder_path = None
+    removed_id = None
+    cleanup_agent = None
     try:
-        await _cleanup_file_search_resources(real_openai_client, folder_path, agent2)
-    except Exception as e:
-        print(f"Cleanup failed: {e}")
+        # First init: uploads both files and creates VS
+        agent1 = Agent(**agent_kwargs)
+        agent1._openai_client = real_openai_client
+        Agency(agent1, user_context=None)
+        cleanup_agent = agent1
+        await _wait_for_vector_store(real_openai_client, agent1)
+
+        # Find VS folder and collect uploaded ids
+        candidates = list(files_dir.parent.glob(f"{files_dir.name}_vs_*"))
+        folder_path = candidates[0] if candidates else None
+        assert folder_path and folder_path.exists(), "No vector store folder found"
+
+        uploaded_ids = []
+        for f in folder_path.glob("*"):
+            if f.is_file():
+                fid = agent1.file_manager.get_id_from_file(f)
+                if fid:
+                    uploaded_ids.append(fid)
+        assert len(uploaded_ids) == 2, f"Expected 2 uploaded files, got {len(uploaded_ids)}"
+
+        # Remove one local file
+        local_files = [p for p in folder_path.glob("*") if p.is_file()]
+        assert len(local_files) >= 2
+        removed_local = local_files[0]
+        removed_id = agent1.file_manager.get_id_from_file(removed_local)
+        assert isinstance(removed_id, str) and removed_id
+        os.remove(removed_local)
+
+        # Re-init: should detach removed from VS, delete its OpenAI file, and keep local metadata in sync.
+        agent2 = Agent(**agent_kwargs)
+        agent2._openai_client = real_openai_client
+        Agency(agent2, user_context=None)
+        cleanup_agent = agent2
+        await _wait_for_vector_store(real_openai_client, agent2)
+
+        vs_id = agent2._associated_vector_store_id
+        assert isinstance(vs_id, str) and vs_id
+
+        await _assert_vector_store_file_absent(real_openai_client, vector_store_id=vs_id, file_id=removed_id)
+        await _assert_openai_file_absent(real_openai_client, removed_id)
+
+        remaining_local_ids = set()
+        for path in folder_path.glob("*"):
+            if not path.is_file():
+                continue
+            file_id = agent2.file_manager.get_id_from_file(path)
+            assert isinstance(file_id, str) and file_id
+            remaining_local_ids.add(file_id)
+        assert removed_id not in remaining_local_ids
+        assert remaining_local_ids.issubset(set(uploaded_ids))
+        assert len(remaining_local_ids) == 1
+    finally:
+        if folder_path is not None and cleanup_agent is not None:
+            try:
+                await _cleanup_file_search_resources(real_openai_client, folder_path, cleanup_agent)
+            except Exception as e:
+                print(f"Cleanup failed: {e}")
+        if removed_id:
+            try:
+                await real_openai_client.files.delete(file_id=removed_id)
+                print(f"Cleaned up removed file {removed_id}")
+            except NotFoundError:
+                print(f"Removed file {removed_id} already absent")
+            except Exception as e:
+                print(f"Removed file cleanup skipped: {e}")
 
 
 @pytest.mark.asyncio

@@ -70,13 +70,13 @@ async def perform_single_run(
                 await mcp_stack.enter_async_context(server)  # type: ignore[arg-type]
 
         run_config = run_config_override or RunConfig()
-        with use_runner_compatible_model_settings(agent, run_config) as runner_config:
+        async with use_runner_compatible_model_settings(agent, run_config, master_context_for_run) as compatible_run:
             result = await Runner.run(
-                starting_agent=agent,
+                starting_agent=compatible_run.agent,
                 input=history_for_runner,
                 context=master_context_for_run,
                 hooks=hooks_override,
-                run_config=runner_config,
+                run_config=compatible_run.run_config,
                 max_turns=kwargs.get("max_turns", 1000000),
             )
     return result

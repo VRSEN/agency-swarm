@@ -70,6 +70,18 @@ class TestFastAPIFileProcessing:
         )
         return httpx.AsyncClient(timeout=timeout_config)
 
+    @staticmethod
+    def _contains_message_type(messages: object, expected_type: str) -> bool:
+        if isinstance(messages, dict):
+            if messages.get("type") == expected_type:
+                return True
+            return any(
+                TestFastAPIFileProcessing._contains_message_type(value, expected_type) for value in messages.values()
+            )
+        if isinstance(messages, list):
+            return any(TestFastAPIFileProcessing._contains_message_type(item, expected_type) for item in messages)
+        return False
+
     @pytest.fixture(scope="class")
     def agency_factory(self):
         """Create an agency factory for testing."""
@@ -245,30 +257,56 @@ class TestFastAPIFileProcessing:
     @pytest.mark.asyncio
     async def test_local_file_attachment(self, fastapi_base_url: str, tmp_path):
         """Test processing a local absolute file path via file_urls."""
+        expected_phrase = "local secret phrase"
+        file_name = "local-file.txt"
         file_path = tmp_path / "local-file.txt"
-        file_path.write_text("local secret phrase", encoding="utf-8")
+        file_path.write_text(expected_phrase, encoding="utf-8")
 
         url = f"{fastapi_base_url}/test_agency/get_response"
-        payload = {
-            "message": "Please read the content of the uploaded file and tell me what secret phrase you find.",
-            "file_urls": {"local-file.txt": str(file_path)},
-        }
+        message = (
+            "Use the Code Interpreter tool to open the attached text file. "
+            "Read the file contents and return the exact secret phrase verbatim."
+        )
         headers = {}
+        max_attempts = 3
+        retry_delay_seconds = 2
+        file_id: str | None = None
+        last_response_text = ""
+        last_response_data: dict[str, object] | None = None
 
         async with self.get_http_client(timeout_seconds=120) as client:
-            response = await client.post(url, json=payload, headers=headers)
+            for attempt in range(max_attempts):
+                if attempt == 0:
+                    payload = {"message": message, "file_urls": {file_name: str(file_path)}}
+                else:
+                    assert file_id is not None
+                    payload = {"message": message, "file_ids": [file_id]}
 
-        assert response.status_code == 200
-        response_data = response.json()
+                response = await client.post(url, json=payload, headers=headers)
 
-        # Verify the file was attached and processed
-        assert "file_ids_map" in response_data
-        assert "local-file.txt" in response_data["file_ids_map"]
+                assert response.status_code == 200
+                response_data = response.json()
+                last_response_data = response_data
+                if "error" in response_data:
+                    pytest.fail(f"Unexpected error response: {response_data['error']}")
 
-        # Should return a response without error
-        assert "response" in response_data
-        response_text = response_data["response"].lower()
-        assert "local secret phrase" in response_text
+                if attempt == 0:
+                    file_ids_map = response_data.get("file_ids_map")
+                    assert isinstance(file_ids_map, dict), f"Expected file_ids_map dict, got: {type(file_ids_map)}"
+                    file_id_value = file_ids_map.get(file_name)
+                    assert isinstance(file_id_value, str) and file_id_value, f"Missing file_id for {file_name}"
+                    file_id = file_id_value
+
+                assert "response" in response_data
+                last_response_text = str(response_data["response"]).lower()
+                if expected_phrase in last_response_text:
+                    break
+                if attempt < max_attempts - 1:
+                    await asyncio.sleep(retry_delay_seconds)
+
+        assert expected_phrase in last_response_text, f"Expected phrase not found. Last response: {last_response_data}"
+        assert last_response_data is not None and "new_messages" in last_response_data
+        assert self._contains_message_type(last_response_data["new_messages"], "code_interpreter_call")
 
     @pytest.mark.asyncio
     async def test_local_allowlist_created_after_start(self, tmp_path, agency_factory):

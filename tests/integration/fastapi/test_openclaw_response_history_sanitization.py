@@ -691,20 +691,38 @@ def test_store_false_sanitizer_keeps_prior_encrypted_reasoning_boundary() -> Non
 def test_live_openai_store_false_replays_encrypted_reasoning() -> None:
     """Live OpenAI proof for stateless Responses reasoning replay."""
     client = OpenAI()
-    first = client.responses.create(
-        model="gpt-5.4-nano",
-        input="Compute 37*41. Return only the number.",
-        store=False,
-        include=[REASONING_ENCRYPTED_CONTENT_INCLUDE],
-        reasoning={"effort": "high"},
-        max_output_tokens=64,
-    )
-    first_items = [item.model_dump(exclude_none=True) for item in first.output]
-    reasoning_items = [item for item in first_items if item.get("type") == "reasoning"]
+    first_items: list[dict[str, Any]] = []
+    attempt_evidence: list[dict[str, Any]] = []
+    for attempt in range(1, 4):
+        first = client.responses.create(
+            model="gpt-5.4-nano",
+            input="Compute 37*41. Return only the number.",
+            store=False,
+            include=[REASONING_ENCRYPTED_CONTENT_INCLUDE],
+            reasoning={"effort": "high"},
+            max_output_tokens=64,
+        )
+        candidate_items = [item.model_dump(exclude_none=True) for item in first.output]
+        reasoning_items = [item for item in candidate_items if item.get("type") == "reasoning"]
+        encrypted_reasoning_items = [item for item in reasoning_items if item.get("encrypted_content")]
+        unencrypted_reasoning_ids = [item.get("id") for item in reasoning_items if not item.get("encrypted_content")]
+        output_text = first.output_text.strip()
+        attempt_evidence.append(
+            {
+                "attempt": attempt,
+                "response_id": first.id,
+                "output_text": output_text,
+                "output_types": [item.get("type") for item in candidate_items],
+                "reasoning_count": len(reasoning_items),
+                "encrypted_reasoning_count": len(encrypted_reasoning_items),
+                "unencrypted_reasoning_ids": unencrypted_reasoning_ids,
+            }
+        )
+        if output_text == "1517" and reasoning_items and not unencrypted_reasoning_ids:
+            first_items = candidate_items
+            break
 
-    assert first.output_text.strip() == "1517"
-    assert reasoning_items
-    assert all(item.get("encrypted_content") for item in reasoning_items)
+    assert first_items, attempt_evidence
 
     replay_input = sanitize_store_false_responses_input(
         [

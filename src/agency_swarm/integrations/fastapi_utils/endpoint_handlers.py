@@ -48,7 +48,7 @@ from agency_swarm import (
     RunContextWrapper,
 )
 from agency_swarm.agent.execution_stream_response import StreamingRunResponse
-from agency_swarm.agent.initialization import apply_framework_defaults
+from agency_swarm.agent.initialization import refresh_model_family_defaults
 from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_urls
 from agency_swarm.integrations.fastapi_utils.logging_middleware import get_logs_endpoint_impl
 from agency_swarm.integrations.fastapi_utils.override_policy import (
@@ -244,33 +244,9 @@ def _client_base_url(client: AsyncOpenAI) -> str:
     return str(base_url).rstrip("/") if base_url is not None else ""
 
 
-# Fields that `agents.models.default_models.get_default_model_settings` varies by
-# model family (currently the GPT-5 family sets these non-None). Keep this list
-# in lockstep with that SDK helper — refreshing any other fields would drop
-# caller-explicit generation tuning on a per-request model swap.
-_MODEL_FAMILY_DEFAULT_FIELDS: tuple[str, ...] = ("reasoning", "verbosity")
-
-
 def _refresh_framework_defaults_after_model_swap(agent: Agent) -> None:
-    """Re-layer model-family defaults for the new ``agent.model`` without wiping caller fields.
-
-    ``apply_framework_defaults`` treats any non-None field on the input
-    ``ModelSettings`` as caller-explicit and preserves it. So to force a fresh
-    model-family default (e.g. GPT-5's ``reasoning.effort`` / ``verbosity``
-    bleeding into a GPT-4o swap) we clear ONLY the family-scoped fields on a
-    copy of the previous settings and let ``apply_framework_defaults`` recompute
-    them for the new model. Every other caller-tuned field (``temperature``,
-    ``max_tokens``, ``top_p``, ``parallel_tool_calls``, ``extra_headers``, ...)
-    survives untouched.
-    """
-    previous: ModelSettings | None = getattr(agent, "model_settings", None)
-    cleared = copy.deepcopy(previous) if previous is not None else ModelSettings()
-    for field_name in _MODEL_FAMILY_DEFAULT_FIELDS:
-        setattr(cleared, field_name, None)
-
-    kwargs: dict[str, Any] = {"model": agent.model, "model_settings": cleared}
-    apply_framework_defaults(kwargs)
-    agent.model_settings = cast(ModelSettings, kwargs["model_settings"])
+    """Re-layer model-family defaults for the new ``agent.model`` without wiping caller fields."""
+    agent.model_settings = refresh_model_family_defaults(agent.model, getattr(agent, "model_settings", None))
 
 
 def _apply_request_litellm_model(agent: Agent, model_name: str) -> None:

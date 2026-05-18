@@ -14,9 +14,13 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from agents import ModelSettings, RunConfig
 
 from agency_swarm import Agency, Agent
 from agency_swarm.utils.citation_extractor import extract_direct_file_citations_from_history
+
+_REVENUE_VALUE = "8,456,789.12"
+_NORMALIZED_REVENUE_VALUE = _REVENUE_VALUE.replace(",", "")
 
 
 def _skip_if_quota(err: Exception) -> None:
@@ -27,6 +31,21 @@ def _skip_if_quota(err: Exception) -> None:
         if "insufficient_quota" in text or "RateLimitError" in text:
             pytest.skip("OpenAI quota unavailable for citation integration test")
         current = current.__cause__ or current.__context__
+
+
+def _used_code_interpreter(result: object) -> bool:
+    """Return true when the Responses run emitted a Code Interpreter tool call."""
+    for item in getattr(result, "new_items", []) or []:
+        raw_item = getattr(item, "raw_item", None)
+        if getattr(raw_item, "type", None) == "code_interpreter_call":
+            return True
+    return False
+
+
+def _contains_exact_revenue(response_text: str) -> bool:
+    """Return true when the response identifies the exact revenue value."""
+    normalized_response = response_text.replace(",", "")
+    return "revenue" in response_text.lower() and _NORMALIZED_REVENUE_VALUE in normalized_response
 
 
 @pytest.mark.asyncio
@@ -68,9 +87,9 @@ async def test_file_attachment_citation_extraction():
             agent = Agent(
                 name="DocumentAnalyst",
                 instructions=(
-                    "You are a document analyst. When analyzing attached files, always cite specific "
-                    "information from the document. Be precise and reference exact text when "
-                    "providing answers."
+                    "You are a document analyst. When analyzing attached text files, use Code Interpreter "
+                    "to read the file and answer from the file contents. Be precise and reference exact "
+                    "text when providing answers."
                 ),
                 model="gpt-5.4-mini",
             )
@@ -89,53 +108,61 @@ async def test_file_attachment_citation_extraction():
             # Increase delay to ensure file is fully processed in CI environments
             await asyncio.sleep(3)
 
-            # Test direct file attachment with more explicit citation request
-            # Adding multiple prompts that strongly encourage citation generation
-            try:
-                result = await agency.get_response(
-                    message=(
-                        "Please analyze the attached financial report. I need you to:\n"
-                        "1. Find and quote the EXACT revenue figure from the document\n"
-                        "2. Include the specific line from the document that contains '$8,456,789.12'\n"
-                        "3. Reference the document by citing the specific text\n"
-                        "Make sure to quote directly from the attached file."
-                    ),
-                    file_ids=[uploaded_file_id],
-                )
-            except Exception as err:
-                _skip_if_quota(err)
-                raise
+            message = (
+                "Use the Code Interpreter tool to inspect the attached file named `quarterly_report.txt`. "
+                "Run code that reads the file contents, finds the line that starts with '- Revenue:', "
+                f"and return that revenue line verbatim. The answer must include {_REVENUE_VALUE} "
+                "and identify it as Revenue."
+            )
+            max_attempts = 3
+            retry_delay_seconds = 2
+            result = None
+            history = []
+            messages_with_citations = []
+            extracted_citations = []
+            response_text = ""
+            used_code_interpreter = False
 
-            assert result is not None
-            assert result.final_output is not None
+            for attempt in range(max_attempts):
+                try:
+                    result = await agency.get_response(
+                        message=message,
+                        file_ids=[uploaded_file_id],
+                        run_config=RunConfig(model_settings=ModelSettings(tool_choice="code_interpreter")),
+                    )
+                except Exception as err:
+                    _skip_if_quota(err)
+                    raise
 
-            # Get conversation history to examine
-            history = agency.thread_manager.get_conversation_history("DocumentAnalyst", None)  # None = user
+                assert result is not None
+                assert result.final_output is not None
 
-            # Look for citations in assistant messages (new format: in metadata)
-            messages_with_citations = [
-                item for item in history if item.get("role") == "assistant" and "citations" in item
-            ]
+                # Get conversation history to examine
+                history = agency.thread_manager.get_conversation_history("DocumentAnalyst", None)  # None = user
 
-            # Extract citations programmatically using centralized utility
-            # This now supports both old format (synthetic messages) and new format (metadata)
-            extracted_citations = extract_direct_file_citations_from_history(history)
+                # Look for citations in assistant messages (new format: in metadata)
+                messages_with_citations = [
+                    item for item in history if item.get("role") == "assistant" and "citations" in item
+                ]
 
-            # More lenient verification - check if either citations were extracted OR
-            # the agent successfully accessed the file content
-            response_text = str(result.final_output)
-            has_revenue_data = "8,456,789.12" in response_text or "8456789.12" in response_text
+                # Extract citations programmatically using centralized utility
+                # This now supports both old format (synthetic messages) and new format (metadata)
+                extracted_citations = extract_direct_file_citations_from_history(history)
 
-            # The test passes if EITHER:
-            # 1. We have extracted citations (preferred), OR
-            # 2. The agent successfully read the file (evidenced by specific data in response)
-            if len(extracted_citations) == 0 and not has_revenue_data:
-                # Only fail if we have neither citations nor evidence of file access
-                raise AssertionError(
-                    "Expected to find direct file citations in conversation history OR evidence of file access. "
-                    f"Found {len(messages_with_citations)} messages with citations metadata, "
-                    f"but no parsed citations or revenue data."
-                )
+                response_text = str(result.final_output)
+                used_code_interpreter = _used_code_interpreter(result)
+                if used_code_interpreter and _contains_exact_revenue(response_text):
+                    break
+
+                if attempt < max_attempts - 1:
+                    await asyncio.sleep(retry_delay_seconds)
+
+            assert used_code_interpreter, "Code Interpreter was not called despite tool_choice='code_interpreter'"
+            assert _contains_exact_revenue(response_text), (
+                "Expected Code Interpreter to read the attached report and return the exact revenue line. "
+                f"Found {len(messages_with_citations)} messages with citations metadata and "
+                f"{len(extracted_citations)} parsed citations. Last response: {response_text}"
+            )
 
             # Verify citation structure
             for citation in extracted_citations:

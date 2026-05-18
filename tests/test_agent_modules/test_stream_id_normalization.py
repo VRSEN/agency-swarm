@@ -2,9 +2,10 @@ from collections.abc import AsyncGenerator
 from typing import Any, cast
 
 import pytest
+from agents import ModelSettings
 from agents.items import MessageOutputItem
 from agents.models.fake_id import FAKE_RESPONSES_ID
-from agents.stream_events import RawResponsesStreamEvent, RunItemStreamEvent
+from agents.stream_events import AgentUpdatedStreamEvent, RawResponsesStreamEvent, RunItemStreamEvent
 from openai.types.responses import ResponseFunctionToolCall, ResponseOutputMessage, ResponseOutputText
 from openai.types.responses.response_function_call_arguments_delta_event import (
     ResponseFunctionCallArgumentsDeltaEvent,
@@ -13,6 +14,34 @@ from openai.types.responses.response_output_item_added_event import ResponseOutp
 from openai.types.responses.response_text_delta_event import ResponseTextDeltaEvent
 
 from agency_swarm import Agent
+
+
+@pytest.mark.asyncio
+async def test_agent_stream_agent_updated_event_uses_registered_agent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Streaming agent updates should expose the public registered Agent."""
+
+    async def dummy_stream_events(agent: Agent) -> AsyncGenerator[Any]:
+        yield AgentUpdatedStreamEvent(new_agent=agent)
+
+    class DummyStreamedResult:
+        def __init__(self, agent: Agent) -> None:
+            self._agent = agent
+
+        def stream_events(self):
+            return dummy_stream_events(self._agent)
+
+    def run_streamed_stub(*_args: Any, **kwargs: Any) -> DummyStreamedResult:
+        return DummyStreamedResult(cast(Agent, kwargs["starting_agent"]))
+
+    monkeypatch.setattr("agents.Runner.run_streamed", run_streamed_stub)
+
+    agent = Agent(name="StreamAgent", instructions="noop", model_settings=ModelSettings(max_tokens=16))
+    events = [event async for event in agent.get_response_stream("hi")]
+
+    assert events
+    assert events[0].new_agent is agent
 
 
 @pytest.mark.asyncio

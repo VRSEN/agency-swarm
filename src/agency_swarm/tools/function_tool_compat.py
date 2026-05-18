@@ -22,9 +22,8 @@ def build_manual_tool_context(
     if isinstance(ctx, ToolContext):
         return ctx
     if isinstance(ctx, RunContextWrapper):
-        return ToolContext(
-            context=ctx.context,
-            usage=ctx.usage,
+        return ToolContext.from_agent_context(
+            ctx,
             tool_call_id=tool_call_id,
             tool_name=tool_name,
             tool_arguments=input_json,
