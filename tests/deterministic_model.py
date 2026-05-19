@@ -38,8 +38,6 @@ _MESSAGE_RE = re.compile(r"message:\s*(?P<message>.+)$", re.IGNORECASE)
 _SECRET_RE = re.compile(r"secret code:\s*(?P<secret>[\w-]+)", re.IGNORECASE)
 _HANDLE_RE = re.compile(r"handle\s+(?P<task>[\w-]+)", re.IGNORECASE)
 _TASK_RE = re.compile(r"task\s+(?P<task>[\w-]+)", re.IGNORECASE)
-_SHARED_STATE_SET_RE = re.compile(r"set\s+test_value\s+to\s+['\"]?(?P<value>[\w-]+)['\"]?", re.IGNORECASE)
-_SHARED_STATE_GET_RE = re.compile(r"get\s+(?:the\s+)?(?:current\s+)?test_value", re.IGNORECASE)
 
 
 def _extract_text_from_content(content: Any) -> str | None:
@@ -345,16 +343,6 @@ class DeterministicModel(Model):
             get_match = _GET_RE.search(user_text)
             if get_match:
                 return _build_tool_call_response("get_data", {"key": get_match.group("key")})
-
-        if "SharedStateTool" in tool_map:
-            set_match = _SHARED_STATE_SET_RE.search(user_text)
-            if set_match:
-                return _build_tool_call_response(
-                    "SharedStateTool",
-                    {"action": "set", "value": set_match.group("value")},
-                )
-            if _SHARED_STATE_GET_RE.search(user_text):
-                return _build_tool_call_response("SharedStateTool", {"action": "get", "value": ""})
 
         if "send_message" in tool_map:
             schema = tool_map["send_message"].params_json_schema

@@ -18,7 +18,6 @@ from agents.items import MessageOutputItem, RunItem
 from agents.stream_events import RunItemStreamEvent, StreamEvent
 from openai.types.responses import ResponseOutputMessage, ResponseOutputText
 
-from agency_swarm.agent.initialization import use_runner_compatible_model_settings
 from agency_swarm.context import MasterContext
 from agency_swarm.messages import MessageFilter, MessageFormatter
 from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
@@ -229,90 +228,84 @@ def run_stream_with_guardrails(
                                 logger.warning(f"Entering async context for server {server.name}")
                                 await mcp_stack.enter_async_context(server)  # type: ignore[arg-type]
 
-                        run_config = run_config_override or RunConfig()
-                        async with use_runner_compatible_model_settings(
-                            agent,
-                            run_config,
-                            master_context_for_run,
-                        ) as compatible_run:
-                            local_result = perform_streamed_run(
-                                agent=compatible_run.agent,
-                                history_for_runner=history_for_runner,
-                                master_context_for_run=master_context_for_run,
-                                hooks_override=hooks_override,
-                                run_config_override=compatible_run.run_config,
-                                kwargs=kwargs,
+                        local_result = perform_streamed_run(
+                            agent=agent,
+                            history_for_runner=history_for_runner,
+                            master_context_for_run=master_context_for_run,
+                            hooks_override=hooks_override,
+                            run_config_override=run_config_override,
+                            kwargs=kwargs,
+                        )
+                        streaming_result = cast(RunResultStreaming, local_result)
+                        cancel_state["run_result"] = streaming_result
+
+                        # OpenAI pattern: call cancel() INSIDE the loop, then continue consuming
+                        # until the generator stops naturally.
+                        # Use manual iteration to check cancel_requested while waiting for events.
+                        cancelled = False
+                        stream_gen = local_result.stream_events()
+
+                        # Create cancel_wait once outside the loop (Fix #4: reduce task churn)
+                        cancel_wait: asyncio.Task[bool] | None = asyncio.create_task(cancel_requested.wait())
+
+                        while True:
+                            # Check for cancellation while waiting for the next event
+                            next_task = asyncio.create_task(stream_gen.__anext__())
+
+                            # Build task set: always include next_task, include cancel_wait if still active
+                            tasks_to_wait: list[asyncio.Task[Any]] = [next_task]
+                            if cancel_wait is not None:
+                                tasks_to_wait.append(cancel_wait)
+
+                            done, pending = await asyncio.wait(
+                                tasks_to_wait,
+                                return_when=asyncio.FIRST_COMPLETED,
                             )
-                            streaming_result = cast(RunResultStreaming, local_result)
-                            cancel_state["run_result"] = streaming_result
 
-                            # OpenAI pattern: call cancel() INSIDE the loop, then continue consuming
-                            # until the generator stops naturally.
-                            # Use manual iteration to check cancel_requested while waiting for events.
-                            cancelled = False
-                            stream_gen = local_result.stream_events()
+                            # Handle cancellation request
+                            if cancel_wait is not None and cancel_wait in done and not cancelled:
+                                mode = cancel_state["mode"]
+                                local_result.cancel(mode=mode)
+                                cancelled = True
+                                cancel_wait = None  # Don't reuse after it fired
 
-                            # Create cancel_wait once outside the loop (Fix #4: reduce task churn)
-                            cancel_wait: asyncio.Task[bool] | None = asyncio.create_task(cancel_requested.wait())
+                                if mode == "immediate":
+                                    # Immediate mode: cancel pending task and exit quickly
+                                    if next_task in pending:
+                                        next_task.cancel()
+                                        with suppress(asyncio.CancelledError, StopAsyncIteration):
+                                            await next_task
+                                else:
+                                    # after_turn mode: wait for pending task to complete (don't lose event)
+                                    if next_task in pending:
+                                        with suppress(asyncio.CancelledError, StopAsyncIteration):
+                                            await next_task
 
-                            while True:
-                                # Check for cancellation while waiting for the next event
-                                next_task = asyncio.create_task(stream_gen.__anext__())
-
-                                # Build task set: always include next_task, include cancel_wait if still active
-                                tasks_to_wait: list[asyncio.Task[Any]] = [next_task]
-                                if cancel_wait is not None:
-                                    tasks_to_wait.append(cancel_wait)
-
-                                done, pending = await asyncio.wait(
-                                    tasks_to_wait,
-                                    return_when=asyncio.FIRST_COMPLETED,
-                                )
-
-                                # Handle cancellation request
-                                if cancel_wait is not None and cancel_wait in done and not cancelled:
-                                    mode = cancel_state["mode"]
-                                    local_result.cancel(mode=mode)
-                                    cancelled = True
-                                    cancel_wait = None  # Don't reuse after it fired
-
-                                    if mode == "immediate":
-                                        # Immediate mode: cancel pending task and exit quickly
-                                        if next_task in pending:
-                                            next_task.cancel()
-                                            with suppress(asyncio.CancelledError, StopAsyncIteration):
-                                                await next_task
-                                    else:
-                                        # after_turn mode: wait for pending task to complete (don't lose event)
-                                        if next_task in pending:
-                                            with suppress(asyncio.CancelledError, StopAsyncIteration):
-                                                await next_task
-
-                                        # Queue the event if we got one
-                                        if next_task.done():
-                                            with suppress(asyncio.CancelledError, StopAsyncIteration):
-                                                ev = next_task.result()
-                                                await event_queue.put(ev)
-
-                                        # Drain remaining events (OpenAI: keep polling after cancel)
-                                        async for ev in stream_gen:
+                                    # Queue the event if we got one
+                                    if next_task.done():
+                                        with suppress(asyncio.CancelledError, StopAsyncIteration):
+                                            ev = next_task.result()
                                             await event_queue.put(ev)
+
+                                    # Drain remaining events (OpenAI: keep polling after cancel)
+                                    async for ev in stream_gen:
+                                        await event_queue.put(ev)
+                                break
+
+                            # Handle next event
+                            if next_task in done:
+                                try:
+                                    ev = next_task.result()
+                                except StopAsyncIteration:
+                                    # Generator exhausted normally - cleanup cancel_wait
+                                    if cancel_wait is not None and not cancel_wait.done():
+                                        cancel_wait.cancel()
+                                        with suppress(asyncio.CancelledError):
+                                            await cancel_wait
                                     break
 
-                                # Handle next event
-                                if next_task in done:
-                                    try:
-                                        ev = next_task.result()
-                                    except StopAsyncIteration:
-                                        # Generator exhausted normally - cleanup cancel_wait
-                                        if cancel_wait is not None and not cancel_wait.done():
-                                            cancel_wait.cancel()
-                                            with suppress(asyncio.CancelledError):
-                                                await cancel_wait
-                                        break
-
-                                    # Put event to queue
-                                    await event_queue.put(ev)
+                                # Put event to queue
+                                await event_queue.put(ev)
 
                 except OutputGuardrailTripwireTriggered as e:
                     guardrail_exception = e

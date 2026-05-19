@@ -3,7 +3,6 @@ import uuid
 
 import pytest
 from agents import ModelSettings, RunResult
-from openai.types.shared import Reasoning
 
 from agency_swarm import Agency, Agent
 
@@ -19,7 +18,7 @@ def planner_agent_instance():
             "Ensure your message to the Worker clearly includes the full and exact task description you received. "
             "After receiving the final result, relay it verbatim to the user including all task identifiers."
         ),
-        model_settings=ModelSettings(reasoning=Reasoning(effort="low")),
+        model_settings=ModelSettings(temperature=0.0),
     )
 
 
@@ -34,7 +33,7 @@ def worker_agent_instance():
             "Send the result string to the Reporter agent using the send_message tool. "
             "Ensure your message clearly references the specific task description you were given by the Planner."
         ),
-        model_settings=ModelSettings(reasoning=Reasoning(effort="low")),
+        model_settings=ModelSettings(temperature=0.0),
     )
 
 
@@ -50,7 +49,7 @@ def reporter_agent_instance():
             "Ensure your final report clearly identifies the specific task "
             "description that was processed along with the results."
         ),
-        model_settings=ModelSettings(reasoning=Reasoning(effort="low")),
+        model_settings=ModelSettings(temperature=0.0),
     )
 
 

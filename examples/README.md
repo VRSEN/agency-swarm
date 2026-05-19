@@ -28,13 +28,13 @@ This directory contains runnable examples demonstrating key features of Agency S
 - **`fastapi_integration/`** – FastAPI server and client examples
   - `server.py` – FastAPI server with streaming support
   - `client.py` – Client examples for testing endpoints
-- **`mcp_servers.py`** – Local MCP tool proof with optional hosted MCP when `MCP_PUBLIC_SERVER_URL` is set
+- **`mcp_servers.py`** – Using tools from MCP servers (local and hosted)
 - **`connectors.py`** – Google Calendar integration using OpenAI hosted tools
 
 ## Model Providers
-- **`interactive/third_party_models.py`** – Using available Claude and Gemini models via LiteLLM
+- **`third_party_models.py`** – Using third-party models (Claude, Gemini, Grok) via LiteLLM
 
 ## Observability
-- **`observability.py`** – OpenAI tracing proof with optional Langfuse and AgentOps integrations
+- **`observability.py`** – OpenAI, Langfuse and AgentOps tracing integration
 
 Run any file with `python examples/<name>.py` after setting your `OPENAI_API_KEY`.

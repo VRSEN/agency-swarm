@@ -8,27 +8,21 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from agency_swarm.tools import BaseTool
-from agency_swarm.tools.function_tool_compat import build_manual_tool_context
+from agency_swarm.tools.function_tool_compat import normalize_function_tool
 
 from .tool_request_models import build_request_model
 
 
-def _get_tool_invoke_context(tool: Any, context: Any, *, input_json: str) -> Any:
-    if isinstance(tool, FunctionTool):
-        return build_manual_tool_context(context, tool_name=tool.name, input_json=input_json)
-    return context
-
-
 def make_tool_endpoint(tool, verify_token, context=None):
+    if isinstance(tool, FunctionTool):
+        tool = normalize_function_tool(tool)
+
     async def generic_handler(request: Request, token: str = Depends(verify_token)):
         try:
             data = await request.json()
             if hasattr(tool, "on_invoke_tool"):
                 input_json = json.dumps(data)
-                result = await tool.on_invoke_tool(
-                    _get_tool_invoke_context(tool, context, input_json=input_json),
-                    input_json,
-                )
+                result = await tool.on_invoke_tool(context, input_json)
             elif isinstance(tool, type):
                 tool_instance = tool(**data)
                 result = tool_instance.run()
@@ -82,10 +76,7 @@ def make_tool_endpoint(tool, verify_token, context=None):
             data = request_model.model_dump(mode="python", exclude_unset=True)
             if hasattr(tool, "on_invoke_tool"):
                 input_json = request_model.model_dump_json(exclude_unset=True)
-                result = await tool.on_invoke_tool(
-                    _get_tool_invoke_context(tool, context, input_json=input_json),
-                    input_json,
-                )
+                result = await tool.on_invoke_tool(context, input_json)
             else:
                 result = tool(**data)
                 if asyncio.iscoroutine(result):

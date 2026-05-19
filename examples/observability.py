@@ -1,7 +1,8 @@
-"""Observability demo showing OpenAI tracing plus optional Langfuse and AgentOps tracing.
+"""
+Observability demo showing OpenAI (built-in), Langfuse and AgentOps tracing.
 
 Make sure you have correct environment variables set up prior to running the script
-for any optional tracking providers you want to enable.
+or comment out unused tracking options.
 
 OpenAI does not require extra setup, results can be found here: https://platform.openai.com/traces
 
@@ -11,38 +12,21 @@ AgentOps setup guide: https://docs.agentops.ai/v2/integrations/openai_agents_pyt
 
 Results can be found in the platform's respective dashboards.
 
-Run with: python examples/observability.py
+Run with: python examples/observability_demo.py
 """
 
 import asyncio
 import logging
 import os
 import sys
-from dataclasses import dataclass
 from statistics import mean, stdev
 from typing import Any
 
 # Path setup for standalone examples
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
-try:  # noqa: E402
-    import agentops  # type: ignore[import-not-found]
-except ImportError:  # pragma: no cover - exercised by example smoke test
-    agentops = None
-
-try:  # noqa: E402
-    from langfuse import observe  # type: ignore[import-not-found]
-except ImportError:  # pragma: no cover - exercised by example smoke test
-
-    def observe(*_args, **_kwargs):
-        def decorator(func):
-            return func
-
-        return decorator
-
-    _LANGFUSE_AVAILABLE = False
-else:
-    _LANGFUSE_AVAILABLE = True
+import agentops  # noqa: E402
+from langfuse import observe  # noqa: E402
 
 from agency_swarm import (  # noqa: E402
     Agency,
@@ -53,14 +37,6 @@ from agency_swarm import (  # noqa: E402
 )
 
 logging.basicConfig(level=logging.INFO)
-
-
-@dataclass(frozen=True)
-class TracingProof:
-    """Output captured from a tracing run for release-test assertions."""
-
-    final_output: str
-    function_outputs: list[str]
 
 
 # ────────────────────────────────
@@ -116,35 +92,31 @@ def create_agency() -> Agency:
 # ────────────────────────────────
 # Example tracing wrappers
 # ────────────────────────────────
-async def openai_tracing(input_message: str) -> TracingProof:
+async def openai_tracing(input_message: str) -> str:
     agency_instance = create_agency()
     with trace("OpenAI tracing"):
         response = await agency_instance.get_response(message=input_message)
-    return TracingProof(response.final_output, _function_outputs(agency_instance))
+    return response.final_output
 
 
 @observe()
-async def langfuse_tracing(input_message: str) -> TracingProof:
-    if not _LANGFUSE_AVAILABLE:
-        raise ModuleNotFoundError("langfuse is not installed")
+async def langfuse_tracing(input_message: str) -> str:
     if os.getenv("LANGFUSE_SECRET_KEY") is None or os.getenv("LANGFUSE_PUBLIC_KEY") is None:
         raise ValueError("LANGFUSE api keys are not set")
 
     agency_instance = create_agency()
 
     @observe()
-    async def get_response_wrapper(message: str) -> Any:
+    async def get_response_wrapper(message: str):
         return await agency_instance.get_response(
             message=message,
         )
 
     response = await get_response_wrapper(input_message)
-    return TracingProof(response.final_output, _function_outputs(agency_instance))
+    return response.final_output
 
 
-async def agentops_tracing(input_message: str) -> TracingProof:
-    if agentops is None:
-        raise ModuleNotFoundError("agentops is not installed")
+async def agentops_tracing(input_message: str) -> str:
     if os.getenv("AGENTOPS_API_KEY") is None:
         raise ValueError("AGENTOPS_API_KEY is not set")
     agentops.init(auto_start_session=True, trace_name="Agentops tracing", tags=["openai", "agentops-example"])
@@ -155,70 +127,20 @@ async def agentops_tracing(input_message: str) -> TracingProof:
         message=input_message,
     )
     agentops.end_trace(tracer, end_state="Success")
-    return TracingProof(response.final_output, _function_outputs(agency_instance))
-
-
-def _function_outputs(agency: Agency) -> list[str]:
-    """Return persisted function outputs from the last agency run."""
-    outputs: list[str] = []
-    for message in agency.thread_manager.get_all_messages():
-        if not isinstance(message, dict) or message.get("type") != "function_call_output":
-            continue
-        outputs.append(str(message.get("output", "")))
-    return outputs
-
-
-def _require_text(haystack: str, needles: list[str], proof_name: str) -> None:
-    missing = [needle for needle in needles if needle not in haystack]
-    if missing:
-        raise RuntimeError(f"{proof_name} did not return required evidence: {missing}")
-
-
-def _require_tracing_proof(provider: str, proof: TracingProof) -> None:
-    if not proof.final_output.strip():
-        raise RuntimeError(f"{provider} tracing returned an empty response")
-    proof_text = "\n".join([proof.final_output, *proof.function_outputs])
-    _require_text(proof.final_output.lower(), ["factorial"], f"{provider} tracing")
-    _require_text(proof_text, ["Mean: 20.0", "Standard Deviation: 7.9"], f"{provider} tracing")
-
-
-def _missing_env_vars(*names: str) -> list[str]:
-    return [name for name in names if not os.getenv(name)]
-
-
-def _print_result(provider: str, proof: TracingProof) -> None:
-    _require_tracing_proof(provider, proof)
-    print(proof.final_output)
-    print(f"{provider} tracing proof completed with factorial and dataset evidence.")
-
-
-async def main() -> None:
-    test_message = "Create a function to calculate factorial and analyze the dataset [10, 25, 15, 30, 20]."
-
-    print("Running OpenAI tracing...")
-    _print_result("OpenAI", await openai_tracing(test_message))
-
-    print("\nRunning Langfuse tracing...")
-    missing_langfuse = _missing_env_vars("LANGFUSE_SECRET_KEY", "LANGFUSE_PUBLIC_KEY")
-    if not _LANGFUSE_AVAILABLE:
-        print("SKIPPED: langfuse is not installed.")
-    elif missing_langfuse:
-        print(f"SKIPPED: missing {', '.join(missing_langfuse)}.")
-    else:
-        _print_result("Langfuse", await langfuse_tracing(test_message))
-
-    print("\nRunning AgentOps tracing...")
-    missing_agentops = _missing_env_vars("AGENTOPS_API_KEY")
-    if agentops is None:
-        print("SKIPPED: agentops is not installed.")
-    elif missing_agentops:
-        print(f"SKIPPED: missing {', '.join(missing_agentops)}.")
-    else:
-        _print_result("AgentOps", await agentops_tracing(test_message))
+    return response.final_output
 
 
 # ────────────────────────────────
 # Entry point
 # ────────────────────────────────
 if __name__ == "__main__":
-    asyncio.run(main())
+    test_message = "Create a function to calculate factorial and analyze the dataset [10, 25, 15, 30, 20]."
+
+    print("Running OpenAI tracing...")
+    print(asyncio.run(openai_tracing(test_message)))
+
+    print("\nRunning Langfuse tracing...")
+    print(asyncio.run(langfuse_tracing(test_message)))
+
+    print("\nRunning AgentOps tracing...")
+    print(asyncio.run(agentops_tracing(test_message)))

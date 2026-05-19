@@ -1,26 +1,23 @@
-"""Run an agency with a local MCP server and an opt-in hosted MCP server.
+"""
+An example of running an agency with a local and a public MCP server.
 
 This example connects to the pre-made MCP servers with custom tools
 that can be found at examples/utils/stdio_mcp_server.py and examples/utils/sse_mcp_server.py
 
-The local stdio MCP server runs automatically and is the default proof path.
-
-The hosted MCP path is optional because OpenAI must reach your MCP server over
-the public internet. To test it, run the SSE server on port 8000 behind a public
-tunnel, then set MCP_PUBLIC_SERVER_URL to the public URL including /sse.
-
-You can set a custom APP_TOKEN in .env for auth; otherwise this example uses
-"test_token_123".
+The public MCP server is running on port 8000 and can be accessed at http://localhost:8000/sse
+Additionally, you can set up custom APP_TOKEN in .env file for auth, otherwise the token will be set to "test_token_123".
 
 Run the example with: python examples/mcp_servers.py
-It will ask the agent to use the local MCP tools and assert the tool outputs.
+It will ask the agent to use tools from both MCP servers and present the results.
 
-To enable the hosted MCP server example (copy/paste):
+To fully test the public MCP server example (copy/paste):
 1) Start ngrok in one terminal:
 ngrok http 8000
 
 2) In another terminal (replace YOUR_NGROK_ID):
 MCP_PUBLIC_SERVER_URL="https://YOUR_NGROK_ID.ngrok-free.app/sse" python examples/mcp_servers.py
+
+IF you do not want to run the public MCP server, you can comment out the public_mcp_server_example() call in the main function below.
 """
 
 import asyncio
@@ -52,7 +49,7 @@ stdio_server = MCPServerStdio(
 
 
 # Launch the SSE MCP server
-def launch_sse_server() -> subprocess.Popen[bytes]:
+def launch_sse_server():
     """Launch the SSE MCP server in a separate process"""
     env = os.environ.copy()
     env["APP_TOKEN"] = app_token
@@ -67,31 +64,6 @@ def launch_sse_server() -> subprocess.Popen[bytes]:
     return process
 
 
-def _function_outputs(agency: Agency) -> list[str]:
-    """Return persisted function outputs from the last agency run."""
-    outputs: list[str] = []
-    for message in agency.thread_manager.get_all_messages():
-        if not isinstance(message, dict) or message.get("type") != "function_call_output":
-            continue
-        outputs.append(str(message.get("output", "")))
-    return outputs
-
-
-def _require_text(haystack: str, needles: list[str], proof_name: str) -> None:
-    missing = [needle for needle in needles if needle not in haystack]
-    if missing:
-        raise RuntimeError(f"{proof_name} did not return required evidence: {missing}")
-
-
-def _stop_sse_server(process: subprocess.Popen[bytes]) -> None:
-    process.terminate()
-    try:
-        process.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.wait()
-
-
 mcp_agent_local = Agent(
     name="local_MCP_Agent",
     instructions="You are a helpful assistant",
@@ -103,7 +75,7 @@ mcp_agent_local = Agent(
 agency_local = Agency(mcp_agent_local)
 
 
-async def local_mcp_server_example() -> None:
+async def local_mcp_server_example():
     # Agent will handle execution lifecycle of the MCP server automatically.
     print("Running local MCP server example")
     print("-" * 25)
@@ -111,27 +83,19 @@ async def local_mcp_server_example() -> None:
     print(f"Sending message: {message}")
     response = await agency_local.get_response(message)
     print(f"Answer: {response.final_output}")
-    proof_text = "\n".join([str(response.final_output), *_function_outputs(agency_local)])
-    _require_text(
-        proof_text,
-        ["Unique ID: 12332211", "Current time in Europe/Amsterdam"],
-        "Local MCP server example",
-    )
-    print("\nLocal MCP server proof verified the unique id and Amsterdam time tool outputs.")
+    print("\nIf you see the time and id in the answer, that means agent used the local MCP server successfully")
     print("Local MCP server example completed\n")
     print("-" * 25 + "\n")
 
 
-async def public_mcp_server_example() -> None:
+async def public_mcp_server_example():
     # HostedMCPTools do not require manual connection
     public_server_url = os.getenv("MCP_PUBLIC_SERVER_URL")
     if not public_server_url:
-        print("MCP_PUBLIC_SERVER_URL is not set; skipping hosted MCP server example.")
-        print("Set MCP_PUBLIC_SERVER_URL to a public tunnel URL ending in /sse to opt in.")
+        print("MCP_PUBLIC_SERVER_URL is not set; skipping public MCP server example.")
+        print("Set MCP_PUBLIC_SERVER_URL to your ngrok URL (including /sse) to enable it.")
         return
     public_server_url = public_server_url.rstrip("/")
-    if not public_server_url.endswith("/sse"):
-        raise ValueError("MCP_PUBLIC_SERVER_URL must be a public URL ending in /sse.")
 
     public_agent = Agent(
         name="public_MCP_Agent",
@@ -158,22 +122,22 @@ async def public_mcp_server_example() -> None:
     try:
         sse_server = launch_sse_server()
         await asyncio.sleep(5)  # wait for the server to start
-        response = await agency_public.get_response("Get secret word using seed 2 and then list directory")
-        public_output = str(response.final_output)
-        print(public_output)
-        _require_text(public_output.lower(), ["strawberry"], "Hosted MCP server example")
-        _require_text(public_output, ["sse_mcp_server.py"], "Hosted MCP server example")
+        response = await agency_public.get_response("Get secret word and then list directory")
+        print(response.final_output)
     except Exception as e:
         print(
             f"Error using public MCP server: {e}\n Please check the ngrok url and try again.\n"
             "If issue persists, try manually starting sse server by running `python examples/utils/sse_mcp_server.py`"
         )
-        raise
+        return
     finally:
         if sse_server is not None:
-            _stop_sse_server(sse_server)
-    print("\nHosted MCP server proof verified the secret word and utils directory listing.")
-    print("Hosted MCP server example completed")
+            sse_server.terminate()
+    print(
+        "\nIf secret word is 'strawberry' and agent presented a list of files from the utils folder,"
+        " that means the public MCP server worked successfully"
+    )
+    print("Public MCP server example completed")
     print("-" * 25)
 
 
@@ -181,4 +145,4 @@ if __name__ == "__main__":
     print("MCP Server Example")
     print("=" * 50)
     asyncio.run(local_mcp_server_example())
-    asyncio.run(public_mcp_server_example())
+    asyncio.run(public_mcp_server_example())  # <- comment this out if you want to run local example only

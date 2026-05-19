@@ -70,18 +70,6 @@ class TestFastAPIFileProcessing:
         )
         return httpx.AsyncClient(timeout=timeout_config)
 
-    @staticmethod
-    def _contains_message_type(messages: object, expected_type: str) -> bool:
-        if isinstance(messages, dict):
-            if messages.get("type") == expected_type:
-                return True
-            return any(
-                TestFastAPIFileProcessing._contains_message_type(value, expected_type) for value in messages.values()
-            )
-        if isinstance(messages, list):
-            return any(TestFastAPIFileProcessing._contains_message_type(item, expected_type) for item in messages)
-        return False
-
     @pytest.fixture(scope="class")
     def agency_factory(self):
         """Create an agency factory for testing."""
@@ -257,56 +245,30 @@ class TestFastAPIFileProcessing:
     @pytest.mark.asyncio
     async def test_local_file_attachment(self, fastapi_base_url: str, tmp_path):
         """Test processing a local absolute file path via file_urls."""
-        expected_phrase = "local secret phrase"
-        file_name = "local-file.txt"
         file_path = tmp_path / "local-file.txt"
-        file_path.write_text(expected_phrase, encoding="utf-8")
+        file_path.write_text("local secret phrase", encoding="utf-8")
 
         url = f"{fastapi_base_url}/test_agency/get_response"
-        message = (
-            "Use the Code Interpreter tool to open the attached text file. "
-            "Read the file contents and return the exact secret phrase verbatim."
-        )
+        payload = {
+            "message": "Please read the content of the uploaded file and tell me what secret phrase you find.",
+            "file_urls": {"local-file.txt": str(file_path)},
+        }
         headers = {}
-        max_attempts = 3
-        retry_delay_seconds = 2
-        file_id: str | None = None
-        last_response_text = ""
-        last_response_data: dict[str, object] | None = None
 
         async with self.get_http_client(timeout_seconds=120) as client:
-            for attempt in range(max_attempts):
-                if attempt == 0:
-                    payload = {"message": message, "file_urls": {file_name: str(file_path)}}
-                else:
-                    assert file_id is not None
-                    payload = {"message": message, "file_ids": [file_id]}
+            response = await client.post(url, json=payload, headers=headers)
 
-                response = await client.post(url, json=payload, headers=headers)
+        assert response.status_code == 200
+        response_data = response.json()
 
-                assert response.status_code == 200
-                response_data = response.json()
-                last_response_data = response_data
-                if "error" in response_data:
-                    pytest.fail(f"Unexpected error response: {response_data['error']}")
+        # Verify the file was attached and processed
+        assert "file_ids_map" in response_data
+        assert "local-file.txt" in response_data["file_ids_map"]
 
-                if attempt == 0:
-                    file_ids_map = response_data.get("file_ids_map")
-                    assert isinstance(file_ids_map, dict), f"Expected file_ids_map dict, got: {type(file_ids_map)}"
-                    file_id_value = file_ids_map.get(file_name)
-                    assert isinstance(file_id_value, str) and file_id_value, f"Missing file_id for {file_name}"
-                    file_id = file_id_value
-
-                assert "response" in response_data
-                last_response_text = str(response_data["response"]).lower()
-                if expected_phrase in last_response_text:
-                    break
-                if attempt < max_attempts - 1:
-                    await asyncio.sleep(retry_delay_seconds)
-
-        assert expected_phrase in last_response_text, f"Expected phrase not found. Last response: {last_response_data}"
-        assert last_response_data is not None and "new_messages" in last_response_data
-        assert self._contains_message_type(last_response_data["new_messages"], "code_interpreter_call")
+        # Should return a response without error
+        assert "response" in response_data
+        response_text = response_data["response"].lower()
+        assert "local secret phrase" in response_text
 
     @pytest.mark.asyncio
     async def test_local_allowlist_created_after_start(self, tmp_path, agency_factory):
@@ -370,7 +332,7 @@ class TestFastAPIFileProcessing:
         """Test processing an HTML file via file_urls."""
         url = f"{fastapi_base_url}/test_agency/get_response"
         payload = {
-            "message": "Search for the secret phrase inside the document and return the full phrase verbatim.",
+            "message": "Search for the secret phrase inside the document.",
             "file_urls": {"webpage.html": f"{file_server_base_url}/test-html.html"},
         }
         headers = {}
@@ -382,10 +344,8 @@ class TestFastAPIFileProcessing:
         response_data = response.json()
 
         response_text = response_data["response"].lower()
-        # The model can truncate the exact phrase wording, but it should still identify
-        # one of the stable HTML secret markers rather than miss the document content.
-        assert "secret phrase" in response_text
-        assert "first html" in response_text or "second html" in response_text
+        # Should find both secret phrases in HTML
+        assert "first html secret phrase" in response_text or "second html secret phrase" in response_text
 
         file_ids = response_data["file_ids_map"]
         assert "webpage.html" in file_ids.keys()
@@ -421,24 +381,19 @@ class TestFastAPIFileProcessing:
     async def test_streaming_response(self, file_server_base_url: str, fastapi_base_url: str):
         """Test streaming response with file processing."""
         url = f"{fastapi_base_url}/test_agency/get_response_stream"
-        message = "Please read the text file and describe its content in detail."
-        file_url = f"{file_server_base_url}/test-txt.txt"
+        payload = {
+            "message": "Please read the text file and describe its content in detail.",
+            "file_urls": {"stream_test.txt": f"{file_server_base_url}/test-txt.txt"},
+        }
         headers = {}
         expected_phrase = "first txt secret phrase"
         max_attempts = 3
         retry_delay_seconds = 2
         last_response = ""
-        file_id: str | None = None
 
         async with self.get_http_client(timeout_seconds=120) as client:
             for attempt in range(max_attempts):
                 collected_data = []
-                if attempt == 0:
-                    payload = {"message": message, "file_urls": {"stream_test.txt": file_url}}
-                else:
-                    assert file_id is not None
-                    payload = {"message": message, "file_ids": [file_id]}
-
                 async with client.stream("POST", url, json=payload, headers=headers) as response:
                     assert response.status_code == 200
                     async for line in response.aiter_lines():
@@ -454,27 +409,9 @@ class TestFastAPIFileProcessing:
                 if expected_phrase in full_response:
                     break
 
-                for index, line in enumerate(collected_data):
-                    if line == "event: messages" and index + 1 < len(collected_data):
-                        data_line = collected_data[index + 1]
-                        if not data_line.startswith("data: "):
-                            continue
-                        try:
-                            payload_data = json.loads(data_line[6:])
-                        except json.JSONDecodeError:
-                            continue
-                        file_ids_map = payload_data.get("file_ids_map") or {}
-                        candidate = file_ids_map.get("stream_test.txt")
-                        if isinstance(candidate, str) and candidate:
-                            file_id = candidate
-                            break
-
                 # OpenAI streaming can transiently fail with provider-side 5xx errors.
                 # Retry bounded times to avoid flaking on transient backend errors.
                 if attempt < max_attempts - 1 and "an error occurred while processing your request" in full_response:
-                    await asyncio.sleep(retry_delay_seconds)
-                    continue
-                if attempt < max_attempts - 1 and file_id is not None:
                     await asyncio.sleep(retry_delay_seconds)
                     continue
                 break

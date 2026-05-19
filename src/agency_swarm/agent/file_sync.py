@@ -102,24 +102,36 @@ class FileSync:
             orphan_file_ids.append(file_id)
 
         for file_id in orphan_file_ids:
-            if not self._delete_openai_file(file_id):
-                continue
-
-            if not self._wait_for_openai_file_absence(file_id):
-                continue
-
-            if self._detach_vector_store_file(vector_store_id=vs_id, file_id=file_id):
+            try:
+                # OpenAI file deletion removes the file from all vector stores.
+                self.agent.client_sync.files.delete(file_id=file_id)
+                logger.info("Agent %s: Deleted OpenAI file %s as part of sync.", self.agent.name, file_id)
+            except NotFoundError:
+                logger.debug("Agent %s: OpenAI file %s already absent during sync.", self.agent.name, file_id)
+            except Exception as exc:
+                logger.warning(
+                    "Agent %s: Failed to delete OpenAI file %s during sync: %s",
+                    self.agent.name,
+                    file_id,
+                    exc,
+                )
+            finally:
                 self._wait_for_vector_store_file_absence(vector_store_id=vs_id, file_id=file_id)
+                self._wait_for_openai_file_absence(file_id)
 
     def remove_file_from_vs_and_oai(self, file_id: str) -> None:
         vs_id = self.agent._associated_vector_store_id
 
-        if vs_id:
-            if not self._detach_vector_store_file(vector_store_id=vs_id, file_id=file_id):
-                return
-            self._wait_for_vector_store_file_absence(vector_store_id=vs_id, file_id=file_id)
-
-        if self._delete_openai_file(file_id):
+        try:
+            # OpenAI file deletion removes the file from all vector stores.
+            self.agent.client_sync.files.delete(file_id=file_id)
+        except NotFoundError:
+            pass
+        except Exception as exc:
+            logger.debug(f"Agent {self.agent.name}: Could not delete OpenAI file {file_id}: {exc}")
+        finally:
+            if vs_id:
+                self._wait_for_vector_store_file_absence(vector_store_id=vs_id, file_id=file_id)
             self._wait_for_openai_file_absence(file_id)
 
     def _should_skip_file(self, filename: str) -> bool:
@@ -251,19 +263,12 @@ class FileSync:
         last_error: Exception | None = None
         backoff = 0.5
         max_backoff = 5.0
-        confirmed_absences = 0
-        required_absences = 3
         while time.monotonic() < deadline:
             try:
                 self.agent.client_sync.vector_stores.files.retrieve(vector_store_id=vector_store_id, file_id=file_id)
             except NotFoundError:
-                confirmed_absences += 1
-                if confirmed_absences >= required_absences:
-                    return
-                self._sleep(0.5)
-                continue
+                return
             except Exception as exc:
-                confirmed_absences = 0
                 last_error = exc
                 if not warned:
                     logger.warning(
@@ -277,14 +282,13 @@ class FileSync:
                 self._sleep(backoff)
                 backoff = min(backoff * 1.7, max_backoff)
                 continue
-            confirmed_absences = 0
             self._sleep(backoff)
             backoff = min(backoff * 1.7, max_backoff)
         if last_error:
             logger.warning(
                 "Agent %s: Timed out after %.0fs waiting for file %s to disappear from Vector Store %s "
                 "(last error: %s). "
-                "OpenAI retrieve endpoint still reports the id despite deletion.",
+                "OpenAI list endpoint still reports the id despite deletion.",
                 self.agent.name,
                 timeout_seconds,
                 file_id,
@@ -294,59 +298,14 @@ class FileSync:
         else:
             logger.warning(
                 "Agent %s: Timed out after %.0fs waiting for file %s to disappear from Vector Store %s. "
-                "OpenAI retrieve endpoint still reports the id despite deletion.",
+                "OpenAI list endpoint still reports the id despite deletion.",
                 self.agent.name,
                 timeout_seconds,
                 file_id,
                 vector_store_id,
             )
 
-    def _detach_vector_store_file(self, *, vector_store_id: str, file_id: str) -> bool:
-        try:
-            self.agent.client_sync.vector_stores.files.delete(vector_store_id=vector_store_id, file_id=file_id)
-            logger.info(
-                "Agent %s: Detached file %s from Vector Store %s.",
-                self.agent.name,
-                file_id,
-                vector_store_id,
-            )
-            return True
-        except NotFoundError:
-            logger.debug(
-                "Agent %s: File %s already absent from Vector Store %s.",
-                self.agent.name,
-                file_id,
-                vector_store_id,
-            )
-            return True
-        except Exception as exc:
-            logger.warning(
-                "Agent %s: Failed to detach file %s from Vector Store %s: %s",
-                self.agent.name,
-                file_id,
-                vector_store_id,
-                exc,
-            )
-            return False
-
-    def _delete_openai_file(self, file_id: str) -> bool:
-        try:
-            self.agent.client_sync.files.delete(file_id=file_id)
-            logger.info("Agent %s: Deleted OpenAI file %s.", self.agent.name, file_id)
-            return True
-        except NotFoundError:
-            logger.debug("Agent %s: OpenAI file %s already absent.", self.agent.name, file_id)
-            return True
-        except Exception as exc:
-            logger.warning(
-                "Agent %s: Failed to delete OpenAI file %s; OpenAI file absence is unconfirmed: %s",
-                self.agent.name,
-                file_id,
-                exc,
-            )
-            return False
-
-    def _wait_for_openai_file_absence(self, file_id: str, timeout_seconds: float = 120.0) -> bool:
+    def _wait_for_openai_file_absence(self, file_id: str, timeout_seconds: float = 120.0) -> None:
         deadline = time.monotonic() + timeout_seconds
         warned = False
         last_error: Exception | None = None
@@ -356,7 +315,7 @@ class FileSync:
             try:
                 self.agent.client_sync.files.retrieve(file_id)
             except NotFoundError:
-                return True
+                return
             except Exception as exc:
                 last_error = exc
                 if not warned:
@@ -385,4 +344,3 @@ class FileSync:
                 self.agent.name,
                 file_id,
             )
-        return False

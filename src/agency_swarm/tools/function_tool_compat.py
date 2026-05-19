@@ -20,7 +20,14 @@ def build_manual_tool_context(
 ) -> ToolContext[Any]:
     tool_call_id = _MANUAL_TOOL_CALL_ID_TEMPLATE.format(tool_name=tool_name)
     if isinstance(ctx, ToolContext):
-        return ctx
+        if ctx.tool_name == tool_name and ctx.tool_arguments == input_json:
+            return ctx
+        return ToolContext.from_agent_context(
+            ctx,
+            tool_call_id=tool_call_id,
+            tool_name=tool_name,
+            tool_arguments=input_json,
+        )
     if isinstance(ctx, RunContextWrapper):
         return ToolContext.from_agent_context(
             ctx,
@@ -37,8 +44,10 @@ def build_manual_tool_context(
 
 
 def normalize_function_tool(tool: FunctionTool) -> FunctionTool:
-    """Make direct/manual tool invocation behave like pre-0.14 SDK releases."""
+    """Keep direct/manual FunctionTool calls compatible with openai-agents 0.14."""
     if getattr(tool, _WRAPPED_ATTR, False):
+        return tool
+    if not _is_sdk_function_tool(tool):
         return tool
 
     original_on_invoke_attr = getattr(tool, "on_invoke_tool", None)
@@ -49,21 +58,29 @@ def normalize_function_tool(tool: FunctionTool) -> FunctionTool:
     expects_run_context_wrapper = _expects_run_context_wrapper(original_on_invoke_tool)
 
     @wraps(original_on_invoke_tool)
-    async def on_invoke_tool(ctx: Any, input_json: str) -> Any:
+    async def on_invoke_tool(ctx: Any, input: str) -> Any:
         if expects_run_context_wrapper and isinstance(ctx, RunContextWrapper):
-            return await original_on_invoke_tool(ctx, input_json)
+            return await original_on_invoke_tool(ctx, input)
 
         manual_context = build_manual_tool_context(
             ctx,
             tool_name=tool.name,
-            input_json=input_json,
+            input_json=input,
         )
-        return await original_on_invoke_tool(manual_context, input_json)
+        return await original_on_invoke_tool(manual_context, input)
 
     on_invoke_tool.__dict__.update(getattr(original_on_invoke_tool, "__dict__", {}))
     tool.on_invoke_tool = on_invoke_tool
     setattr(tool, _WRAPPED_ATTR, True)
     return tool
+
+
+def _is_sdk_function_tool(tool: FunctionTool) -> bool:
+    """Detect tools built by the SDK @function_tool decorator without importing private types."""
+    on_invoke_tool = getattr(tool, "on_invoke_tool", None)
+    return getattr(on_invoke_tool, "_function_tool", None) is tool and callable(
+        getattr(on_invoke_tool, "_invoke_tool_impl", None)
+    )
 
 
 def _expects_run_context_wrapper(func: Callable[..., Any]) -> bool:
