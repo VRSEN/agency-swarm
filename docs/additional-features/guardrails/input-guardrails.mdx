@@ -113,7 +113,7 @@ guardrail_agent = Agent(
         "Flag any unrelated requests as irrelevant."
     ),
     model="gpt-5.4-mini",
-    model_settings=ModelSettings(reasoning=Reasoning(effort="minimal")),
+    model_settings=ModelSettings(reasoning=Reasoning(effort="low")),
     output_type=RelevanceDecision,
 )
 
