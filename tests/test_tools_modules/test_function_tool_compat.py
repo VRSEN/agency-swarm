@@ -1,8 +1,9 @@
+from dataclasses import replace
 from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
-from agents import FunctionTool, RunContextWrapper, function_tool as sdk_function_tool
+from agents import FunctionTool, RunContextWrapper, function_tool as sdk_function_tool, tool_namespace
 from agents.tool_context import ToolContext
 
 from agency_swarm import Agent, function_tool
@@ -92,6 +93,45 @@ async def test_agency_function_tool_rebuilds_forwarded_tool_context_for_new_tool
     assert seen_contexts[0].tool_name == "callee_tool"
     assert seen_contexts[0].tool_arguments == '{"value":"new"}'
     assert seen_contexts[0].tool_call_id == "agency_swarm_manual_callee_tool"
+
+
+@pytest.mark.asyncio
+async def test_copied_agency_function_tool_rebinds_manual_context_to_copy_name() -> None:
+    """Copied FunctionTool instances should describe the copied tool."""
+    seen_contexts: list[ToolContext[dict[str, str]]] = []
+
+    @function_tool
+    async def original_tool(ctx: RunContextWrapper[dict[str, str]], value: str) -> str:
+        tool_context = cast(ToolContext[dict[str, str]], ctx)
+        seen_contexts.append(tool_context)
+        return f"{tool_context.context['label']}:{value}:{tool_context.tool_name}:{tool_context.tool_call_id}"
+
+    copied_tool = replace(original_tool, name="copied_tool")
+    on_invoke_tool = cast(Any, copied_tool.on_invoke_tool)
+
+    result = await on_invoke_tool(RunContextWrapper(context={"label": "agency"}), '{"value":"new"}')
+
+    assert result == "agency:new:copied_tool:agency_swarm_manual_copied_tool"
+    assert len(seen_contexts) == 1
+    assert seen_contexts[0].tool_name == "copied_tool"
+    assert seen_contexts[0].tool_call_id == "agency_swarm_manual_copied_tool"
+
+
+def test_agency_function_tool_preserves_deferred_namespace_metadata() -> None:
+    """Wrapped FunctionTool instances should keep SDK loading metadata."""
+
+    @function_tool(defer_loading=True)
+    def deferred_tool(value: str) -> str:
+        return value
+
+    namespaced_tool = tool_namespace(name="demo_namespace", description="Demo namespace", tools=[deferred_tool])[0]
+    agent = Agent(name="test", instructions="test", tools=[namespaced_tool])
+    tool = agent.tools[0]
+
+    assert isinstance(tool, FunctionTool)
+    assert tool.defer_loading is True
+    assert tool._tool_namespace == "demo_namespace"
+    assert tool._tool_namespace_description == "Demo namespace"
 
 
 @pytest.mark.asyncio
