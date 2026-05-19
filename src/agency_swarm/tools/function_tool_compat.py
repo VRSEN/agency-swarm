@@ -40,6 +40,7 @@ class _ManualContextFunctionTool(FunctionTool):
         manual_context = build_manual_tool_context(
             ctx,
             tool_name=self.name,
+            tool_namespace=getattr(self, "_tool_namespace", None),
             input_json=input,
         )
         return await original_on_invoke_tool(manual_context, input)
@@ -49,16 +50,18 @@ def build_manual_tool_context(
     ctx: Any,
     *,
     tool_name: str,
+    tool_namespace: str | None = None,
     input_json: str,
 ) -> ToolContext[Any]:
     tool_call_id = _MANUAL_TOOL_CALL_ID_TEMPLATE.format(tool_name=tool_name)
     if isinstance(ctx, ToolContext):
-        if ctx.tool_name == tool_name and ctx.tool_arguments == input_json:
+        if ctx.tool_name == tool_name and ctx.tool_namespace == tool_namespace and ctx.tool_arguments == input_json:
             return ctx
         return ToolContext.from_agent_context(
             ctx,
             tool_call_id=tool_call_id,
             tool_name=tool_name,
+            tool_namespace=tool_namespace,
             tool_arguments=input_json,
         )
     if isinstance(ctx, RunContextWrapper):
@@ -66,11 +69,13 @@ def build_manual_tool_context(
             ctx,
             tool_call_id=tool_call_id,
             tool_name=tool_name,
+            tool_namespace=tool_namespace,
             tool_arguments=input_json,
         )
     return ToolContext(
         context=ctx,
         tool_name=tool_name,
+        tool_namespace=tool_namespace,
         tool_call_id=tool_call_id,
         tool_arguments=input_json,
     )
@@ -83,6 +88,9 @@ def normalize_function_tool(tool: FunctionTool) -> FunctionTool:
 
     original_on_invoke_attr = getattr(tool, "on_invoke_tool", None)
     if not callable(original_on_invoke_attr):
+        return tool
+
+    if getattr(tool, "_is_agent_tool", False):
         return tool
 
     previous_original = getattr(original_on_invoke_attr, _ORIGINAL_INVOKER_ATTR, None)

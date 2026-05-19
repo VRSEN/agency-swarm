@@ -3,7 +3,13 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
-from agents import FunctionTool, RunContextWrapper, function_tool as sdk_function_tool, tool_namespace
+from agents import (
+    Agent as SDKAgent,
+    FunctionTool,
+    RunContextWrapper,
+    function_tool as sdk_function_tool,
+    tool_namespace,
+)
 from agents.tool_context import ToolContext
 
 from agency_swarm import Agent, function_tool
@@ -132,6 +138,46 @@ def test_agency_function_tool_preserves_deferred_namespace_metadata() -> None:
     assert tool.defer_loading is True
     assert tool._tool_namespace == "demo_namespace"
     assert tool._tool_namespace_description == "Demo namespace"
+
+
+@pytest.mark.asyncio
+async def test_namespaced_agency_function_tool_manual_context_keeps_namespace() -> None:
+    """Manual ToolContext should preserve SDK namespace identity."""
+    seen_contexts: list[ToolContext[dict[str, str]]] = []
+
+    @function_tool
+    async def namespaced_tool(ctx: RunContextWrapper[dict[str, str]], value: str) -> str:
+        tool_context = cast(ToolContext[dict[str, str]], ctx)
+        seen_contexts.append(tool_context)
+        return f"{tool_context.qualified_tool_name}:{tool_context.context['label']}:{value}"
+
+    namespaced = tool_namespace(name="demo_namespace", description="Demo namespace", tools=[namespaced_tool])[0]
+    agent = Agent(name="test", instructions="test", tools=[namespaced])
+    tool = agent.tools[0]
+    assert isinstance(tool, FunctionTool)
+    on_invoke_tool = cast(Any, tool.on_invoke_tool)
+
+    result = await on_invoke_tool(RunContextWrapper(context={"label": "agency"}), '{"value":"new"}')
+
+    assert result == "demo_namespace.namespaced_tool:agency:new"
+    assert len(seen_contexts) == 1
+    assert seen_contexts[0].tool_name == "namespaced_tool"
+    assert seen_contexts[0].tool_namespace == "demo_namespace"
+    assert seen_contexts[0].qualified_tool_name == "demo_namespace.namespaced_tool"
+
+
+def test_sdk_agent_tool_is_not_rewrapped_as_decorator_function_tool() -> None:
+    """Agent.as_tool() should keep the SDK's own invoker."""
+    nested_agent = SDKAgent(name="nested", instructions="Return the input.")
+    nested_tool = nested_agent.as_tool(tool_name="nested_tool", tool_description="Nested tool")
+
+    agent = Agent(name="test", instructions="test", tools=[nested_tool])
+    tool = agent.tools[0]
+
+    assert isinstance(tool, FunctionTool)
+    assert tool._is_agent_tool is True
+    assert getattr(tool, "_agency_swarm_manual_tool_context_compat", False) is False
+    assert not hasattr(tool, "_agency_original_on_invoke_tool")
 
 
 @pytest.mark.asyncio
