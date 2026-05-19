@@ -691,18 +691,27 @@ def test_store_false_sanitizer_keeps_prior_encrypted_reasoning_boundary() -> Non
 def test_live_openai_store_false_replays_encrypted_reasoning() -> None:
     """Live OpenAI proof for stateless Responses reasoning replay."""
     client = OpenAI()
-    first = client.responses.create(
-        model="gpt-5.4-nano",
-        input="Compute 37*41. Return only the number.",
-        store=False,
-        include=[REASONING_ENCRYPTED_CONTENT_INCLUDE],
-        reasoning={"effort": "high"},
-        max_output_tokens=64,
-    )
-    first_items = [item.model_dump(exclude_none=True) for item in first.output]
-    reasoning_items = [item for item in first_items if item.get("type") == "reasoning"]
+    first_items: list[dict[str, Any]] = []
+    reasoning_items: list[dict[str, Any]] = []
+    first_output_text = ""
+    for attempt in range(3):
+        first = client.responses.create(
+            model="gpt-5.4-nano",
+            input="Compute 37*41. Return only the number.",
+            store=False,
+            include=[REASONING_ENCRYPTED_CONTENT_INCLUDE],
+            reasoning={"effort": "high"},
+            max_output_tokens=64,
+        )
+        first_output_text = first.output_text.strip()
+        first_items = [item.model_dump(exclude_none=True) for item in first.output]
+        reasoning_items = [item for item in first_items if item.get("type") == "reasoning"]
+        if first_output_text == "1517" and reasoning_items:
+            break
+        if attempt < 2:
+            time.sleep(2)
 
-    assert first.output_text.strip() == "1517"
+    assert first_output_text == "1517"
     assert reasoning_items
     assert all(item.get("encrypted_content") for item in reasoning_items)
 
