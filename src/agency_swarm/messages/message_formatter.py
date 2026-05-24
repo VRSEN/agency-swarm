@@ -295,8 +295,12 @@ class MessageFormatter:
                 run_trace_id=run_trace_id,
                 history_protocol=history_protocol,
             )
-            messages_for_runner.append(MessageFormatter._strip_ephemeral_content(formatted_msg, drop_parts=False))
-            messages_to_save.append(MessageFormatter._strip_ephemeral_content(formatted_msg, drop_parts=True))
+            messages_for_runner.append(
+                cast(TResponseInputItem, MessageFormatter._strip_ephemeral_content(formatted_msg, drop_parts=False))
+            )
+            save_message = MessageFormatter._strip_ephemeral_content(formatted_msg, drop_parts=True)
+            if save_message is not None:
+                messages_to_save.append(save_message)
 
         # Save messages to flat storage
         thread_manager.add_messages(messages_to_save)
@@ -316,7 +320,7 @@ class MessageFormatter:
         return history_for_runner  # type: ignore[return-value]
 
     @staticmethod
-    def _strip_ephemeral_content(message: TResponseInputItem, *, drop_parts: bool) -> TResponseInputItem:
+    def _strip_ephemeral_content(message: TResponseInputItem, *, drop_parts: bool) -> TResponseInputItem | None:
         if not isinstance(message, dict):
             return message
         content = message.get("content")
@@ -338,6 +342,8 @@ class MessageFormatter:
 
         if not changed:
             return message
+        if drop_parts and not cleaned_content:
+            return None
         cleaned_message = cast(dict[str, Any], message.copy())
         cleaned_message["content"] = cleaned_content
         return cast(TResponseInputItem, cleaned_message)

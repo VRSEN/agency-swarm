@@ -9,7 +9,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = "codex-requirement-ledger/v2"
+SCHEMA_VERSION = "agentswarm-requirement-ledger/v2"
+LEGACY_ACTIVE_SCHEMA_VERSIONS = ("codex-requirement-ledger/v2",)
 DEFAULT_LEDGER_DIR = Path(".codex/requirements-ledger")
 ACTIVE_FILE = "active.json"
 ARCHIVE_FILE = "archive.jsonl"
@@ -47,10 +48,14 @@ def build_parser() -> argparse.ArgumentParser:
     add_parser.add_argument("--status", choices=ACTIVE_STATUSES, default="open")
     add_parser.add_argument("--category", required=True)
     add_parser.add_argument("--title", required=True)
-    add_parser.add_argument("--original", required=True, help="Close original wording for auditability.")
+    add_parser.add_argument("--original", help="Proofread, sanitized requirement wording for auditability.")
+    add_parser.add_argument(
+        "--original-file", type=Path, help="Read reviewed requirement wording from a UTF-8 text file."
+    )
     add_parser.add_argument("--intent", required=True)
     add_parser.add_argument("--next-action", required=True)
     add_parser.add_argument("--source-pointer", action="append", required=True, help="Repeat for multiple sources.")
+    add_parser.add_argument("--artifact", action="append", help="Repeat for multiple artifacts like PRs or branches.")
     add_parser.set_defaults(func=command_add)
 
     update_parser = subparsers.add_parser(
@@ -62,9 +67,13 @@ def build_parser() -> argparse.ArgumentParser:
     update_parser.add_argument("--category")
     update_parser.add_argument("--title")
     update_parser.add_argument("--original")
+    update_parser.add_argument(
+        "--original-file", type=Path, help="Read reviewed requirement wording from a UTF-8 text file."
+    )
     update_parser.add_argument("--intent")
     update_parser.add_argument("--next-action")
     update_parser.add_argument("--source-pointer", action="append", help="Append one or more source pointers.")
+    update_parser.add_argument("--artifact", action="append", help="Append one or more artifacts if missing.")
     update_parser.set_defaults(func=command_update)
 
     complete_parser = subparsers.add_parser("complete", help="Move an active item to the archive.")
@@ -113,10 +122,13 @@ def command_add(args: argparse.Namespace) -> None:
         "status": _required_text("status", args.status),
         "category": _required_text("category", args.category),
         "title": _required_text("title", args.title),
-        "original": _required_text("original", args.original),
+        "original": _text_argument(
+            "original", args.original, args.original_file, required=True, preserve_whitespace=True
+        ),
         "intent": _required_text("intent", args.intent),
         "next_action": _required_text("next_action", args.next_action),
         "source_pointers": [_required_text("source_pointer", source) for source in args.source_pointer],
+        "artifacts": _merge_unique_texts([], _optional_texts("artifact", args.artifact)),
     }
     active["items"].append(item)
     _write_active(paths["active"], active)
@@ -132,17 +144,26 @@ def command_update(args: argparse.Namespace) -> None:
         "status": args.status,
         "category": args.category,
         "title": args.title,
-        "original": args.original,
         "intent": args.intent,
         "next_action": args.next_action,
     }
-    if not any(value is not None for value in updates.values()) and not args.source_pointer:
+    original = _text_argument("original", args.original, args.original_file, preserve_whitespace=True)
+    if (
+        not any(value is not None for value in updates.values())
+        and original is None
+        and not args.source_pointer
+        and not args.artifact
+    ):
         raise LedgerError("update needs at least one field to change")
     for field, value in updates.items():
         if value is not None:
             item[field] = _required_text(field, value)
+    if original is not None:
+        item["original"] = original
     if args.source_pointer:
         item["source_pointers"].extend(_required_text("source_pointer", source) for source in args.source_pointer)
+    if args.artifact:
+        item["artifacts"] = _merge_unique_texts(_read_artifacts(item), _optional_texts("artifact", args.artifact))
     item["updated_at"] = _now()
 
     _write_active(paths["active"], active)
@@ -175,6 +196,7 @@ def _archive_active_item(args: argparse.Namespace, status: str) -> None:
     archived_item = dict(item)
     archived_item["status"] = status
     archived_item["resolution"] = _required_text("resolution", args.resolution)
+    archived_item["artifacts"] = _read_artifacts(item)
     archived_item["updated_at"] = now
     archived_item["archived_at"] = now
 
@@ -206,10 +228,18 @@ def _load_active(path: Path) -> dict[str, Any]:
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise LedgerError(f"invalid active ledger JSON: {path}") from exc
-    if data.get("schema") != SCHEMA_VERSION or not isinstance(data.get("items"), list):
+    schema = data.get("schema")
+    if schema not in (SCHEMA_VERSION, *LEGACY_ACTIVE_SCHEMA_VERSIONS) or not isinstance(data.get("items"), list):
         raise LedgerError(f"unsupported active ledger schema: {path}")
+    migrated = schema != SCHEMA_VERSION
+    if migrated:
+        data["schema"] = SCHEMA_VERSION
     for item in data["items"]:
+        if migrated and "artifacts" not in item:
+            item["artifacts"] = []
         _validate_item(item, "active ledger", ACTIVE_STATUSES)
+    if migrated:
+        _write_active(path, data)
     return data
 
 
@@ -226,6 +256,9 @@ def _load_archive(path: Path) -> list[dict[str, Any]]:
             raise LedgerError(f"invalid archive JSONL at {path}:{line_number}") from exc
         if not isinstance(item, dict):
             raise LedgerError(f"archive entry must be an object at {path}:{line_number}")
+        if "artifacts" not in item:
+            item = dict(item)
+            item["artifacts"] = []
         _validate_item(item, f"archive entry at {path}:{line_number}", ARCHIVE_STATUSES)
         items.append(item)
     return items
@@ -279,12 +312,24 @@ def _validate_item(item: dict[str, Any], location: str, allowed_statuses: tuple[
         raise LedgerError(f"{location} has unsupported status: {status!r}")
     original = item.get("original")
     if not isinstance(original, str) or not original.strip():
-        raise LedgerError(f"{location} is missing close original wording")
+        raise LedgerError(f"{location} is missing sanitized requirement wording")
     source_pointers = item.get("source_pointers")
     if not isinstance(source_pointers, list) or not source_pointers:
         raise LedgerError(f"{location} is missing source pointers")
     if not all(isinstance(source, str) and source.strip() for source in source_pointers):
         raise LedgerError(f"{location} has invalid source pointers")
+    _read_artifacts(item, location)
+
+
+def _read_artifacts(item: dict[str, Any], location: str = "ledger item") -> list[str]:
+    artifacts = item.get("artifacts")
+    if artifacts is None:
+        raise LedgerError(f"{location} is missing artifacts")
+    if not isinstance(artifacts, list):
+        raise LedgerError(f"{location} has invalid artifacts")
+    if not all(isinstance(artifact, str) and artifact.strip() for artifact in artifacts):
+        raise LedgerError(f"{location} has invalid artifacts")
+    return list(artifacts)
 
 
 def _next_item_id(*item_groups: list[dict[str, Any]]) -> str:
@@ -309,16 +354,76 @@ def _required_text(field: str, value: str) -> str:
     return text
 
 
+def _required_preserved_text(field: str, value: str) -> str:
+    if not value.strip():
+        raise LedgerError(f"{field} cannot be empty")
+    return value
+
+
+def _text_argument(
+    field: str,
+    value: str | None,
+    file_path: Path | None,
+    *,
+    required: bool = False,
+    preserve_whitespace: bool = False,
+) -> str | None:
+    if value is not None and file_path is not None:
+        raise LedgerError(f"cannot combine --{field} with --{field}-file")
+    if file_path is not None:
+        try:
+            value = file_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as exc:
+            raise LedgerError(f"cannot decode {field} file as UTF-8: {file_path}") from exc
+        except OSError as exc:
+            raise LedgerError(f"cannot read {field} file: {file_path}") from exc
+    if value is None:
+        if required:
+            raise LedgerError(f"{field} is required")
+        return None
+    if preserve_whitespace:
+        return _required_preserved_text(field, value)
+    return _required_text(field, value)
+
+
+def _optional_texts(field: str, values: list[str] | None) -> list[str]:
+    if not values:
+        return []
+    return [_required_text(field, value) for value in values]
+
+
+def _merge_unique_texts(current: list[str], incoming: list[str]) -> list[str]:
+    merged = list(current)
+    seen = set(current)
+    for value in incoming:
+        if value in seen:
+            continue
+        merged.append(value)
+        seen.add(value)
+    return merged
+
+
 def _print_items(label: str, items: list[dict[str, Any]]) -> None:
     print(f"{label} ({len(items)})")
     for item in items:
         print(f"- {item['id']} [{item['status']}/{item['category']}] {item['title']}")
-        print(f"  original: {item['original']}")
-        print(f"  intent: {item['intent']}")
-        print(f"  next: {item.get('next_action', 'none')}")
+        _print_text_field("original", item["original"])
+        _print_text_field("intent", item["intent"])
+        _print_text_field("next", item.get("next_action", "none"))
         print(f"  source: {', '.join(item.get('source_pointers', []))}")
+        if artifacts := _read_artifacts(item):
+            print(f"  artifacts: {', '.join(artifacts)}")
         if item.get("resolution"):
-            print(f"  resolution: {item['resolution']}")
+            _print_text_field("resolution", item["resolution"])
+
+
+def _print_text_field(label: str, value: str) -> None:
+    prefix = f"  {label}: "
+    lines = value.splitlines() or [""]
+    print(f"{prefix}{lines[0]}")
+    continuation = " " * len(prefix)
+    for line in lines[1:]:
+        print(f"{continuation}{line}")
 
 
 if __name__ == "__main__":

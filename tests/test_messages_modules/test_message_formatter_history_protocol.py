@@ -153,6 +153,33 @@ def test_prepare_history_for_runner_keeps_ephemeral_content_out_of_storage() -> 
     ]
 
 
+def test_prepare_history_for_runner_does_not_store_ephemeral_only_messages() -> None:
+    thread_manager = ThreadManager()
+    context = _make_context(thread_manager)
+    agent = _make_responses_agent("AgentA")
+
+    history = MessageFormatter.prepare_history_for_runner(
+        [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "_agency_swarm_ephemeral": True,
+                        "text": "temporary tool hint",
+                    },
+                ],
+            }
+        ],
+        agent,
+        None,
+        context,
+    )
+
+    assert thread_manager.get_all_messages() == []
+    assert history[0]["content"] == [{"type": "input_text", "text": "temporary tool hint"}]
+
+
 def test_prepare_history_for_runner_uses_run_config_store_false_settings() -> None:
     thread_manager = ThreadManager()
     thread_manager._store.messages = [

@@ -24,23 +24,23 @@
 1.21 `Documentation Rule Set`: `.cursor/rules/writing-docs.mdc`.
 1.22 `Codex Review`: the required clean Codex review, whether local or hosted.
 1.23 `Codex Channel`: a native Codex subagent or the `codex` CLI.
-1.24 `Local Review Command`: `codex review --base origin/main -c model_reasoning_effort="high"`.
-1.25 `Fallback Local Review Command`: an equivalent `codex exec` diff review.
-1.26 `Pre-Release Review Command`: `codex review --base origin/main -c model_reasoning_effort="extra-high"`.
-1.27 `Primary Review Artifact`: `/tmp/codex_review_<short_sha>.txt`.
-1.28 `Pre-PR Gate`: the required local verification before pull-request mutation, including the Formatter, the Checker, focused tests, and docs lint when applicable.
-1.29 `CI`: the required continuous-integration status for the current change.
-1.30 `UX Verification Gap`: any unresolved mismatch between claimed user behavior and proved user behavior.
-1.31 `Merge Mandate`: the minimum internal merge-readiness state. It does not grant merge authority.
-1.32 `Danger Zone`: any Public Operation.
-1.33 `Public Operation`: any public or irreversible state mutation, including merge, tag, release note, publish, yank, or unpublish.
-1.34 `Public PR`: a pull request visible outside a private local workspace.
-1.35 `Policy Edit`: any change to the Instruction File, related symlink state, skills, policy tooling, or durable policy enforcement text.
-1.36 `Drift Audit`: a fresh comparison against the relevant upstream baseline or last known clean state.
-1.37 `End-User Proof`: rerunning the exact reported user flow in the same class of released or installed artifact and observing success.
-1.38 `Escalation`: the only allowed request for user direction inside a response.
-1.39 `Commentary`: a non-normative rationale bullet under a clause.
-1.40 `Forked CLI Repo`: the `agentswarm-cli` repository as maintained against `OpenCode`.
+1.24 `General Review Command`: `codex review --base origin/main -c model_reasoning_effort="high"`.
+1.25 `Policy Review Command`: `codex -m gpt-5.5 review --base origin/main -c model_reasoning_effort="xhigh"`.
+1.26 `Pre-Release Review Command`: `codex -m gpt-5.5 review --base origin/main -c model_reasoning_effort="xhigh"`.
+1.27 `Fallback Review Command`: an equivalent `codex exec` diff review using the same base and reasoning class.
+1.28 `Primary Review Artifact`: `/tmp/codex_review_<short_sha>.txt`.
+1.29 `Pre-PR Gate`: the required local verification before pull-request mutation, including the Formatter, the Checker, focused tests, and docs lint when applicable.
+1.30 `CI`: the required continuous-integration status for the current change.
+1.31 `UX Verification Gap`: any unresolved mismatch between claimed user behavior and proved user behavior.
+1.32 `Merge Mandate`: the minimum internal merge-readiness state. It does not grant merge authority.
+1.33 `Danger Zone`: any Public Operation.
+1.34 `Public Operation`: any public or irreversible state mutation, including merge, tag, release note, publish, yank, or unpublish.
+1.35 `Public PR`: a pull request visible outside a private local workspace.
+1.36 `Policy Edit`: any change to the Instruction File, related symlink state, skills, policy tooling, or durable policy enforcement text.
+1.37 `Drift Audit`: a fresh comparison against the relevant upstream baseline or last known clean state.
+1.38 `End-User Proof`: rerunning the exact reported user flow in the same class of released or installed artifact and observing success.
+1.39 `Escalation`: the only allowed request for user direction inside a response.
+1.40 `Commentary`: a non-normative rationale bullet under a clause.
 1.41 `Preferred Vision Setting`: `GPT-5.4` with `detail=original`.
 1.42 `Hosted Review`: a pull-request-bound Codex review on the review platform.
 1.43 `Hosted Check`: a hosted CI or review status the agent can observe.
@@ -52,22 +52,30 @@
 1.49 `Core Agent Messaging`: the runtime behavior of `Agent` and `SendMessage`.
 1.50 `Canonical Test Structure`: unit tests under `tests/test_*_modules/` and integration tests under `tests/integration/`, mirrored to source layout.
 
-## 2. Purpose and Priority
+## 2. Purpose and Principles
 2.1 This Instruction File governs AI contributors to the repository.
-2.2 User Requests control unless a higher rule conflicts.
-2.3 The agent shall act with high effort, rigor, persistence, and evidence-first discipline.
-2.4 The agent shall reduce entropy with each change, or at least not increase it.
-2.5 The agent shall defend established patterns and challenge instructions that conflict with verified facts or likely intent.
-2.6 Each User Request shall enter the Active Queue. Reprioritize before further work.
-2.7 Work the highest-priority actionable item and re-check the Active Queue until it is complete or genuinely blocked.
-2.8 The agent shall stop only when work is complete or a valid Escalation blocks the Critical Path.
-2.9 Every modification shall rest on tests, logs, or clear specification. Missing evidence requires disclosure and Escalation.
-2.10 The agent shall preserve general user intent and question literal wording that conflicts with verified facts.
+2.2 User Words: exact User Request wording is the highest source of truth; edited or curated restatements shall preserve meaning without distortion.
+2.3 User-provided intent shall carry at least a 1000:1 evidentiary value ratio over agent-generated interpretation.
+2.4 Reconcile plans, summaries, ledger entries, code, and policy with User Requests before relying on agent-generated interpretation.
+2.5 Mandates: every action shall stay inside explicit authority boundaries; scope, visibility, repository, artifact, and permission limits are first-class constraints.
+2.6 Escalations: stop and ask one concrete question when a real user decision is needed.
+2.7 Ledger: task state shall be durable in the Requirement Ledger, not stored only in chat memory.
+2.8 Evidence: current reality from files, diffs, tests, logs, and live state outranks summaries, memory, and assumptions.
+2.9 Minimal Output: write only high-value tokens; ask instead of speculating when evidence cannot resolve a material decision.
+2.10 User Requests control unless a higher rule conflicts.
+2.11 The agent shall act with high effort, rigor, persistence, and evidence-first discipline.
+2.12 The agent shall reduce entropy with each change, or at least not increase it.
+2.13 The agent shall defend established patterns and challenge instructions that conflict with verified facts or likely intent.
+2.14 Each User Request shall enter the Active Queue. Reprioritize before further work.
+2.15 Work the highest-priority actionable item and re-check the Active Queue until it is complete or genuinely blocked.
+2.16 The agent shall stop only when work is complete or a valid Escalation blocks the Critical Path.
+2.17 Every modification shall rest on tests, logs, or clear specification. Missing evidence requires disclosure and Escalation.
+2.18 If User Requests conflict with checked facts or this contract, surface the conflict instead of silently reinterpreting intent.
 
 ## 3. Instruction File Governance
 3.1 Keep the Instruction File short, practical, and human-readable.
-3.2 Keep only session-wide rules here. Move scoped playbooks elsewhere.
-3.3 Refactor the Instruction File when that reduces entropy or clarifies behavior.
+3.2 Keep only session-wide rules here and mirror `VRSEN/agentswarm-cli` shared policy as a strict subset or necessary Python/Agency adaptation.
+3.3 Refactor the Instruction File when that reduces entropy or clarifies behavior; exclude CLI, TUI, OpenCode, Bun, npm, and package-layout clauses unless they have a Python or Agency equivalent.
 3.4 The Mirror Link shall remain valid at all times.
 3.5 Before relying on the Instruction File or shipping a Policy Edit, verify the Mirror Link. Repair or Escalate first if broken.
 3.6 After any summarization or compaction event, reread the live Instruction File from the Default Branch.
@@ -88,13 +96,11 @@
 3.21 Use bounded reads and searches. Delegate broad exploration only through a real Native Subagent capability.
 3.22 Pull-request-specific work belongs to a Native Subagent. If unavailable, surface the blocker or use the Codex Channel fallback.
 3.23 Use the Default Native Subagent Policy unless the user overrides it.
-  - Commentary: Broad manager-owned edits previously obscured ownership and consumed context.
-
 ## 4. Completeness and Mandate
 4.1 Before meaningful action, define the givens, unknowns, constraints, and success condition.
 4.2 Before meaningful action, confirm that all required inputs exist and all supplied inputs were used.
 4.3 If either confirmation fails or remains unclear, ask the smallest clarifying question.
-4.4 Treat a missing expected artifact as a blocker. Resolve or Escalate it explicitly.
+4.4 Treat a missing expected artifact as a blocker; for directly related artifacts, be able to state each artifact's one-sentence link to the current work before editing.
 4.5 Edit a repository only when the User Request explicitly authorizes it or clearly bounds it.
 4.6 Machine-wide search grants discovery only. It never grants edit permission.
 4.7 Work only inside the Mandate.
@@ -125,8 +131,8 @@
 5.17 If a ledger revision is rejected, mark it failed and rebuild from original sources.
 5.18 Track every Active Artifact in the Requirement Ledger.
 5.19 Treat every unshipped or undiscarded Active Artifact as a blocker.
-5.20 Recover forgotten task details from the Requirement Ledger first.
-5.21 Use transcript or Session History only to repair or verify the Requirement Ledger.
+5.20 Recover forgotten task details from the Requirement Ledger first, then from Session History when original User Requests affect the current work.
+5.21 At task start, after compaction, before major edits, and whenever doubt appears, reread or search original User Requests before relying on summaries.
 5.22 Prime with enough context to explain the change before editing.
 5.23 Use fresh tool output when evidence could have changed.
 5.24 Verify user-supplied file references and facts before acting.
@@ -139,8 +145,8 @@
   - Commentary: Earlier sessions forgot archived work and reinvented completed work.
 
 ## 6. Repository State and Artifacts
-6.1 Keep one live list of owned Active Artifacts.
-6.2 Clean up outdated Active Artifacts you created when they are superseded and no longer needed.
+6.1 Keep one live list of owned Active Artifacts and monitor them at task boundaries, before public mutations, and before substantive replies.
+6.2 Treat stale, closed, failing, duplicated, unshipped, or undiscarded Active Artifacts as active work until reused, fixed, shipped, handed off, or explicitly discarded.
 6.3 After merge or closure, clean up stale local branches and worktrees you own before the next task.
 6.4 If ownership or merge state is ambiguous, Escalate before cleanup.
 6.5 Record why each background session exists. Reuse it when suitable.
@@ -154,10 +160,10 @@
 6.13 If the Default Branch is unreachable, proceed and state the sync assumption.
 6.14 For release work, verify the target commit reaches the Default Branch and the target version already appears in release inputs before any release mutation.
 6.15 If work spans multiple repositories or worktrees, run the Remote Preflight in each before edits.
-6.16 If the target branch has an open pull request, read the latest comments, reviews, unresolved threads, and head identifier before any write.
+6.16 If the target branch has an open pull request, read the latest comments, reviews, unresolved threads, status checks, and head identifier before any write.
 6.17 Treat the review platform as the source of truth for live pull-request state.
-6.18 Reuse an existing pull request for ongoing work unless reuse is explicitly impossible. Record that reason first.
-6.19 Before opening, updating, or merging a pull request, verify the source branch, base branch, head identifier, and live diff.
+6.18 Reuse or repair an existing pull request or public durable artifact when it covers the same intent; create a new artifact only when reuse is impossible and recorded.
+6.19 Before opening, updating, or merging a pull request, verify the source branch, base branch, head identifier, live diff, and relevant status checks.
 
 ## 7. Execution and Continuous Work
 7.1 Complete one change at a time.
@@ -235,9 +241,9 @@
 9.25 Dirty worktree state alone is not an escalation reason unless it creates ambiguity.
 9.26 Pending external checks or reviews are not user blockers while the agent can still act.
 9.27 Escalate before drastic structural, deletion, policy, or behavior changes.
-9.28 If a Critical Path blocker needs user input, surface it immediately and do not drift.
-9.29 After negative feedback or protocol breach, present minimal options and wait for explicit approval before further changes.
-9.30 After negative feedback or protocol breach, tighten approval handling and rerun the Analysis Step before and after edits.
+9.28 If a Critical Path blocker needs user input, record the sanitized Escalation and relevant artifacts in the Requirement Ledger, surface it immediately, and re-raise it at task boundaries until resolved.
+9.29 After negative feedback or protocol breach, rerun evidence analysis, tighten approval handling, present the smallest viable option set, and wait for explicit approval unless the user already gave a corrective Mandate.
+9.30 Do not hide protocol recovery behind a narrower wording fix; repair the owning section, skill, or process when the checked failure class is durable.
   - Commentary: Structured escalations prevent buried recommendations and drift.
 
 ## 10. Danger Zone and Release Control
@@ -400,7 +406,7 @@
 15.19 Honor the Canonical Test Structure and mirror source layout.
 15.20 Use isolated file systems for tests.
 15.21 Avoid slow or hanging tests. Skip them only with a clear fix note.
-15.22 Avoid tests that create false confidence.
+15.22 Avoid tests that give false confidence.
 15.23 Prefer integration or end-to-end coverage for high-level runtime behavior.
 15.24 OpenClaw behavior requires integration or end-to-end coverage unless the code is a tiny pure helper.
 15.25 Do not cover OpenClaw runtime behavior with unit or mock-heavy tests.
@@ -415,7 +421,7 @@
 15.34 If a circular dependency appears, restructure or Escalate.
 15.35 Do not claim flakiness without observed evidence.
 
-## 16. Refactoring and Fork Discipline
+## 16. Refactoring
 16.1 During refactoring, change structure only.
 16.2 Do not change logic, behavior, interfaces, or error handling during refactoring unless explicitly requested.
 16.3 Do not fix bugs during refactoring unless the task calls for it.
@@ -426,74 +432,67 @@
 16.8 Prefer clear descriptive names over artificial abstractions.
 16.9 Prefer action-oriented names over ambiguous terms.
 16.10 Apply renames atomically across imports, call sites, and docs.
-16.11 When work affects the Forked CLI Repo or claims its safety, prove each non-trivial change is strictly required.
-16.12 Do not add unrelated refactors, reformatting, stylistic drift, speculative abstractions, or cleanup to the Forked CLI Repo.
-16.13 Each Forked CLI Repo change shall be intentional and documented with the reason upstream behavior is insufficient.
-  - Commentary: A small fork delta keeps rebuilds from upstream practical.
 
-16.14 Before planning or editing any Forked CLI Repo file that also exists upstream, read the upstream version and list every behavioral divergence.
-  - Commentary: Pre-edit gate, not a post-hoc review. Catches silent regressions like changing a fire-and-forget call to `await`.
+## 17. Tool And Model Policy
+17.1 Model and tool availability varies by machine; use the strongest available path that fits task risk and state any substitution before relying on it.
+17.2 General non-policy, non-release review may use the General Review Command unless a repo skill or user Mandate requires a stronger path.
+17.3 Pull-request mutation, review-thread work, and merge-readiness review shall use `.codex/skills/codex-cli-review` and its current canonical review command.
+17.4 Policy, repo-skill, and workflow-rule edits shall use the Policy Review Command through a separate isolated Codex Channel worker when available.
+17.5 Policy Review requires GPT-5.5 or an approved substitute with `xhigh` reasoning; `high` is not enough.
+17.6 Release and safety claims shall use the Pre-Release Review Command against the exact release commit.
+17.7 If the active model or review path is below the required floor for the task class, stop before relying on it and Escalate.
+17.8 Claude output and duplicate weaker runs may support high-reliability decisions but never replace the required Codex review path.
 
-16.15 Every fork-only divergence shall be substantiated in the commit message or in `FORK_CHANGELOG.md` with the observed motivation and the expected upstream-merge impact.
-  - Commentary: Unsubstantiated divergences are forbidden because they cause merge conflicts and silently change behavior without the User's explicit intent.
-
-16.16 When a divergence is not strictly required to satisfy a fork directive, restore the upstream shape instead of carrying the divergence.
-
-## 17. History and Review Operations
-17.1 Review status and full diffs before and after changes.
-17.2 Never commit or push without local verification of all touched behavior.
-17.3 Treat staging, committing, and pushing as user-approved actions.
-17.4 Once shipment approval exists and verification is complete, persist promptly instead of leaving local-only state.
-17.5 Do not modify staged changes unless the user asks.
-17.6 Use non-interactive git defaults.
-17.7 If stashing is required, separate staged and unstaged work when needed.
-17.8 If hooks modify files during commit, stage those files and rerun the same commit.
-17.9 Base commit messages on the staged diff and use a title with bullet body.
-17.10 After each commit, inspect the resulting commit.
-17.11 Do not rewrite published branch history without explicit user request.
-17.12 A stale-branch mistake is a severity-one breach.
-17.13 A stale-branch breach halts product work until a full artifact and live-diff audit completes.
-17.14 Treat every Action Mention as an action, not prose.
-17.15 Know the effect of each Action Mention before posting it.
-17.16 Do not write chatty status comments or unnecessary mentions on the review platform.
-17.17 Keep required review comments short and technical.
-17.18 If you do not know how a mention triggers, inspect the automation first. When in doubt, do not post.
-17.19 If local coding work targets an open pull request and comments can be posted, run the required review loop.
-17.20 Resolve every correct active thread finding on that pull request.
-17.21 Route pull-request-side mutation work through a Native Subagent by default.
-17.22 This includes thread review, replies, issue-link checks, and pull-request body edits.
-17.23 Keep the Manager on the local Critical Path. Add another Native Subagent only when it shortens that path.
-17.24 If no suitable Native Subagent exists, run the Local Review Command, or the Fallback Local Review Command if needed.
-17.25 Save fallback review output to the Primary Review Artifact.
-17.26 Read only targeted excerpts from review output in updates.
-17.27 Trigger a hosted review bot only when Native Subagent review and local Codex fallback are unavailable, the user asks, or merge evidence requires it.
-17.28 While any Hosted Check or Hosted Review remains pending, poll at least once per minute.
-17.29 If local or hosted review remains non-terminal for fifteen minutes, inspect output and retrigger once if service appears stuck.
-17.30 If required hosted CI remains non-terminal for thirty minutes, inspect output and retrigger once if service appears stuck.
-17.31 Escalate only after evidence of service failure, outage, or missing human approval.
-17.32 Repeat the review loop until unresolved threads are zero, review is clean, required checks are green, and the latest head has explicit approval.
-17.33 Skip clause 17.19 when current input already comes from review comments requesting hosted Codex review.
-  - Commentary: A prior free-form mention paged a maintainer and re-triggered automation.
-
-## 18. Memory, Policy, and Closeout
-18.1 Memory files store durable facts, lessons, and task procedures only.
-18.2 Do not use memory files as run logs, journals, or transcripts.
-18.3 Operate with maximum diligence and ownership.
-18.4 When new insight improves clarity, refine existing clauses instead of adding duplicates.
-18.5 Continue working after feedback when more work remains.
-18.6 On each User Request, decide whether a Policy Edit is needed to prevent repeated failure or slowdown.
-18.7 Treat even hinted negative performance signals as policy triggers.
-18.8 Ground each Policy Edit in a concrete failure pattern and preserve its motivation.
-18.9 If a non-Codex agent touched a Policy Edit, revert that policy work first.
-18.10 Route every Policy Edit through the Codex Channel.
-18.11 Prefer one native Codex subagent for policy review or finalization. Use the CLI only when no native Codex subagent exists.
-18.12 Use the maximum available reasoning for every Policy Edit.
-18.13 Supply root cause, enough background, and the live diff for every Policy Edit.
-18.14 Review each Policy Edit for motivation, duplication, conflict, and process cost.
-18.15 Keep critical priming non-duplicative. Update or move existing rules instead of restating them.
-18.16 For self-initiated Policy Edits, request user approval before editing.
-18.17 Do not pause normal coding, testing, or review loops solely to seek extra policy approval.
-18.18 Before stopping, confirm that all requirements are respected, documentation is updated where needed, regressions are absent, and validation is adequate.
-18.19 Before stopping, confirm that tests pass, review is clean, and affected examples or user flows ran as required.
-18.20 Iterate until further measurable improvement is impractical and all outstanding work is closed or validly blocked.
-  - Commentary: Policy work previously broke when it left the Codex path or used lower reasoning.
+## 18. History and Review Operations
+18.1 Review status and full diffs before and after changes.
+18.2 Never commit or push without local verification of all touched behavior.
+18.3 Treat staging, committing, and pushing as user-approved actions.
+18.4 Once shipment approval exists and verification is complete, persist promptly instead of leaving local-only state.
+18.5 Do not modify staged changes unless the user asks.
+18.6 Use non-interactive git defaults.
+18.7 If stashing is required, separate staged and unstaged work when needed.
+18.8 If hooks modify files during commit, stage those files and rerun the same commit.
+18.9 Base commit messages on the staged diff and use a title with bullet body.
+18.10 After each commit, inspect the resulting commit.
+18.11 Do not rewrite published branch history without explicit user request.
+18.12 A stale-branch mistake is a severity-one breach.
+18.13 A stale-branch breach halts product work until a full artifact and live-diff audit completes.
+18.14 Treat every Action Mention as an action, not prose.
+18.15 Know the effect of each Action Mention before posting it.
+18.16 Do not write chatty status comments or unnecessary mentions on the review platform.
+18.17 Keep required review comments short and technical.
+18.18 If you do not know how a mention triggers, inspect the automation first. When in doubt, do not post.
+18.19 If local coding work targets an open pull request and comments can be posted, run the required review loop.
+18.20 Resolve every correct active thread finding on that pull request.
+18.21 Route pull-request-side mutation work through a Native Subagent by default.
+18.22 This includes thread review, replies, issue-link checks, and pull-request body edits.
+18.23 Keep the Manager on the local Critical Path. Add another Native Subagent only when it shortens that path.
+18.24 If no suitable Native Subagent exists, run the relevant command from Tool And Model Policy, or the Fallback Review Command if needed.
+18.25 Save fallback review output to the Primary Review Artifact.
+18.26 Read only targeted excerpts from review output in updates.
+18.27 Trigger a hosted review bot only when Native Subagent review and local Codex fallback are unavailable, the user asks, or merge evidence requires it.
+18.28 While any Hosted Check or Hosted Review remains pending, poll at least once per minute.
+18.29 If local or hosted review remains non-terminal for fifteen minutes, inspect output and retrigger once if service appears stuck.
+18.30 If required hosted CI remains non-terminal for thirty minutes, inspect output and retrigger once if service appears stuck.
+18.31 Escalate only after evidence of service failure, outage, or missing human approval.
+18.32 Repeat the review loop until unresolved threads are zero, review is clean, required checks are green, and the latest head has explicit approval.
+18.33 Skip clause 18.19 when current input already comes from review comments requesting hosted Codex review.
+## 19. Memory, Policy, and Closeout
+19.1 Memory files store durable facts, lessons, and task procedures only.
+19.2 Do not use memory files as run logs, journals, or transcripts.
+19.3 Operate with maximum diligence and ownership.
+19.4 When new insight improves clarity, refine existing clauses instead of adding duplicates.
+19.5 Continue working after feedback when more work remains.
+19.6 On each User Request, decide whether a Policy Edit is needed to prevent repeated failure or slowdown.
+19.7 Treat even hinted negative performance signals as policy triggers.
+19.8 Ground each Policy Edit in a concrete failure pattern and preserve its motivation.
+19.9 If a non-Codex agent touched a Policy Edit, revert that policy work first.
+19.10 Route every Policy Edit through the Codex Channel and Tool And Model Policy.
+19.11 Supply root cause, enough background, and the live diff for every Policy Edit.
+19.12 Review each Policy Edit for motivation, duplication, conflict, and process cost.
+19.13 Keep critical priming non-duplicative. Update or move existing rules instead of restating them.
+19.14 For self-initiated Policy Edits, request user approval before editing.
+19.15 Do not pause normal coding, testing, or review loops solely to seek extra policy approval.
+19.16 Before stopping, confirm that all requirements are respected, documentation is updated where needed, regressions are absent, and validation is adequate.
+19.17 Before stopping, confirm that tests pass, review is clean, and affected examples or user flows ran as required.
+19.18 Iterate until further measurable improvement is impractical and all outstanding work is closed or validly blocked.
