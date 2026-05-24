@@ -1,30 +1,11 @@
-from collections.abc import AsyncIterator
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-from agents import (
-    FunctionTool,
-    ModelSettings,
-    RunConfig,
-    StopAtTools,
-    Tool,
-    WebSearchTool,
-    function_tool as sdk_function_tool,
-)
-from agents.agent_output import AgentOutputSchemaBase
-from agents.handoffs import Handoff as SDKHandoff
-from agents.items import ModelResponse, TResponseInputItem, TResponseStreamEvent
-from agents.models.interface import Model, ModelTracing
-from openai.types.responses.response_prompt_param import ResponsePromptParam
-from openai.types.shared import Reasoning
+from agents import FunctionTool, ModelSettings, StopAtTools, WebSearchTool
 from pydantic import BaseModel, Field
 
 from agency_swarm import Agent
-from agency_swarm.agent.initialization import (
-    normalize_incompatible_model_settings,
-    use_runner_compatible_model_settings,
-)
 from agency_swarm.integrations.openclaw_model import build_openclaw_responses_model
 
 
@@ -68,7 +49,6 @@ def test_agent_initialization_core_configuration_variants():
     configured = Agent(
         name="ConfiguredAgent",
         instructions="Use tools",
-        model="gpt-4.1-mini",
         tools=[tool],
         model_settings=ModelSettings(
             temperature=0.3,
@@ -346,9 +326,6 @@ def test_agent_initialization_model_settings_defaults_and_overrides():
     """Initialization should keep SDK defaults and preserve explicit settings overrides."""
     default_agent = Agent(name="TruncDefault", instructions="Test")
     assert default_agent.model_settings.truncation == "auto"
-    assert default_agent.model_settings.reasoning is not None
-    assert default_agent.model_settings.reasoning.effort == "none"
-    assert default_agent.model_settings.verbosity == "low"
 
     explicit_agent = Agent(
         name="TruncDisabled",
@@ -364,93 +341,6 @@ def test_agent_initialization_model_settings_defaults_and_overrides():
     provider_prefixed_gpt5_agent = Agent(name="ProviderPrefixedGpt5", instructions="Test", model="openai/gpt-5.4-mini")
     assert provider_prefixed_gpt5_agent.model_settings.reasoning is None
     assert provider_prefixed_gpt5_agent.model_settings.verbosity is None
-
-
-@pytest.mark.parametrize(
-    ("model_name", "expected_effort"),
-    [
-        ("gpt-5.4-mini", "low"),
-        ("openai/gpt-5.4-mini", "low"),
-        ("gpt-5.4-pro", "medium"),
-    ],
-)
-def test_agent_initialization_normalizes_unsupported_gpt5_minimal_reasoning(
-    model_name: str,
-    expected_effort: str,
-) -> None:
-    with pytest.warns(UserWarning, match="does not support reasoning.effort='minimal'"):
-        agent = Agent(
-            name="CompatAgent",
-            instructions="Test",
-            model=model_name,
-            model_settings=ModelSettings(reasoning=Reasoning(effort="minimal")),
-        )
-
-    assert agent.model_settings.reasoning is not None
-    assert agent.model_settings.reasoning.effort == expected_effort
-
-
-@pytest.mark.parametrize(
-    "model_name",
-    [
-        "gpt-5",
-        "openai/gpt-5",
-        "gpt-5.4-mini",
-        "openai/gpt-5.4-mini",
-        "o1",
-        "o3",
-        "o4-mini",
-    ],
-)
-def test_runner_settings_omit_temperature_for_models_with_unsupported_temperature(
-    model_name: str,
-) -> None:
-    with pytest.warns(UserWarning, match="does not support temperature"):
-        settings = normalize_incompatible_model_settings(
-            model_name,
-            ModelSettings(temperature=0.3),
-            omit_unsupported_temperature=True,
-        )
-
-    assert settings.temperature is None
-
-
-def test_runner_settings_context_normalizes_run_config_model_override_agent_settings() -> None:
-    """Per-run model overrides should use compatible agent settings without mutating the agent."""
-    agent = Agent(
-        name="CompatAgent",
-        instructions="Test",
-        model="gpt-4.1-mini",
-        model_settings=ModelSettings(temperature=0.3, max_tokens=16),
-    )
-    run_config = RunConfig(model="gpt-5.4-mini")
-
-    with pytest.warns(UserWarning, match="does not support temperature"):
-        with use_runner_compatible_model_settings(agent, run_config) as runner_config:
-            assert runner_config is run_config
-            assert agent.model_settings.temperature is None
-            assert agent.model_settings.max_tokens == 16
-            assert runner_config.model_settings is None
-
-    assert agent.model_settings.temperature == 0.3
-    assert agent.model_settings.max_tokens == 16
-    assert run_config.model_settings is None
-
-
-def test_runner_settings_context_normalizes_and_preserves_run_config_settings() -> None:
-    """RunConfig settings should remain available for handoffs after compatibility normalization."""
-    agent = Agent(name="CompatAgent", instructions="Test", model="gpt-5.4-mini")
-    run_config = RunConfig(model_settings=ModelSettings(temperature=0.3, max_tokens=16))
-
-    with pytest.warns(UserWarning, match="does not support temperature"):
-        with use_runner_compatible_model_settings(agent, run_config) as runner_config:
-            assert runner_config.model_settings is not None
-            assert runner_config.model_settings.temperature is None
-            assert runner_config.model_settings.max_tokens == 16
-
-    assert run_config.model_settings is not None
-    assert run_config.model_settings.temperature == 0.3
-    assert run_config.model_settings.max_tokens == 16
 
 
 @pytest.mark.parametrize("provider_model", ["openai/gpt-5.4-mini", "azure/gpt-5.4-mini"])
@@ -481,58 +371,6 @@ def test_agent_initialization_model_objects_preserve_explicit_openclaw_alias_def
     assert agent.model_settings.verbosity is None
 
 
-def test_agent_initialization_model_objects_without_default_settings_alias_keep_explicit_settings() -> None:
-    class AnonymousModel(Model):
-        async def get_response(
-            self,
-            system_instructions: str | None,
-            input: str | list[TResponseInputItem],
-            model_settings: ModelSettings,
-            tools: list[Tool],
-            output_schema: AgentOutputSchemaBase | None,
-            handoffs: list[SDKHandoff],
-            tracing: ModelTracing,
-            *,
-            previous_response_id: str | None,
-            conversation_id: str | None,
-            prompt: ResponsePromptParam | None,
-        ) -> ModelResponse:
-            raise AssertionError("Model execution is not part of this initialization test")
-
-        def stream_response(
-            self,
-            system_instructions: str | None,
-            input: str | list[TResponseInputItem],
-            model_settings: ModelSettings,
-            tools: list[Tool],
-            output_schema: AgentOutputSchemaBase | None,
-            handoffs: list[SDKHandoff],
-            tracing: ModelTracing,
-            *,
-            previous_response_id: str | None,
-            conversation_id: str | None,
-            prompt: ResponsePromptParam | None,
-        ) -> AsyncIterator[TResponseStreamEvent]:
-            async def _stream() -> AsyncIterator[TResponseStreamEvent]:
-                if False:
-                    yield None
-                return
-
-            return _stream()
-
-    agent = Agent(
-        name="CustomModel",
-        instructions="Test",
-        model=AnonymousModel(),
-        model_settings=ModelSettings(temperature=0.3, reasoning=Reasoning(effort="minimal")),
-    )
-
-    assert agent.model_settings.temperature == 0.3
-    assert agent.model_settings.reasoning is not None
-    assert agent.model_settings.reasoning.effort == "minimal"
-    assert agent.model_settings.truncation == "auto"
-
-
 def test_agent_initialization_adapts_basetool_type():
     """Passing a BaseTool subclass should be adapted to a FunctionTool."""
     from pydantic import Field
@@ -551,21 +389,6 @@ def test_agent_initialization_adapts_basetool_type():
 
     assert len(agent.tools) == 1
     assert isinstance(agent.tools[0], FunctionTool)
-
-
-@pytest.mark.asyncio
-async def test_agent_initialization_normalizes_direct_sdk_function_tool_manual_invocation() -> None:
-    """Direct SDK FunctionTool inputs should support legacy manual invocation."""
-
-    @sdk_function_tool
-    def echo_name(name: str) -> str:
-        return name
-
-    agent = Agent(name="SdkTool", instructions="Test", tools=[echo_name])
-
-    result = await agent.tools[0].on_invoke_tool(None, '{"name": "Ada"}')
-
-    assert result == "Ada"
 
 
 def test_agent_initialization_web_search_source_include_behavior() -> None:

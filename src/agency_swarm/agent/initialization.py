@@ -5,25 +5,14 @@ This module handles the complex initialization process for agents,
 including setting up file management.
 """
 
-import copy
 import dataclasses
 import inspect
 import logging
-import re
 import warnings
-from collections.abc import Iterator
-from contextlib import contextmanager
 from functools import wraps
 from typing import TYPE_CHECKING, Any
 
-from agents import (
-    Agent as BaseAgent,
-    FunctionTool,
-    GuardrailFunctionOutput,
-    ModelSettings,
-    RunConfig,
-    RunContextWrapper,
-)
+from agents import Agent as BaseAgent, FunctionTool, GuardrailFunctionOutput, ModelSettings, RunContextWrapper
 from agents.models.default_models import get_default_model_settings as get_sdk_default_model_settings
 
 from agency_swarm.agent.attachment_manager import AttachmentManager
@@ -32,7 +21,7 @@ from agency_swarm.agent.file_manager import AgentFileManager
 from agency_swarm.messages.response_input_sanitizer import ensure_store_false_reasoning_encrypted_content
 from agency_swarm.tools import BaseTool, ToolFactory
 from agency_swarm.tools.function_tool_compat import normalize_function_tool
-from agency_swarm.utils.model_utils import REASONING_MODEL_PREFIXES, get_default_settings_model_name
+from agency_swarm.utils.model_utils import get_default_settings_model_name
 
 if TYPE_CHECKING:
     from agency_swarm.agent.core import Agent
@@ -40,10 +29,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _INPUT_GUARDRAIL_WRAPPED_ATTR = "_agency_swarm_input_guardrail_wrapped"
-_GPT_5_MINIMAL_REASONING_FALLBACKS: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"^gpt-5(?:\.\d+)?(?:-mini|-nano|-codex)?(?:-\d{4}-\d{2}-\d{2})?$"), "low"),
-    (re.compile(r"^gpt-5(?:\.\d+)?-pro(?:-\d{4}-\d{2}-\d{2})?$"), "medium"),
-)
+
 # Agency Swarm defaults applied when the SDK leaves a field unset
 # include_usage=True enables streaming usage tracking for LiteLLM models
 _FRAMEWORK_DEFAULT_MODEL_SETTINGS = ModelSettings(truncation="auto", include_usage=True)
@@ -58,90 +44,6 @@ def _get_framework_default_model_settings(model: str | None = None) -> ModelSett
         if getattr(base, field.name) is None and getattr(_FRAMEWORK_DEFAULT_MODEL_SETTINGS, field.name) is not None
     }
     return dataclasses.replace(base, **updates) if updates else base
-
-
-def _replace_reasoning_effort(reasoning: Any, effort: str) -> Any:
-    if hasattr(reasoning, "model_copy"):
-        return reasoning.model_copy(update={"effort": effort})
-    cloned = copy.copy(reasoning)
-    cloned.effort = effort
-    return cloned
-
-
-def normalize_incompatible_model_settings(
-    model_name: str | None,
-    settings: ModelSettings,
-    *,
-    omit_unsupported_temperature: bool = False,
-) -> ModelSettings:
-    """Downgrade user-specified settings that current model families reject."""
-    normalized = settings
-    canonical_model_name = model_name.split("/")[-1].lower() if model_name else None
-
-    if (
-        omit_unsupported_temperature
-        and normalized.temperature is not None
-        and canonical_model_name
-        and canonical_model_name.startswith(REASONING_MODEL_PREFIXES)
-    ):
-        warnings.warn(
-            f"{canonical_model_name or model_name} does not support temperature; omitting the explicit value.",
-            UserWarning,
-            stacklevel=3,
-        )
-        normalized = dataclasses.replace(normalized, temperature=None)
-
-    reasoning = normalized.reasoning
-    if reasoning is None or getattr(reasoning, "effort", None) != "minimal" or not canonical_model_name:
-        return normalized
-
-    for pattern, fallback_effort in _GPT_5_MINIMAL_REASONING_FALLBACKS:
-        if pattern.fullmatch(canonical_model_name):
-            warnings.warn(
-                f"{canonical_model_name} does not support reasoning.effort='minimal'; "
-                f"using '{fallback_effort}' instead.",
-                UserWarning,
-                stacklevel=3,
-            )
-            return dataclasses.replace(normalized, reasoning=_replace_reasoning_effort(reasoning, fallback_effort))
-
-    return normalized
-
-
-def normalize_runner_model_settings(model: Any, settings: ModelSettings) -> ModelSettings:
-    """Return model settings safe to send to the current SDK model."""
-    model_name = get_default_settings_model_name(model)
-    return normalize_incompatible_model_settings(
-        model_name,
-        settings,
-        omit_unsupported_temperature=True,
-    )
-
-
-@contextmanager
-def use_runner_compatible_model_settings(agent: Any, run_config: RunConfig) -> Iterator[RunConfig]:
-    """Temporarily apply SDK-compatible model settings during Runner calls."""
-    original_settings = getattr(agent, "model_settings", None)
-    original_run_settings = run_config.model_settings
-    if not isinstance(original_settings, ModelSettings):
-        yield run_config
-        return
-
-    runner_model = run_config.model or getattr(agent, "model", None)
-    runner_settings = normalize_runner_model_settings(runner_model, original_settings)
-    runner_run_settings = (
-        normalize_runner_model_settings(runner_model, original_run_settings)
-        if isinstance(original_run_settings, ModelSettings)
-        else original_run_settings
-    )
-
-    agent.model_settings = runner_settings
-    run_config.model_settings = runner_run_settings
-    try:
-        yield run_config
-    finally:
-        agent.model_settings = original_settings
-        run_config.model_settings = original_run_settings
 
 
 _DEPRECATED_AGENT_KWARGS: dict[str, str] = {
@@ -231,7 +133,7 @@ def apply_framework_defaults(kwargs: dict[str, Any]) -> None:
         kwargs: The initialization keyword arguments (modified in place)
     """
     model_arg = kwargs.get("model")
-    model_name = FRAMEWORK_DEFAULT_MODEL if model_arg is None else get_default_settings_model_name(model_arg)
+    model_name = get_default_settings_model_name(model_arg)
     base_defaults = _get_framework_default_model_settings(model_name)
 
     existing_settings = kwargs.get("model_settings")
@@ -246,8 +148,8 @@ def apply_framework_defaults(kwargs: dict[str, Any]) -> None:
     if not isinstance(existing_settings, ModelSettings):
         raise TypeError("model_settings must be a ModelSettings instance or dict")
 
-    resolved_settings = base_defaults.resolve(existing_settings)
-    kwargs["model_settings"] = normalize_incompatible_model_settings(model_name, resolved_settings)
+    # User-specified values override defaults; unset fields inherit framework+SDK defaults
+    kwargs["model_settings"] = base_defaults.resolve(existing_settings)
     ensure_store_false_reasoning_encrypted_content(kwargs["model_settings"])
 
 

@@ -3,7 +3,6 @@ import uuid
 
 import pytest
 from agents import ModelSettings, RunResult
-from openai.types.shared import Reasoning
 
 from agency_swarm import Agency, Agent
 
@@ -19,7 +18,7 @@ def planner_agent_instance():
             "Ensure your message to the Worker clearly includes the full and exact task description you received. "
             "After receiving the final result, relay it verbatim to the user including all task identifiers."
         ),
-        model_settings=ModelSettings(reasoning=Reasoning(effort="low")),
+        model_settings=ModelSettings(temperature=0.0),
     )
 
 
@@ -34,7 +33,7 @@ def worker_agent_instance():
             "Send the result string to the Reporter agent using the send_message tool. "
             "Ensure your message clearly references the specific task description you were given by the Planner."
         ),
-        model_settings=ModelSettings(reasoning=Reasoning(effort="low")),
+        model_settings=ModelSettings(temperature=0.0),
     )
 
 
@@ -50,7 +49,7 @@ def reporter_agent_instance():
             "Ensure your final report clearly identifies the specific task "
             "description that was processed along with the results."
         ),
-        model_settings=ModelSettings(reasoning=Reasoning(effort="low")),
+        model_settings=ModelSettings(temperature=0.0),
     )
 
 
@@ -76,7 +75,6 @@ async def test_multi_agent_communication_flow(multi_agent_agency: Agency):
     final_result: RunResult = await multi_agent_agency.get_response(message=initial_task)
     print(f"--- Integration Test Complete --- FINAL OUTPUT:\n{final_result.final_output}")
 
-    assert final_result is not None
     assert final_result.final_output is not None
 
     assert isinstance(final_result.final_output, str)

@@ -16,33 +16,14 @@ Run with: python examples/observability_demo.py
 """
 
 import asyncio
+import importlib.util
 import logging
 import os
 import sys
 from statistics import mean, stdev
 from typing import Any
 
-# Path setup for standalone examples
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
-
-try:  # noqa: E402
-    import agentops  # type: ignore[import-not-found]
-except ImportError:  # pragma: no cover - exercised by example smoke test
-    agentops = None
-
-try:  # noqa: E402
-    from langfuse import observe  # type: ignore[import-not-found]
-except ImportError:  # pragma: no cover - exercised by example smoke test
-
-    def observe(*_args, **_kwargs):
-        def decorator(func):
-            return func
-
-        return decorator
-
-    _LANGFUSE_AVAILABLE = False
-else:
-    _LANGFUSE_AVAILABLE = True
 
 from agency_swarm import (  # noqa: E402
     Agency,
@@ -115,12 +96,11 @@ async def openai_tracing(input_message: str) -> str:
     return response.final_output
 
 
-@observe()
 async def langfuse_tracing(input_message: str) -> str:
-    if not _LANGFUSE_AVAILABLE:
-        raise ModuleNotFoundError("langfuse is not installed")
     if os.getenv("LANGFUSE_SECRET_KEY") is None or os.getenv("LANGFUSE_PUBLIC_KEY") is None:
         raise ValueError("LANGFUSE api keys are not set")
+
+    from langfuse import observe
 
     agency_instance = create_agency()
 
@@ -135,10 +115,11 @@ async def langfuse_tracing(input_message: str) -> str:
 
 
 async def agentops_tracing(input_message: str) -> str:
-    if agentops is None:
-        raise ModuleNotFoundError("agentops is not installed")
     if os.getenv("AGENTOPS_API_KEY") is None:
         raise ValueError("AGENTOPS_API_KEY is not set")
+
+    import agentops
+
     agentops.init(auto_start_session=True, trace_name="Agentops tracing", tags=["openai", "agentops-example"])
     tracer = agentops.start_trace(trace_name="Agentops tracing", tags=["openai", "agentops-example"])
 
@@ -159,8 +140,14 @@ if __name__ == "__main__":
     print("Running OpenAI tracing...")
     print(asyncio.run(openai_tracing(test_message)))
 
-    print("\nRunning Langfuse tracing...")
-    print(asyncio.run(langfuse_tracing(test_message)))
+    if importlib.util.find_spec("langfuse") and os.getenv("LANGFUSE_SECRET_KEY") and os.getenv("LANGFUSE_PUBLIC_KEY"):
+        print("\nRunning Langfuse tracing...")
+        print(asyncio.run(langfuse_tracing(test_message)))
+    else:
+        print("\nSkipping Langfuse tracing: install langfuse and set LANGFUSE_SECRET_KEY/LANGFUSE_PUBLIC_KEY.")
 
-    print("\nRunning AgentOps tracing...")
-    print(asyncio.run(agentops_tracing(test_message)))
+    if importlib.util.find_spec("agentops") and os.getenv("AGENTOPS_API_KEY"):
+        print("\nRunning AgentOps tracing...")
+        print(asyncio.run(agentops_tracing(test_message)))
+    else:
+        print("\nSkipping AgentOps tracing: install agentops and set AGENTOPS_API_KEY.")

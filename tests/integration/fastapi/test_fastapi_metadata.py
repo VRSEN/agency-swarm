@@ -2,11 +2,19 @@
 
 import json
 from datetime import datetime
+from typing import cast
 
 import pytest
 
 pytest.importorskip("fastapi.testclient")
-from agents import CodeInterpreterTool, FileSearchTool, WebSearchTool
+from agents import (
+    CodeInterpreterTool,
+    FileSearchTool,
+    RunContextWrapper,
+    WebSearchTool,
+    function_tool as sdk_function_tool,
+)
+from agents.tool_context import ToolContext
 from fastapi.testclient import TestClient
 from openai.types.responses.tool_param import CodeInterpreter
 from pydantic import BaseModel
@@ -505,6 +513,29 @@ def test_function_tool_with_nested_schema():
     request_schema = endpoint_schema["requestBody"]["content"]["application/json"]["schema"]
     assert "$ref" in request_schema
     assert "UserToolRequest" in request_schema["$ref"]
+
+
+def test_raw_sdk_function_tool_endpoint_receives_manual_tool_context():
+    """Raw SDK FunctionTools exposed directly through run_fastapi should get ToolContext."""
+    seen_contexts: list[ToolContext[None]] = []
+
+    @sdk_function_tool
+    async def raw_sdk_tool(ctx: RunContextWrapper[None], value: str) -> str:
+        tool_context = cast(ToolContext[None], ctx)
+        seen_contexts.append(tool_context)
+        return f"{tool_context.tool_name}:{tool_context.tool_arguments}:{value}"
+
+    app = run_fastapi(tools=[raw_sdk_tool], return_app=True, app_token_env="")
+    client = TestClient(app)
+
+    response = client.post("/tool/raw_sdk_tool", json={"value": "ok"})
+
+    assert response.status_code == 200
+    assert response.json() == {"response": 'raw_sdk_tool:{"value":"ok"}:ok'}
+    assert len(seen_contexts) == 1
+    assert seen_contexts[0].tool_name == "raw_sdk_tool"
+    assert seen_contexts[0].tool_arguments == '{"value":"ok"}'
+    assert seen_contexts[0].tool_call_id == "agency_swarm_manual_raw_sdk_tool"
 
 
 def test_strict_function_tool_rejects_extra_fields():

@@ -5,6 +5,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from agents import RunContextWrapper
+from agents.tool import _get_function_tool_invoke_context
+from agents.tool_context import ToolContext
 from pydantic import Field
 
 from agency_swarm import Agent, BaseTool, GuardrailFunctionOutput, InputGuardrailTripwireTriggered
@@ -143,6 +145,23 @@ def base_tool():
 
 
 # --- Test Cases ---
+
+
+def test_send_message_advertises_tool_context_to_agents_sdk(
+    specific_send_message_tool,
+    mock_master_context,
+) -> None:
+    """The SDK should pass SendMessage the real ToolContext with call metadata."""
+    tool_context = ToolContext(
+        context=mock_master_context,
+        tool_name="send_message",
+        tool_call_id="call_send_message",
+        tool_arguments="{}",
+    )
+
+    selected_context = _get_function_tool_invoke_context(specific_send_message_tool, tool_context)
+
+    assert selected_context is tool_context
 
 
 @pytest.mark.asyncio
@@ -341,49 +360,6 @@ async def test_tools_folder_supports_relative_imports(tmp_path):
 
     result = await tool.on_invoke_tool(None, json.dumps({"name": "Ada"}))
     assert result == "hello Ada"
-
-
-@pytest.mark.asyncio
-async def test_tools_folder_preserves_run_context_wrapper_for_custom_function_tool(tmp_path):
-    """Custom FunctionTool callbacks should keep SDK-supplied RunContextWrapper."""
-    tools_dir = tmp_path / "tools"
-    tools_dir.mkdir()
-
-    (tools_dir / "CustomFunction.py").write_text(
-        "from agents import FunctionTool, RunContextWrapper\n\n"
-        "async def invoke(ctx: RunContextWrapper[dict], input_json: str):\n"
-        "    return type(ctx).__name__\n\n"
-        "CustomFunction = FunctionTool(\n"
-        "    name='CustomFunction',\n"
-        "    description='custom function tool',\n"
-        "    params_json_schema={'type': 'object', 'properties': {}},\n"
-        "    on_invoke_tool=invoke,\n"
-        "    strict_json_schema=False,\n"
-        ")\n"
-    )
-
-    agent = Agent(name="test", instructions="test", tools_folder=str(tools_dir))
-    tool = next(t for t in agent.tools if t.name == "CustomFunction")
-
-    result = await tool.on_invoke_tool(RunContextWrapper(context={}), "{}")
-
-    assert result == "RunContextWrapper"
-
-
-@pytest.mark.asyncio
-async def test_normalized_sdk_function_tool_accepts_manual_run_context_wrapper():
-    """SDK-created FunctionTool instances should accept legacy RunContextWrapper calls."""
-    from agents import function_tool
-
-    @function_tool
-    async def context_name(ctx: RunContextWrapper[dict]) -> str:
-        return type(ctx).__name__
-
-    agent = Agent(name="test", instructions="test", tools=[context_name])
-
-    result = await agent.tools[0].on_invoke_tool(RunContextWrapper(context={}), "{}")
-
-    assert result == "ToolContext"
 
 
 @pytest.mark.parametrize("folder", [None, "/nonexistent/path"])

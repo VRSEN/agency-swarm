@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
-from agents import FunctionTool
+from agents import Agent as SDKAgent, RunContextWrapper, function_tool as sdk_function_tool
 from agents.tool_context import ToolContext
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -35,10 +36,8 @@ class DummyTypedTool:
 
     def __init__(self) -> None:
         self.calls: list[str] = []
-        self.contexts: list[Any] = []
 
     async def on_invoke_tool(self, context, input_json: str):
-        self.contexts.append(context)
         self.calls.append(input_json)
         return "ok"
 
@@ -91,15 +90,13 @@ async def test_make_tool_endpoint_serializes_non_json_types(monkeypatch):
         fake_build_request_model,
     )
 
-    raw_context = {"scope": "raw"}
-    handler = make_tool_endpoint(tool, verify_token=_fake_verify_token, context=raw_context)
+    handler = make_tool_endpoint(tool, verify_token=_fake_verify_token, context=None)
     request_data = TimestampModel(timestamp="2024-05-01T09:30:00Z")
 
     response = await handler(request_data=request_data, token="ignored")
 
     assert response == {"response": "ok"}
     assert tool.calls, "on_invoke_tool should receive serialized payload"
-    assert tool.contexts == [raw_context]
     payload = json.loads(tool.calls[0])
     assert payload == {"timestamp": "2024-05-01T09:30:00Z"}
 
@@ -145,32 +142,6 @@ async def test_make_tool_endpoint_generic_handler_handles_invalid_request_json()
     assert b"bad json" in response.body
 
 
-class GenericInvokeTool:
-    name = "GenericInvokeTool"
-
-    def __init__(self) -> None:
-        self.contexts: list[Any] = []
-        self.calls: list[str] = []
-
-    async def on_invoke_tool(self, context, input_json: str):
-        self.contexts.append(context)
-        self.calls.append(input_json)
-        return "ok"
-
-
-@pytest.mark.asyncio
-async def test_make_tool_endpoint_generic_handler_preserves_raw_context_for_non_function_tool() -> None:
-    tool = GenericInvokeTool()
-    raw_context = {"scope": "raw"}
-
-    handler = make_tool_endpoint(tool, verify_token=_fake_verify_token, context=raw_context)
-    response = await handler(request=_DummyRequest({"value": "ok"}), token="ignored")
-
-    assert response == {"response": "ok"}
-    assert tool.contexts == [raw_context]
-    assert json.loads(tool.calls[0]) == {"value": "ok"}
-
-
 @pytest.mark.asyncio
 async def test_make_tool_endpoint_for_base_tool_sync_and_async_runs() -> None:
     sync_handler = make_tool_endpoint(EchoTool, verify_token=_fake_verify_token, context=None)
@@ -194,6 +165,10 @@ async def test_make_tool_endpoint_for_base_tool_returns_json_error() -> None:
 
 class ParamsModel(BaseModel):
     value: str
+
+
+class AgentToolParamsModel(BaseModel):
+    input: str
 
 
 class ParamsTool:
@@ -225,34 +200,56 @@ async def test_make_tool_endpoint_supports_params_json_schema(monkeypatch: pytes
 
 
 @pytest.mark.asyncio
-async def test_make_tool_endpoint_wraps_context_for_sdk_function_tools(monkeypatch: pytest.MonkeyPatch) -> None:
-    contexts: list[ToolContext[Any]] = []
-    payloads: list[str] = []
+async def test_make_tool_endpoint_invokes_sdk_function_tool_with_manual_tool_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen_contexts: list[ToolContext[None]] = []
 
-    async def on_invoke_tool(context: ToolContext[Any], input_json: str) -> str:
-        contexts.append(context)
-        payloads.append(input_json)
-        return "ok"
+    @sdk_function_tool
+    async def endpoint_sdk_tool(ctx: RunContextWrapper[None], value: str) -> str:
+        tool_context = cast(ToolContext[None], ctx)
+        seen_contexts.append(tool_context)
+        return f"{tool_context.tool_name}:{tool_context.tool_arguments}:{value}"
 
-    tool = FunctionTool(
-        name="SdkFunctionTool",
-        description="desc",
-        params_json_schema={"type": "object", "properties": {"value": {"type": "string"}}, "required": ["value"]},
-        on_invoke_tool=on_invoke_tool,
-    )
     monkeypatch.setattr(
         "agency_swarm.integrations.fastapi_utils.tool_endpoints.build_request_model",
         lambda *_args, **_kwargs: ParamsModel,
     )
 
-    raw_context = {"scope": "raw"}
-    handler = make_tool_endpoint(tool, verify_token=_fake_verify_token, context=raw_context)
+    handler = make_tool_endpoint(endpoint_sdk_tool, verify_token=_fake_verify_token, context=None)
     response = await handler(request_data=ParamsModel(value="ok"), token="ignored")
 
-    assert response == {"response": "ok"}
-    assert len(contexts) == 1
-    assert isinstance(contexts[0], ToolContext)
-    assert contexts[0].context is raw_context
-    assert contexts[0].tool_name == "SdkFunctionTool"
-    assert contexts[0].tool_arguments == payloads[0]
-    assert json.loads(payloads[0]) == {"value": "ok"}
+    assert response == {"response": 'endpoint_sdk_tool:{"value":"ok"}:ok'}
+    assert len(seen_contexts) == 1
+    assert seen_contexts[0].tool_name == "endpoint_sdk_tool"
+    assert seen_contexts[0].tool_arguments == '{"value":"ok"}'
+
+
+@pytest.mark.asyncio
+async def test_make_tool_endpoint_invokes_sdk_agent_tool_with_manual_tool_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen_contexts: list[ToolContext[None]] = []
+
+    async def fake_run(**kwargs: Any) -> SimpleNamespace:
+        context = kwargs["context"]
+        assert isinstance(context, ToolContext)
+        seen_contexts.append(context)
+        return SimpleNamespace(final_output="nested ok", new_items=[], interruptions=[])
+
+    monkeypatch.setattr("agents.Runner.run", fake_run)
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.tool_endpoints.build_request_model",
+        lambda *_args, **_kwargs: AgentToolParamsModel,
+    )
+    nested_agent = SDKAgent(name="nested", instructions="Return the input.")
+    nested_tool = nested_agent.as_tool(tool_name="nested_tool", tool_description="Nested tool")
+
+    handler = make_tool_endpoint(nested_tool, verify_token=_fake_verify_token, context=None)
+    response = await handler(request_data=AgentToolParamsModel(input="ok"), token="ignored")
+
+    assert response == {"response": "nested ok"}
+    assert len(seen_contexts) == 1
+    assert seen_contexts[0].tool_name == "nested_tool"
+    assert seen_contexts[0].tool_arguments == '{"input":"ok"}'
+    assert seen_contexts[0].tool_call_id == "agency_swarm_manual_nested_tool"

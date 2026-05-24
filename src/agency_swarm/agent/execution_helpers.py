@@ -23,7 +23,6 @@ from openai.types.responses import (
 )
 
 from agency_swarm.agent.context_types import AgentRuntimeState
-from agency_swarm.agent.initialization import use_runner_compatible_model_settings
 from agency_swarm.context import MasterContext
 from agency_swarm.messages import MessageFormatter
 from agency_swarm.tools.mcp_manager import default_mcp_manager
@@ -69,16 +68,14 @@ async def perform_single_run(
                 logger.warning(f"Entering async context for server {server.name}")
                 await mcp_stack.enter_async_context(server)  # type: ignore[arg-type]
 
-        run_config = run_config_override or RunConfig()
-        with use_runner_compatible_model_settings(agent, run_config) as runner_config:
-            result = await Runner.run(
-                starting_agent=agent,
-                input=history_for_runner,
-                context=master_context_for_run,
-                hooks=hooks_override,
-                run_config=runner_config,
-                max_turns=kwargs.get("max_turns", 1000000),
-            )
+        result = await Runner.run(
+            starting_agent=agent,
+            input=history_for_runner,
+            context=master_context_for_run,
+            hooks=hooks_override,
+            run_config=run_config_override or RunConfig(),
+            max_turns=kwargs.get("max_turns", 1000000),
+        )
     return result
 
 

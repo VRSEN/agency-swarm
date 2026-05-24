@@ -265,7 +265,9 @@ class SendMessage(FunctionTool):
 
         return _create_model(f"{cls.__name__}Params", __module__=cls.__module__, **extra_field_defs)
 
-    def _create_recipient_agency_context(self, wrapper: RunContextWrapper[MasterContext]) -> "AgencyContext":
+    def _create_recipient_agency_context(
+        self, wrapper: ToolContext[MasterContext] | RunContextWrapper[MasterContext]
+    ) -> "AgencyContext":
         """Create agency context for the recipient agent."""
         # Avoid circular import
         from ..agent.core import AgencyContext
@@ -309,7 +311,11 @@ class SendMessage(FunctionTool):
             shared_instructions=shared_instructions_from_context,
         )
 
-    async def on_invoke_tool(self, wrapper: RunContextWrapper[MasterContext], arguments_json_string: str) -> str:
+    async def on_invoke_tool(
+        self,
+        wrapper: ToolContext[MasterContext] | RunContextWrapper[MasterContext],
+        arguments_json_string: str,
+    ) -> str:
         """
         Handles the invocation of this specific send message tool.
         Retrieves the message from kwargs, validates context, calls the recipient agent's

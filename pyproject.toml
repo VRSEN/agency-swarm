@@ -7,7 +7,7 @@ path = "hatch_build.py"
 
 [project]
 name = "agency-swarm"
-version = "1.9.8"
+version = "1.9.9"
 description = "Agency Swarm framework"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -15,7 +15,7 @@ license = "MIT"
 authors = [{ name = "Vrsen AI Solutions", email = "me@vrsen.ai" }]
 dependencies = [
     "openai>=2.2,<3",
-    "openai-agents==0.14.2",
+    "openai-agents==0.14.8",
     "datamodel-code-generator>=0.56.0,<0.57.0",
     "docstring-parser>=0.16,<1.0.0",
     "fastmcp>=2.13.1",
@@ -60,7 +60,7 @@ agency-swarm = "agency_swarm.cli.main:main"
 [project.optional-dependencies]
 voice = ["numpy>=2.2.0, <3; python_version>='3.10'", "websockets>=15.0, <16"]
 viz = ["graphviz>=0.17"]
-litellm = ["litellm>=1.67.4.post1, <2"]
+litellm = ["litellm>=1.83.0, <2"]
 jupyter = ["ipykernel>=6.29.0,<7.0.0", "jupyter_client>=8.0.0,<9.0.0", "nest_asyncio>=1.6.0,<2.0.0"]
 
 fastapi = [

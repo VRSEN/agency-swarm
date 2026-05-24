@@ -113,6 +113,37 @@ class TestAttachmentManager:
                 {"message_files": ["file-123"]},
             )
 
+    @pytest.mark.asyncio
+    async def test_prepare_and_attach_files_adds_code_interpreter_instruction(self):
+        """Code-interpreter attachments should tell the model how to inspect uploaded files."""
+        mock_agent = Mock()
+        mock_agent.name = "TestAgent"
+        mock_agent.file_manager = Mock()
+
+        attachment_manager = AttachmentManager(mock_agent)
+        attachment_manager._get_filename_by_id = Mock(return_value="report.txt")
+        message_items = [{"role": "user", "content": "read the file"}]
+
+        await attachment_manager.prepare_and_attach_files(message_items, ["file-123"], {})
+
+        assert message_items == [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": "read the file"},
+                    {
+                        "type": "input_text",
+                        "_agency_swarm_ephemeral": True,
+                        "text": (
+                            "The uploaded file(s) report.txt are available through the code_interpreter tool. "
+                            "Use that tool to inspect their contents before answering."
+                        ),
+                    },
+                ],
+            }
+        ]
+        mock_agent.file_manager.add_code_interpreter_tool.assert_called_once_with(["file-123"])
+
     def test_attachments_cleanup_code_interpreter_files(self):
         """Test attachments_cleanup with temporary code interpreter files."""
         mock_agent = Mock()

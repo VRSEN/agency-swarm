@@ -1,79 +1,63 @@
 import agents
-from openai.types.responses import tool_param
 
 import agency_swarm
 import agency_swarm.tools as agency_tools
 
-ROOT_SHADOWED_SDK_EXPORTS = {"Agent", "Handoff", "function_tool", "__version__"}
-TOOLS_SHADOWED_SDK_EXPORTS = {"function_tool"}
-TOOL_PARAM_IGNORED_EXPORTS = {
-    "Dict",
-    "Literal",
-    "Optional",
-    "Required",
-    "SequenceNotStr",
-    "TypeAlias",
-    "TypedDict",
-    "Union",
-    "annotations",
+REQUIRED_TOP_LEVEL_AGENTS_EXPORTS = {
+    "SDKAgent": "Agent",
+    "SDKHandoff": "Handoff",
+    "Runner": "Runner",
+    "RunConfig": "RunConfig",
+    "Tool": "Tool",
+    "TResponseInputItem": "TResponseInputItem",
+    "CustomTool": "CustomTool",
+    "ToolSearchTool": "ToolSearchTool",
+    "ToolOrigin": "ToolOrigin",
+    "ToolOriginType": "ToolOriginType",
+    "AgentToolInvocation": "AgentToolInvocation",
+    "ModelProvider": "ModelProvider",
+    "ModelTracing": "ModelTracing",
+    "OpenAIResponsesModel": "OpenAIResponsesModel",
+    "ImageGenerationTool": "ImageGenerationTool",
+    "ToolsToFinalOutputResult": "ToolsToFinalOutputResult",
 }
-TOOL_PARAM_SHADOWED_EXPORTS = {"WebSearchTool"}
+
+REQUIRED_TOOLS_AGENTS_EXPORTS = {
+    "Tool": "Tool",
+    "CustomTool": "CustomTool",
+    "ToolSearchTool": "ToolSearchTool",
+    "ToolOrigin": "ToolOrigin",
+    "ToolOriginType": "ToolOriginType",
+    "ImageGenerationTool": "ImageGenerationTool",
+    "tool_namespace": "tool_namespace",
+}
 
 
-def _is_sdk_tool_export(name: str) -> bool:
-    return (
-        "Tool" in name
-        or "Computer" in name
-        or name.startswith("ApplyPatch")
-        or name.startswith("Shell")
-        or name.startswith("MCP")
-        or name
-        in {
-            "Button",
-            "CustomTool",
-            "Environment",
-            "FunctionToolResult",
-            "LocalShellCommandRequest",
-            "LocalShellExecutor",
-        }
-    )
+def test_all_declared_exports_resolve() -> None:
+    for name in agency_swarm.__all__:
+        assert hasattr(agency_swarm, name), name
+
+    for name in agency_tools.__all__:
+        assert hasattr(agency_tools, name), name
 
 
-def test_root_exports_agents_sdk_public_imports() -> None:
-    expected_exports = set(agents.__all__) - ROOT_SHADOWED_SDK_EXPORTS
+def test_top_level_required_agents_exports_match_sdk() -> None:
+    for export_name, agents_name in REQUIRED_TOP_LEVEL_AGENTS_EXPORTS.items():
+        assert export_name in agency_swarm.__all__
+        assert getattr(agency_swarm, export_name) is getattr(agents, agents_name)
 
-    missing_exports = sorted(expected_exports - set(agency_swarm.__all__))
 
-    assert missing_exports == []
+def test_tools_required_agents_exports_match_sdk() -> None:
+    for export_name, agents_name in REQUIRED_TOOLS_AGENTS_EXPORTS.items():
+        assert export_name in agency_tools.__all__
+        assert getattr(agency_tools, export_name) is getattr(agents, agents_name)
+
+
+def test_local_agent_and_handoff_keep_sdk_aliases() -> None:
     assert agency_swarm.SDKAgent is agents.Agent
-    assert agency_swarm.SDKHandoff is agents.Handoff
     assert agency_swarm.Agent is not agents.Agent
+    assert agency_swarm.SDKHandoff is agents.Handoff
+    assert agency_swarm.Handoff is agency_tools.Handoff
     assert agency_swarm.Handoff is not agents.Handoff
-    for name in expected_exports:
-        assert getattr(agency_swarm, name) is getattr(agents, name)
-
-
-def test_tools_exports_agents_sdk_tool_imports() -> None:
-    expected_exports = {name for name in agents.__all__ if _is_sdk_tool_export(name)} - TOOLS_SHADOWED_SDK_EXPORTS
-
-    missing_exports = sorted(expected_exports - set(agency_tools.__all__))
-
-    assert missing_exports == []
-    for name in expected_exports:
-        assert getattr(agency_tools, name) is getattr(agents, name)
-
-
-def test_tools_exports_openai_tool_param_imports() -> None:
-    expected_exports = {
-        name
-        for name in dir(tool_param)
-        if not name.startswith("_")
-        and name not in TOOL_PARAM_IGNORED_EXPORTS
-        and name not in TOOL_PARAM_SHADOWED_EXPORTS
-    }
-
-    missing_exports = sorted(expected_exports - set(agency_tools.__all__))
-
-    assert missing_exports == []
-    for name in expected_exports:
-        assert getattr(agency_tools, name) is getattr(tool_param, name)
+    assert agency_swarm.function_tool is agency_tools.function_tool
+    assert agency_swarm.function_tool is not agents.function_tool

@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 from agents import ModelSettings, function_tool
 from agents.models.fake_id import FAKE_RESPONSES_ID
+from openai.types.shared import Reasoning
 
 from agency_swarm import Agency, Agent
 
@@ -98,7 +99,6 @@ def combine_results(results: str) -> str:
 # integration keeps step with SDK streaming semantics.
 EXPECTED_FLOW_DEFAULT: list[tuple[str, str, str | None]] = [
     ("tool_call_item", "MainAgent", "get_market_data"),
-    ("message_output_item", "MainAgent", None),
     ("tool_call_output_item", "MainAgent", None),
     ("tool_call_item", "MainAgent", "send_message"),
     ("tool_call_item", "SubAgent", "analyze_risk"),
@@ -163,28 +163,58 @@ async def test_full_streaming_flow_hardcoded_sequence(
 
         main_model = LitellmModel(model=ANTHROPIC_MODEL_NAME)
         helper_model = LitellmModel(model=ANTHROPIC_MODEL_NAME)
-    else:
-        main_model = "gpt-5.4-mini"
-        helper_model = "gpt-5.4-mini"
-
-    main = Agent(
-        name="MainAgent",
-        description="Coordinator",
-        instructions=(
+        main_model_settings = None
+        helper_model_settings = None
+        main_instructions = (
             "First send a standalone 'ACK' message before any tool calls. "
             "Then call get_market_data('AAPL'). "
             "Then use the send_message tool to ask SubAgent to analyze the data and reply. "
             "Finally, respond to the user with a brief conclusion."
-        ),
+        )
+        user_message = "Start."
+    else:
+        main_model = "gpt-5.4-mini"
+        helper_model = "gpt-5.4-mini"
+        main_model_settings = ModelSettings(
+            reasoning=Reasoning(effort="low"),
+            tool_choice="get_market_data",
+            parallel_tool_calls=False,
+        )
+        helper_model_settings = ModelSettings(
+            reasoning=Reasoning(effort="low"),
+            tool_choice="analyze_risk",
+            parallel_tool_calls=False,
+        )
+        main_instructions = (
+            "Complete the workflow in this exact order. "
+            "First call get_market_data with symbol 'AAPL'. Do not send assistant text before this tool call. "
+            "After get_market_data returns, call send_message to ask SubAgent to analyze the returned market data. "
+            "Do not send assistant text between get_market_data and send_message. "
+            "After SubAgent replies, send one brief final conclusion to the user."
+        )
+        user_message = (
+            "Run the streaming-order proof now: call get_market_data for AAPL, then send_message to SubAgent "
+            "with the returned market data, then provide the final conclusion after SubAgent responds."
+        )
+
+    main = Agent(
+        name="MainAgent",
+        description="Coordinator",
+        instructions=main_instructions,
         model=main_model,
+        model_settings=main_model_settings,
         tools=[get_market_data],
     )
 
     helper = Agent(
         name="SubAgent",
         description="Risk analyzer",
-        instructions=("When prompted by MainAgent: call analyze_risk on the provided data, then reply succinctly."),
+        instructions=(
+            "When prompted by MainAgent, first call analyze_risk on the provided data. "
+            "After analyze_risk returns, reply succinctly."
+        ),
         model=helper_model,
+        model_settings=helper_model_settings,
         tools=[analyze_risk],
     )
 
@@ -198,7 +228,7 @@ async def test_full_streaming_flow_hardcoded_sequence(
 
     # Collect stream as (type, agent, tool_name)
     stream_items: list[tuple[str, str, str | None]] = []
-    async for event in agency.get_response_stream(message="Start."):
+    async for event in agency.get_response_stream(message=user_message):
         if hasattr(event, "item") and event.item is not None:
             item = event.item
             evt_type = getattr(item, "type", None)
@@ -232,6 +262,9 @@ async def test_full_streaming_flow_hardcoded_sequence(
     )
 
     _assert_sanitized_history(comparable)
+    _assert_tool_call_recorded(new_messages, "MainAgent", "get_market_data", context="default streaming workflow")
+    _assert_tool_call_recorded(new_messages, "MainAgent", "send_message", context="default streaming workflow")
+    _assert_tool_call_recorded(new_messages, "SubAgent", "analyze_risk", context="default streaming workflow")
 
 
 # Expected flow for multiple sequential sub-agent calls
