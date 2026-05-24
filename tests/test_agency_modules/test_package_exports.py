@@ -19,6 +19,7 @@ REQUIRED_TOP_LEVEL_AGENTS_EXPORTS = {
     "ModelTracing": "ModelTracing",
     "OpenAIResponsesModel": "OpenAIResponsesModel",
     "ImageGenerationTool": "ImageGenerationTool",
+    "ToolsToFinalOutputResult": "ToolsToFinalOutputResult",
 }
 
 REQUIRED_TOOLS_AGENTS_EXPORTS = {

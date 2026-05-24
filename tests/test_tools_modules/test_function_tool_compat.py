@@ -123,6 +123,25 @@ async def test_copied_agency_function_tool_rebinds_manual_context_to_copy_name()
     assert seen_contexts[0].tool_call_id == "agency_swarm_manual_copied_tool"
 
 
+@pytest.mark.asyncio
+async def test_copied_agency_function_tool_rebinds_failure_handler_to_copy() -> None:
+    """Copied FunctionTool failure handlers should resolve against the copied tool."""
+
+    def failure_message(ctx: ToolContext[None], error: Exception) -> str:
+        return f"{ctx.tool_name}:{error}"
+
+    @function_tool(failure_error_function=failure_message)
+    async def original_tool(ctx: RunContextWrapper[None], value: str) -> str:  # noqa: ARG001
+        raise RuntimeError("boom")
+
+    copied_tool = replace(original_tool, name="copied_tool")
+    on_invoke_tool = cast(Any, copied_tool.on_invoke_tool)
+
+    result = await on_invoke_tool(RunContextWrapper(context=None), '{"value":"new"}')
+
+    assert result == "copied_tool:boom"
+
+
 def test_agency_function_tool_preserves_deferred_namespace_metadata() -> None:
     """Wrapped FunctionTool instances should keep SDK loading metadata."""
 
@@ -138,6 +157,33 @@ def test_agency_function_tool_preserves_deferred_namespace_metadata() -> None:
     assert tool.defer_loading is True
     assert tool._tool_namespace == "demo_namespace"
     assert tool._tool_namespace_description == "Demo namespace"
+
+
+@pytest.mark.asyncio
+async def test_deferred_agency_function_tool_keeps_sdk_tool_context_metadata() -> None:
+    """Deferred top-level tools can use the SDK synthetic namespace for real calls."""
+    seen_contexts: list[ToolContext[dict[str, str]]] = []
+
+    @function_tool(defer_loading=True)
+    async def deferred_tool(ctx: RunContextWrapper[dict[str, str]], value: str) -> str:
+        tool_context = cast(ToolContext[dict[str, str]], ctx)
+        seen_contexts.append(tool_context)
+        return f"{tool_context.tool_call_id}:{value}"
+
+    sdk_context = ToolContext(
+        context={"label": "agency"},
+        tool_name="deferred_tool",
+        tool_namespace="deferred_tool",
+        tool_call_id="call_real",
+        tool_arguments='{"value":"new"}',
+    )
+    on_invoke_tool = cast(Any, deferred_tool.on_invoke_tool)
+
+    result = await on_invoke_tool(sdk_context, '{"value":"new"}')
+
+    assert result == "call_real:new"
+    assert len(seen_contexts) == 1
+    assert seen_contexts[0] is sdk_context
 
 
 @pytest.mark.asyncio

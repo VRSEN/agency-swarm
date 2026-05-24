@@ -72,28 +72,15 @@ async def test_multi_agent_communication_flow(multi_agent_agency: Agency):
     initial_task = f"Process test data batch {uuid.uuid4()}."
     print(f"\n--- Starting Integration Test --- TASK: {initial_task}")
 
-    task_id_part = initial_task.split(" ")[-1].split(".")[0]
-    final_result: RunResult | None = None
-    final_output = ""
-    for attempt in range(3):
-        message = (
-            initial_task
-            if attempt == 0
-            else f"Repeat the same task and include this exact batch id in the final answer: {task_id_part}."
-        )
-        final_result = await multi_agent_agency.get_response(message=message)
-        final_output = str(final_result.final_output or "")
-        if task_id_part in final_output:
-            break
+    final_result: RunResult = await multi_agent_agency.get_response(message=initial_task)
+    print(f"--- Integration Test Complete --- FINAL OUTPUT:\n{final_result.final_output}")
 
-    print(f"--- Integration Test Complete --- FINAL OUTPUT:\n{final_output}")
-
-    assert final_result is not None
     assert final_result.final_output is not None
 
     assert isinstance(final_result.final_output, str)
     assert len(final_result.final_output) > 0
 
+    task_id_part = initial_task.split(" ")[-1].split(".")[0]
     assert task_id_part in final_result.final_output
     print("--- Assertions Passed ---")
 

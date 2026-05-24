@@ -27,6 +27,9 @@ class _ManualContextFunctionTool(FunctionTool):
     def __post_init__(self) -> None:
         super().__post_init__()
         if self._agency_original_on_invoke_tool is not None:
+            bind_to_tool = getattr(self._agency_original_on_invoke_tool, "__agents_bind_function_tool__", None)
+            if callable(bind_to_tool):
+                self._agency_original_on_invoke_tool = cast(Callable[[Any, str], Awaitable[Any]], bind_to_tool(self))
             self.on_invoke_tool = self._invoke_with_manual_context
             setattr(self, _WRAPPED_ATTR, True)
 
@@ -55,7 +58,10 @@ def build_manual_tool_context(
 ) -> ToolContext[Any]:
     tool_call_id = _MANUAL_TOOL_CALL_ID_TEMPLATE.format(tool_name=tool_name)
     if isinstance(ctx, ToolContext):
-        if ctx.tool_name == tool_name and ctx.tool_namespace == tool_namespace and ctx.tool_arguments == input_json:
+        context_namespace_matches = ctx.tool_namespace == tool_namespace or (
+            tool_namespace is None and ctx.tool_namespace == tool_name
+        )
+        if ctx.tool_name == tool_name and context_namespace_matches and ctx.tool_arguments == input_json:
             return ctx
         return ToolContext.from_agent_context(
             ctx,

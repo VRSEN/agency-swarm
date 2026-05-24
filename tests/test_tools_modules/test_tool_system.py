@@ -5,6 +5,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from agents import RunContextWrapper
+from agents.tool import _get_function_tool_invoke_context
+from agents.tool_context import ToolContext
 from pydantic import Field
 
 from agency_swarm import Agent, BaseTool, GuardrailFunctionOutput, InputGuardrailTripwireTriggered
@@ -143,6 +145,23 @@ def base_tool():
 
 
 # --- Test Cases ---
+
+
+def test_send_message_advertises_tool_context_to_agents_sdk(
+    specific_send_message_tool,
+    mock_master_context,
+) -> None:
+    """The SDK should pass SendMessage the real ToolContext with call metadata."""
+    tool_context = ToolContext(
+        context=mock_master_context,
+        tool_name="send_message",
+        tool_call_id="call_send_message",
+        tool_arguments="{}",
+    )
+
+    selected_context = _get_function_tool_invoke_context(specific_send_message_tool, tool_context)
+
+    assert selected_context is tool_context
 
 
 @pytest.mark.asyncio

@@ -59,6 +59,7 @@ class MessageFormatter:
         "run_trace_id",
         "history_protocol",
     ]
+    ephemeral_content_part_field = "_agency_swarm_ephemeral"
 
     @staticmethod
     def resolve_history_protocol(agent: "Agent") -> str:
@@ -283,6 +284,7 @@ class MessageFormatter:
 
         # Add agency metadata to incoming messages
         messages_to_save: list[TResponseInputItem] = []
+        messages_for_runner: list[TResponseInputItem] = []
         for msg in processed_current_message_items:
             formatted_msg = MessageFormatter.add_agency_metadata(
                 msg,  # type: ignore[arg-type]
@@ -293,14 +295,15 @@ class MessageFormatter:
                 run_trace_id=run_trace_id,
                 history_protocol=history_protocol,
             )
-            messages_to_save.append(formatted_msg)  # type: ignore[arg-type]
+            messages_for_runner.append(MessageFormatter._strip_ephemeral_content(formatted_msg, drop_parts=False))
+            messages_to_save.append(MessageFormatter._strip_ephemeral_content(formatted_msg, drop_parts=True))
 
         # Save messages to flat storage
         thread_manager.add_messages(messages_to_save)
         logger.debug(f"Added {len(messages_to_save)} messages to storage.")
 
         # Get relevant conversation history for this agent pair
-        full_history = thread_manager.get_conversation_history(agent.name, sender_name)
+        full_history = existing_history + messages_for_runner
 
         # Prepare history for runner (sanitize and ensure content safety)
         history_for_runner = MessageFormatter.sanitize_tool_calls_in_history(full_history)  # type: ignore[arg-type]
@@ -311,6 +314,33 @@ class MessageFormatter:
         if MessageFormatter._ensure_store_false_replay_settings(agent, run_config_override):
             history_for_runner = sanitize_store_false_responses_input(history_for_runner)
         return history_for_runner  # type: ignore[return-value]
+
+    @staticmethod
+    def _strip_ephemeral_content(message: TResponseInputItem, *, drop_parts: bool) -> TResponseInputItem:
+        if not isinstance(message, dict):
+            return message
+        content = message.get("content")
+        if not isinstance(content, list):
+            return message
+
+        cleaned_content = []
+        changed = False
+        for part in content:
+            if not isinstance(part, dict):
+                cleaned_content.append(part)
+                continue
+            if part.get(MessageFormatter.ephemeral_content_part_field):
+                changed = True
+                if drop_parts:
+                    continue
+                part = {k: v for k, v in part.items() if k != MessageFormatter.ephemeral_content_part_field}
+            cleaned_content.append(part)
+
+        if not changed:
+            return message
+        cleaned_message = cast(dict[str, Any], message.copy())
+        cleaned_message["content"] = cleaned_content
+        return cast(TResponseInputItem, cleaned_message)
 
     @staticmethod
     def strip_agency_metadata(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:

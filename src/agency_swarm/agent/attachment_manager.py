@@ -60,6 +60,7 @@ class AttachmentManager:
         """
         pdf_file_ids = []
         code_interpreter_ids = []
+        code_interpreter_filenames = []
         image_file_ids = []
 
         for file_id in file_ids:
@@ -73,6 +74,7 @@ class AttachmentManager:
             ]
             if extension in code_interpreter_extensions:
                 code_interpreter_ids.append(file_id)
+                code_interpreter_filenames.append(filename)
             elif extension == ".pdf":
                 pdf_file_ids.append(file_id)
             elif extension in IMAGE_FILE_EXTENSIONS:
@@ -81,7 +83,7 @@ class AttachmentManager:
                 raise AgentsException(f"Unsupported file extension: {extension} for file {filename}")
 
         # Add PDF file and images to content (they can be directly attached to messages)
-        content_list = []
+        content_list: list[dict[str, Any]] = []
         for file_id in pdf_file_ids:
             if isinstance(file_id, str) and file_id.startswith("file-"):
                 logger.debug(f"Adding pdf file content item for file_id: {file_id}")
@@ -111,6 +113,18 @@ class AttachmentManager:
             logger.info(f"Adding file ids: {code_interpreter_ids} for {self.agent.name}'s code interpreter")
             self.agent.file_manager.add_code_interpreter_tool(code_interpreter_ids)  # type: ignore[union-attr]
             self._temp_code_interpreter_file_ids = code_interpreter_ids
+            filenames = ", ".join(code_interpreter_filenames)
+            content_list.append(
+                {
+                    "type": "input_text",
+                    "_agency_swarm_ephemeral": True,
+                    "text": (
+                        "The uploaded file(s) "
+                        f"{filenames} are available through the code_interpreter tool. "
+                        "Use that tool to inspect their contents before answering."
+                    ),
+                }
+            )
 
         return content_list
 
