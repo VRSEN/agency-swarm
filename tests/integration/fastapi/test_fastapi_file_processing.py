@@ -332,7 +332,10 @@ class TestFastAPIFileProcessing:
         """Test processing an HTML file via file_urls."""
         url = f"{fastapi_base_url}/test_agency/get_response"
         payload = {
-            "message": "Search for the secret phrase inside the document.",
+            "message": (
+                "Search the HTML document with the code interpreter. "
+                "Return exactly one complete uppercase secret phrase from the document, preserving word order."
+            ),
             "file_urls": {"webpage.html": f"{file_server_base_url}/test-html.html"},
         }
         headers = {}
