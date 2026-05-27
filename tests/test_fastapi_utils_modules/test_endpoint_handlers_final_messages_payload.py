@@ -1,5 +1,6 @@
 import json
 from collections.abc import AsyncGenerator
+from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
@@ -242,6 +243,132 @@ async def test_stream_endpoint_final_payload_rewrites_fake_ids(monkeypatch: pyte
     ]
     assert len(assistant_ids) == 2
     assert len(set(assistant_ids)) == 2
+
+
+@pytest.mark.asyncio
+async def test_stream_endpoint_final_payload_keeps_streamed_provider_assistant_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Final SSE history delta must keep assistant messages even when text streamed earlier."""
+
+    async def _noop_attach(_agency: Any) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.attach_persistent_mcp_servers",
+        _noop_attach,
+    )
+
+    thread_manager = _StubThreadManager()
+    provider_data = {"model": "xai/grok-4-1-fast-reasoning", "response_id": "response_1"}
+
+    async def _stream() -> AsyncGenerator[Any]:
+        item = SimpleNamespace(
+            id="message_1",
+            type="message",
+            provider_data=provider_data,
+            content=[],
+        )
+        yield SimpleNamespace(
+            type="raw_response_event",
+            data=SimpleNamespace(type="response.output_item.added", item=item, output_index=0),
+        )
+        yield SimpleNamespace(
+            type="raw_response_event",
+            data=SimpleNamespace(type="response.output_text.delta", item_id="message_1", delta="final text"),
+        )
+        thread_manager._messages.extend(
+            [
+                {"type": "message", "role": "user", "content": "hi", "id": None},
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "final text"}],
+                    "id": "msg_agent_run_1_2",
+                    "provider_data": provider_data,
+                },
+            ]
+        )
+
+    stream = StreamingRunResponse(_stream())
+    agency = _StubAgency(stream, thread_manager)
+
+    def agency_factory(**_kwargs: Any) -> _StubAgency:
+        return agency
+
+    handler = make_stream_endpoint(BaseRequest, agency_factory, lambda: None, ActiveRunRegistry())
+    response = await handler(http_request=_StubRequest(), request=BaseRequest(message="hi"), token=None)
+    chunks = [chunk async for chunk in response.body_iterator]
+
+    payload = _parse_sse_messages_payload(chunks)
+    new_messages = payload["new_messages"]
+
+    assert any(
+        isinstance(message, dict)
+        and message.get("role") == "assistant"
+        and message.get("id") == "msg_agent_run_1_2"
+        for message in new_messages
+    )
+
+
+@pytest.mark.asyncio
+async def test_stream_endpoint_public_sse_keeps_provider_response_completed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Public FastAPI SSE should not display-filter raw completed events."""
+
+    async def _noop_attach(_agency: Any) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.attach_persistent_mcp_servers",
+        _noop_attach,
+    )
+
+    thread_manager = _StubThreadManager()
+    provider_data = {"model": "xai/grok-4-1-fast-reasoning", "response_id": "response_1"}
+    item = SimpleNamespace(
+        id="message_1",
+        type="message",
+        provider_data=provider_data,
+        content=[SimpleNamespace(text="final text")],
+    )
+
+    async def _stream() -> AsyncGenerator[Any]:
+        yield SimpleNamespace(
+            type="raw_response_event",
+            data=SimpleNamespace(type="response.output_item.added", item=item, output_index=0),
+        )
+        yield SimpleNamespace(
+            type="raw_response_event",
+            data=SimpleNamespace(type="response.output_text.delta", item_id="message_1", delta="final text"),
+        )
+        yield SimpleNamespace(
+            type="raw_response_event",
+            data=SimpleNamespace(
+                type="response.completed",
+                response=SimpleNamespace(output=[item], status="completed", usage={"total_tokens": 1}),
+            ),
+        )
+
+    stream = StreamingRunResponse(_stream())
+    agency = _StubAgency(stream, thread_manager)
+
+    def agency_factory(**_kwargs: Any) -> _StubAgency:
+        return agency
+
+    handler = make_stream_endpoint(BaseRequest, agency_factory, lambda: None, ActiveRunRegistry())
+    response = await handler(http_request=_StubRequest(), request=BaseRequest(message="hi"), token=None)
+    chunks = [chunk async for chunk in response.body_iterator]
+
+    streamed = _parse_sse_stream_events(chunks)
+
+    assert any(
+        event.get("type") == "raw_response_event"
+        and isinstance(event.get("data"), dict)
+        and event["data"].get("type") == "response.completed"
+        for event in streamed
+    )
 
 
 @pytest.mark.asyncio

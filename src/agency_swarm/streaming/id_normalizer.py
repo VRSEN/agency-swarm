@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import deque
-from typing import Any
+from typing import Any, cast
 
 from agents import TResponseInputItem
 from agents.models.fake_id import FAKE_RESPONSES_ID
@@ -25,6 +25,8 @@ class StreamIdNormalizer:
         self._seq_by_agent_run_id: dict[str, int] = {}
         self._id_by_run_and_output_index: dict[tuple[str, int], str] = {}
         self._call_id_by_run_and_output_index: dict[tuple[str, int], str] = {}
+        self._id_by_provider_output: dict[tuple[str, str, str, int], str] = {}
+        self._pending_ids_by_provider_response_and_kind: dict[tuple[str, str, str], deque[str]] = {}
         self._pending_ids_by_run_and_kind: dict[tuple[str, str], deque[str]] = {}
         self._unmatched_output_indices_by_run_and_kind: dict[tuple[str, str], deque[int]] = {}
 
@@ -48,6 +50,9 @@ class StreamIdNormalizer:
             return event
 
         data_type = getattr(data, "type", None)
+        if data_type == "response.completed":
+            return self._normalize_completed_event(event, data, agent_run_id)
+
         output_index = self._coerce_output_index(getattr(data, "output_index", None))
         if output_index is None:
             return event
@@ -56,6 +61,23 @@ class StreamIdNormalizer:
         # Track tool call ids by output_index so argument deltas can be rewritten.
         if data_type in {"response.output_item.added", "response.output_item.done"}:
             item = getattr(data, "item", None)
+            if isinstance(item, BaseModel):
+                provider_response_id = self._provider_response_id(item)
+                if provider_response_id is not None and kind in {"message", "reasoning"}:
+                    stable_id = self._get_or_create_provider_stable_id(
+                        agent_run_id,
+                        provider_response_id,
+                        kind,
+                        output_index,
+                    )
+                    self._id_by_run_and_output_index[(agent_run_id, output_index)] = stable_id
+                    if getattr(item, "id", None) != stable_id:
+                        item_copy = item.model_copy(update={"id": stable_id})
+                        data_copy = data.model_copy(update={"item": item_copy})
+                        event.data = data_copy
+                        event_any.item_id = stable_id
+                    return event
+
             if isinstance(item, BaseModel) and getattr(item, "id", None) == FAKE_RESPONSES_ID:
                 call_id = getattr(item, "call_id", None)
                 if isinstance(call_id, str) and call_id and call_id != FAKE_RESPONSES_ID:
@@ -83,6 +105,13 @@ class StreamIdNormalizer:
 
         # Rewrite any raw event that references item_id (most ChatCmpl/LiteLLM events do).
         item_id_value = getattr(data, "item_id", None)
+        stable_item_id = self._id_by_run_and_output_index.get((agent_run_id, output_index))
+        if stable_item_id is not None and item_id_value is not None and item_id_value != stable_item_id:
+            data_copy = data.model_copy(update={"item_id": stable_item_id})
+            event.data = data_copy
+            event_any.item_id = stable_item_id
+            return event
+
         if item_id_value != FAKE_RESPONSES_ID:
             return event
 
@@ -102,6 +131,65 @@ class StreamIdNormalizer:
         event_any.item_id = stable_item_id
         return event
 
+    def _normalize_completed_event(
+        self,
+        event: RawResponsesStreamEvent,
+        data: BaseModel,
+        agent_run_id: str,
+    ) -> RawResponsesStreamEvent:
+        response = getattr(data, "response", None)
+        output = getattr(response, "output", None)
+        if not isinstance(response, BaseModel) or not isinstance(output, list):
+            return event
+
+        normalized_output: list[Any] = []
+        changed = False
+        for output_index, item in enumerate(output):
+            if not isinstance(item, BaseModel):
+                normalized_output.append(item)
+                continue
+
+            item_type = getattr(item, "type", None)
+            kind = "reasoning" if item_type == "reasoning" else "message" if item_type == "message" else None
+            if isinstance(item_type, str) and item_type.endswith("_call"):
+                kind = "tool"
+
+            item_id = getattr(item, "id", None)
+            provider_response_id = self._provider_response_id(item)
+            stable_id: str | None
+            if provider_response_id is not None and kind in {"message", "reasoning"}:
+                stable_id = self._get_or_create_provider_stable_id(
+                    agent_run_id,
+                    provider_response_id,
+                    kind,
+                    output_index,
+                )
+            else:
+                stable_id = self._id_by_run_and_output_index.get((agent_run_id, output_index))
+            if stable_id is None and item_id == FAKE_RESPONSES_ID:
+                call_id = getattr(item, "call_id", None)
+                if isinstance(call_id, str) and call_id and call_id != FAKE_RESPONSES_ID:
+                    stable_id = call_id
+                else:
+                    stable_id, _from_pending, _created_new = self._get_or_create_stable_id(
+                        agent_run_id, output_index, kind=kind
+                    )
+                self._id_by_run_and_output_index[(agent_run_id, output_index)] = stable_id
+
+            if stable_id is not None and item_id != stable_id:
+                item = item.model_copy(update={"id": stable_id})
+                changed = True
+
+            normalized_output.append(item)
+
+        if not changed:
+            return event
+
+        response_copy = response.model_copy(update={"output": normalized_output})
+        data_copy = data.model_copy(update={"response": response_copy})
+        cast(Any, event).data = data_copy
+        return event
+
     def _normalize_run_item_stream_event(self, event: RunItemStreamEvent) -> RunItemStreamEvent:
         agent_run_id = self._coerce_agent_run_id(getattr(event, "agent_run_id", None))
         if agent_run_id is None:
@@ -114,10 +202,6 @@ class StreamIdNormalizer:
         if not isinstance(raw_item, BaseModel):
             return event
 
-        raw_id = getattr(raw_item, "id", None)
-        if raw_id != FAKE_RESPONSES_ID:
-            return event
-
         name = event.name
         if name == "message_output_created":
             kind = "message"
@@ -126,6 +210,17 @@ class StreamIdNormalizer:
         elif name in {"tool_called", "tool_output", "handoff_requested", "handoff_occured"}:
             kind = "tool"
         else:
+            return event
+
+        provider_response_id = self._provider_response_id(raw_item)
+        raw_id = getattr(raw_item, "id", None)
+        if provider_response_id is not None and kind in {"message", "reasoning"}:
+            provider_stable_id = self._match_provider_id_for_run_item(agent_run_id, provider_response_id, kind=kind)
+            if provider_stable_id is None or raw_id == provider_stable_id:
+                return event
+            return self._rewrite_run_item_id(event, raw_item, provider_stable_id)
+
+        if raw_id != FAKE_RESPONSES_ID:
             return event
 
         stable_id: str | None = None
@@ -139,8 +234,16 @@ class StreamIdNormalizer:
             if stable_id is None:
                 return event
 
+        return self._rewrite_run_item_id(event, raw_item, stable_id)
+
+    def _rewrite_run_item_id(
+        self,
+        event: RunItemStreamEvent,
+        raw_item: BaseModel,
+        stable_id: str,
+    ) -> RunItemStreamEvent:
         raw_copy = raw_item.model_copy(update={"id": stable_id})
-        item_any: Any = item
+        item_any: Any = event.item
         item_any.raw_item = raw_copy
         event_any: Any = event
         event_any.item_id = stable_id
@@ -222,6 +325,38 @@ class StreamIdNormalizer:
         self._pending_ids_by_run_and_kind.setdefault((agent_run_id, kind), deque()).append(stable_id)
         return stable_id
 
+    def _get_or_create_provider_stable_id(
+        self,
+        agent_run_id: str,
+        provider_response_id: str,
+        kind: str,
+        output_index: int,
+    ) -> str:
+        key = (agent_run_id, provider_response_id, kind, output_index)
+        existing = self._id_by_provider_output.get(key)
+        if existing is not None:
+            return existing
+
+        stable_id = self._new_seq_id(agent_run_id)
+        self._id_by_provider_output[key] = stable_id
+        self._pending_ids_by_provider_response_and_kind.setdefault(
+            (agent_run_id, provider_response_id, kind),
+            deque(),
+        ).append(stable_id)
+        return stable_id
+
+    def _match_provider_id_for_run_item(
+        self,
+        agent_run_id: str,
+        provider_response_id: str,
+        *,
+        kind: str,
+    ) -> str | None:
+        pending = self._pending_ids_by_provider_response_and_kind.get((agent_run_id, provider_response_id, kind))
+        if not pending:
+            return None
+        return pending.popleft()
+
     def _new_seq_id(self, agent_run_id: str) -> str:
         seq = self._seq_by_agent_run_id.get(agent_run_id, 0)
         self._seq_by_agent_run_id[agent_run_id] = seq + 1
@@ -255,6 +390,16 @@ class StreamIdNormalizer:
             return int(value)
         except Exception:
             return None
+
+    @staticmethod
+    def _provider_response_id(item: BaseModel) -> str | None:
+        provider_data = getattr(item, "provider_data", None)
+        if not isinstance(provider_data, dict):
+            return None
+        response_id = provider_data.get("response_id")
+        if isinstance(response_id, str) and response_id:
+            return response_id
+        return None
 
     @staticmethod
     def _kind_for_raw_event(data_type: Any, *, data: BaseModel) -> str | None:

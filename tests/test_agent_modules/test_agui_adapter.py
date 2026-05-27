@@ -374,6 +374,36 @@ def test_run_item_stream_with_annotations_returns_custom_event():
     assert custom.value["annotations"] == [annotation.model_dump()]
 
 
+def test_run_item_stream_with_annotations_survives_duplicate_message_filter():
+    adapter = AguiAdapter()
+    run_id = "annotated-filtered"
+    annotation = AnnotationFileCitation(file_id="file-annot", filename="doc.pdf", index=1, type="file_citation")
+    provider_data = {"model": "gemini/gemini-2.5-flash", "response_id": "response_1"}
+    streamed_item = SimpleNamespace(id="msg-annot", type="message", provider_data=provider_data, content=[])
+    output_content = ResponseOutputText(annotations=[annotation], text="Answer", type="output_text")
+    raw_item = SimpleNamespace(
+        id="msg-annot",
+        type="message",
+        provider_data=provider_data,
+        content=[output_content],
+    )
+    item = SimpleNamespace(raw_item=raw_item)
+
+    adapter.openai_to_agui_events(
+        make_raw_event(SimpleNamespace(type="response.output_item.added", item=streamed_item, output_index=0)),
+        run_id=run_id,
+    )
+    adapter.openai_to_agui_events(
+        make_raw_event(SimpleNamespace(type="response.output_text.delta", item_id="msg-annot", delta="Answer")),
+        run_id=run_id,
+    )
+    event = adapter.openai_to_agui_events(make_stream_event("message_output_created", item), run_id=run_id)
+
+    assert isinstance(event, CustomEvent)
+    assert event.name == "annotated_output"
+    assert event.value["annotations"] == [annotation.model_dump()]
+
+
 def test_run_item_stream_ignores_message_without_text():
     adapter = AguiAdapter()
     run_id = "missing-text"

@@ -29,6 +29,7 @@ except ImportError as exc:
         "ag_ui.core is required for the AG-UI adapter. Install with `pip install ag-ui-protocol`."
     ) from exc
 
+from agency_swarm.ui.core.stream_event_filter import StreamDisplayEventFilter
 from agency_swarm.utils.serialization import serialize
 
 logger = logging.getLogger(__name__)
@@ -52,13 +53,16 @@ class AguiAdapter:
         """Initialize a new AguiAdapter with clean per-instance run state."""
         # Per-instance run state to avoid global mutable state issues
         self._run_state: dict[str, dict[str, Any]] = {}
+        self._display_filter_by_run_id: dict[str, StreamDisplayEventFilter] = {}
 
     def clear_run_state(self, run_id: str | None = None) -> None:
         """Clear run state for a specific run_id or all runs if run_id is None."""
         if run_id is None:
             self._run_state.clear()
+            self._display_filter_by_run_id.clear()
         else:
             self._run_state.pop(run_id, None)
+            self._display_filter_by_run_id.pop(run_id, None)
 
     def openai_to_agui_events(
         self,
@@ -73,6 +77,13 @@ class AguiAdapter:
 
         logger.debug("Received event: %s", event)
         try:
+            display_filter = self._display_filter_by_run_id.setdefault(run_id, StreamDisplayEventFilter())
+            if not display_filter.should_emit(event):
+                annotated_event = self._annotated_output_event(event)
+                if annotated_event is not None:
+                    return annotated_event
+                return None
+
             converted_event = None
             if getattr(event, "type", None) == "raw_response_event":
                 converted_event = self._handle_raw_response(event.data, call_id_by_item, call_id_by_output_index)
@@ -167,6 +178,54 @@ class AguiAdapter:
                 oai_messages.append({"role": "system", "content": msg.content})
 
         return oai_messages
+
+    @staticmethod
+    def _annotated_output_event(event) -> CustomEvent | None:
+        """Return the annotation custom event from a suppressed message snapshot."""
+        snapshot = AguiAdapter.message_snapshot_event(event)
+        if snapshot is None:
+            return None
+        output_content = AguiAdapter._message_output_content(event)
+        output_text = getattr(output_content, "text", None)
+        annotations = getattr(output_content, "annotations", None)
+        if not output_text or not annotations:
+            return None
+        raw_item = getattr(getattr(event, "item", None), "raw_item", None)
+        call_id = getattr(raw_item, "id", None)
+        return CustomEvent(
+            type=EventType.CUSTOM,
+            name="annotated_output",
+            value={
+                "id": call_id,
+                "role": "assistant",
+                "content": output_text,
+                "annotations": [a.model_dump() for a in annotations],
+            },
+        )
+
+    @staticmethod
+    def message_snapshot_event(event) -> MessagesSnapshotEvent | None:
+        """Return an assistant snapshot for endpoint state, without implying it should be emitted."""
+        if (
+            getattr(event, "type", None) != "run_item_stream_event"
+            or getattr(event, "name", None) != "message_output_created"
+        ):
+            return None
+        raw_item = getattr(getattr(event, "item", None), "raw_item", None)
+        output_content = AguiAdapter._message_output_content(event)
+        output_text = getattr(output_content, "text", None)
+        if not output_text:
+            return None
+        call_id = getattr(raw_item, "id", None)
+        return MessagesSnapshotEvent(
+            type=EventType.MESSAGES_SNAPSHOT,
+            messages=[AssistantMessage(id=call_id, role="assistant", content=output_text)],  # type: ignore[arg-type]
+        )
+
+    @staticmethod
+    def _message_output_content(event) -> Any:
+        raw_item = getattr(getattr(event, "item", None), "raw_item", None)
+        return (getattr(raw_item, "content", None) or [None])[0]
 
     def _tool_meta(self, raw_item):
         """Return (call_id, tool_name, arguments) for a tool *raw_item*."""

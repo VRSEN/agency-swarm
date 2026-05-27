@@ -8,6 +8,8 @@ from rich.markup import escape as rich_escape
 from rich.panel import Panel
 from rich.syntax import Syntax
 
+from agency_swarm.ui.core.stream_event_filter import StreamDisplayEventFilter
+
 
 class ConsoleEventAdapter:
     """
@@ -36,6 +38,7 @@ class ConsoleEventAdapter:
         self.show_reasoning = bool(show_reasoning)
         # Names of all agents in the agency, used to display correct names on handoffs
         self.agents = agents or []
+        self._display_filter = StreamDisplayEventFilter()
 
     def set_show_reasoning(self, enabled: bool) -> None:
         self.show_reasoning = bool(enabled)
@@ -77,6 +80,8 @@ class ConsoleEventAdapter:
 
     def openai_to_message_output(self, event: Any, recipient_agent: str):
         try:
+            if not self._display_filter.should_emit(event):
+                return
             # Ensure live-rendering attributes exist before processing events
             self_dict = getattr(self, "__dict__", {})
             if "reasoning_output" not in self_dict:
@@ -343,6 +348,10 @@ class ConsoleEventAdapter:
 
         item = data.item
         if getattr(item, "type", "") == "reasoning":
+            if self._display_filter.has_streamed_reasoning(item):
+                self._finalize_open_reasoning()
+                self.reasoning_buffer = ""
+                return
             try:
                 summaries = getattr(item, "summary", []) or []
                 final_text = getattr(summaries[0], "text", "") if summaries else ""

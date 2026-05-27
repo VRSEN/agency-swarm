@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, cast
 from weakref import WeakKeyDictionary
 
-from ag_ui.core import EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
+from ag_ui.core import EventType, RunErrorEvent, RunFinishedEvent, RunStartedEvent
 from ag_ui.encoder import EventEncoder
 from agents import (
     Model,
@@ -49,6 +49,7 @@ from agency_swarm import (
 )
 from agency_swarm.agent.execution_stream_response import StreamingRunResponse
 from agency_swarm.agent.initialization import apply_framework_defaults
+from agency_swarm.integrations.fastapi_utils.agui_stream import encode_agui_stream_events
 from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_urls
 from agency_swarm.integrations.fastapi_utils.logging_middleware import get_logs_endpoint_impl
 from agency_swarm.integrations.fastapi_utils.override_policy import (
@@ -167,6 +168,7 @@ def _apply_request_model_override(agent: Agent, model_name: str, config: ClientC
         if _is_litellm_model(model_name):
             _apply_request_litellm_model(agent, model_name)
             return False
+        model_name = _normalize_openai_model_name(model_name)
         client = gateway_client if gateway_client is not None else model._client
         agent.model = _rebuild_openai_responses_model(model, model_name, client)
         return gateway_client is not None
@@ -175,11 +177,16 @@ def _apply_request_model_override(agent: Agent, model_name: str, config: ClientC
         if _is_litellm_model(model_name):
             _apply_request_litellm_model(agent, model_name)
             return False
+        model_name = _normalize_openai_model_name(model_name)
         client = gateway_client if gateway_client is not None else model._client
         agent.model = OpenAIChatCompletionsModel(model=model_name, openai_client=client)
         return gateway_client is not None
 
     if _LITELLM_AVAILABLE and LitellmModel is not None and isinstance(model, LitellmModel):
+        if _is_openai_model_name(model_name) and gateway_client is not None:
+            model_name = _normalize_openai_model_name(model_name)
+            agent.model = OpenAIResponsesModel(model=model_name, openai_client=gateway_client)
+            return True
         actual = model_name[8:] if model_name.startswith("litellm/") else model_name
         agent.model = LitellmModel(model=actual, base_url=model.base_url, api_key=model.api_key)
         return False
@@ -193,7 +200,7 @@ def _apply_request_model_override(agent: Agent, model_name: str, config: ClientC
         # names (e.g. "anthropic/claude-sonnet-4") still reach the gateway — the downstream
         # _agent_supports_openai_client_override gate rejects those names and would
         # otherwise drop the request-scoped client entirely.
-        agent.model = OpenAIResponsesModel(model=model_name, openai_client=gateway_client)
+        agent.model = OpenAIResponsesModel(model=_normalize_openai_model_name(model_name), openai_client=gateway_client)
         return True
 
     agent.model = model_name
@@ -887,31 +894,13 @@ def make_agui_chat_endpoint(
             )
 
             try:
-                # Create AguiAdapter instance with clean state for this request
-                agui_adapter = AguiAdapter()
-
-                # Store in dict format to avoid converting to classes
-                snapshot_messages = [message.model_dump() for message in request.messages]
-                async for event in agency.get_response_stream(
-                    message=request.messages[-1].content,
-                    context_override=request.user_context,
-                    additional_instructions=request.additional_instructions,
-                    file_ids=combined_file_ids or None,
+                async for chunk in encode_agui_stream_events(
+                    agency=agency,
+                    request=request,
+                    encoder=encoder,
+                    combined_file_ids=combined_file_ids,
                 ):
-                    agui_event = agui_adapter.openai_to_agui_events(
-                        event,
-                        run_id=request.run_id,
-                    )
-                    if agui_event:
-                        agui_events = agui_event if isinstance(agui_event, list) else [agui_event]
-                        for agui_evt in agui_events:
-                            if isinstance(agui_evt, MessagesSnapshotEvent):
-                                snapshot_messages.append(agui_evt.messages[0].model_dump())
-                                yield encoder.encode(
-                                    MessagesSnapshotEvent(type=EventType.MESSAGES_SNAPSHOT, messages=snapshot_messages)
-                                )
-                            else:
-                                yield encoder.encode(agui_evt)
+                    yield chunk
 
                 yield encoder.encode(
                     RunFinishedEvent(
@@ -1355,6 +1344,13 @@ def _is_openai_model_name(model_name: str) -> bool:
         return True
     prefix, _rest = model_name.split("/", 1)
     return prefix == "openai"
+
+
+def _normalize_openai_model_name(model_name: str) -> str:
+    """Strip the OpenAI provider prefix before calling OpenAI model wrappers."""
+    if model_name.startswith("openai/"):
+        return model_name.removeprefix("openai/")
+    return model_name
 
 
 def _get_model_name_for_override_logging(agent: Agent) -> str | None:
