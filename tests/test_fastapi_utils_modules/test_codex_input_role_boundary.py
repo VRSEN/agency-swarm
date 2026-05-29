@@ -98,7 +98,7 @@ def _agency_factory(**kwargs: Any) -> Agency:
     )
 
 
-def _prepare_history_roles(agent: Agent, run_config: RunConfig) -> list[str]:
+def _prepare_history_roles(agent: Agent, run_config: RunConfig | None) -> list[str]:
     replayed = _history()
     thread_manager = ThreadManager()
     thread_manager._store.messages = replayed
@@ -120,12 +120,11 @@ def _prepare_history_roles(agent: Agent, run_config: RunConfig) -> list[str]:
 
 
 def _multi_provider_unknown_prefix_model_id(base_url: str) -> MultiProvider:
+    if "unknown_prefix_mode" not in inspect.signature(MultiProvider).parameters:
+        pytest.skip("MultiProvider unknown_prefix_mode is not available in this Agents SDK")
     kwargs = {"openai_api_key": "sk-test", "openai_base_url": base_url}
-    if "unknown_prefix_mode" in inspect.signature(MultiProvider).parameters:
-        kwargs["unknown_prefix_mode"] = "model_id"
+    kwargs["unknown_prefix_mode"] = "model_id"
     provider = MultiProvider(**kwargs)
-    if getattr(provider, "_unknown_prefix_mode", None) != "model_id":
-        provider._unknown_prefix_mode = "model_id"
     routed, resolved = provider._resolve_prefixed_model(
         original_model_name="anthropic/foo",
         prefix="anthropic",
@@ -145,7 +144,7 @@ def test_prepare_history_rewrites_system_replay_for_codex_openai_provider_run_co
     assert _prepare_history_roles(agent, run_config) == ["developer", "developer", "developer", "user"]
 
 
-def test_prepare_history_rewrites_system_replay_for_codex_openai_provider_base_url_over_default(
+def test_prepare_history_keeps_system_replay_for_codex_openai_provider_base_url_with_non_codex_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from agency_swarm.messages import codex_input
@@ -158,7 +157,7 @@ def test_prepare_history_rewrites_system_replay_for_codex_openai_provider_base_u
         codex_input, "get_default_openai_client", lambda: AsyncOpenAI(api_key="sk-test", base_url=OPENAI_BASE_URL)
     )
 
-    assert _prepare_history_roles(agent, run_config) == ["developer", "developer", "developer", "user"]
+    assert _prepare_history_roles(agent, run_config) == ["system", "system", "system", "user"]
 
 
 def test_prepare_history_rewrites_system_replay_for_codex_openai_provider_custom_model_name() -> None:
@@ -183,6 +182,18 @@ def test_prepare_history_rewrites_system_replay_for_lazy_openai_provider_codex_e
     monkeypatch.setenv("OPENAI_BASE_URL", CODEX_BASE_URL)
 
     assert _prepare_history_roles(agent, run_config) == ["developer", "developer", "developer", "user"]
+
+
+def test_prepare_history_rewrites_system_replay_for_default_provider_codex_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from agency_swarm.messages import codex_input
+
+    agent = Agent(name="A", instructions="normal agent instructions", model="gpt-5.4-mini")
+    monkeypatch.setattr(codex_input, "get_default_openai_client", lambda: None)
+    monkeypatch.setenv("OPENAI_BASE_URL", CODEX_BASE_URL)
+
+    assert _prepare_history_roles(agent, None) == ["developer", "developer", "developer", "user"]
 
 
 def test_prepare_history_rewrites_system_replay_for_codex_multi_provider_base_url() -> None:
@@ -221,7 +232,7 @@ def test_prepare_history_keeps_system_replay_for_non_codex_openai_provider_run_c
     assert _prepare_history_roles(agent, run_config) == ["system", "system", "system", "user"]
 
 
-def test_prepare_history_keeps_system_replay_for_non_codex_openai_provider_base_url_over_default(
+def test_prepare_history_rewrites_system_replay_for_non_codex_openai_provider_base_url_with_codex_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from agency_swarm.messages import codex_input
@@ -234,7 +245,7 @@ def test_prepare_history_keeps_system_replay_for_non_codex_openai_provider_base_
         codex_input, "get_default_openai_client", lambda: AsyncOpenAI(api_key="sk-test", base_url=CODEX_BASE_URL)
     )
 
-    assert _prepare_history_roles(agent, run_config) == ["system", "system", "system", "user"]
+    assert _prepare_history_roles(agent, run_config) == ["developer", "developer", "developer", "user"]
 
 
 def test_prepare_history_keeps_system_replay_for_explicit_non_openai_provider(

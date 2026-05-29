@@ -30,7 +30,7 @@ def agent_uses_codex_browser_auth(agent: object, run_config_override: object | N
             return provider_codex
         if not _is_openai_model_name(model):
             return False
-        return _client_uses_codex(get_default_openai_client())
+        return _default_openai_route_uses_codex()
     return False
 
 
@@ -66,16 +66,20 @@ def _provider_uses_codex(provider: object | None, model: str) -> bool | None:
         return False
     if provider._client is not None:
         return _client_uses_codex(provider._client)
-    base_url = getattr(provider, "_stored_base_url", None)
-    if isinstance(base_url, str):
-        return is_codex_base_url(base_url)
     default_client = get_default_openai_client()
     if default_client is not None:
         return _client_uses_codex(default_client)
-    env_base_url = os.getenv("OPENAI_BASE_URL")
-    if env_base_url is not None:
-        return is_codex_base_url(env_base_url)
-    return None
+    base_url = getattr(provider, "_stored_base_url", None)
+    if isinstance(base_url, str):
+        return is_codex_base_url(base_url)
+    return is_codex_base_url(os.getenv("OPENAI_BASE_URL"))
+
+
+def _default_openai_route_uses_codex() -> bool:
+    default_client = get_default_openai_client()
+    if default_client is not None:
+        return _client_uses_codex(default_client)
+    return is_codex_base_url(os.getenv("OPENAI_BASE_URL"))
 
 
 def _multi_provider_provider_for_model(provider: MultiProvider, model: str) -> object | None:
