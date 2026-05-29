@@ -2,6 +2,7 @@ from typing import Any
 
 from agents.models._openai_shared import get_default_openai_client
 from agents.models.openai_chatcompletions import OpenAIChatCompletionsModel
+from agents.models.openai_provider import OpenAIProvider
 from agents.models.openai_responses import OpenAIResponsesModel
 from openai import AsyncOpenAI
 
@@ -21,7 +22,10 @@ def agent_uses_codex_browser_auth(agent: object, run_config_override: object | N
     if isinstance(model, OpenAIResponsesModel | OpenAIChatCompletionsModel):
         return _client_uses_codex(model._client)
     if isinstance(model, str):
-        return _is_openai_model_name(model) and _client_uses_codex(get_default_openai_client())
+        if not _is_openai_model_name(model):
+            return False
+        provider = getattr(run_config_override, "model_provider", None)
+        return _provider_uses_codex(provider) or _client_uses_codex(get_default_openai_client())
     return False
 
 
@@ -40,6 +44,15 @@ def _client_uses_codex(client: AsyncOpenAI | None) -> bool:
     if client is None:
         return False
     return is_codex_base_url(str(client.base_url))
+
+
+def _provider_uses_codex(provider: object | None) -> bool:
+    if not isinstance(provider, OpenAIProvider):
+        return False
+    if _client_uses_codex(provider._client):
+        return True
+    base_url = getattr(provider, "_stored_base_url", None)
+    return isinstance(base_url, str) and is_codex_base_url(base_url)
 
 
 def _is_openai_model_name(model: str) -> bool:

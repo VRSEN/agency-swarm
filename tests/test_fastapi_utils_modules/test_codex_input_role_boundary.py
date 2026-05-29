@@ -2,8 +2,11 @@ from collections.abc import AsyncGenerator
 from typing import Any, cast
 
 import pytest
+from agents import RunConfig
+from agents.models.openai_provider import OpenAIProvider
+from openai import AsyncOpenAI
 
-from agency_swarm import Agency, Agent
+from agency_swarm import Agency, AgencyContext, Agent
 from agency_swarm.integrations.fastapi_utils.endpoint_handlers import (
     ActiveRunRegistry,
     make_agui_chat_endpoint,
@@ -11,6 +14,8 @@ from agency_swarm.integrations.fastapi_utils.endpoint_handlers import (
     make_stream_endpoint,
 )
 from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest, ClientConfig, RunAgentInputCustom
+from agency_swarm.messages import MessageFormatter
+from agency_swarm.utils.thread import ThreadManager
 
 CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex"
 OPENAI_BASE_URL = "https://api.openai.com/v1"
@@ -83,6 +88,58 @@ def _agency_factory(**kwargs: Any) -> Agency:
     return Agency(
         Agent(name="A", instructions="normal agent instructions"), load_threads_callback=kwargs["load_threads_callback"]
     )
+
+
+def _prepare_history_roles(agent: Agent, run_config: RunConfig) -> list[str]:
+    replayed = _history()
+    thread_manager = ThreadManager()
+    thread_manager._store.messages = replayed
+    context = AgencyContext(agency_instance=None, thread_manager=thread_manager)
+
+    history = cast(
+        list[dict[str, Any]],
+        MessageFormatter.prepare_history_for_runner(
+            [{"role": "user", "content": "next"}],
+            agent,
+            None,
+            context,
+            run_config_override=run_config,
+        ),
+    )
+
+    assert _roles(replayed[:3]) == ["system", "system", "system"]
+    return _roles(history)
+
+
+def test_prepare_history_rewrites_system_replay_for_codex_openai_provider_run_config() -> None:
+    agent = Agent(name="A", instructions="normal agent instructions", model="gpt-5.4-mini")
+    run_config = RunConfig(
+        model_provider=OpenAIProvider(api_key="sk-test", base_url=CODEX_BASE_URL),
+    )
+
+    assert _prepare_history_roles(agent, run_config) == ["developer", "developer", "developer", "user"]
+
+
+def test_prepare_history_keeps_system_replay_for_non_codex_openai_provider_run_config() -> None:
+    agent = Agent(name="A", instructions="normal agent instructions", model="gpt-5.4-mini")
+    run_config = RunConfig(
+        model_provider=OpenAIProvider(api_key="sk-test", base_url=OPENAI_BASE_URL),
+    )
+
+    assert _prepare_history_roles(agent, run_config) == ["system", "system", "system", "user"]
+
+
+def test_prepare_history_keeps_system_replay_for_custom_model_with_codex_cached_client() -> None:
+    from tests.deterministic_model import DeterministicModel
+
+    agent = Agent(
+        name="A",
+        instructions="normal agent instructions",
+        model=DeterministicModel(model="anthropic/claude-sonnet-4"),
+    )
+    agent._openai_client = AsyncOpenAI(api_key="sk-test", base_url=CODEX_BASE_URL)
+
+    assert _prepare_history_roles(agent, RunConfig()) == ["system", "system", "system", "user"]
 
 
 @pytest.mark.asyncio
