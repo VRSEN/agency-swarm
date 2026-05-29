@@ -82,8 +82,6 @@ def _multi_provider_provider_for_model(provider: MultiProvider, model: str) -> o
             return mapped
     if prefix == "openai":
         return provider.openai_provider
-    if getattr(provider, "_unknown_prefix_mode", None) == "model_id":
-        return provider.openai_provider
     return None
 
 
