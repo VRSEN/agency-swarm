@@ -23,7 +23,6 @@ from openai.types.responses import (
 )
 from openai.types.responses.response_file_search_tool_call import Result as ResponseFileSearchResult
 
-from agency_swarm.messages.codex_input import agent_uses_codex_browser_auth, rewrite_system_input_roles_for_codex
 from agency_swarm.messages.response_input_sanitizer import (
     REASONING_ENCRYPTED_CONTENT_INCLUDE,
     ensure_store_false_reasoning_encrypted_content,
@@ -318,8 +317,6 @@ class MessageFormatter:
         history_for_runner = MessageFormatter.sanitize_replayed_tool_item_ids(history_for_runner)
         if MessageFormatter._ensure_store_false_replay_settings(agent, run_config_override):
             history_for_runner = sanitize_store_false_responses_input(history_for_runner)
-        if agent_uses_codex_browser_auth(agent, run_config_override):
-            history_for_runner = rewrite_system_input_roles_for_codex(history_for_runner)
         return history_for_runner  # type: ignore[return-value]
 
     @staticmethod

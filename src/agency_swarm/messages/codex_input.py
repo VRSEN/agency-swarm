@@ -59,10 +59,11 @@ def _client_uses_codex(client: AsyncOpenAI | None) -> bool:
 
 def _provider_uses_codex(provider: object | None, model: str | None) -> bool | None:
     if isinstance(provider, MultiProvider):
-        routed_provider = _multi_provider_provider_for_model(provider, model)
-        if routed_provider is None:
+        route = _multi_provider_route_for_model(provider, model)
+        if route is None:
             return False
-        routed_codex = _provider_uses_codex(routed_provider, model)
+        routed_provider, routed_model = route
+        routed_codex = _provider_uses_codex(routed_provider, routed_model)
         if routed_codex is None and routed_provider is not provider.openai_provider:
             return False
         return routed_codex
@@ -88,20 +89,24 @@ def _default_openai_route_uses_codex() -> bool:
     return is_codex_base_url(os.getenv("OPENAI_BASE_URL"))
 
 
-def _multi_provider_provider_for_model(provider: MultiProvider, model: str | None) -> object | None:
-    if model is None or "/" not in model:
-        return provider.openai_provider
-    prefix, _rest = model.split("/", 1)
+def _multi_provider_route_for_model(provider: MultiProvider, model: str | None) -> tuple[object, str | None] | None:
+    if model is None:
+        return provider.openai_provider, None
+    if "/" not in model:
+        return provider.openai_provider, model
+    prefix, rest = model.split("/", 1)
     if provider.provider_map is not None:
         mapped = provider.provider_map.get_provider(prefix)
         if mapped is not None:
-            return mapped
+            return mapped, rest
     if prefix in {"litellm", "any-llm"}:
         return None
     if prefix == "openai":
-        return provider.openai_provider
+        if getattr(provider, "_openai_prefix_mode", None) == "model_id":
+            return provider.openai_provider, model
+        return provider.openai_provider, rest
     if getattr(provider, "_unknown_prefix_mode", None) == "model_id":
-        return provider.openai_provider
+        return provider.openai_provider, model
     return None
 
 

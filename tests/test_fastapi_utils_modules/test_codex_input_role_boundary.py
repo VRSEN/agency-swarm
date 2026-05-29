@@ -1,15 +1,23 @@
+import asyncio
 import inspect
 from collections.abc import AsyncGenerator
 from typing import Any, cast
 
 import pytest
-from agents import RunConfig
+from agents import ModelSettings, RunConfig, Tool
+from agents.agent_output import AgentOutputSchemaBase
+from agents.handoffs import Handoff as SDKHandoff
+from agents.items import ModelResponse, TResponseInputItem
 from agents.models.interface import Model, ModelProvider
-from agents.models.multi_provider import MultiProvider
+from agents.models.multi_provider import MultiProvider, MultiProviderMap
 from agents.models.openai_provider import OpenAIProvider
+from agents.models.openai_responses import OpenAIResponsesModel
+from agents.run_config import CallModelData, ModelInputData
 from openai import AsyncOpenAI
+from openai.types.responses.response_prompt_param import ResponsePromptParam
 
 from agency_swarm import Agency, AgencyContext, Agent
+from agency_swarm.agent.codex_model_input import with_codex_model_input_role_rewrite
 from agency_swarm.integrations.fastapi_utils.endpoint_handlers import (
     ActiveRunRegistry,
     make_agui_chat_endpoint,
@@ -18,7 +26,9 @@ from agency_swarm.integrations.fastapi_utils.endpoint_handlers import (
 )
 from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest, ClientConfig, RunAgentInputCustom
 from agency_swarm.messages import MessageFormatter
+from agency_swarm.tools import Handoff
 from agency_swarm.utils.thread import ThreadManager
+from tests.deterministic_model import DeterministicModel, _build_message_response
 
 CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex"
 OPENAI_BASE_URL = "https://api.openai.com/v1"
@@ -53,6 +63,32 @@ async def _empty_stream() -> AsyncGenerator[dict[str, str]]:
 class _NonOpenAIProvider(ModelProvider):
     def get_model(self, model_name: str | None) -> Model:
         raise AssertionError(f"unexpected model lookup for {model_name}")
+
+
+class _CapturingResponsesModel(OpenAIResponsesModel):
+    def __init__(self, *, base_url: str) -> None:
+        super().__init__(
+            model="gpt-5.4-mini",
+            openai_client=AsyncOpenAI(api_key="sk-test", base_url=base_url),
+        )
+        self.inputs: list[list[dict[str, Any]]] = []
+
+    async def get_response(
+        self,
+        system_instructions: str | None,
+        input: str | list[TResponseInputItem],
+        model_settings: ModelSettings,
+        tools: list[Tool],
+        output_schema: AgentOutputSchemaBase | None,
+        handoffs: list[SDKHandoff],
+        tracing,
+        previous_response_id: str | None = None,
+        conversation_id: str | None = None,
+        prompt: ResponsePromptParam | None = None,
+    ) -> ModelResponse:
+        if isinstance(input, list):
+            self.inputs.append(cast(list[dict[str, Any]], input))
+        return _build_message_response("worker done", str(self.model))
 
 
 async def _attach_noop(_agency: Agency) -> None:
@@ -98,7 +134,19 @@ def _agency_factory(**kwargs: Any) -> Agency:
     )
 
 
-def _prepare_history_roles(agent: Agent, run_config: RunConfig | None) -> list[str]:
+async def _filtered_roles(
+    run_config: RunConfig,
+    agent: Agent,
+    messages: list[dict[str, Any]],
+) -> list[str]:
+    model_data = ModelInputData(input=cast(list[TResponseInputItem], messages), instructions=None)
+    filter_func = run_config.call_model_input_filter
+    assert filter_func is not None
+    filtered = await filter_func(CallModelData(model_data=model_data, agent=agent, context=None))
+    return _roles(cast(list[dict[str, Any]], filtered.input))
+
+
+def _model_call_roles(agent: Agent, run_config: RunConfig | None) -> list[str]:
     replayed = _history()
     thread_manager = ThreadManager()
     thread_manager._store.messages = replayed
@@ -116,7 +164,9 @@ def _prepare_history_roles(agent: Agent, run_config: RunConfig | None) -> list[s
     )
 
     assert _roles(replayed[:3]) == ["system", "system", "system"]
-    return _roles(history)
+    assert _roles(history) == ["system", "system", "system", "user"]
+    wrapped = with_codex_model_input_role_rewrite(run_config or RunConfig())
+    return asyncio.run(_filtered_roles(wrapped, agent, history))
 
 
 def _multi_provider_unknown_prefix_model_id(base_url: str) -> MultiProvider:
@@ -135,25 +185,25 @@ def _multi_provider_unknown_prefix_model_id(base_url: str) -> MultiProvider:
     return provider
 
 
-def test_prepare_history_rewrites_system_replay_for_codex_openai_provider_run_config() -> None:
+def test_model_call_rewrites_system_replay_for_codex_openai_provider_run_config() -> None:
     agent = Agent(name="A", instructions="normal agent instructions", model="gpt-5.4-mini")
     run_config = RunConfig(
         model_provider=OpenAIProvider(api_key="sk-test", base_url=CODEX_BASE_URL),
     )
 
-    assert _prepare_history_roles(agent, run_config) == ["developer", "developer", "developer", "user"]
+    assert _model_call_roles(agent, run_config) == ["developer", "developer", "developer", "user"]
 
 
-def test_prepare_history_rewrites_system_replay_for_codex_openai_provider_default_model() -> None:
+def test_model_call_rewrites_system_replay_for_codex_openai_provider_default_model() -> None:
     agent = Agent(name="A", instructions="normal agent instructions", model=None)
     run_config = RunConfig(
         model_provider=OpenAIProvider(api_key="sk-test", base_url=CODEX_BASE_URL),
     )
 
-    assert _prepare_history_roles(agent, run_config) == ["developer", "developer", "developer", "user"]
+    assert _model_call_roles(agent, run_config) == ["developer", "developer", "developer", "user"]
 
 
-def test_prepare_history_keeps_system_replay_for_codex_openai_provider_base_url_with_non_codex_default(
+def test_model_call_keeps_system_replay_for_codex_openai_provider_base_url_with_non_codex_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from agency_swarm.messages import codex_input
@@ -166,19 +216,19 @@ def test_prepare_history_keeps_system_replay_for_codex_openai_provider_base_url_
         codex_input, "get_default_openai_client", lambda: AsyncOpenAI(api_key="sk-test", base_url=OPENAI_BASE_URL)
     )
 
-    assert _prepare_history_roles(agent, run_config) == ["system", "system", "system", "user"]
+    assert _model_call_roles(agent, run_config) == ["system", "system", "system", "user"]
 
 
-def test_prepare_history_rewrites_system_replay_for_codex_openai_provider_custom_model_name() -> None:
+def test_model_call_rewrites_system_replay_for_codex_openai_provider_custom_model_name() -> None:
     agent = Agent(name="A", instructions="normal agent instructions", model="anthropic/foo")
     run_config = RunConfig(
         model_provider=OpenAIProvider(api_key="sk-test", base_url=CODEX_BASE_URL),
     )
 
-    assert _prepare_history_roles(agent, run_config) == ["developer", "developer", "developer", "user"]
+    assert _model_call_roles(agent, run_config) == ["developer", "developer", "developer", "user"]
 
 
-def test_prepare_history_rewrites_system_replay_for_lazy_openai_provider_codex_env(
+def test_model_call_rewrites_system_replay_for_lazy_openai_provider_codex_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from agency_swarm.messages import codex_input
@@ -190,10 +240,10 @@ def test_prepare_history_rewrites_system_replay_for_lazy_openai_provider_codex_e
     monkeypatch.setattr(codex_input, "get_default_openai_client", lambda: None)
     monkeypatch.setenv("OPENAI_BASE_URL", CODEX_BASE_URL)
 
-    assert _prepare_history_roles(agent, run_config) == ["developer", "developer", "developer", "user"]
+    assert _model_call_roles(agent, run_config) == ["developer", "developer", "developer", "user"]
 
 
-def test_prepare_history_rewrites_system_replay_for_default_provider_codex_env(
+def test_model_call_rewrites_system_replay_for_default_provider_codex_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from agency_swarm.messages import codex_input
@@ -202,46 +252,85 @@ def test_prepare_history_rewrites_system_replay_for_default_provider_codex_env(
     monkeypatch.setattr(codex_input, "get_default_openai_client", lambda: None)
     monkeypatch.setenv("OPENAI_BASE_URL", CODEX_BASE_URL)
 
-    assert _prepare_history_roles(agent, None) == ["developer", "developer", "developer", "user"]
+    assert _model_call_roles(agent, None) == ["developer", "developer", "developer", "user"]
 
 
-def test_prepare_history_rewrites_system_replay_for_codex_multi_provider_base_url() -> None:
+def test_model_call_rewrites_system_replay_for_codex_multi_provider_base_url() -> None:
     agent = Agent(name="A", instructions="normal agent instructions", model="gpt-5.4-mini")
     run_config = RunConfig(
         model_provider=MultiProvider(openai_api_key="sk-test", openai_base_url=CODEX_BASE_URL),
     )
 
-    assert _prepare_history_roles(agent, run_config) == ["developer", "developer", "developer", "user"]
+    assert _model_call_roles(agent, run_config) == ["developer", "developer", "developer", "user"]
 
 
-def test_prepare_history_rewrites_system_replay_for_codex_multi_provider_client() -> None:
+@pytest.mark.parametrize(
+    ("model", "expected_roles"),
+    [
+        ("openai/gpt-5.4-mini", ["developer", "developer", "developer", "user"]),
+        ("litellm/openai/gpt-5.4-mini", ["system", "system", "system", "user"]),
+        ("any-llm/openrouter/gpt-5.4-mini", ["system", "system", "system", "user"]),
+    ],
+)
+def test_model_call_preserves_multi_provider_builtin_prefix_boundaries(
+    model: str,
+    expected_roles: list[str],
+) -> None:
+    agent = Agent(name="A", instructions="normal agent instructions", model=model)
+    run_config = RunConfig(
+        model_provider=MultiProvider(openai_api_key="sk-test", openai_base_url=CODEX_BASE_URL),
+    )
+
+    assert _model_call_roles(agent, run_config) == expected_roles
+
+
+def test_model_call_rewrites_system_replay_for_nested_codex_multi_provider_route() -> None:
+    nested = MultiProvider(openai_api_key="sk-test", openai_base_url=CODEX_BASE_URL)
+    provider_map = MultiProviderMap()
+    provider_map.add_provider("tenant", nested)
+    provider = MultiProvider(provider_map=provider_map)
+    routed, resolved = provider._resolve_prefixed_model(
+        original_model_name="tenant/gpt-5.4-mini",
+        prefix="tenant",
+        stripped_model_name="gpt-5.4-mini",
+    )
+    assert routed is nested
+    assert resolved == "gpt-5.4-mini"
+
+    agent = Agent(name="A", instructions="normal agent instructions", model="tenant/gpt-5.4-mini")
+    run_config = RunConfig(model_provider=provider)
+
+    assert _model_call_roles(agent, run_config) == ["developer", "developer", "developer", "user"]
+
+
+def test_model_call_rewrites_system_replay_for_codex_multi_provider_client() -> None:
     agent = Agent(name="A", instructions="normal agent instructions", model="gpt-5.4-mini")
     run_config = RunConfig(
         model_provider=MultiProvider(openai_client=AsyncOpenAI(api_key="sk-test", base_url=CODEX_BASE_URL)),
     )
 
-    assert _prepare_history_roles(agent, run_config) == ["developer", "developer", "developer", "user"]
+    assert _model_call_roles(agent, run_config) == ["developer", "developer", "developer", "user"]
 
 
-def test_prepare_history_rewrites_system_replay_for_codex_multi_provider_unknown_prefix_model_id() -> None:
+def test_model_call_rewrites_system_replay_for_codex_multi_provider_unknown_prefix_model_id() -> None:
     agent = Agent(name="A", instructions="normal agent instructions", model="anthropic/foo")
     run_config = RunConfig(
         model_provider=_multi_provider_unknown_prefix_model_id(CODEX_BASE_URL),
     )
 
-    assert _prepare_history_roles(agent, run_config) == ["developer", "developer", "developer", "user"]
+    assert _model_call_roles(agent, run_config) == ["developer", "developer", "developer", "user"]
 
 
-def test_prepare_history_keeps_system_replay_for_non_codex_openai_provider_run_config() -> None:
+def test_model_call_keeps_system_replay_for_non_codex_openai_provider_run_config() -> None:
     agent = Agent(name="A", instructions="normal agent instructions", model="gpt-5.4-mini")
     run_config = RunConfig(
         model_provider=OpenAIProvider(api_key="sk-test", base_url=OPENAI_BASE_URL),
     )
 
-    assert _prepare_history_roles(agent, run_config) == ["system", "system", "system", "user"]
+    assert _model_call_roles(agent, run_config) == ["system", "system", "system", "user"]
 
 
-def test_prepare_history_rewrites_system_replay_for_non_codex_openai_provider_base_url_with_codex_default(
+def test_model_call_rewrites_system_replay_for_non_codex_openai_provider_base_url_with_codex_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from agency_swarm.messages import codex_input
@@ -254,10 +343,10 @@ def test_prepare_history_rewrites_system_replay_for_non_codex_openai_provider_ba
         codex_input, "get_default_openai_client", lambda: AsyncOpenAI(api_key="sk-test", base_url=CODEX_BASE_URL)
     )
 
-    assert _prepare_history_roles(agent, run_config) == ["developer", "developer", "developer", "user"]
+    assert _model_call_roles(agent, run_config) == ["developer", "developer", "developer", "user"]
 
 
-def test_prepare_history_keeps_system_replay_for_explicit_non_openai_provider(
+def test_model_call_keeps_system_replay_for_explicit_non_openai_provider(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from agency_swarm.messages import codex_input
@@ -268,10 +357,10 @@ def test_prepare_history_keeps_system_replay_for_explicit_non_openai_provider(
         codex_input, "get_default_openai_client", lambda: AsyncOpenAI(api_key="sk-test", base_url=CODEX_BASE_URL)
     )
 
-    assert _prepare_history_roles(agent, run_config) == ["system", "system", "system", "user"]
+    assert _model_call_roles(agent, run_config) == ["system", "system", "system", "user"]
 
 
-def test_prepare_history_keeps_system_replay_for_explicit_non_openai_provider_default_model(
+def test_model_call_keeps_system_replay_for_explicit_non_openai_provider_default_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from agency_swarm.messages import codex_input
@@ -282,10 +371,10 @@ def test_prepare_history_keeps_system_replay_for_explicit_non_openai_provider_de
         codex_input, "get_default_openai_client", lambda: AsyncOpenAI(api_key="sk-test", base_url=CODEX_BASE_URL)
     )
 
-    assert _prepare_history_roles(agent, run_config) == ["system", "system", "system", "user"]
+    assert _model_call_roles(agent, run_config) == ["system", "system", "system", "user"]
 
 
-def test_prepare_history_keeps_system_replay_for_explicit_non_codex_openai_client(
+def test_model_call_keeps_system_replay_for_explicit_non_codex_openai_client(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from agency_swarm.messages import codex_input
@@ -298,10 +387,10 @@ def test_prepare_history_keeps_system_replay_for_explicit_non_codex_openai_clien
         codex_input, "get_default_openai_client", lambda: AsyncOpenAI(api_key="sk-test", base_url=CODEX_BASE_URL)
     )
 
-    assert _prepare_history_roles(agent, run_config) == ["system", "system", "system", "user"]
+    assert _model_call_roles(agent, run_config) == ["system", "system", "system", "user"]
 
 
-def test_prepare_history_keeps_system_replay_for_custom_model_with_codex_cached_client() -> None:
+def test_model_call_keeps_system_replay_for_custom_model_with_codex_cached_client() -> None:
     from tests.deterministic_model import DeterministicModel
 
     agent = Agent(
@@ -311,30 +400,81 @@ def test_prepare_history_keeps_system_replay_for_custom_model_with_codex_cached_
     )
     agent._openai_client = AsyncOpenAI(api_key="sk-test", base_url=CODEX_BASE_URL)
 
-    assert _prepare_history_roles(agent, RunConfig()) == ["system", "system", "system", "user"]
+    assert _model_call_roles(agent, RunConfig()) == ["system", "system", "system", "user"]
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("base_url", "expected_roles"),
+    ("base_url", "expected_reminder_role"),
+    [
+        (CODEX_BASE_URL, "developer"),
+        (OPENAI_BASE_URL, "system"),
+    ],
+)
+async def test_handoff_target_model_call_rewrites_codex_reminder_without_mutating_history(
+    base_url: str,
+    expected_reminder_role: str,
+) -> None:
+    target_model = _CapturingResponsesModel(base_url=base_url)
+    coordinator = Agent(
+        name="Coordinator",
+        instructions="Hand off Worker tasks.",
+        model=DeterministicModel(),
+    )
+    worker = Agent(
+        name="Worker",
+        instructions="Handle transferred tasks.",
+        model=target_model,
+    )
+    agency = Agency(coordinator, communication_flows=[(coordinator, worker, Handoff)])
+
+    result = await agency.get_response("Please transfer this to Worker.")
+
+    assert result.final_output == "worker done"
+    assert target_model.inputs
+    reminder_roles = [
+        message["role"]
+        for message in target_model.inputs[-1]
+        if message.get("content") == "Transfer completed. You are Worker. Please continue the task."
+    ]
+    assert reminder_roles == [expected_reminder_role]
+
+    stored_reminders = [
+        message
+        for message in agency.thread_manager.get_all_messages()
+        if message.get("message_origin") == "handoff_reminder"
+    ]
+    assert _roles(stored_reminders) == ["system"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("base_url", "expected_model_roles"),
     [
         (CODEX_BASE_URL, ["developer", "developer", "developer", "user"]),
         (OPENAI_BASE_URL, ["system", "system", "system", "user"]),
     ],
 )
-async def test_response_endpoint_rewrites_codex_system_replay_before_runner(
+async def test_response_endpoint_keeps_runner_input_and_filters_model_call_boundary(
     monkeypatch: pytest.MonkeyPatch,
     base_url: str,
-    expected_roles: list[str],
+    expected_model_roles: list[str],
 ) -> None:
     pytest.importorskip("agents")
 
     import agents
 
-    captured: dict[str, list[dict[str, Any]]] = {}
+    captured: dict[str, Any] = {}
 
     async def _run(**kwargs: Any) -> _RunResult:
         captured["input"] = cast(list[dict[str, Any]], kwargs["input"])
+        captured["run_config"] = kwargs["run_config"]
+        captured["starting_agent"] = kwargs["starting_agent"]
+        captured["model_roles"] = await _filtered_roles(
+            kwargs["run_config"],
+            kwargs["starting_agent"],
+            captured["input"],
+        )
         assert kwargs["starting_agent"].instructions == "normal agent instructions"
         return _RunResult()
 
@@ -355,7 +495,8 @@ async def test_response_endpoint_rewrites_codex_system_replay_before_runner(
     )
 
     assert response["response"] == "ok"
-    assert _roles(captured["input"]) == expected_roles
+    assert _roles(captured["input"]) == ["system", "system", "system", "user"]
+    assert captured["model_roles"] == expected_model_roles
     assert _roles(replayed) == ["system", "system", "system"]
 
 
@@ -369,11 +510,18 @@ async def test_response_endpoint_keeps_system_replay_for_custom_model_with_codex
 
     from tests.deterministic_model import DeterministicModel
 
-    captured: dict[str, list[dict[str, Any]]] = {}
+    captured: dict[str, Any] = {}
 
     async def _run(**kwargs: Any) -> _RunResult:
         starting_agent = kwargs["starting_agent"]
         captured["input"] = cast(list[dict[str, Any]], kwargs["input"])
+        captured["run_config"] = kwargs["run_config"]
+        captured["starting_agent"] = starting_agent
+        captured["model_roles"] = await _filtered_roles(
+            kwargs["run_config"],
+            starting_agent,
+            captured["input"],
+        )
         assert starting_agent.model.model == "anthropic/claude-sonnet-4"
         assert str(starting_agent._openai_client.base_url).rstrip("/") == CODEX_BASE_URL
         return _RunResult()
@@ -406,21 +554,24 @@ async def test_response_endpoint_keeps_system_replay_for_custom_model_with_codex
 
     assert response["response"] == "ok"
     assert _roles(captured["input"]) == ["system", "system", "system", "user"]
+    assert captured["model_roles"] == ["system", "system", "system", "user"]
     assert _roles(replayed) == ["system", "system", "system"]
 
 
 @pytest.mark.asyncio
-async def test_stream_endpoint_rewrites_codex_system_replay_before_runner_streamed(
+async def test_stream_endpoint_keeps_runner_input_and_filters_model_call_boundary(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     pytest.importorskip("agents")
 
     import agents
 
-    captured: dict[str, list[dict[str, Any]]] = {}
+    captured: dict[str, Any] = {}
 
     def _run_streamed(**kwargs: Any) -> _StreamedResult:
         captured["input"] = cast(list[dict[str, Any]], kwargs["input"])
+        captured["run_config"] = kwargs["run_config"]
+        captured["starting_agent"] = kwargs["starting_agent"]
         assert kwargs["starting_agent"].instructions == "normal agent instructions"
         return _StreamedResult()
 
@@ -445,7 +596,8 @@ async def test_stream_endpoint_rewrites_codex_system_replay_before_runner_stream
     chunks = [chunk async for chunk in response.body_iterator]
 
     assert chunks[-1] == "event: end\ndata: [DONE]\n\n"
-    assert _roles(captured["input"]) == ["developer", "developer", "developer", "user"]
+    assert _roles(captured["input"]) == ["system", "system", "system", "user"]
+    assert captured["run_config"].call_model_input_filter is not None
     assert _roles(replayed) == ["system", "system", "system"]
 
 
@@ -460,10 +612,17 @@ async def test_response_endpoint_rewrites_codex_system_replay_for_default_openai
 
     from agency_swarm.messages import codex_input
 
-    captured: dict[str, list[dict[str, Any]]] = {}
+    captured: dict[str, Any] = {}
 
     async def _run(**kwargs: Any) -> _RunResult:
         captured["input"] = cast(list[dict[str, Any]], kwargs["input"])
+        captured["run_config"] = kwargs["run_config"]
+        captured["starting_agent"] = kwargs["starting_agent"]
+        captured["model_roles"] = await _filtered_roles(
+            kwargs["run_config"],
+            kwargs["starting_agent"],
+            captured["input"],
+        )
         return _RunResult()
 
     monkeypatch.setattr(agents.Runner, "run", _run)
@@ -479,21 +638,24 @@ async def test_response_endpoint_rewrites_codex_system_replay_for_default_openai
     response = await handler(BaseRequest(message="next", chat_history=replayed), token=None)
 
     assert response["response"] == "ok"
-    assert _roles(captured["input"]) == ["developer", "developer", "developer", "user"]
+    assert _roles(captured["input"]) == ["system", "system", "system", "user"]
+    assert captured["model_roles"] == ["developer", "developer", "developer", "user"]
 
 
 @pytest.mark.asyncio
-async def test_agui_endpoint_rewrites_codex_system_replay_before_runner_streamed(
+async def test_agui_endpoint_keeps_runner_input_and_filters_model_call_boundary(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     pytest.importorskip("agents")
 
     import agents
 
-    captured: dict[str, list[dict[str, Any]]] = {}
+    captured: dict[str, Any] = {}
 
     def _run_streamed(**kwargs: Any) -> _StreamedResult:
         captured["input"] = cast(list[dict[str, Any]], kwargs["input"])
+        captured["run_config"] = kwargs["run_config"]
+        captured["starting_agent"] = kwargs["starting_agent"]
         assert kwargs["starting_agent"].instructions == "normal agent instructions"
         return _StreamedResult()
 
@@ -521,7 +683,8 @@ async def test_agui_endpoint_rewrites_codex_system_replay_before_runner_streamed
     chunks = [chunk async for chunk in response.body_iterator]
 
     assert chunks
-    assert _roles(captured["input"]) == ["developer", "developer", "developer", "user"]
+    assert _roles(captured["input"]) == ["system", "system", "system", "user"]
+    assert captured["run_config"].call_model_input_filter is not None
     assert _roles(replayed) == ["system", "system", "system"]
 
 
