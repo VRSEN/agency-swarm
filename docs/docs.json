@@ -127,7 +127,8 @@
               "additional-features/azure-openai",
               "additional-features/third-party-models",
               "additional-features/deployment-to-production",
-              "additional-features/observability"
+              "additional-features/observability",
+              "additional-features/vaultak-security"
             ]
           },
           {

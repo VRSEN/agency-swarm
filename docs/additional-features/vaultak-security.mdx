@@ -1,0 +1,312 @@
+---
+title: "Runtime Security with Vaultak"
+description: "Risk-score every tool call and agent message, enforce policy rules, and mask PII — without changing your agency logic."
+icon: "shield-check"
+---
+
+[Vaultak](https://vaultak.com) is a runtime security platform purpose-built for agentic workloads. It intercepts agent actions in real time, scores risk on a 0–10 scale, enforces your policy rules, and masks PII in outputs — before results reach users or downstream systems.
+
+Agency Swarm exposes two natural integration points that Vaultak plugs into directly:
+
+<CardGroup cols={2}>
+  <Card title="Input & Output Guardrails" icon="shield-halved" href="#guardrail-approach">
+    Risk-score incoming messages and mask PII in agent responses using Agency Swarm's native guardrail system.
+  </Card>
+  <Card title="BaseTool Mixin" icon="wrench" href="#tool-level-approach">
+    Intercept individual tool calls before they execute by subclassing `BaseTool` with Vaultak security checks.
+  </Card>
+</CardGroup>
+
+## Install
+
+```bash
+pip install vaultak agency-swarm
+```
+
+Sign up at [vaultak.com](https://vaultak.com) to get your API key (starts with `vtk_`).
+
+## Guardrail Approach
+
+Agency Swarm's [input and output guardrails](/additional-features/guardrails/overview) are the simplest way to add Vaultak to an existing agency. No tool changes needed.
+
+- **Input guardrail** — risk-scores each incoming message before the agent processes it; blocks if the score meets or exceeds your threshold.
+- **Output guardrail** — masks PII in agent responses before they reach the user.
+
+```python
+import asyncio
+import os
+
+from agency_swarm import (
+    Agent,
+    Agency,
+    GuardrailFunctionOutput,
+    RunContextWrapper,
+    input_guardrail,
+    output_guardrail,
+)
+
+from vaultak import Vaultak
+
+_api_key = os.environ.get("VAULTAK_API_KEY")
+if not _api_key:
+    raise ValueError(
+        "VAULTAK_API_KEY environment variable is not set. "
+        "Sign up at https://vaultak.com to get your API key."
+    )
+
+RISK_THRESHOLD = 7.0
+vt = Vaultak(api_key=_api_key, agent_name="agency-swarm-agent")
+
+
+@input_guardrail
+async def vaultak_input_guard(
+    context: RunContextWrapper,
+    agent: Agent,
+    user_input: str | list[str],
+) -> GuardrailFunctionOutput:
+    """Risk-score incoming messages before the agent processes them."""
+    text = user_input if isinstance(user_input, str) else " ".join(user_input)
+
+    result = await asyncio.to_thread(vt.score_action, action="user-message", context={"input": text})
+    if result.score >= RISK_THRESHOLD:
+        return GuardrailFunctionOutput(
+            output_info=(
+                f"[Vaultak] Request blocked — risk score {result.score:.1f}/10 "
+                f"meets or exceeds threshold {RISK_THRESHOLD}. "
+                "Review at app.vaultak.com"
+            ),
+            tripwire_triggered=True,
+        )
+
+    await asyncio.to_thread(vt.check_policy, tool_name="user-message", input_data=text)
+    return GuardrailFunctionOutput(output_info="", tripwire_triggered=False)
+
+
+@output_guardrail
+async def vaultak_output_guard(
+    context: RunContextWrapper,
+    agent: Agent,
+    response_text: str,
+) -> GuardrailFunctionOutput:
+    """Mask PII in agent responses before they reach the user."""
+    if isinstance(response_text, str):
+        masked = await asyncio.to_thread(vt.mask_pii, response_text)
+        if masked != response_text:
+            # Return the masked text as guidance so the agent re-sends the clean version
+            return GuardrailFunctionOutput(
+                output_info=masked,
+                tripwire_triggered=True,
+            )
+    return GuardrailFunctionOutput(output_info="", tripwire_triggered=False)
+
+
+ceo = Agent(
+    name="CEO",
+    instructions="You orchestrate the agency and answer user questions.",
+    input_guardrails=[vaultak_input_guard],
+    output_guardrails=[vaultak_output_guard],
+)
+
+agency = Agency(agents=[ceo])
+```
+
+<Note>
+`asyncio.to_thread()` is required here because Vaultak SDK calls are synchronous and guardrail functions are `async`. Wrapping with `asyncio.to_thread()` keeps the event loop non-blocking.
+</Note>
+
+## Tool-Level Approach
+
+For per-tool risk scoring — blocking a specific dangerous tool while letting others run — subclass `BaseTool` through the `VaultakMixin`.
+
+The mixin intercepts `run()`, calls Vaultak before execution, and masks PII in string outputs afterward. Your tool only needs to implement its own `run()` as usual.
+
+```python
+import os
+from typing import Any
+
+from agency_swarm.tools import BaseTool
+from pydantic import Field
+
+from vaultak import Vaultak
+
+_api_key = os.environ.get("VAULTAK_API_KEY")
+if not _api_key:
+    raise ValueError(
+        "VAULTAK_API_KEY environment variable is not set. "
+        "Sign up at https://vaultak.com to get your API key."
+    )
+
+RISK_THRESHOLD = 7.0
+vt = Vaultak(api_key=_api_key, agent_name="agency-swarm-agent")
+
+
+class VaultakMixin:
+    """
+    Mixin for BaseTool subclasses that adds Vaultak pre-execution security checks.
+
+    Inherit before BaseTool so the MRO calls this run() first:
+        class MyTool(VaultakMixin, BaseTool): ...
+    """
+
+    def run(self) -> Any:
+        tool_name = self.__class__.__name__
+        args = self.model_dump()  # type: ignore[attr-defined]
+
+        # Risk-score the tool call before it executes
+        result = vt.score_action(action=tool_name, context=args)
+        if result.score >= RISK_THRESHOLD:
+            raise RuntimeError(
+                f"[Vaultak] Tool '{tool_name}' blocked — risk score "
+                f"{result.score:.1f}/10 meets or exceeds threshold {RISK_THRESHOLD}. "
+                "Review at app.vaultak.com"
+            )
+
+        # Check against your configured policy rules
+        vt.check_policy(tool_name=tool_name, input_data=str(args))
+
+        # Execute the original tool
+        output = super().run()  # type: ignore[misc]
+
+        # Mask PII in string outputs before they return to the agent
+        if isinstance(output, str):
+            output = vt.mask_pii(output)
+
+        return output
+
+
+# Example: secure a custom tool by adding VaultakMixin
+class LookupCustomer(VaultakMixin, BaseTool):
+    """Look up a customer record by ID."""
+
+    customer_id: str = Field(..., description="The customer ID to look up.")
+
+    def run(self) -> str:
+        # Your actual tool logic here
+        return f"Customer {self.customer_id}: Alice Smith, alice@example.com, DOB 1990-01-01"
+```
+
+<Note>
+Inherit `VaultakMixin` **before** `BaseTool` so Python's MRO calls `VaultakMixin.run()` first, which then calls `super().run()` to reach your tool's implementation.
+</Note>
+
+## Combined Example
+
+Use both approaches together for defence-in-depth: guardrails screen agent messages, and the mixin secures individual high-risk tools.
+
+```python
+import asyncio
+import os
+
+from agency_swarm import Agent, Agency, GuardrailFunctionOutput, RunContextWrapper, input_guardrail
+from agency_swarm.tools import BaseTool
+from pydantic import Field
+
+from vaultak import Vaultak
+
+_api_key = os.environ.get("VAULTAK_API_KEY")
+if not _api_key:
+    raise ValueError(
+        "VAULTAK_API_KEY environment variable is not set. "
+        "Sign up at https://vaultak.com to get your API key."
+    )
+
+RISK_THRESHOLD = 7.0
+vt = Vaultak(api_key=_api_key, agent_name="agency-swarm-agent")
+
+
+# --- Guardrail: risk-score incoming messages ---
+
+@input_guardrail
+async def vaultak_input_guard(
+    context: RunContextWrapper, agent: Agent, user_input: str | list[str]
+) -> GuardrailFunctionOutput:
+    text = user_input if isinstance(user_input, str) else " ".join(user_input)
+    result = await asyncio.to_thread(vt.score_action, action="user-message", context={"input": text})
+    if result.score >= RISK_THRESHOLD:
+        return GuardrailFunctionOutput(
+            output_info=(
+                f"[Vaultak] Request blocked — risk score {result.score:.1f}/10 "
+                f"meets or exceeds threshold {RISK_THRESHOLD}. "
+                "Review at app.vaultak.com"
+            ),
+            tripwire_triggered=True,
+        )
+    return GuardrailFunctionOutput(output_info="", tripwire_triggered=False)
+
+
+# --- Tool mixin: risk-score individual tool calls ---
+
+class VaultakMixin:
+    def run(self):
+        tool_name = self.__class__.__name__
+        args = self.model_dump()
+        result = vt.score_action(action=tool_name, context=args)
+        if result.score >= RISK_THRESHOLD:
+            raise RuntimeError(
+                f"[Vaultak] Tool '{tool_name}' blocked — risk score "
+                f"{result.score:.1f}/10 meets or exceeds threshold {RISK_THRESHOLD}. "
+                "Review at app.vaultak.com"
+            )
+        vt.check_policy(tool_name=tool_name, input_data=str(args))
+        output = super().run()
+        return vt.mask_pii(output) if isinstance(output, str) else output
+
+
+class SendEmail(VaultakMixin, BaseTool):
+    """Send an email to a recipient."""
+
+    to: str = Field(..., description="Recipient email address.")
+    subject: str = Field(..., description="Email subject.")
+    body: str = Field(..., description="Email body.")
+
+    def run(self) -> str:
+        # Email sending logic here
+        return f"Email sent to {self.to} with subject '{self.subject}'."
+
+
+# --- Agency setup ---
+
+ceo = Agent(
+    name="CEO",
+    instructions="You are an executive assistant. Use SendEmail for outbound communication.",
+    tools=[SendEmail],
+    input_guardrails=[vaultak_input_guard],
+)
+
+agency = Agency(agents=[ceo])
+```
+
+## Stricter threshold for sensitive agencies
+
+For agencies with access to databases, payment systems, or external APIs, lower the threshold to block medium-risk actions:
+
+```python
+RISK_THRESHOLD = 5.0  # Block anything above medium risk
+```
+
+## Configuration reference
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `api_key` | `str` | — | Your Vaultak API key — required |
+| `agent_name` | `str` | `"agency-swarm-agent"` | Label for this agency in the Vaultak dashboard |
+| `RISK_THRESHOLD` | `float` | `7.0` | Score (0–10) at or above which actions are blocked |
+
+## What gets monitored
+
+| Agency Swarm event | Vaultak action |
+|---|---|
+| Incoming user or inter-agent message (input guardrail) | Risk-scores the message; blocks via `tripwire_triggered=True` if score ≥ threshold |
+| Policy check | Validates against your dashboard-configured rules |
+| Tool call (`VaultakMixin`) | Risk-scores inputs; blocks via `RuntimeError` if score ≥ threshold; checks policy |
+| Tool output (`VaultakMixin`) | Scans for PII and masks before the result returns to the agent |
+| Agent response (output guardrail) | Masks PII before the response reaches the user |
+
+## Links
+
+- [Vaultak documentation](https://docs.vaultak.com)
+- [PyPI: `vaultak`](https://pypi.org/project/vaultak)
+- [GitHub](https://github.com/vaultak/vaultak-python)
+- [Dashboard](https://app.vaultak.com)
+- [Agency Swarm Guardrails](/additional-features/guardrails/overview)
+- [Agency Swarm BaseTool](/core-framework/tools/custom-tools/step-by-step-guide)
