@@ -1,3 +1,4 @@
+import os
 from typing import Any
 
 from agents.models._openai_shared import get_default_openai_client
@@ -59,8 +60,10 @@ def _provider_uses_codex(provider: object | None, model: str) -> bool | None:
         if routed_codex is None and routed_provider is not provider.openai_provider:
             return False
         return routed_codex
-    if not isinstance(provider, OpenAIProvider):
+    if provider is None:
         return None
+    if not isinstance(provider, OpenAIProvider):
+        return False
     if provider._client is not None:
         return _client_uses_codex(provider._client)
     base_url = getattr(provider, "_stored_base_url", None)
@@ -69,6 +72,9 @@ def _provider_uses_codex(provider: object | None, model: str) -> bool | None:
     default_client = get_default_openai_client()
     if default_client is not None:
         return _client_uses_codex(default_client)
+    env_base_url = os.getenv("OPENAI_BASE_URL")
+    if env_base_url is not None:
+        return is_codex_base_url(env_base_url)
     return None
 
 
@@ -80,7 +86,11 @@ def _multi_provider_provider_for_model(provider: MultiProvider, model: str) -> o
         mapped = provider.provider_map.get_provider(prefix)
         if mapped is not None:
             return mapped
+    if prefix in {"litellm", "any-llm"}:
+        return None
     if prefix == "openai":
+        return provider.openai_provider
+    if getattr(provider, "_unknown_prefix_mode", None) == "model_id":
         return provider.openai_provider
     return None
 
