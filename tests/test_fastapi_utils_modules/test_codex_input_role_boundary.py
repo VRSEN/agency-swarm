@@ -144,6 +144,15 @@ def test_prepare_history_rewrites_system_replay_for_codex_openai_provider_run_co
     assert _prepare_history_roles(agent, run_config) == ["developer", "developer", "developer", "user"]
 
 
+def test_prepare_history_rewrites_system_replay_for_codex_openai_provider_default_model() -> None:
+    agent = Agent(name="A", instructions="normal agent instructions", model=None)
+    run_config = RunConfig(
+        model_provider=OpenAIProvider(api_key="sk-test", base_url=CODEX_BASE_URL),
+    )
+
+    assert _prepare_history_roles(agent, run_config) == ["developer", "developer", "developer", "user"]
+
+
 def test_prepare_history_keeps_system_replay_for_codex_openai_provider_base_url_with_non_codex_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -254,6 +263,20 @@ def test_prepare_history_keeps_system_replay_for_explicit_non_openai_provider(
     from agency_swarm.messages import codex_input
 
     agent = Agent(name="A", instructions="normal agent instructions", model="gpt-5.4-mini")
+    run_config = RunConfig(model_provider=_NonOpenAIProvider())
+    monkeypatch.setattr(
+        codex_input, "get_default_openai_client", lambda: AsyncOpenAI(api_key="sk-test", base_url=CODEX_BASE_URL)
+    )
+
+    assert _prepare_history_roles(agent, run_config) == ["system", "system", "system", "user"]
+
+
+def test_prepare_history_keeps_system_replay_for_explicit_non_openai_provider_default_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from agency_swarm.messages import codex_input
+
+    agent = Agent(name="A", instructions="normal agent instructions", model=None)
     run_config = RunConfig(model_provider=_NonOpenAIProvider())
     monkeypatch.setattr(
         codex_input, "get_default_openai_client", lambda: AsyncOpenAI(api_key="sk-test", base_url=CODEX_BASE_URL)

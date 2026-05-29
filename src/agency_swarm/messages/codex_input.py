@@ -23,6 +23,12 @@ def agent_uses_codex_browser_auth(agent: object, run_config_override: object | N
     model = override_model if override_model is not None else getattr(agent, "model", None)
     if isinstance(model, OpenAIResponsesModel | OpenAIChatCompletionsModel):
         return _client_uses_codex(model._client)
+    if model is None:
+        provider = getattr(run_config_override, "model_provider", None)
+        provider_codex = _provider_uses_codex(provider, model)
+        if provider_codex is not None:
+            return provider_codex
+        return _default_openai_route_uses_codex()
     if isinstance(model, str):
         provider = getattr(run_config_override, "model_provider", None)
         provider_codex = _provider_uses_codex(provider, model)
@@ -51,7 +57,7 @@ def _client_uses_codex(client: AsyncOpenAI | None) -> bool:
     return is_codex_base_url(str(client.base_url))
 
 
-def _provider_uses_codex(provider: object | None, model: str) -> bool | None:
+def _provider_uses_codex(provider: object | None, model: str | None) -> bool | None:
     if isinstance(provider, MultiProvider):
         routed_provider = _multi_provider_provider_for_model(provider, model)
         if routed_provider is None:
@@ -82,8 +88,8 @@ def _default_openai_route_uses_codex() -> bool:
     return is_codex_base_url(os.getenv("OPENAI_BASE_URL"))
 
 
-def _multi_provider_provider_for_model(provider: MultiProvider, model: str) -> object | None:
-    if "/" not in model:
+def _multi_provider_provider_for_model(provider: MultiProvider, model: str | None) -> object | None:
+    if model is None or "/" not in model:
         return provider.openai_provider
     prefix, _rest = model.split("/", 1)
     if provider.provider_map is not None:
