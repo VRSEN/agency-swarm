@@ -56,6 +56,10 @@ try:
 except ImportError:
     _LITELLM_AVAILABLE = False
 
+from .streaming.litellm_reasoning import patch_litellm_thinking_blocks  # noqa: E402
+
+patch_litellm_thinking_blocks()
+
 _JUPYTER_AVAILABLE = importlib.util.find_spec("jupyter_client") is not None
 _OPENCLAW_DEPS_AVAILABLE = (
     importlib.util.find_spec("fastapi") is not None and importlib.util.find_spec("httpx") is not None

@@ -54,6 +54,7 @@ from fastapi import Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from openai import AsyncOpenAI, OpenAI
+from openai.types.shared.reasoning import Reasoning
 from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
@@ -328,6 +329,7 @@ def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
         and config.default_headers is None
         and config.litellm_keys is None
         and config.model is None
+        and config.model_settings_extra_args is None
     ):
         return  # Nothing to override
 
@@ -344,6 +346,7 @@ def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
         if config.model is not None:
             gateway_applied = _apply_request_model_override(agent, config.model, config)
             _refresh_framework_defaults_after_model_swap(agent)
+        _apply_request_model_settings_extra_args(agent, config)
 
         # File attachment handling uses agent.client / agent.client_sync directly.
         # Keep those clients request-scoped too, so file_ids work without server env keys.
@@ -1451,6 +1454,124 @@ def _apply_default_headers_to_agent_model_settings(agent: Agent, headers: dict[s
     # ModelSettings is a dataclass (agents==0.6.4), so updating requires replacement.
     current.extra_headers = merged
     agent.model_settings = current
+
+
+def _apply_request_model_settings_extra_args(agent: Agent, config: ClientConfig) -> None:
+    """Apply explicit UI-selected model variant settings for this request only."""
+    if not config.model_settings_extra_args:
+        return
+
+    current: ModelSettings = getattr(agent, "model_settings", None) or ModelSettings()
+    extra_args = dict(current.extra_args or {})
+    extra_args.update(config.model_settings_extra_args)
+
+    include = extra_args.pop("include", None)
+    if isinstance(include, list) and not _agent_uses_litellm(agent):
+        existing_include = list(current.response_include or [])
+        current.response_include = [*existing_include, *include]
+    elif include is not None:
+        extra_args["include"] = include
+
+    reasoning_effort = extra_args.get("reasoning_effort")
+    reasoning_summary = extra_args.get("reasoning_summary")
+    litellm_model_name = _litellm_model_name(agent)
+    is_litellm_gemini = litellm_model_name.startswith(("google/", "gemini/", "vertex_ai/"))
+    if litellm_model_name.startswith("anthropic/"):
+        _normalize_anthropic_litellm_variant_args(extra_args)
+        reasoning_effort = extra_args.get("reasoning_effort")
+        reasoning_summary = extra_args.get("reasoning_summary")
+    elif is_litellm_gemini:
+        requested_reasoning_summary = reasoning_summary
+        _normalize_gemini_litellm_variant_args(extra_args)
+        reasoning_effort = extra_args.get("reasoning_effort")
+        reasoning_summary = requested_reasoning_summary if isinstance(requested_reasoning_summary, str) else "auto"
+
+    if litellm_model_name.startswith("xai/") and "grok" in litellm_model_name:
+        extra_args.pop("reasoning_effort", None)
+        extra_args.pop("reasoning_summary", None)
+        extra_args.pop("effort", None)
+    elif isinstance(reasoning_effort, str) and (
+        not _agent_uses_litellm(agent) or litellm_model_name.startswith(("openai/", "google/", "gemini/", "vertex_ai/"))
+    ):
+        current.reasoning = Reasoning(
+            effort=reasoning_effort,
+            summary=reasoning_summary if isinstance(reasoning_summary, str) else None,
+        )
+        if not _agent_uses_litellm(agent) or is_litellm_gemini:
+            extra_args.pop("reasoning_effort", None)
+            extra_args.pop("reasoning_summary", None)
+    elif isinstance(extra_args.get("reasoning"), dict) and not _agent_uses_litellm(agent):
+        raw_reasoning = cast(dict[str, Any], extra_args.pop("reasoning"))
+        effort = raw_reasoning.get("effort")
+        summary = raw_reasoning.get("summary")
+        if isinstance(effort, str) or isinstance(summary, str):
+            current.reasoning = Reasoning(
+                effort=effort if isinstance(effort, str) else None,
+                summary=summary if isinstance(summary, str) else None,
+            )
+    elif isinstance(reasoning_summary, str) and isinstance(reasoning_effort, dict):
+        reasoning_effort.setdefault("summary", reasoning_summary)
+        extra_args.pop("reasoning_summary", None)
+
+    current.extra_args = extra_args or None
+    agent.model_settings = current
+
+
+def _normalize_anthropic_litellm_variant_args(extra_args: dict[str, Any]) -> None:
+    """Convert OpenCode Anthropic variant fields to LiteLLM-supported request params."""
+    effort = extra_args.pop("effort", None)
+    if isinstance(effort, str) and "reasoning_effort" not in extra_args:
+        extra_args["reasoning_effort"] = effort
+    extra_args.pop("reasoning_summary", None)
+    extra_args.pop("include", None)
+    _normalize_thinking_budget_tokens(extra_args)
+
+
+def _normalize_gemini_litellm_variant_args(extra_args: dict[str, Any]) -> None:
+    """Convert OpenCode Gemini thinkingConfig variants to LiteLLM-supported request params."""
+    thinking_config = extra_args.pop("thinkingConfig", None)
+    if isinstance(thinking_config, dict):
+        thinking_budget = thinking_config.get("thinkingBudget")
+        thinking_level = thinking_config.get("thinkingLevel")
+        if isinstance(thinking_budget, int):
+            extra_args["thinking"] = {"type": "enabled", "budget_tokens": thinking_budget}
+            extra_args.setdefault("reasoning_effort", "high" if thinking_budget >= 16000 else "medium")
+        elif isinstance(thinking_level, str) and "reasoning_effort" not in extra_args:
+            extra_args["reasoning_effort"] = thinking_level
+    thinking_level = extra_args.pop("thinkingLevel", None)
+    if isinstance(thinking_level, str) and "reasoning_effort" not in extra_args:
+        extra_args["reasoning_effort"] = thinking_level
+    thinking_budget = extra_args.pop("thinkingBudget", None)
+    if isinstance(thinking_budget, int):
+        extra_args["thinking"] = {"type": "enabled", "budget_tokens": thinking_budget}
+        extra_args.setdefault("reasoning_effort", "high" if thinking_budget >= 16000 else "medium")
+    extra_args.pop("includeThoughts", None)
+    extra_args.pop("reasoning_summary", None)
+    extra_args.pop("include", None)
+
+
+def _normalize_thinking_budget_tokens(extra_args: dict[str, Any]) -> None:
+    thinking = extra_args.get("thinking")
+    if not isinstance(thinking, dict):
+        return
+    budget_tokens = thinking.get("budgetTokens")
+    if isinstance(budget_tokens, int) and "budget_tokens" not in thinking:
+        normalized = dict(thinking)
+        normalized["budget_tokens"] = budget_tokens
+        normalized.pop("budgetTokens", None)
+        extra_args["thinking"] = normalized
+
+
+def _litellm_model_name(agent: Agent) -> str:
+    if not _agent_uses_litellm(agent):
+        return ""
+    return str(getattr(agent.model, "model", "")).lower()
+
+
+def _is_codex_base_url(value: str | None) -> bool:
+    if not value:
+        return False
+    return value.rstrip("/") == "https://chatgpt.com/backend-api/codex"
 
 
 class _CodexAsyncStream:

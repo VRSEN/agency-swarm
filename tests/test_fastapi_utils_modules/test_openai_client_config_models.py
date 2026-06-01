@@ -399,6 +399,290 @@ def test_model_override_preserves_litellm_credentials() -> None:
     assert agent.model.api_key == "sk-existing"
 
 
+def test_litellm_provider_model_override_does_not_add_reasoning_settings() -> None:
+    """Provider model overrides must not manufacture reasoning request parameters."""
+    pytest.importorskip("agents")
+    pytest.importorskip("agents.extensions.models.litellm_model")
+
+    from agents import ModelSettings
+    from agents.extensions.models.litellm_model import LitellmModel
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    agent = Agent(name="A", instructions="x", model=LitellmModel(model="openai/gpt-5.4"))
+    agent.model_settings = ModelSettings(extra_headers={"x-request": "1"})
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(agency, ClientConfig(model="litellm/anthropic/claude-sonnet-4-20250514"))
+
+    assert isinstance(agent.model, LitellmModel)
+    assert agent.model.model == "anthropic/claude-sonnet-4-20250514"
+    assert agent.model_settings.reasoning is None
+    assert agent.model_settings.extra_headers == {"x-request": "1"}
+
+
+def test_xai_model_override_does_not_add_reasoning_settings() -> None:
+    """xAI Grok models reject LiteLLM reasoningEffort, so do not manufacture it."""
+    pytest.importorskip("agents")
+    pytest.importorskip("agents.extensions.models.litellm_model")
+
+    from agents.extensions.models.litellm_model import LitellmModel
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    agent = Agent(name="A", instructions="x", model=LitellmModel(model="openai/gpt-5.4"))
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(agency, ClientConfig(model="litellm/xai/grok-4.20-0309-reasoning"))
+
+    assert isinstance(agent.model, LitellmModel)
+    assert agent.model.model == "xai/grok-4.20-0309-reasoning"
+    assert agent.model_settings.reasoning is None
+
+
+def test_litellm_model_override_applies_explicit_variant_extra_args() -> None:
+    """User-selected model variants should pass provider settings without backend defaults."""
+    pytest.importorskip("agents")
+    pytest.importorskip("agents.extensions.models.litellm_model")
+
+    from agents.extensions.models.litellm_model import LitellmModel
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    agent = Agent(name="A", instructions="x", model=LitellmModel(model="openai/gpt-5.4"))
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(
+            model="litellm/anthropic/claude-sonnet-4-20250514",
+            model_settings_extra_args={
+                "thinking": {"type": "enabled", "budgetTokens": 16000},
+                "reasoning_effort": "high",
+            },
+        ),
+    )
+
+    assert isinstance(agent.model, LitellmModel)
+    assert agent.model.model == "anthropic/claude-sonnet-4-20250514"
+    assert agent.model_settings.reasoning is None
+    assert agent.model_settings.extra_args == {
+        "thinking": {"type": "enabled", "budget_tokens": 16000},
+        "reasoning_effort": "high",
+    }
+
+
+def test_litellm_anthropic_variant_maps_effort_without_leaking_provider_field() -> None:
+    """Anthropic UI variants use effort, but LiteLLM expects reasoning_effort."""
+    pytest.importorskip("agents")
+    pytest.importorskip("agents.extensions.models.litellm_model")
+
+    from agents.extensions.models.litellm_model import LitellmModel
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    agent = Agent(name="A", instructions="x", model=LitellmModel(model="anthropic/claude-sonnet-4-6"))
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(
+            model="litellm/anthropic/claude-sonnet-4-6",
+            model_settings_extra_args={
+                "thinking": {"type": "adaptive"},
+                "effort": "high",
+                "reasoning_summary": "auto",
+            },
+        ),
+    )
+
+    assert agent.model_settings.reasoning is None
+    assert agent.model_settings.extra_args == {
+        "thinking": {"type": "adaptive"},
+        "reasoning_effort": "high",
+    }
+
+
+def test_litellm_gemini_variant_maps_thinking_config() -> None:
+    """Gemini UI variants use thinkingConfig, but LiteLLM expects thinking or reasoning_effort."""
+    pytest.importorskip("agents")
+    pytest.importorskip("agents.extensions.models.litellm_model")
+
+    from agents.extensions.models.litellm_model import LitellmModel
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    agent = Agent(name="A", instructions="x", model=LitellmModel(model="google/gemini-2.5-pro"))
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(
+            model="litellm/google/gemini-2.5-pro",
+            model_settings_extra_args={
+                "thinkingConfig": {"includeThoughts": True, "thinkingBudget": 16000},
+            },
+        ),
+    )
+
+    assert agent.model_settings.reasoning is not None
+    assert agent.model_settings.reasoning.effort == "high"
+    assert agent.model_settings.reasoning.summary == "auto"
+    assert agent.model_settings.extra_args == {
+        "thinking": {"type": "enabled", "budget_tokens": 16000},
+    }
+
+
+def test_litellm_gemini_variant_maps_top_level_thinking_level() -> None:
+    """Gemini 3 UI variants may arrive as top-level thinkingLevel/includeThoughts."""
+    pytest.importorskip("agents")
+    pytest.importorskip("agents.extensions.models.litellm_model")
+
+    from agents.extensions.models.litellm_model import LitellmModel
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    agent = Agent(name="A", instructions="x", model=LitellmModel(model="google/gemini-3.5-flash"))
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(
+            model="litellm/google/gemini-3.5-flash",
+            model_settings_extra_args={
+                "includeThoughts": True,
+                "thinkingLevel": "high",
+            },
+        ),
+    )
+
+    assert agent.model_settings.reasoning is not None
+    assert agent.model_settings.reasoning.effort == "high"
+    assert agent.model_settings.reasoning.summary == "auto"
+    assert agent.model_settings.extra_args is None
+
+
+def test_openai_model_override_applies_explicit_variant_reasoning() -> None:
+    """OpenAI variant effort should become request-scoped reasoning only when selected."""
+    pytest.importorskip("agents")
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    agent = Agent(name="A", instructions="x", model="gpt-4o-mini")
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(
+            model="gpt-5",
+            model_settings_extra_args={"reasoning_effort": "high", "reasoning_summary": "auto"},
+        ),
+    )
+
+    assert agent.model == "gpt-5"
+    assert agent.model_settings.reasoning is not None
+    assert agent.model_settings.reasoning.effort == "high"
+    assert agent.model_settings.reasoning.summary == "auto"
+    assert agent.model_settings.extra_args is None
+
+
+def test_openai_model_override_maps_variant_include_to_response_include() -> None:
+    """OpenAI Responses variants should use typed include instead of duplicate extra args."""
+    pytest.importorskip("agents")
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    agent = Agent(name="A", instructions="x", model="gpt-4o-mini")
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(
+            model="gpt-5",
+            model_settings_extra_args={
+                "reasoning_effort": "medium",
+                "reasoning_summary": "auto",
+                "include": ["reasoning.encrypted_content"],
+            },
+        ),
+    )
+
+    assert agent.model_settings.reasoning is not None
+    assert agent.model_settings.reasoning.effort == "medium"
+    assert agent.model_settings.response_include == ["reasoning.encrypted_content"]
+    assert agent.model_settings.extra_args is None
+
+
+def test_litellm_openai_variant_sets_reasoning_without_forcing_other_providers() -> None:
+    """OpenAI LiteLLM variants should enable Agents reasoning state only from explicit UI settings."""
+    pytest.importorskip("agents")
+    pytest.importorskip("agents.extensions.models.litellm_model")
+
+    from agents.extensions.models.litellm_model import LitellmModel
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    agent = Agent(name="A", instructions="x", model=LitellmModel(model="openai/gpt-4o-mini"))
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(
+            model="litellm/openai/gpt-5.4",
+            model_settings_extra_args={"reasoning_effort": "high", "reasoning_summary": "auto"},
+        ),
+    )
+
+    assert isinstance(agent.model, LitellmModel)
+    assert agent.model_settings.reasoning is not None
+    assert agent.model_settings.reasoning.effort == "high"
+    assert agent.model_settings.extra_args == {"reasoning_effort": "high", "reasoning_summary": "auto"}
+
+
+def test_xai_grok_variant_does_not_forward_unsupported_reasoning_effort() -> None:
+    """Grok reasoning models reason by model choice and reject reasoning_effort parameters."""
+    pytest.importorskip("agents")
+    pytest.importorskip("agents.extensions.models.litellm_model")
+
+    from agents.extensions.models.litellm_model import LitellmModel
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    agent = Agent(name="A", instructions="x", model=LitellmModel(model="xai/grok-4.20-0309-reasoning"))
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(
+            model="litellm/xai/grok-4.20-0309-reasoning",
+            model_settings_extra_args={"reasoning_effort": "high", "reasoning_summary": "auto"},
+        ),
+    )
+
+    assert agent.model_settings.reasoning is None
+    assert agent.model_settings.extra_args is None
+
+
 def test_non_openai_custom_model_skips_openai_client_build(monkeypatch) -> None:
     """Custom non-OpenAI model names should skip OpenAI client construction entirely."""
     pytest.importorskip("agents")
