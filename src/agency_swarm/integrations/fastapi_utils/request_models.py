@@ -72,6 +72,13 @@ class ClientConfig(BaseModel):
             "(same string forms as Agent.model: OpenAI names, 'openai/…', 'litellm/…', provider paths, etc.)."
         ),
     )
+    model_settings_extra_args: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Request-scoped model settings extra_args, used for explicit UI-selected provider variants "
+            "such as reasoning effort. Values are forwarded only for this run."
+        ),
+    )
 
     @field_validator("litellm_keys")
     @classmethod
