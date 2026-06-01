@@ -9,7 +9,7 @@
 1.6 `Native Subagent`: the built-in delegation capability.
 1.7 `Default Native Subagent Policy`: model `gpt-5.4` with `high` reasoning.
 1.8 `Mandate`: the authorized action, repository, branch, artifact, and visibility boundary for the task.
-1.9 `Requirement Ledger`: the durable requirement system at `.codex/skills/requirement-ledger`.
+1.9 `Requirement Ledger`: the durable requirement system provided by the `requirement-ledger` skill.
 1.10 `Execution Plan`: the short current-task plan stored in the plan tool.
 1.11 `Active Queue`: the active, unfulfilled items in the Requirement Ledger.
 1.12 `Active Artifact`: any repository, worktree, branch, pull request, file, temporary asset, background terminal, or review artifact the agent owns.
@@ -436,7 +436,7 @@
 ## 17. Tool And Model Policy
 17.1 Model and tool availability varies by machine; use the strongest available path that fits task risk and state any substitution before relying on it.
 17.2 General non-policy, non-release review may use the General Review Command unless a repo skill or user Mandate requires a stronger path.
-17.3 Pull-request mutation, review-thread work, and merge-readiness review shall use `.codex/skills/codex-cli-review` and its current canonical review command.
+17.3 Pull-request mutation, review-thread work, and merge-readiness review shall use the `codex-cli-review` skill and its current canonical review command.
 17.4 Policy, repo-skill, and workflow-rule edits shall use the Policy Review Command through a separate isolated Codex Channel worker when available.
 17.5 Policy Review requires GPT-5.5 or an approved substitute with `xhigh` reasoning; `high` is not enough.
 17.6 Release and safety claims shall use the Pre-Release Review Command against the exact release commit.
