@@ -559,14 +559,14 @@ class OpenClawRuntime:
         try:
             if process is not None and process.poll() is None:
                 try:
-                    os.killpg(process.pid, signal.SIGTERM)
+                    os.killpg(process.pid, signal.SIGTERM)  # type: ignore[attr-defined]
                 except Exception:
                     process.terminate()
                 try:
                     process.wait(timeout=5)
                 except subprocess.TimeoutExpired:
                     try:
-                        os.killpg(process.pid, signal.SIGKILL)
+                        os.killpg(process.pid, signal.SIGKILL)  # type: ignore[attr-defined]
                     except Exception:
                         process.kill()
                     try:
@@ -593,14 +593,14 @@ class OpenClawRuntime:
         try:
             if process.poll() is None:
                 try:
-                    os.killpg(process.pid, signal.SIGTERM)
+                    os.killpg(process.pid, signal.SIGTERM)  # type: ignore[attr-defined]
                 except Exception:
                     process.terminate()
                 process.wait(timeout=15)
         except subprocess.TimeoutExpired:
             logger.warning("OpenClaw did not stop after SIGTERM; forcing kill")
             try:
-                os.killpg(process.pid, signal.SIGKILL)
+                os.killpg(process.pid, signal.SIGKILL)  # type: ignore[attr-defined]
             except Exception:
                 process.kill()
             try:

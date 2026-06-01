@@ -10,7 +10,7 @@ from collections.abc import AsyncGenerator, Callable, Sequence
 from dataclasses import dataclass, field
 from importlib import metadata
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 from weakref import WeakKeyDictionary
 
 from ag_ui.core import EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
@@ -73,6 +73,9 @@ from agency_swarm.utils.usage_tracking import (
     calculate_usage_with_cost,
     extract_usage_from_run_result,
 )
+
+ReasoningEffortValue = Literal["none", "minimal", "low", "medium", "high", "xhigh"]
+ReasoningSummaryValue = Literal["auto", "concise", "detailed"]
 
 logger = logging.getLogger(__name__)
 
@@ -1225,12 +1228,14 @@ def _apply_request_model_settings_extra_args(agent: Agent, config: ClientConfig)
         extra_args.pop("reasoning_effort", None)
         extra_args.pop("reasoning_summary", None)
         extra_args.pop("effort", None)
-    elif isinstance(reasoning_effort, str) and (
+    normalized_effort = _reasoning_effort_value(reasoning_effort)
+    normalized_summary = _reasoning_summary_value(reasoning_summary)
+    if normalized_effort is not None and (
         not _agent_uses_litellm(agent) or litellm_model_name.startswith(("openai/", "google/", "gemini/", "vertex_ai/"))
     ):
         current.reasoning = Reasoning(
-            effort=reasoning_effort,
-            summary=reasoning_summary if isinstance(reasoning_summary, str) else None,
+            effort=normalized_effort,
+            summary=normalized_summary,
         )
         if not _agent_uses_litellm(agent) or is_litellm_gemini:
             extra_args.pop("reasoning_effort", None)
@@ -1239,10 +1244,12 @@ def _apply_request_model_settings_extra_args(agent: Agent, config: ClientConfig)
         raw_reasoning = cast(dict[str, Any], extra_args.pop("reasoning"))
         effort = raw_reasoning.get("effort")
         summary = raw_reasoning.get("summary")
-        if isinstance(effort, str) or isinstance(summary, str):
+        normalized_effort = _reasoning_effort_value(effort)
+        normalized_summary = _reasoning_summary_value(summary)
+        if normalized_effort is not None or normalized_summary is not None:
             current.reasoning = Reasoning(
-                effort=effort if isinstance(effort, str) else None,
-                summary=summary if isinstance(summary, str) else None,
+                effort=normalized_effort,
+                summary=normalized_summary,
             )
     elif isinstance(reasoning_summary, str) and isinstance(reasoning_effort, dict):
         reasoning_effort.setdefault("summary", reasoning_summary)
@@ -1250,6 +1257,18 @@ def _apply_request_model_settings_extra_args(agent: Agent, config: ClientConfig)
 
     current.extra_args = extra_args or None
     agent.model_settings = current
+
+
+def _reasoning_effort_value(value: Any) -> ReasoningEffortValue | None:
+    if value in {"none", "minimal", "low", "medium", "high", "xhigh"}:
+        return cast(ReasoningEffortValue, value)
+    return None
+
+
+def _reasoning_summary_value(value: Any) -> ReasoningSummaryValue | None:
+    if value in {"auto", "concise", "detailed"}:
+        return cast(ReasoningSummaryValue, value)
+    return None
 
 
 def _normalize_anthropic_litellm_variant_args(extra_args: dict[str, Any]) -> None:
