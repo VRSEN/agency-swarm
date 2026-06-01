@@ -1,3 +1,4 @@
+import importlib
 from types import SimpleNamespace
 
 import pytest
@@ -8,7 +9,7 @@ async def test_litellm_thinking_blocks_emit_reasoning_events() -> None:
     """LiteLLM thinking_blocks should be visible as reasoning stream deltas."""
     pytest.importorskip("agents.extensions.models.litellm_model")
 
-    import agency_swarm  # noqa: F401
+    importlib.import_module("agency_swarm")
     from agents.extensions.models.litellm_model import ChatCmplStreamHandler
     from openai.types.responses import Response
 
@@ -61,7 +62,7 @@ async def test_litellm_model_extra_reasoning_content_emits_reasoning_events() ->
     """Gemini can expose reasoning fields through provider/model extras instead of attributes."""
     pytest.importorskip("agents.extensions.models.litellm_model")
 
-    import agency_swarm  # noqa: F401
+    importlib.import_module("agency_swarm")
     from agents.extensions.models.litellm_model import ChatCmplStreamHandler
     from openai.types.responses import Response
 

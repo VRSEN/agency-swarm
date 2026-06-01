@@ -11,10 +11,11 @@ def patch_litellm_thinking_blocks() -> None:
     except ImportError:
         return
 
-    if getattr(ChatCmplStreamHandler, "_agency_swarm_thinking_patch", False):
+    handler_cls: Any = ChatCmplStreamHandler
+    if getattr(handler_cls, "_agency_swarm_thinking_patch", False):
         return
 
-    original = ChatCmplStreamHandler.handle_stream.__func__
+    original = handler_cls.handle_stream.__func__
 
     async def handle_stream(
         cls, response: Any, stream: AsyncIterator[Any], model: str | None = None
@@ -27,8 +28,8 @@ def patch_litellm_thinking_blocks() -> None:
         async for event in original(cls, response, normalized_stream(), model):
             yield event
 
-    ChatCmplStreamHandler.handle_stream = classmethod(handle_stream)
-    ChatCmplStreamHandler._agency_swarm_thinking_patch = True
+    handler_cls.handle_stream = classmethod(handle_stream)
+    handler_cls._agency_swarm_thinking_patch = True
 
 
 def _copy_thinking_blocks_to_reasoning_content(chunk: Any) -> None:
@@ -49,7 +50,7 @@ def _copy_thinking_blocks_to_reasoning_content(chunk: Any) -> None:
             or _thinking_blocks_text(_field(delta, "thinking_blocks"))
         )
         if text:
-            setattr(delta, "reasoning_content", text)
+            delta.reasoning_content = text
 
 
 def _field(value: Any, key: str) -> Any:
