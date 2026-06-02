@@ -1483,6 +1483,10 @@ def _apply_request_model_settings_extra_args(agent: Agent, config: ClientConfig)
         _normalize_anthropic_litellm_variant_args(extra_args)
         reasoning_effort = extra_args.get("reasoning_effort")
         reasoning_summary = extra_args.get("reasoning_summary")
+    elif litellm_model_name.startswith("xai/"):
+        _normalize_xai_litellm_variant_args(extra_args)
+        reasoning_effort = extra_args.get("reasoning_effort")
+        reasoning_summary = extra_args.get("reasoning_summary")
     elif is_litellm_gemini:
         requested_reasoning_summary = reasoning_summary
         _normalize_gemini_litellm_variant_args(extra_args)
@@ -1540,6 +1544,15 @@ def _normalize_anthropic_litellm_variant_args(extra_args: dict[str, Any]) -> Non
     extra_args.pop("reasoning_summary", None)
     extra_args.pop("include", None)
     _normalize_thinking_budget_tokens(extra_args)
+
+
+def _normalize_xai_litellm_variant_args(extra_args: dict[str, Any]) -> None:
+    """Keep only xAI reasoning fields that LiteLLM forwards to Grok chat."""
+    effort = extra_args.pop("effort", None)
+    if isinstance(effort, str) and "reasoning_effort" not in extra_args:
+        extra_args["reasoning_effort"] = effort
+    extra_args.pop("reasoning_summary", None)
+    extra_args.pop("include", None)
 
 
 def _normalize_gemini_litellm_variant_args(extra_args: dict[str, Any]) -> None:
