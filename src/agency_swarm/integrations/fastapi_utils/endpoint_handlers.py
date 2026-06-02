@@ -1302,12 +1302,7 @@ def _xai_litellm_model_supports_reasoning_effort(model_name: str) -> bool:
         model = model_name.removeprefix("xai/").lower()
         if "non-reasoning" in model:
             return False
-        return (
-            "grok-3-mini" in model
-            or "grok-4.3" in model
-            or "grok-4-3" in model
-            or ("grok" in model and "reasoning" in model)
-        )
+        return "grok-3-mini" in model or "grok-4.3" in model or "grok-4-3" in model
 
 
 def _normalize_gemini_litellm_variant_args(extra_args: dict[str, Any]) -> None:
