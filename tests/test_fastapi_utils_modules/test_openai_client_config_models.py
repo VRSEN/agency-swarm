@@ -471,7 +471,8 @@ def test_litellm_model_override_applies_explicit_variant_extra_args() -> None:
 
     assert isinstance(agent.model, LitellmModel)
     assert agent.model.model == "anthropic/claude-sonnet-4-20250514"
-    assert agent.model_settings.reasoning is None
+    assert agent.model_settings.reasoning is not None
+    assert agent.model_settings.reasoning.effort == "high"
     assert agent.model_settings.extra_args == {
         "thinking": {"type": "enabled", "budget_tokens": 16000},
         "reasoning_effort": "high",
@@ -504,7 +505,8 @@ def test_litellm_anthropic_variant_maps_effort_without_leaking_provider_field() 
         ),
     )
 
-    assert agent.model_settings.reasoning is None
+    assert agent.model_settings.reasoning is not None
+    assert agent.model_settings.reasoning.effort == "high"
     assert agent.model_settings.extra_args == {
         "thinking": {"type": "adaptive"},
         "reasoning_effort": "high",
@@ -537,12 +539,146 @@ def test_litellm_gemini_variant_maps_thinking_config() -> None:
 
     assert isinstance(agent.model, LitellmModel)
     assert agent.model.model == "gemini/gemini-2.5-pro"
-    assert agent.model_settings.reasoning is not None
-    assert agent.model_settings.reasoning.effort == "high"
-    assert agent.model_settings.reasoning.summary == "auto"
+    assert agent.model_settings.reasoning is None
     assert agent.model_settings.extra_args == {
         "thinking": {"type": "enabled", "budget_tokens": 16000},
     }
+
+
+async def test_litellm_gemini_budget_forwards_only_thinking_payload(monkeypatch) -> None:
+    """Budget-based Gemini variants should not also send LiteLLM reasoning_effort."""
+    pytest.importorskip("agents")
+    litellm = pytest.importorskip("litellm")
+    pytest.importorskip("agents.extensions.models.litellm_model")
+
+    from agents.extensions.models.litellm_model import LitellmModel
+    from agents.models.interface import ModelTracing
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    agent = Agent(name="A", instructions="x", model=LitellmModel(model="google/gemini-2.5-pro"))
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+    seen: dict[str, object] = {}
+
+    async def capture(**kwargs):
+        seen.update(kwargs)
+        msg = litellm.types.utils.Message(content="ok", role="assistant")
+        choice = litellm.types.utils.Choices(finish_reason="stop", index=0, message=msg)
+        return litellm.types.utils.ModelResponse(choices=[choice], model=kwargs["model"])
+
+    monkeypatch.setattr(litellm, "acompletion", capture)
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(
+            model="litellm/google/gemini-2.5-pro",
+            model_settings_extra_args={
+                "thinkingConfig": {"includeThoughts": True, "thinkingBudget": 16000},
+                "reasoning_effort": "high",
+            },
+        ),
+    )
+
+    assert isinstance(agent.model, LitellmModel)
+    assert agent.model_settings.reasoning is None
+    assert agent.model_settings.extra_args == {"thinking": {"type": "enabled", "budget_tokens": 16000}}
+
+    await agent.model._fetch_response(
+        None,
+        "hi",
+        agent.model_settings,
+        [],
+        None,
+        [],
+        None,
+        ModelTracing.DISABLED,
+        stream=False,
+    )
+
+    assert seen["thinking"] == {"type": "enabled", "budget_tokens": 16000}
+    assert seen["reasoning_effort"] is None
+
+
+async def test_litellm_anthropic_variant_preserves_reasoning_for_tool_replay(monkeypatch) -> None:
+    """Anthropic thinking variants should replay signed thinking blocks across tool calls."""
+    pytest.importorskip("agents")
+    litellm = pytest.importorskip("litellm")
+    pytest.importorskip("agents.extensions.models.litellm_model")
+
+    from agents.extensions.models.litellm_model import LitellmModel
+    from agents.models.interface import ModelTracing
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    agent = Agent(name="A", instructions="x", model=LitellmModel(model="anthropic/claude-sonnet-4-6"))
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+    seen: dict[str, object] = {}
+
+    async def capture(**kwargs):
+        seen.update(kwargs)
+        msg = litellm.types.utils.Message(content="ok", role="assistant")
+        choice = litellm.types.utils.Choices(finish_reason="stop", index=0, message=msg)
+        return litellm.types.utils.ModelResponse(choices=[choice], model=kwargs["model"])
+
+    monkeypatch.setattr(litellm, "acompletion", capture)
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(
+            model="litellm/anthropic/claude-sonnet-4-6",
+            model_settings_extra_args={
+                "thinking": {"type": "adaptive"},
+                "effort": "high",
+            },
+        ),
+    )
+
+    assert isinstance(agent.model, LitellmModel)
+    assert agent.model_settings.reasoning is not None
+    assert agent.model_settings.reasoning.effort == "high"
+
+    await agent.model._fetch_response(
+        None,
+        [
+            {
+                "type": "reasoning",
+                "id": "rs_1",
+                "content": [{"type": "reasoning_text", "text": "private chain"}],
+                "encrypted_content": "signed-thinking",
+                "provider_data": {"model": "anthropic/claude-sonnet-4-6"},
+            },
+            {
+                "type": "function_call",
+                "id": "fc_1",
+                "call_id": "call_1",
+                "name": "lookup",
+                "arguments": "{}",
+                "provider_data": {"model": "anthropic/claude-sonnet-4-6"},
+            },
+            {"type": "function_call_output", "call_id": "call_1", "output": "tool result"},
+        ],
+        agent.model_settings,
+        [],
+        None,
+        [],
+        None,
+        ModelTracing.DISABLED,
+        stream=False,
+    )
+
+    assert seen["reasoning_effort"] == "high"
+    assert seen["thinking"] == {"type": "adaptive"}
+    messages = seen["messages"]
+    assert isinstance(messages, list)
+    assistant = messages[0]
+    assert isinstance(assistant, dict)
+    assert assistant["role"] == "assistant"
+    assert assistant["content"] == [{"type": "thinking", "thinking": "private chain", "signature": "signed-thinking"}]
+    assert assistant["tool_calls"][0]["id"] == "call_1"
 
 
 def test_litellm_gemini_variant_maps_top_level_thinking_level() -> None:
@@ -726,7 +862,8 @@ def test_litellm_prefixed_string_model_normalizes_variant_extra_args_without_mod
     )
 
     assert agent.model == "litellm/anthropic/claude-sonnet-4-6"
-    assert agent.model_settings.reasoning is None
+    assert agent.model_settings.reasoning is not None
+    assert agent.model_settings.reasoning.effort == "high"
     assert agent.model_settings.extra_args == {"reasoning_effort": "high"}
 
 
@@ -751,7 +888,8 @@ def test_litellm_prefixed_wrapper_model_normalizes_variant_extra_args_without_mo
 
     assert isinstance(agent.model, LitellmModel)
     assert agent.model.model == "litellm/anthropic/claude-sonnet-4-6"
-    assert agent.model_settings.reasoning is None
+    assert agent.model_settings.reasoning is not None
+    assert agent.model_settings.reasoning.effort == "high"
     assert agent.model_settings.extra_args == {"reasoning_effort": "high"}
 
 

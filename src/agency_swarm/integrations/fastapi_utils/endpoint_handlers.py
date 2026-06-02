@@ -1240,7 +1240,7 @@ def _apply_request_model_settings_extra_args(agent: Agent, config: ClientConfig)
             extra_args["reasoning_effort"] = normalized_effort
         extra_args.pop("reasoning_summary", None)
     elif normalized_effort is not None and (
-        not uses_litellm or litellm_model_name.startswith(("gemini/", "vertex_ai/"))
+        not uses_litellm or litellm_model_name.startswith(("anthropic/", "gemini/", "vertex_ai/"))
     ):
         current.reasoning = Reasoning(
             effort=normalized_effort,
@@ -1322,7 +1322,7 @@ def _normalize_gemini_litellm_variant_args(extra_args: dict[str, Any]) -> None:
         thinking_level = thinking_config.get("thinkingLevel")
         if isinstance(thinking_budget, int):
             extra_args["thinking"] = {"type": "enabled", "budget_tokens": thinking_budget}
-            extra_args.setdefault("reasoning_effort", "high" if thinking_budget >= 16000 else "medium")
+            extra_args.pop("reasoning_effort", None)
         elif isinstance(thinking_level, str) and "reasoning_effort" not in extra_args:
             extra_args["reasoning_effort"] = thinking_level
     thinking_level = extra_args.pop("thinkingLevel", None)
@@ -1331,7 +1331,7 @@ def _normalize_gemini_litellm_variant_args(extra_args: dict[str, Any]) -> None:
     thinking_budget = extra_args.pop("thinkingBudget", None)
     if isinstance(thinking_budget, int):
         extra_args["thinking"] = {"type": "enabled", "budget_tokens": thinking_budget}
-        extra_args.setdefault("reasoning_effort", "high" if thinking_budget >= 16000 else "medium")
+        extra_args.pop("reasoning_effort", None)
     extra_args.pop("includeThoughts", None)
     extra_args.pop("reasoning_summary", None)
     extra_args.pop("include", None)
