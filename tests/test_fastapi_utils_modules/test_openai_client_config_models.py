@@ -535,6 +535,8 @@ def test_litellm_gemini_variant_maps_thinking_config() -> None:
         ),
     )
 
+    assert isinstance(agent.model, LitellmModel)
+    assert agent.model.model == "gemini/gemini-2.5-pro"
     assert agent.model_settings.reasoning is not None
     assert agent.model_settings.reasoning.effort == "high"
     assert agent.model_settings.reasoning.summary == "auto"
@@ -568,6 +570,8 @@ def test_litellm_gemini_variant_maps_top_level_thinking_level() -> None:
         ),
     )
 
+    assert isinstance(agent.model, LitellmModel)
+    assert agent.model.model == "gemini/gemini-3.5-flash"
     assert agent.model_settings.reasoning is not None
     assert agent.model_settings.reasoning.effort == "high"
     assert agent.model_settings.reasoning.summary == "auto"
@@ -652,9 +656,57 @@ def test_litellm_openai_variant_sets_reasoning_without_forcing_other_providers()
     )
 
     assert isinstance(agent.model, LitellmModel)
-    assert agent.model_settings.reasoning is not None
-    assert agent.model_settings.reasoning.effort == "high"
-    assert agent.model_settings.extra_args == {"reasoning_effort": "high"}
+    assert agent.model_settings.reasoning is None
+    assert agent.model_settings.extra_args == {"reasoning_effort": {"effort": "high", "summary": "auto"}}
+
+
+async def test_litellm_openai_variant_forwards_reasoning_summary_to_litellm(monkeypatch) -> None:
+    """OpenAI LiteLLM summaries must reach the SDK chat-completions call payload."""
+    pytest.importorskip("agents")
+    litellm = pytest.importorskip("litellm")
+    pytest.importorskip("agents.extensions.models.litellm_model")
+
+    from agents.extensions.models.litellm_model import LitellmModel
+    from agents.models.interface import ModelTracing
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    agent = Agent(name="A", instructions="x", model=LitellmModel(model="openai/gpt-4o-mini"))
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+    seen: dict[str, object] = {}
+
+    async def capture(**kwargs):
+        seen.update(kwargs)
+        msg = litellm.types.utils.Message(content="ok", role="assistant")
+        choice = litellm.types.utils.Choices(finish_reason="stop", index=0, message=msg)
+        return litellm.types.utils.ModelResponse(choices=[choice], model=kwargs["model"])
+
+    monkeypatch.setattr(litellm, "acompletion", capture)
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(
+            model="litellm/openai/gpt-5.4",
+            model_settings_extra_args={"reasoning_effort": "high", "reasoning_summary": "auto"},
+        ),
+    )
+
+    assert isinstance(agent.model, LitellmModel)
+    await agent.model._fetch_response(
+        None,
+        "hi",
+        agent.model_settings,
+        [],
+        None,
+        [],
+        None,
+        ModelTracing.DISABLED,
+        stream=False,
+    )
+
+    assert seen["reasoning_effort"] == {"effort": "high", "summary": "auto"}
 
 
 def test_litellm_prefixed_string_model_normalizes_variant_extra_args_without_model_override() -> None:
