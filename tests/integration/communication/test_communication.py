@@ -39,7 +39,9 @@ class CommunicationFlowModel(DeterministicModel):
 
         user_text = _extract_last_user_text(input) or ""
         tool_names = {tool.name for tool in tools}
-        if "send_message" in tool_names and self.agent_name == "Planner":
+        if self.agent_name == "Planner":
+            if "send_message" not in tool_names:
+                return _build_message_response("Planner missing send_message tool", self.model)
             return _build_tool_call_response(
                 "send_message",
                 {
@@ -48,7 +50,9 @@ class CommunicationFlowModel(DeterministicModel):
                     "additional_instructions": "",
                 },
             )
-        if "send_message" in tool_names and self.agent_name == "Worker":
+        if self.agent_name == "Worker":
+            if "send_message" not in tool_names:
+                return _build_message_response("Worker missing send_message tool", self.model)
             return _build_tool_call_response(
                 "send_message",
                 {
@@ -57,7 +61,7 @@ class CommunicationFlowModel(DeterministicModel):
                     "additional_instructions": "",
                 },
             )
-        return _build_message_response(f"Final report: {user_text}", self.model)
+        return _build_message_response(f"Reporter final report: {user_text}", self.model)
 
 
 @pytest.fixture
@@ -138,6 +142,8 @@ async def test_multi_agent_communication_flow(multi_agent_agency: Agency):
 
     task_id_part = initial_task.split(" ")[-1].split(".")[0]
     assert task_id_part in final_result.final_output
+    assert "Reporter final report:" in final_result.final_output
+    assert "Work done for:" in final_result.final_output
     print("--- Assertions Passed ---")
 
 
