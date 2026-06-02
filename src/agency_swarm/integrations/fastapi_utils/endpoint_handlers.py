@@ -1569,8 +1569,9 @@ def _apply_request_model_settings_extra_args(agent: Agent, config: ClientConfig)
 
     extra_body = extra_args.pop("extra_body", None)
     if isinstance(extra_body, dict):
+        current_extra_body = current.extra_body if isinstance(current.extra_body, dict) else {}
         current.extra_body = {
-            **(current.extra_body or {}),
+            **current_extra_body,
             **extra_body,
         }
     max_tokens = extra_args.pop("max_tokens", None)

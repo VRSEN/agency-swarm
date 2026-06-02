@@ -364,7 +364,7 @@ def test_agent_initialization_openrouter_model_requires_api_key(monkeypatch: pyt
     """Direct openrouter/... Agent models should fail before making provider calls when no key is available."""
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
 
-    with pytest.raises(ValueError, match="OpenRouter API key is required"):
+    with pytest.raises(ValueError, match="OPENROUTER_API_KEY is required"):
         Agent(name="OpenRouterAgent", instructions="Test", model="openrouter/anthropic/claude-sonnet-4.5")
 
 
