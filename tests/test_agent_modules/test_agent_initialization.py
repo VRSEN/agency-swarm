@@ -343,6 +343,31 @@ def test_agent_initialization_model_settings_defaults_and_overrides():
     assert provider_prefixed_gpt5_agent.model_settings.verbosity is None
 
 
+def test_agent_initialization_openrouter_model_uses_openrouter_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Direct openrouter/... Agent models should route through OpenRouter."""
+    from agents import OpenAIChatCompletionsModel
+
+    from agency_swarm.utils.openrouter import get_openrouter_model_name
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-openrouter")
+
+    agent = Agent(name="OpenRouterAgent", instructions="Test", model="openrouter/anthropic/claude-sonnet-4.5")
+
+    assert isinstance(agent.model, OpenAIChatCompletionsModel)
+    assert agent.model.model == "anthropic/claude-sonnet-4.5"
+    assert get_openrouter_model_name(agent.model) == "openrouter/anthropic/claude-sonnet-4.5"
+    assert agent.model._client.api_key == "sk-openrouter"
+    assert str(agent.model._client.base_url).startswith("https://openrouter.ai/api/v1")
+
+
+def test_agent_initialization_openrouter_model_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Direct openrouter/... Agent models should fail before making provider calls when no key is available."""
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+
+    with pytest.raises(ValueError, match="OpenRouter API key is required"):
+        Agent(name="OpenRouterAgent", instructions="Test", model="openrouter/anthropic/claude-sonnet-4.5")
+
+
 @pytest.mark.parametrize("provider_model", ["openai/gpt-5.4-mini", "azure/gpt-5.4-mini"])
 def test_agent_initialization_model_objects_use_openclaw_default_settings_alias(
     monkeypatch: pytest.MonkeyPatch,
