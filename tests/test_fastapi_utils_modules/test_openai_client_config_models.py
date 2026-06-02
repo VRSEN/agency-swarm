@@ -675,7 +675,12 @@ def test_xai_grok_variant_forwards_selected_reasoning_effort() -> None:
         agency,
         ClientConfig(
             model="litellm/xai/grok-4.3",
-            model_settings_extra_args={"reasoning_effort": "high"},
+            model_settings_extra_args={
+                "effort": "medium",
+                "reasoning_effort": "high",
+                "reasoning_summary": "auto",
+                "include": ["reasoning.encrypted_content"],
+            },
         ),
     )
 
