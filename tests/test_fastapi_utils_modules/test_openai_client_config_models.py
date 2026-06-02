@@ -654,7 +654,53 @@ def test_litellm_openai_variant_sets_reasoning_without_forcing_other_providers()
     assert isinstance(agent.model, LitellmModel)
     assert agent.model_settings.reasoning is not None
     assert agent.model_settings.reasoning.effort == "high"
-    assert agent.model_settings.extra_args == {"reasoning_effort": "high", "reasoning_summary": "auto"}
+    assert agent.model_settings.extra_args == {"reasoning_effort": "high"}
+
+
+def test_litellm_prefixed_string_model_normalizes_variant_extra_args_without_model_override() -> None:
+    """Existing LiteLLM-prefixed string models should still get provider-specific variant mapping."""
+    pytest.importorskip("agents")
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    agent = Agent(name="A", instructions="x", model="litellm/anthropic/claude-sonnet-4-6")
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(model_settings_extra_args={"effort": "high", "reasoning_summary": "auto"}),
+    )
+
+    assert agent.model == "litellm/anthropic/claude-sonnet-4-6"
+    assert agent.model_settings.reasoning is None
+    assert agent.model_settings.extra_args == {"reasoning_effort": "high"}
+
+
+def test_litellm_prefixed_wrapper_model_normalizes_variant_extra_args_without_model_override() -> None:
+    """Existing LiteLLM wrappers with a prefixed model should still get provider-specific variant mapping."""
+    pytest.importorskip("agents")
+    pytest.importorskip("agents.extensions.models.litellm_model")
+
+    from agents.extensions.models.litellm_model import LitellmModel
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    agent = Agent(name="A", instructions="x", model=LitellmModel(model="litellm/anthropic/claude-sonnet-4-6"))
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(model_settings_extra_args={"effort": "high", "reasoning_summary": "auto"}),
+    )
+
+    assert isinstance(agent.model, LitellmModel)
+    assert agent.model.model == "litellm/anthropic/claude-sonnet-4-6"
+    assert agent.model_settings.reasoning is None
+    assert agent.model_settings.extra_args == {"reasoning_effort": "high"}
 
 
 @pytest.mark.parametrize("model_name", ["xai/grok-4.3", "xai/grok-4-1-fast", "xai/grok-code-fast"])

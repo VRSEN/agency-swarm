@@ -24,6 +24,10 @@ def test_request_override_policy_flags() -> None:
     assert model_only.has_client_overrides is True
     assert model_only.has_openai_overrides is False
 
+    extra_args_only = RequestOverridePolicy(ClientConfig(model_settings_extra_args={"reasoning_effort": "high"}))
+    assert extra_args_only.has_client_overrides is True
+    assert extra_args_only.has_openai_overrides is False
+
     litellm_cfg = cast(
         ClientConfig,
         SimpleNamespace(
