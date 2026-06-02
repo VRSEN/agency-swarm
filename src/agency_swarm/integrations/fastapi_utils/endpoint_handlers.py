@@ -1240,6 +1240,8 @@ def _apply_request_model_settings_extra_args(agent: Agent, config: ClientConfig)
         if not _agent_uses_litellm(agent) or is_litellm_gemini:
             extra_args.pop("reasoning_effort", None)
             extra_args.pop("reasoning_summary", None)
+        elif litellm_model_name.startswith("openai/"):
+            extra_args.pop("reasoning_summary", None)
     elif isinstance(extra_args.get("reasoning"), dict) and not _agent_uses_litellm(agent):
         raw_reasoning = cast(dict[str, Any], extra_args.pop("reasoning"))
         effort = raw_reasoning.get("effort")
@@ -1343,7 +1345,21 @@ def _normalize_thinking_budget_tokens(extra_args: dict[str, Any]) -> None:
 def _litellm_model_name(agent: Agent) -> str:
     if not _agent_uses_litellm(agent):
         return ""
-    return str(getattr(agent.model, "model", "")).lower()
+    model = agent.model
+    if isinstance(model, str):
+        name = model
+    elif isinstance(model, OpenAIResponsesModel | OpenAIChatCompletionsModel):
+        name = model.model
+    elif _LITELLM_AVAILABLE and LitellmModel is not None and isinstance(model, LitellmModel):
+        name = model.model
+    elif isinstance(model, Model):
+        name = getattr(model, "model", "")
+    else:
+        name = ""
+    if not isinstance(name, str):
+        return ""
+    normalized = name.lower()
+    return normalized[8:] if normalized.startswith("litellm/") else normalized
 
 
 def _is_codex_base_url(value: str | None) -> bool:
