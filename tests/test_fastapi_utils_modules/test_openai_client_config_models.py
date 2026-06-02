@@ -892,6 +892,32 @@ def test_openai_model_override_maps_variant_include_to_response_include() -> Non
     assert agent.model_settings.extra_args is None
 
 
+def test_model_settings_extra_args_apply_openrouter_extra_body_and_max_tokens() -> None:
+    """OpenRouter options should reach typed ModelSettings fields, not extra_args."""
+    pytest.importorskip("agents")
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    agent = Agent(name="A", instructions="x", model="gpt-4o-mini")
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(
+            model_settings_extra_args={
+                "extra_body": {"reasoning": {"effort": "high"}},
+                "max_tokens": 2500,
+            },
+        ),
+    )
+
+    assert agent.model_settings.extra_body == {"reasoning": {"effort": "high"}}
+    assert agent.model_settings.max_tokens == 2500
+    assert agent.model_settings.extra_args is None
+
+
 @pytest.mark.parametrize("model_name", ["litellm/openai/gpt-5.4", "litellm/gpt-5"])
 def test_litellm_openai_variant_sets_reasoning_without_forcing_other_providers(model_name: str) -> None:
     """OpenAI LiteLLM variants should enable Agents reasoning state only from explicit UI settings."""
@@ -1202,6 +1228,35 @@ def test_provider_path_model_override_routes_request_gateway_client() -> None:
     assert agent.model._client is not embedded
     assert agent.model._client.api_key == "sk-gateway"
     assert str(agent.model._client.base_url).startswith("https://gateway.test")
+
+
+def test_openrouter_model_override_routes_to_openrouter_client() -> None:
+    """OpenRouter request models must not send the OpenRouter key to OpenAI."""
+    pytest.importorskip("agents")
+
+    from agents import OpenAIChatCompletionsModel
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+    from agency_swarm.utils.openrouter import get_openrouter_model_name
+
+    agent = Agent(name="A", instructions="x", model="gpt-4o-mini")
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(
+            model="openrouter/anthropic/claude-sonnet-4.5",
+            api_key="sk-openrouter",
+        ),
+    )
+
+    assert isinstance(agent.model, OpenAIChatCompletionsModel)
+    assert agent.model.model == "anthropic/claude-sonnet-4.5"
+    assert get_openrouter_model_name(agent.model) == "openrouter/anthropic/claude-sonnet-4.5"
+    assert agent.model._client.api_key == "sk-openrouter"
+    assert str(agent.model._client.base_url).startswith("https://openrouter.ai/api/v1")
 
 
 def test_model_override_refreshes_gpt5_framework_defaults() -> None:

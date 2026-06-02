@@ -88,6 +88,7 @@ from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
 from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
 from agency_swarm.ui.core.agui_adapter import AguiAdapter
 from agency_swarm.utils.dry_run import force_dry_run
+from agency_swarm.utils.openrouter import build_openrouter_chat_model, is_openrouter_model_name
 from agency_swarm.utils.serialization import serialize
 from agency_swarm.utils.usage_tracking import (
     calculate_usage_with_cost,
@@ -186,6 +187,14 @@ def _apply_request_model_override(agent: Agent, model_name: str, config: ClientC
     """
     model = agent.model
     gateway_client = _resolve_request_gateway_client(agent, config)
+
+    if is_openrouter_model_name(model_name):
+        agent.model = build_openrouter_chat_model(
+            model_name,
+            api_key=config.api_key if config is not None else None,
+            default_headers=config.default_headers if config is not None else None,
+        )
+        return True
 
     if isinstance(model, OpenAIResponsesModel):
         if _is_litellm_model(model_name):
@@ -1557,6 +1566,16 @@ def _apply_request_model_settings_extra_args(agent: Agent, config: ClientConfig)
             **current_body,
             **extra_body,
         }
+
+    extra_body = extra_args.pop("extra_body", None)
+    if isinstance(extra_body, dict):
+        current.extra_body = {
+            **(current.extra_body or {}),
+            **extra_body,
+        }
+    max_tokens = extra_args.pop("max_tokens", None)
+    if isinstance(max_tokens, int):
+        current.max_tokens = max_tokens
 
     current.extra_args = extra_args or None
     agent.model_settings = current
