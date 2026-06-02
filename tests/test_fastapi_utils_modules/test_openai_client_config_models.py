@@ -1171,7 +1171,7 @@ def test_xai_grok_fallback_drops_fixed_reasoning_effort(monkeypatch) -> None:
     )
 
     assert agent.model_settings.reasoning is None
-    assert agent.model_settings.extra_args is None
+    assert agent.model_settings.extra_args == {"reasoning_effort": "high"}
 
 
 def test_non_openai_custom_model_skips_openai_client_build(monkeypatch) -> None:
