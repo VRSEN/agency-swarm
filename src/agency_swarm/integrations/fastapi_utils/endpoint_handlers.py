@@ -1489,10 +1489,6 @@ def _apply_request_model_settings_extra_args(agent: Agent, config: ClientConfig)
         reasoning_effort = extra_args.get("reasoning_effort")
         reasoning_summary = requested_reasoning_summary if isinstance(requested_reasoning_summary, str) else "auto"
 
-    if litellm_model_name.startswith("xai/") and "grok" in litellm_model_name:
-        extra_args.pop("reasoning_effort", None)
-        extra_args.pop("reasoning_summary", None)
-        extra_args.pop("effort", None)
     normalized_effort = _reasoning_effort_value(reasoning_effort)
     normalized_summary = _reasoning_summary_value(reasoning_summary)
     if normalized_effort is not None and (
