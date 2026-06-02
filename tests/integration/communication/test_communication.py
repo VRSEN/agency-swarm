@@ -5,6 +5,59 @@ import pytest
 from agents import ModelSettings, RunResult
 
 from agency_swarm import Agency, Agent
+from tests.deterministic_model import (
+    DeterministicModel,
+    _build_message_response,
+    _build_tool_call_response,
+    _extract_last_tool_output,
+    _extract_last_user_text,
+)
+
+
+class CommunicationFlowModel(DeterministicModel):
+    def __init__(self, agent_name: str) -> None:
+        super().__init__(model=f"test-{agent_name.lower()}")
+        self.agent_name = agent_name
+
+    async def get_response(
+        self,
+        system_instructions,
+        input,
+        model_settings,
+        tools,
+        output_schema,
+        handoffs,
+        tracing,
+        *,
+        previous_response_id,
+        conversation_id,
+        prompt,
+    ):
+        tool_output = _extract_last_tool_output(input)
+        if tool_output is not None:
+            return _build_message_response(tool_output, self.model)
+
+        user_text = _extract_last_user_text(input) or ""
+        tool_names = {tool.name for tool in tools}
+        if "send_message" in tool_names and self.agent_name == "Planner":
+            return _build_tool_call_response(
+                "send_message",
+                {
+                    "recipient_agent": "Worker",
+                    "message": user_text,
+                    "additional_instructions": "",
+                },
+            )
+        if "send_message" in tool_names and self.agent_name == "Worker":
+            return _build_tool_call_response(
+                "send_message",
+                {
+                    "recipient_agent": "Reporter",
+                    "message": f"Work done for: {user_text}",
+                    "additional_instructions": "",
+                },
+            )
+        return _build_message_response(f"Final report: {user_text}", self.model)
 
 
 @pytest.fixture
@@ -69,6 +122,9 @@ def multi_agent_agency(planner_agent_instance, worker_agent_instance, reporter_a
 @pytest.mark.asyncio
 async def test_multi_agent_communication_flow(multi_agent_agency: Agency):
     """Proves end-to-end Planner→Worker→Reporter pipeline yields a final output with task context."""
+    for name in ("Planner", "Worker", "Reporter"):
+        multi_agent_agency.agents[name].model = CommunicationFlowModel(name)
+
     initial_task = f"Process test data batch {uuid.uuid4()}."
     print(f"\n--- Starting Integration Test --- TASK: {initial_task}")
 
