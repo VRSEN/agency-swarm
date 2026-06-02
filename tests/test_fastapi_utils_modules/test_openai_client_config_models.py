@@ -1259,6 +1259,55 @@ def test_openrouter_model_override_routes_to_openrouter_client() -> None:
     assert str(agent.model._client.base_url).startswith("https://openrouter.ai/api/v1")
 
 
+def test_openrouter_model_override_uses_request_base_url() -> None:
+    """OpenRouter request models should honor request-scoped gateway base_url."""
+    pytest.importorskip("agents")
+
+    from agents import OpenAIChatCompletionsModel
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    agent = Agent(name="A", instructions="x", model="gpt-4o-mini")
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(
+            model="openrouter/anthropic/claude-sonnet-4.5",
+            base_url="https://openrouter-proxy.test/v1",
+            api_key="sk-openrouter",
+        ),
+    )
+
+    assert isinstance(agent.model, OpenAIChatCompletionsModel)
+    assert agent.model._client.api_key == "sk-openrouter"
+    assert str(agent.model._client.base_url).startswith("https://openrouter-proxy.test/v1")
+
+
+def test_openrouter_helper_uses_injected_client_without_env_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Injected OpenAI-compatible clients should not need OPENROUTER_API_KEY."""
+    pytest.importorskip("agents")
+
+    from agents import OpenAIChatCompletionsModel
+    from openai import AsyncOpenAI
+
+    from agency_swarm.utils.openrouter import build_openrouter_chat_model
+
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    client = AsyncOpenAI(api_key="sk-injected", base_url="https://openrouter-proxy.test/v1")
+
+    model = build_openrouter_chat_model(
+        "openrouter/anthropic/claude-sonnet-4.5",
+        openai_client=client,
+    )
+
+    assert isinstance(model, OpenAIChatCompletionsModel)
+    assert model._client is client
+    assert model.model == "anthropic/claude-sonnet-4.5"
+
+
 def test_openrouter_model_override_requires_api_key(monkeypatch) -> None:
     """OpenRouter overrides should fail explicitly when no key is available."""
     pytest.importorskip("agents")

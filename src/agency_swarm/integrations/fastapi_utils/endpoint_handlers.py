@@ -192,6 +192,7 @@ def _apply_request_model_override(agent: Agent, model_name: str, config: ClientC
         agent.model = build_openrouter_chat_model(
             model_name,
             api_key=config.api_key if config is not None else None,
+            base_url=config.base_url if config is not None else None,
             default_headers=config.default_headers if config is not None else None,
         )
         return True
