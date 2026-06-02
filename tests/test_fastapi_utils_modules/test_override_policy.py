@@ -24,6 +24,10 @@ def test_request_override_policy_flags() -> None:
     assert model_only.has_client_overrides is True
     assert model_only.has_openai_overrides is False
 
+    settings_only = RequestOverridePolicy(ClientConfig(model_settings_extra_args={"max_tokens": 2500}))
+    assert settings_only.has_client_overrides is True
+    assert settings_only.has_openai_overrides is False
+
     litellm_cfg = cast(
         ClientConfig,
         SimpleNamespace(

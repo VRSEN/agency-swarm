@@ -28,6 +28,7 @@ class RequestOverridePolicy:
             or self.config.default_headers is not None
             or self.config.litellm_keys is not None
             or getattr(self.config, "model", None) is not None
+            or getattr(self.config, "model_settings_extra_args", None) is not None
         )
 
     @property
