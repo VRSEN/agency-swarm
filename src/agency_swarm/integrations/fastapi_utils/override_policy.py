@@ -7,6 +7,7 @@ from openai import AsyncOpenAI
 
 from agency_swarm import Agency, Agent
 from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+from agency_swarm.utils.openrouter import get_openrouter_model_name, is_openrouter_model_name
 
 
 def get_allowed_dirs_for_metadata(allowed_local_dirs: Sequence[str | Path]) -> list[str]:
@@ -52,15 +53,18 @@ class RequestOverridePolicy:
 
         base_client: AsyncOpenAI | None = None
         selected_agent = _get_upload_client_agent(agency, recipient_agent=recipient_agent)
-        if selected_agent is not None:
-            base_client = _get_openai_client_from_agent(selected_agent)
-            if base_client is None:
-                cached_client = getattr(selected_agent, "_openai_client", None)
-                if isinstance(cached_client, AsyncOpenAI):
-                    base_client = cached_client
+        if not _uses_openrouter_request_client(selected_agent, self.config):
+            if selected_agent is not None:
+                base_client = _get_openai_client_from_agent(selected_agent)
+                if base_client is None:
+                    cached_client = getattr(selected_agent, "_openai_client", None)
+                    if isinstance(cached_client, AsyncOpenAI):
+                        base_client = cached_client
 
-        if base_client is None:
-            base_client = get_default_openai_client()
+            if base_client is None:
+                base_client = get_default_openai_client()
+        else:
+            return get_default_openai_client()
 
         if base_client is None:
             if self.config.api_key is None:
@@ -77,6 +81,12 @@ class RequestOverridePolicy:
             base_url=self.config.base_url,
             default_headers=self.config.default_headers,
         )
+
+
+def _uses_openrouter_request_client(agent: Agent | None, config: ClientConfig) -> bool:
+    if isinstance(config.model, str) and is_openrouter_model_name(config.model):
+        return True
+    return agent is not None and get_openrouter_model_name(agent.model) is not None
 
 
 def _get_openai_client_from_agent(agent: Agent) -> AsyncOpenAI | None:
