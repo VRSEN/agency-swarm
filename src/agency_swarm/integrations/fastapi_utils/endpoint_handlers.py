@@ -88,7 +88,11 @@ from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
 from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
 from agency_swarm.ui.core.agui_adapter import AguiAdapter
 from agency_swarm.utils.dry_run import force_dry_run
-from agency_swarm.utils.openrouter import build_openrouter_chat_model, is_openrouter_model_name
+from agency_swarm.utils.openrouter import (
+    build_openrouter_chat_model,
+    get_openrouter_model_name,
+    is_openrouter_model_name,
+)
 from agency_swarm.utils.serialization import serialize
 from agency_swarm.utils.usage_tracking import (
     calculate_usage_with_cost,
@@ -1924,6 +1928,8 @@ def _get_model_name_for_override_logging(agent: Agent) -> str | None:
 
 def _agent_supports_openai_client_override(agent: Agent) -> bool:
     """Return True only when request OpenAI client overrides are applicable."""
+    if get_openrouter_model_name(agent.model) is not None:
+        return True
     model_name = _get_model_name_for_override_logging(agent)
     if model_name is None:
         return False
@@ -1994,6 +2000,12 @@ def _apply_client_to_agent(agent: Agent, client: AsyncOpenAI | None, config: Cli
             if _is_codex_base_url(str(client.base_url)):
                 _apply_codex_compatibility_model_settings(agent)
     elif isinstance(model, OpenAIChatCompletionsModel):
+        openrouter_model_name = get_openrouter_model_name(model)
+        if openrouter_model_name is not None:
+            if client is None:
+                return
+            agent.model = build_openrouter_chat_model(openrouter_model_name, openai_client=client)
+            return
         if _is_litellm_model(model.model):
             if has_litellm_overrides:
                 _apply_litellm_config(agent, model.model, config)
