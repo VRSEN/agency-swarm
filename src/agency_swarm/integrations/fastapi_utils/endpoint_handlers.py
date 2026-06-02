@@ -170,9 +170,9 @@ def _apply_request_model_override(agent: Agent, model_name: str, config: ClientC
     during the swap so the caller can skip the downstream client-apply step.
     """
     model = agent.model
-    gateway_client = _resolve_request_gateway_client(agent, config)
 
     if is_openrouter_model_name(model_name):
+        gateway_client = _resolve_request_gateway_client(agent, config)
         openrouter_client = None
         if get_openrouter_model_name(model) is not None:
             openrouter_client = gateway_client if gateway_client is not None else _get_openai_client_from_agent(agent)
@@ -184,6 +184,19 @@ def _apply_request_model_override(agent: Agent, model_name: str, config: ClientC
             openai_client=openrouter_client,
         )
         return gateway_client is not None
+
+    if get_openrouter_model_name(model) is not None:
+        if _is_litellm_model(model_name):
+            _apply_request_litellm_model(agent, model_name)
+            return False
+        client = _resolve_openai_client_after_openrouter_override(config)
+        if client is None:
+            agent.model = model_name
+            return False
+        agent.model = OpenAIChatCompletionsModel(model=model_name, openai_client=client)
+        return _has_request_openai_overrides(config)
+
+    gateway_client = _resolve_request_gateway_client(agent, config)
 
     if isinstance(model, OpenAIResponsesModel):
         if _is_litellm_model(model_name):
@@ -229,6 +242,26 @@ def _resolve_request_gateway_client(agent: Agent, config: ClientConfig | None) -
     if config.base_url is None and config.api_key is None and config.default_headers is None:
         return None
     return _build_openai_client_for_agent(agent, config)
+
+
+def _resolve_openai_client_after_openrouter_override(config: ClientConfig | None) -> AsyncOpenAI | None:
+    """Build a non-OpenRouter OpenAI client when an OpenRouter wrapper swaps away."""
+    base_client = get_default_openai_client()
+    if config is None:
+        return base_client
+    if base_client is None:
+        if config.api_key is None and config.base_url is None:
+            return None
+        return AsyncOpenAI(
+            api_key=config.api_key,
+            base_url=config.base_url,
+            default_headers=config.default_headers,
+        )
+    return base_client.copy(
+        api_key=config.api_key,
+        base_url=config.base_url,
+        default_headers=config.default_headers,
+    )
 
 
 def _rebuild_openai_responses_model(
