@@ -688,6 +688,38 @@ def test_xai_grok_variant_forwards_selected_reasoning_effort() -> None:
     assert agent.model_settings.extra_args == {"reasoning_effort": "high"}
 
 
+@pytest.mark.parametrize("model_name", ["xai/grok-4", "xai/grok-4-1-fast-non-reasoning"])
+def test_xai_grok_variant_drops_unsupported_reasoning_effort(model_name: str) -> None:
+    """xAI Grok variants without configurable reasoning should not receive LiteLLM reasoning args."""
+    pytest.importorskip("agents")
+    pytest.importorskip("agents.extensions.models.litellm_model")
+
+    from agents.extensions.models.litellm_model import LitellmModel
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    agent = Agent(name="A", instructions="x", model=LitellmModel(model=model_name))
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(
+            model=f"litellm/{model_name}",
+            model_settings_extra_args={
+                "effort": "medium",
+                "reasoning_effort": "high",
+                "reasoning_summary": "auto",
+                "include": ["reasoning.encrypted_content"],
+            },
+        ),
+    )
+
+    assert agent.model_settings.reasoning is None
+    assert agent.model_settings.extra_args is None
+
+
 def test_non_openai_custom_model_skips_openai_client_build(monkeypatch) -> None:
     """Custom non-OpenAI model names should skip OpenAI client construction entirely."""
     pytest.importorskip("agents")
