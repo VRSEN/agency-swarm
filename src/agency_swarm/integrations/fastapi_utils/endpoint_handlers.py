@@ -173,13 +173,17 @@ def _apply_request_model_override(agent: Agent, model_name: str, config: ClientC
     gateway_client = _resolve_request_gateway_client(agent, config)
 
     if is_openrouter_model_name(model_name):
+        openrouter_client = None
+        if get_openrouter_model_name(model) is not None:
+            openrouter_client = gateway_client if gateway_client is not None else _get_openai_client_from_agent(agent)
         agent.model = build_openrouter_chat_model(
             model_name,
-            api_key=config.api_key if config is not None else None,
-            base_url=config.base_url if config is not None else None,
-            default_headers=config.default_headers if config is not None else None,
+            api_key=None if openrouter_client is not None or config is None else config.api_key,
+            base_url=None if openrouter_client is not None or config is None else config.base_url,
+            default_headers=None if openrouter_client is not None or config is None else config.default_headers,
+            openai_client=openrouter_client,
         )
-        return True
+        return gateway_client is not None
 
     if isinstance(model, OpenAIResponsesModel):
         if _is_litellm_model(model_name):
