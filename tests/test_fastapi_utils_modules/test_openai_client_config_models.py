@@ -806,7 +806,7 @@ def test_openrouter_model_override_requires_api_key(monkeypatch) -> None:
     agent = Agent(name="A", instructions="x", model="gpt-4o-mini")
     agency = type("Agency", (), {"agents": {"A": agent}})()
 
-    with pytest.raises(ValueError, match="OpenRouter API key is required"):
+    with pytest.raises(ValueError, match="OPENROUTER_API_KEY is required"):
         apply_openai_client_config(
             agency,
             ClientConfig(model="openrouter/anthropic/claude-sonnet-4.5"),
