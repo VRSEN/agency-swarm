@@ -215,10 +215,10 @@ def test_mcp_with_auth_token():
 
         # Verify auth middleware was actually added
         assert len(app.middleware) > 0, "Auth middleware should be added when token is provided"
-        middleware = app.middleware[0]
+        middleware = next((item for item in app.middleware if hasattr(item, "expected")), None)
 
         # Check that it's the StaticBearer middleware with correct token
-        assert hasattr(middleware, "expected"), "Middleware should have 'expected' attribute"
+        assert middleware is not None, "Auth middleware should have 'expected' attribute"
         assert middleware.expected == "Bearer test-token-123", "Middleware should expect correct Bearer token"
     finally:
         del os.environ["TEST_MCP_TOKEN"]
@@ -239,7 +239,27 @@ def test_mcp_stdio_with_auth_warning(caplog):
 
 
 def test_run_mcp_passes_uvicorn_config_to_fastmcp_run():
-    """Test run_mcp forwards uvicorn_config for HTTP/SSE transports."""
+    """Test run_mcp forwards uvicorn_config and stateless mode for streamable HTTP."""
+
+    from agency_swarm import run_mcp
+
+    with patch("agency_swarm.integrations.mcp_server.FastMCP.run") as run_mock:
+        run_mcp(
+            tools=[sample_tool],
+            app_token_env="",  # no auth middleware
+            transport="streamable-http",
+            uvicorn_config={"timeout_graceful_shutdown": 1},
+        )
+
+    run_mock.assert_called_once()
+    _, kwargs = run_mock.call_args
+    assert kwargs["transport"] == "streamable-http"
+    assert kwargs["uvicorn_config"] == {"timeout_graceful_shutdown": 1}
+    assert kwargs["stateless_http"] is True
+
+
+def test_run_mcp_preserves_sse_stateful_transport():
+    """SSE transport does not support FastMCP stateless mode."""
 
     from agency_swarm import run_mcp
 
@@ -255,6 +275,39 @@ def test_run_mcp_passes_uvicorn_config_to_fastmcp_run():
     _, kwargs = run_mock.call_args
     assert kwargs["transport"] == "sse"
     assert kwargs["uvicorn_config"] == {"timeout_graceful_shutdown": 1}
+    assert kwargs["stateless_http"] is False
+
+
+def test_returned_mcp_app_defaults_streamable_http_to_stateless():
+    """Returned FastMCP apps preserve stateless streamable HTTP behavior."""
+
+    from agency_swarm import run_mcp
+
+    app = run_mcp(tools=[sample_tool], app_token_env="", transport="streamable-http", return_app=True)
+
+    with patch("agency_swarm.integrations.mcp_server.FastMCP.http_app") as http_app_mock:
+        app.http_app(transport="streamable-http")
+
+    http_app_mock.assert_called_once()
+    _, kwargs = http_app_mock.call_args
+    assert kwargs["transport"] == "streamable-http"
+    assert kwargs["stateless_http"] is True
+
+
+def test_returned_mcp_app_defaults_sse_to_stateful():
+    """Returned FastMCP apps force SSE out of stateless mode."""
+
+    from agency_swarm import run_mcp
+
+    app = run_mcp(tools=[sample_tool], app_token_env="", transport="sse", return_app=True)
+
+    with patch("agency_swarm.integrations.mcp_server.FastMCP.http_app") as http_app_mock:
+        app.http_app(transport="sse")
+
+    http_app_mock.assert_called_once()
+    _, kwargs = http_app_mock.call_args
+    assert kwargs["transport"] == "sse"
+    assert kwargs["stateless_http"] is False
 
 
 def test_mcp_unsupported_tool_type():
@@ -299,7 +352,7 @@ async def test_mcp_auth_middleware_methods():
         )
 
         # Get the auth middleware that was added
-        middleware = app.middleware[0] if app.middleware else None
+        middleware = next((item for item in app.middleware if hasattr(item, "expected")), None)
         assert middleware is not None
 
         # Test on_request method with correct auth
