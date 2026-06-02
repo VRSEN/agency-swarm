@@ -1219,7 +1219,7 @@ def _apply_request_model_settings_extra_args(agent: Agent, config: ClientConfig)
         reasoning_effort = extra_args.get("reasoning_effort")
         reasoning_summary = extra_args.get("reasoning_summary")
     elif litellm_model_name.startswith("xai/"):
-        _normalize_xai_litellm_variant_args(extra_args)
+        _normalize_xai_litellm_variant_args(extra_args, litellm_model_name)
         reasoning_effort = extra_args.get("reasoning_effort")
         reasoning_summary = extra_args.get("reasoning_summary")
     elif is_litellm_gemini:
@@ -1281,13 +1281,28 @@ def _normalize_anthropic_litellm_variant_args(extra_args: dict[str, Any]) -> Non
     _normalize_thinking_budget_tokens(extra_args)
 
 
-def _normalize_xai_litellm_variant_args(extra_args: dict[str, Any]) -> None:
+def _normalize_xai_litellm_variant_args(extra_args: dict[str, Any], model_name: str) -> None:
     """Keep only xAI reasoning fields that LiteLLM forwards to Grok chat."""
     effort = extra_args.pop("effort", None)
-    if isinstance(effort, str) and "reasoning_effort" not in extra_args:
-        extra_args["reasoning_effort"] = effort
+    if _xai_litellm_model_supports_reasoning_effort(model_name):
+        if isinstance(effort, str) and "reasoning_effort" not in extra_args:
+            extra_args["reasoning_effort"] = effort
+    else:
+        extra_args.pop("reasoning_effort", None)
     extra_args.pop("reasoning_summary", None)
     extra_args.pop("include", None)
+
+
+def _xai_litellm_model_supports_reasoning_effort(model_name: str) -> bool:
+    model = model_name.removeprefix("xai/").lower()
+    if "non-reasoning" in model:
+        return False
+    return (
+        "grok-3-mini" in model
+        or "grok-4.3" in model
+        or "grok-4-3" in model
+        or ("grok" in model and "reasoning" in model)
+    )
 
 
 def _normalize_gemini_litellm_variant_args(extra_args: dict[str, Any]) -> None:
