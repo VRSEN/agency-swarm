@@ -683,8 +683,8 @@ def test_litellm_openai_variant_sets_reasoning_without_forcing_other_providers()
     assert agent.model_settings.extra_args == {"reasoning_effort": "high", "reasoning_summary": "auto"}
 
 
-def test_xai_grok_variant_does_not_forward_unsupported_reasoning_effort() -> None:
-    """Grok reasoning models reason by model choice and reject reasoning_effort parameters."""
+def test_xai_grok_variant_forwards_selected_reasoning_effort() -> None:
+    """Selected xAI Grok variants should reach LiteLLM as explicit extra args."""
     pytest.importorskip("agents")
     pytest.importorskip("agents.extensions.models.litellm_model")
 
@@ -694,19 +694,19 @@ def test_xai_grok_variant_does_not_forward_unsupported_reasoning_effort() -> Non
     from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
     from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
 
-    agent = Agent(name="A", instructions="x", model=LitellmModel(model="xai/grok-4.20-0309-reasoning"))
+    agent = Agent(name="A", instructions="x", model=LitellmModel(model="xai/grok-4.3"))
     agency = type("Agency", (), {"agents": {"A": agent}})()
 
     apply_openai_client_config(
         agency,
         ClientConfig(
-            model="litellm/xai/grok-4.20-0309-reasoning",
-            model_settings_extra_args={"reasoning_effort": "high", "reasoning_summary": "auto"},
+            model="litellm/xai/grok-4.3",
+            model_settings_extra_args={"reasoning_effort": "high"},
         ),
     )
 
     assert agent.model_settings.reasoning is None
-    assert agent.model_settings.extra_args is None
+    assert agent.model_settings.extra_args == {"reasoning_effort": "high"}
 
 
 def test_non_openai_custom_model_skips_openai_client_build(monkeypatch) -> None:
