@@ -1259,6 +1259,25 @@ def test_openrouter_model_override_routes_to_openrouter_client() -> None:
     assert str(agent.model._client.base_url).startswith("https://openrouter.ai/api/v1")
 
 
+def test_openrouter_model_override_requires_api_key(monkeypatch) -> None:
+    """OpenRouter overrides should fail explicitly when no key is available."""
+    pytest.importorskip("agents")
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    agent = Agent(name="A", instructions="x", model="gpt-4o-mini")
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    with pytest.raises(ValueError, match="OpenRouter API key is required"):
+        apply_openai_client_config(
+            agency,
+            ClientConfig(model="openrouter/anthropic/claude-sonnet-4.5"),
+        )
+
+
 def test_model_override_refreshes_gpt5_framework_defaults() -> None:
     """Swapping to a GPT-5 model should re-layer reasoning defaults without wiping headers."""
     pytest.importorskip("agents")

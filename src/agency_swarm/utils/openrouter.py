@@ -9,7 +9,6 @@ from openai import AsyncOpenAI
 OPENROUTER_API_KEY_ENV = "OPENROUTER_API_KEY"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 OPENROUTER_MODEL_PREFIX = "openrouter/"
-_MISSING_OPENROUTER_API_KEY = "missing-openrouter-api-key"
 
 
 def is_openrouter_model_name(model_name: str) -> bool:
@@ -38,8 +37,11 @@ def build_openrouter_chat_model(
 ) -> OpenAIChatCompletionsModel:
     """Build an OpenAI-compatible Chat Completions model for OpenRouter."""
     actual_model = strip_openrouter_prefix(model_name)
+    resolved_api_key = api_key or os.getenv(OPENROUTER_API_KEY_ENV)
+    if not resolved_api_key:
+        raise ValueError("OPENROUTER_API_KEY is required for openrouter/... models")
     client = openai_client or AsyncOpenAI(
-        api_key=api_key or os.getenv(OPENROUTER_API_KEY_ENV) or _MISSING_OPENROUTER_API_KEY,
+        api_key=resolved_api_key,
         base_url=base_url or OPENROUTER_BASE_URL,
         default_headers=default_headers,
     )
