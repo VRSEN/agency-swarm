@@ -204,7 +204,7 @@ def _apply_request_model_override(agent: Agent, model_name: str, config: ClientC
         return gateway_client is not None
 
     if _LITELLM_AVAILABLE and LitellmModel is not None and isinstance(model, LitellmModel):
-        actual = model_name[8:] if model_name.startswith("litellm/") else model_name
+        actual = _normalize_litellm_model_name(model_name)
         agent.model = LitellmModel(model=actual, base_url=model.base_url, api_key=model.api_key)
         return False
 
@@ -307,7 +307,7 @@ def _apply_request_litellm_model(agent: Agent, model_name: str) -> None:
             model_name,
         )
         return
-    actual = model_name[8:] if model_name.startswith("litellm/") else model_name
+    actual = _normalize_litellm_model_name(model_name)
     agent.model = LitellmModel(model=actual, base_url=None, api_key=None)
 
 
@@ -1495,19 +1495,26 @@ def _apply_request_model_settings_extra_args(agent: Agent, config: ClientConfig)
 
     normalized_effort = _reasoning_effort_value(reasoning_effort)
     normalized_summary = _reasoning_summary_value(reasoning_summary)
-    if normalized_effort is not None and (
-        not _agent_uses_litellm(agent) or litellm_model_name.startswith(("openai/", "google/", "gemini/", "vertex_ai/"))
+    uses_litellm = _agent_uses_litellm(agent)
+    is_litellm_openai = uses_litellm and litellm_model_name.startswith("openai/")
+    if normalized_effort is not None and is_litellm_openai:
+        current.reasoning = None
+        if normalized_summary is not None:
+            extra_args["reasoning_effort"] = {"effort": normalized_effort, "summary": normalized_summary}
+        else:
+            extra_args["reasoning_effort"] = normalized_effort
+        extra_args.pop("reasoning_summary", None)
+    elif normalized_effort is not None and (
+        not uses_litellm or litellm_model_name.startswith(("gemini/", "vertex_ai/"))
     ):
         current.reasoning = Reasoning(
             effort=normalized_effort,
             summary=normalized_summary,
         )
-        if not _agent_uses_litellm(agent) or is_litellm_gemini:
+        if not uses_litellm or is_litellm_gemini:
             extra_args.pop("reasoning_effort", None)
             extra_args.pop("reasoning_summary", None)
-        elif litellm_model_name.startswith("openai/"):
-            extra_args.pop("reasoning_summary", None)
-    elif isinstance(extra_args.get("reasoning"), dict) and not _agent_uses_litellm(agent):
+    elif isinstance(extra_args.get("reasoning"), dict) and not uses_litellm:
         raw_reasoning = cast(dict[str, Any], extra_args.pop("reasoning"))
         effort = raw_reasoning.get("effort")
         summary = raw_reasoning.get("summary")
@@ -1623,8 +1630,7 @@ def _litellm_model_name(agent: Agent) -> str:
         name = ""
     if not isinstance(name, str):
         return ""
-    normalized = name.lower()
-    return normalized[8:] if normalized.startswith("litellm/") else normalized
+    return _normalize_litellm_model_name(name).lower()
 
 
 def _is_codex_base_url(value: str | None) -> bool:
@@ -1778,6 +1784,14 @@ def _apply_codex_compatibility_model_settings(agent: Agent) -> None:
 def _is_litellm_model(model_name: str) -> bool:
     """Check if a model name is a LiteLLM model (uses litellm/ prefix)."""
     return model_name.startswith("litellm/")
+
+
+def _normalize_litellm_model_name(model_name: str) -> str:
+    actual = model_name[8:] if model_name.startswith("litellm/") else model_name
+    provider, sep, rest = actual.partition("/")
+    if sep and provider.lower() == "google":
+        return f"gemini/{rest}"
+    return actual
 
 
 def _is_openai_model_name(model_name: str) -> bool:
@@ -2024,11 +2038,10 @@ def _apply_litellm_config(agent: Agent, model_name: str, config: ClientConfig) -
         )
         return
 
-    # Strip the 'litellm/' prefix to get the actual model identifier
-    actual_model = model_name[8:] if model_name.startswith("litellm/") else model_name
+    actual_model = _normalize_litellm_model_name(model_name)
 
-    api_key = _resolve_litellm_api_key(model_name, config, existing_api_key=None)
-    base_url = _resolve_litellm_base_url(model_name, config, existing_base_url=None)
+    api_key = _resolve_litellm_api_key(actual_model, config, existing_api_key=None)
+    base_url = _resolve_litellm_base_url(actual_model, config, existing_base_url=None)
 
     agent.model = LitellmModel(
         model=actual_model,
