@@ -721,6 +721,38 @@ def test_xai_grok_variant_drops_unsupported_reasoning_effort(model_name: str) ->
     assert agent.model_settings.extra_args is None
 
 
+def test_xai_grok_fallback_drops_fixed_reasoning_effort(monkeypatch) -> None:
+    """If LiteLLM metadata is unavailable, fixed-reasoning Grok variants should stay stripped."""
+    pytest.importorskip("agents")
+    litellm = pytest.importorskip("litellm")
+    pytest.importorskip("agents.extensions.models.litellm_model")
+
+    from agents.extensions.models.litellm_model import LitellmModel
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    def fail_supports_reasoning(*args, **kwargs):
+        raise RuntimeError("metadata unavailable")
+
+    monkeypatch.setattr(litellm, "supports_reasoning", fail_supports_reasoning)
+
+    agent = Agent(name="A", instructions="x", model=LitellmModel(model="xai/grok-4-fast-reasoning"))
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(
+            model="litellm/xai/grok-4-fast-reasoning",
+            model_settings_extra_args={"reasoning_effort": "high", "reasoning_summary": "auto"},
+        ),
+    )
+
+    assert agent.model_settings.reasoning is None
+    assert agent.model_settings.extra_args is None
+
+
 def test_non_openai_custom_model_skips_openai_client_build(monkeypatch) -> None:
     """Custom non-OpenAI model names should skip OpenAI client construction entirely."""
     pytest.importorskip("agents")
