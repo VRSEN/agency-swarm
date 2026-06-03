@@ -37,6 +37,7 @@ CommunicationFlowEntry = (
     tuple[Agent, Agent]  # Basic (sender, receiver) pair
     | tuple[AgentFlow, type]  # Agent flow with tool class
     | tuple[Agent, Agent, type]  # Individual (sender, receiver, tool_class)
+    | tuple[Agent, Agent, list[type] | tuple[type, ...]]  # Individual pair with multiple tool classes
     | AgentFlow  # Standalone agent flow (uses default tool)
 )
 
@@ -75,7 +76,8 @@ class Agency:
     _agent_runtime_state: dict[str, "AgentRuntimeState"]
 
     # Communication tool class mappings for agent-to-agent specific tools
-    _communication_tool_classes: dict[tuple[str, str], type]  # (sender_name, receiver_name) -> tool_class
+    _communication_tool_classes: dict[tuple[str, str], list[type]]  # (sender_name, receiver_name) -> tool_classes
+    _default_communication_tool_pairs: set[tuple[str, str]]  # pairs that requested the default send_message tool
 
     def __init__(
         self,
@@ -133,15 +135,18 @@ class Agency:
 
         _derived_entry_points: list[Agent] = []
         _derived_communication_flows: list[tuple[Agent, Agent]] = []
-        _communication_tool_classes: dict[tuple[str, str], type] = {}  # (sender_name, receiver_name) -> tool_class
+        _communication_tool_classes: dict[tuple[str, str], list[type]] = {}
+        _default_communication_tool_pairs: set[tuple[str, str]] = set()
 
         if entry_point_agents or communication_flows is not None:
             _derived_entry_points = list(entry_point_agents)
             if not all(isinstance(ep, Agent) for ep in _derived_entry_points):
                 raise TypeError("All positional arguments (entry points) must be Agent instances.")
-            _derived_communication_flows, _communication_tool_classes = parse_agent_flows(
-                self, communication_flows or []
-            )
+            (
+                _derived_communication_flows,
+                _communication_tool_classes,
+                _default_communication_tool_pairs,
+            ) = parse_agent_flows(self, communication_flows or [])
         else:
             raise ValueError(
                 "Agency structure not defined. Provide entry point agents as positional arguments and/or "
@@ -188,6 +193,7 @@ class Agency:
         logger.info(f"Designated entry points: {[ep.name for ep in self.entry_points]}")
         self._derived_communication_flows = _derived_communication_flows
         self._communication_tool_classes = _communication_tool_classes
+        self._default_communication_tool_pairs = _default_communication_tool_pairs
         configure_agents(self, _derived_communication_flows)
         apply_shared_resources(self)
         for agent_name, agent_instance in self.agents.items():

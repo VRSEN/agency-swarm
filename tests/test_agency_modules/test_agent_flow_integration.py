@@ -39,9 +39,9 @@ def test_agency_with_mixed_communication_flows():
 
     # Check tool mappings
     tool_mappings = agency._communication_tool_classes
-    assert tool_mappings[("Agent1", "Agent2")] == CustomSendMessage
-    assert tool_mappings[("Agent2", "Agent3")] == CustomSendMessage
-    assert tool_mappings[("Agent2", "Agent4")] == Handoff
+    assert tool_mappings[("Agent1", "Agent2")] == [CustomSendMessage]
+    assert tool_mappings[("Agent2", "Agent3")] == [CustomSendMessage]
+    assert tool_mappings[("Agent2", "Agent4")] == [Handoff]
 
 
 def test_agency_with_mixed_communication_flows_reverse():
@@ -61,8 +61,47 @@ def test_agency_with_mixed_communication_flows_reverse():
 
     # Check tool mappings
     tool_mappings = agency._communication_tool_classes
-    assert tool_mappings[("Agent1", "Agent2")] == CustomSendMessage
-    assert tool_mappings[("Agent2", "Agent3")] == CustomSendMessage
+    assert tool_mappings[("Agent1", "Agent2")] == [CustomSendMessage]
+    assert tool_mappings[("Agent2", "Agent3")] == [CustomSendMessage]
+
+
+def test_agent_pair_can_use_send_message_and_handoff():
+    """Test that one agent pair can expose both SendMessage and Handoff."""
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
+
+    agency = Agency(
+        agent1,
+        communication_flows=[
+            (agent1, agent2),
+            (agent1 > agent2, Handoff),
+        ],
+    )
+
+    assert agency._communication_tool_classes[("Agent1", "Agent2")] == [Handoff]
+    assert ("Agent1", "Agent2") in agency._default_communication_tool_pairs
+
+    runtime_state = agency.get_agent_runtime_state("Agent1")
+    assert "agent2" in runtime_state.subagents
+    assert "SendMessage" in runtime_state.send_message_tools
+
+    handoff_names = [handoff.tool_name for handoff in runtime_state.handoffs]
+    assert "transfer_to_Agent2" in handoff_names
+
+
+def test_duplicate_communication_tool_class_is_rejected():
+    """Test that duplicate tool classes for the same pair are rejected."""
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
+
+    with pytest.raises(ValueError, match="Duplicate communication tool class detected"):
+        Agency(
+            agent1,
+            communication_flows=[
+                (agent1, agent2, SendMessage),
+                (agent1, agent2, SendMessage),
+            ],
+        )
 
 
 def test_duplicate_flow_detection_with_chains():
@@ -71,7 +110,7 @@ def test_duplicate_flow_detection_with_chains():
     agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
     agent3 = Agent(name="Agent3", instructions="Test agent 3", model="gpt-5.4-mini")
 
-    with pytest.raises(ValueError, match="Duplicate communication flow detected"):
+    with pytest.raises(ValueError, match="Duplicate communication tool class detected"):
         Agency(
             agent1,
             communication_flows=[
