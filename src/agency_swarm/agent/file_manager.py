@@ -452,14 +452,16 @@ class AgentFileManager:
         if not self.agent.instructions:
             return
 
+        instructions_path = os.fspath(self.agent.instructions)
+
         # Try class-relative path first
-        class_instructions_path = os.path.normpath(os.path.join(self.get_class_folder_path(), self.agent.instructions))
+        class_instructions_path = os.path.normpath(os.path.join(self.get_class_folder_path(), instructions_path))
         if os.path.isfile(class_instructions_path):
-            with open(class_instructions_path) as f:
+            with open(class_instructions_path, encoding="utf-8") as f:
                 self.agent.instructions = f.read()
-        elif os.path.isfile(self.agent.instructions):
+        elif os.path.isfile(instructions_path):
             # Try as absolute or CWD-relative path
-            with open(self.agent.instructions) as f:
+            with open(instructions_path, encoding="utf-8") as f:
                 self.agent.instructions = f.read()
         else:
             # Keep original instructions if it's not a file path
