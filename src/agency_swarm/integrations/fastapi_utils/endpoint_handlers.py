@@ -13,7 +13,15 @@ from pathlib import Path
 from typing import Any, cast
 from weakref import WeakKeyDictionary
 
-from ag_ui.core import EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
+from ag_ui.core import (
+    EventType,
+    Message,
+    MessagesSnapshotEvent,
+    RunErrorEvent,
+    RunFinishedEvent,
+    RunStartedEvent,
+    SystemMessage,
+)
 from ag_ui.encoder import EventEncoder
 from agents import (
     Model,
@@ -528,11 +536,11 @@ def _build_agui_message_input(request_messages: list[Any] | None) -> str | list[
 
 
 def _build_agui_snapshot_messages(
-    request_messages: list[Any],
+    request_messages: list[Message],
     message_input: str | list[TResponseInputItem],
-) -> list[dict[str, Any]]:
+) -> list[Message]:
     """Seed AG-UI snapshots with the synthetic file_urls context when present."""
-    snapshot_messages = [message.model_dump() for message in request_messages]
+    snapshot_messages = list(request_messages)
     if not isinstance(message_input, list) or not message_input:
         return snapshot_messages
 
@@ -541,11 +549,11 @@ def _build_agui_snapshot_messages(
         return snapshot_messages
 
     file_urls_message_dict = cast(dict[str, Any], file_urls_message)
-    agui_file_urls_message = {
-        "id": f"system_file_urls_{uuid.uuid4().hex}",
-        "role": "system",
-        "content": str(file_urls_message_dict["content"]),
-    }
+    agui_file_urls_message = SystemMessage(
+        id=f"system_file_urls_{uuid.uuid4().hex}",
+        role="system",
+        content=str(file_urls_message_dict["content"]),
+    )
     if not snapshot_messages:
         return [agui_file_urls_message]
 
@@ -1039,7 +1047,7 @@ def make_agui_chat_endpoint(
                         agui_events = agui_event if isinstance(agui_event, list) else [agui_event]
                         for agui_evt in agui_events:
                             if isinstance(agui_evt, MessagesSnapshotEvent):
-                                snapshot_messages.append(agui_evt.messages[0].model_dump())
+                                snapshot_messages.append(agui_evt.messages[0])
                                 yield encoder.encode(
                                     MessagesSnapshotEvent(type=EventType.MESSAGES_SNAPSHOT, messages=snapshot_messages)
                                 )
