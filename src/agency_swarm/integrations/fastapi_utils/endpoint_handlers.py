@@ -547,6 +547,18 @@ def _build_agui_message_input(request_messages: list[Any] | None) -> str | list[
     return cast(str, content)
 
 
+def _normalize_agui_history_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Normalize AG-UI content parts in replayed history before loading them into runner history."""
+    normalized_messages: list[dict[str, Any]] = []
+    for message in messages:
+        normalized_message = dict(message)
+        content = normalized_message.get("content")
+        if isinstance(content, list):
+            normalized_message["content"] = [_convert_agui_content_part(part) for part in content]
+        normalized_messages.append(normalized_message)
+    return normalized_messages
+
+
 def _convert_agui_content_part(part: Any) -> dict[str, Any]:
     """Convert one AG-UI content part into a Responses input content part."""
     if isinstance(part, TextInputContent):
@@ -1044,7 +1056,9 @@ def make_agui_chat_endpoint(
 
             # Convert AG-UI messages to flat chat history with metadata
             def load_callback() -> list:
-                agui_messages = AguiAdapter.agui_messages_to_chat_history(request.messages)
+                agui_messages = _normalize_agui_history_messages(
+                    AguiAdapter.agui_messages_to_chat_history(request.messages)
+                )
                 # Add agency metadata to each message
                 for msg in agui_messages:
                     if "agent" not in msg:

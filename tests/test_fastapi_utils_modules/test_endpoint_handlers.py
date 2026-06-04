@@ -24,6 +24,7 @@ from ag_ui.encoder import EventEncoder
 from agency_swarm.integrations.fastapi_utils.endpoint_handlers import (
     _build_agui_message_input,
     _build_message_with_file_urls_context,
+    _normalize_agui_history_messages,
     make_agui_chat_endpoint,
     make_response_endpoint,
 )
@@ -133,6 +134,37 @@ async def test_build_agui_message_input_wraps_content_parts() -> None:
                 {"type": "input_file", "file_data": "BBBB"},
             ],
         }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_normalize_agui_history_messages_serializes_content_parts() -> None:
+    """Replayed AG-UI history should not retain Pydantic content-part objects."""
+
+    history = _normalize_agui_history_messages(
+        [
+            {
+                "role": "user",
+                "content": [
+                    TextInputContent(text="hello"),
+                    ImageInputContent(
+                        source=InputContentUrlSource(value="https://example.com/image.png", mime_type="image/png")
+                    ),
+                ],
+            },
+            {"role": "assistant", "content": "ok"},
+        ]
+    )
+
+    assert history == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": "hello"},
+                {"type": "input_image", "detail": "auto", "image_url": "https://example.com/image.png"},
+            ],
+        },
+        {"role": "assistant", "content": "ok"},
     ]
 
 
