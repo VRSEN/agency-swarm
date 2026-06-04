@@ -14,6 +14,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -25,6 +26,7 @@ from agents.mcp.server import (
     MCPServerStreamableHttp,
     MCPServerStreamableHttpParams,
 )
+from fastmcp import FastMCP
 
 from agency_swarm import Agency, Agent, run_mcp
 from tests.data.tools.sample_tool import sample_tool
@@ -39,6 +41,11 @@ def _reserve_port(host: str = "127.0.0.1") -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind((host, 0))
         return sock.getsockname()[1]
+
+
+def _route_methods(app: Any, path: str) -> set[str] | None:
+    route = next(route for route in app.routes if getattr(route, "path", None) == path)
+    return getattr(route, "methods", None)
 
 
 @pytest.fixture(scope="module")
@@ -238,8 +245,9 @@ def test_mcp_stdio_with_auth_warning(caplog):
         del os.environ["TEST_STDIO_TOKEN"]
 
 
-def test_run_mcp_passes_uvicorn_config_to_fastmcp_run():
-    """Test run_mcp forwards uvicorn_config and stateless mode for streamable HTTP."""
+@pytest.mark.parametrize("transport", ["http", "streamable-http"])
+def test_run_mcp_direct_http_uses_stateless_mode(transport):
+    """Direct FastMCP HTTP runs preserve Agency Swarm's previous stateless default."""
 
     from agency_swarm import run_mcp
 
@@ -247,13 +255,13 @@ def test_run_mcp_passes_uvicorn_config_to_fastmcp_run():
         run_mcp(
             tools=[sample_tool],
             app_token_env="",  # no auth middleware
-            transport="streamable-http",
+            transport=transport,
             uvicorn_config={"timeout_graceful_shutdown": 1},
         )
 
     run_mock.assert_called_once()
     _, kwargs = run_mock.call_args
-    assert kwargs["transport"] == "streamable-http"
+    assert kwargs["transport"] == transport
     assert kwargs["uvicorn_config"] == {"timeout_graceful_shutdown": 1}
     assert kwargs["stateless_http"] is True
 
@@ -278,35 +286,78 @@ def test_run_mcp_preserves_sse_stateful_transport():
     assert kwargs["stateless_http"] is False
 
 
-def test_returned_mcp_app_defaults_streamable_http_to_stateless():
-    """Returned FastMCP apps preserve stateless streamable HTTP behavior."""
+def test_returned_mcp_app_preserves_fastmcp_interface() -> None:
+    """Returned apps keep the FastMCP interface for caller-owned serving."""
 
     from agency_swarm import run_mcp
 
     app = run_mcp(tools=[sample_tool], app_token_env="", transport="streamable-http", return_app=True)
 
-    with patch("agency_swarm.integrations.mcp_server.FastMCP.http_app") as http_app_mock:
-        app.http_app(transport="streamable-http")
+    assert isinstance(app, FastMCP)
 
-    http_app_mock.assert_called_once()
-    _, kwargs = http_app_mock.call_args
-    assert kwargs["transport"] == "streamable-http"
+
+@pytest.mark.parametrize("transport", ["http", "streamable-http"])
+def test_returned_mcp_app_http_app_uses_agency_swarm_stateless_default(transport: str) -> None:
+    """Returned apps preserve Agency Swarm's previous stateless HTTP default."""
+
+    from agency_swarm import run_mcp
+
+    app = run_mcp(tools=[sample_tool], app_token_env="", transport=transport, return_app=True)
+    http_app = app.http_app(transport=transport)
+
+    assert http_app.state.transport_type == "streamable-http"
+    assert _route_methods(http_app, "/mcp") == {"POST", "DELETE"}
+
+
+def test_returned_mcp_app_http_app_allows_stateful_http_override() -> None:
+    """Caller-owned returned apps can still opt into FastMCP's stateful HTTP mode."""
+
+    from agency_swarm import run_mcp
+
+    app = run_mcp(tools=[sample_tool], app_token_env="", transport="streamable-http", return_app=True)
+    http_app = app.http_app(transport="streamable-http", stateless_http=False)
+
+    assert http_app.state.transport_type == "streamable-http"
+    assert _route_methods(http_app, "/mcp") is None
+
+
+@pytest.mark.parametrize("transport", ["http", "streamable-http"])
+def test_returned_mcp_app_run_uses_agency_swarm_stateless_default(transport: str) -> None:
+    """Returned app .run() preserves Agency Swarm's previous stateless HTTP default."""
+
+    from agency_swarm import run_mcp
+
+    app = run_mcp(tools=[sample_tool], app_token_env="", transport=transport, return_app=True)
+
+    with patch("agency_swarm.integrations.mcp_server.FastMCP.run_http_async", new_callable=AsyncMock) as run_mock:
+        app.run(transport=transport, show_banner=False)
+
+    run_mock.assert_awaited_once()
+    _, kwargs = run_mock.await_args
+    assert kwargs["transport"] == transport
+    assert kwargs["show_banner"] is False
     assert kwargs["stateless_http"] is True
 
 
-def test_returned_mcp_app_defaults_sse_to_stateful():
-    """Returned FastMCP apps force SSE out of stateless mode."""
+def test_returned_mcp_app_run_preserves_sse_stateful_default() -> None:
+    """Returned app .run() keeps SSE stateful even when FastMCP defaults are stateless."""
+
+    from fastmcp import settings as fastmcp_settings
 
     from agency_swarm import run_mcp
 
     app = run_mcp(tools=[sample_tool], app_token_env="", transport="sse", return_app=True)
 
-    with patch("agency_swarm.integrations.mcp_server.FastMCP.http_app") as http_app_mock:
-        app.http_app(transport="sse")
+    with (
+        patch.object(fastmcp_settings, "stateless_http", True),
+        patch("agency_swarm.integrations.mcp_server.FastMCP.run_http_async", new_callable=AsyncMock) as run_mock,
+    ):
+        app.run(transport="sse", show_banner=False)
 
-    http_app_mock.assert_called_once()
-    _, kwargs = http_app_mock.call_args
+    run_mock.assert_awaited_once()
+    _, kwargs = run_mock.await_args
     assert kwargs["transport"] == "sse"
+    assert kwargs["show_banner"] is False
     assert kwargs["stateless_http"] is False
 
 

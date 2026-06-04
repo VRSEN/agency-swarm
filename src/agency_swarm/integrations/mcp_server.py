@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import sys
-from typing import Any, Literal
+from typing import Any
 
 from agents.run_context import RunContextWrapper
 from agents.tool import FunctionTool
@@ -20,73 +20,30 @@ from agency_swarm.tools import BaseTool, ToolFactory
 
 logger = logging.getLogger(__name__)
 
-HTTPTransport = Literal["http", "streamable-http", "sse"]
+
+def _agency_swarm_stateless_http_default(transport: str) -> bool:
+    return transport != "sse"
 
 
-def _default_stateless_http(transport: Transport | None, stateless_http: bool | None) -> bool | None:
-    if stateless_http is not None:
-        return stateless_http
-    if transport == "sse":
-        return False
-    if transport in {None, "http", "streamable-http"}:
-        return True
-    return stateless_http
+class _AgencySwarmFastMCP(FastMCP):
+    """FastMCP with Agency Swarm's previous HTTP stateless default."""
 
+    async def run_http_async(self, *args: Any, **kwargs: Any) -> None:
+        transport = kwargs.get("transport")
+        if transport is None:
+            transport = args[1] if len(args) > 1 else "http"
+        has_positional_stateless = len(args) > 9
+        if not has_positional_stateless and kwargs.get("stateless_http") is None and kwargs.get("stateless") is None:
+            kwargs["stateless_http"] = _agency_swarm_stateless_http_default(transport)
+        await super().run_http_async(*args, **kwargs)
 
-class OpenAIAgentsFastMCP(FastMCP):
-    """FastMCP server that keeps OpenAI Agents HTTP clients stateless by default."""
-
-    async def run_http_async(
-        self,
-        show_banner: bool = True,
-        transport: HTTPTransport = "http",
-        host: str | None = None,
-        port: int | None = None,
-        log_level: str | None = None,
-        path: str | None = None,
-        uvicorn_config: dict[str, Any] | None = None,
-        middleware: list[Any] | None = None,
-        json_response: bool | None = None,
-        stateless_http: bool | None = None,
-        stateless: bool | None = None,
-    ) -> None:
-        if stateless is not None and stateless_http is None:
-            stateless_http = stateless
-        stateless_http = _default_stateless_http(transport, stateless_http)
-        await super().run_http_async(
-            show_banner=show_banner,
-            transport=transport,
-            host=host,
-            port=port,
-            log_level=log_level,
-            path=path,
-            uvicorn_config=uvicorn_config,
-            middleware=middleware,
-            json_response=json_response,
-            stateless_http=stateless_http,
-            stateless=stateless,
-        )
-
-    def http_app(
-        self,
-        path: str | None = None,
-        middleware: list[Any] | None = None,
-        json_response: bool | None = None,
-        stateless_http: bool | None = None,
-        transport: HTTPTransport = "http",
-        event_store: Any = None,
-        retry_interval: int | None = None,
-    ) -> Any:
-        stateless_http = _default_stateless_http(transport, stateless_http)
-        return super().http_app(
-            path=path,
-            middleware=middleware,
-            json_response=json_response,
-            stateless_http=stateless_http,
-            transport=transport,
-            event_store=event_store,
-            retry_interval=retry_interval,
-        )
+    def http_app(self, *args: Any, **kwargs: Any) -> Any:
+        transport = kwargs.get("transport")
+        if transport is None:
+            transport = args[4] if len(args) > 4 else "http"
+        if len(args) <= 3 and kwargs.get("stateless_http") is None:
+            kwargs["stateless_http"] = _agency_swarm_stateless_http_default(transport)
+        return super().http_app(*args, **kwargs)
 
 
 def _load_tools_from_directory(tools_dir: str) -> list[type[BaseTool] | FunctionTool]:
@@ -146,7 +103,7 @@ def run_mcp(
         if not tools_list or len(tools_list) == 0:
             raise ValueError("No tools provided. Please provide at least one tool class.")
 
-    mcp: FastMCP = OpenAIAgentsFastMCP(server_name)
+    mcp: FastMCP = _AgencySwarmFastMCP(server_name)
 
     # Get authentication token
     app_token = os.getenv(app_token_env)
@@ -247,9 +204,9 @@ def run_mcp(
     if transport == "stdio":
         mcp.run(transport=transport)
     else:
-        # Stateless HTTP is required for OpenAI Agents clients. FastMCP v3 moved
-        # this option from the constructor to HTTP run/app helpers. SSE does not
-        # support stateless mode.
+        # Preserve Agency Swarm's previous direct HTTP server behavior
+        # after FastMCP v3 moved this option from construction to HTTP run helpers.
+        # SSE does not support stateless mode.
         run_kwargs: dict[str, Any] = {
             "transport": transport,
             "host": host,
