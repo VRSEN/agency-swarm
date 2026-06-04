@@ -14,6 +14,7 @@ from typing import Any, cast
 from weakref import WeakKeyDictionary
 
 from ag_ui.core import (
+    BinaryInputContent,
     EventType,
     Message,
     MessagesSnapshotEvent,
@@ -21,6 +22,7 @@ from ag_ui.core import (
     RunFinishedEvent,
     RunStartedEvent,
     SystemMessage,
+    TextInputContent,
 )
 from ag_ui.encoder import EventEncoder
 from agents import (
@@ -532,11 +534,49 @@ def _build_agui_message_input(request_messages: list[Any] | None) -> str | list[
                 TResponseInputItem,
                 {
                     "role": getattr(last_message, "role", "user"),
-                    "content": copy.deepcopy(content),
+                    "content": [_convert_agui_content_part(part) for part in content],
                 },
             )
         ]
     return cast(str, content)
+
+
+def _convert_agui_content_part(part: Any) -> dict[str, Any]:
+    """Convert one AG-UI content part into a Responses input content part."""
+    if isinstance(part, TextInputContent):
+        return {"type": "input_text", "text": part.text}
+
+    if isinstance(part, BinaryInputContent):
+        return _convert_agui_binary_content_part(part)
+
+    if isinstance(part, dict):
+        return cast(dict[str, Any], copy.deepcopy(part))
+
+    raise TypeError(f"Unsupported AG-UI content part: {type(part).__name__}")
+
+
+def _convert_agui_binary_content_part(part: BinaryInputContent) -> dict[str, Any]:
+    """Convert AG-UI binary content into a Responses file or image input part."""
+    if part.mime_type.startswith("image/"):
+        image_part: dict[str, Any] = {"type": "input_image", "detail": "auto"}
+        if part.id is not None:
+            image_part["file_id"] = part.id
+        elif part.url is not None:
+            image_part["image_url"] = part.url
+        elif part.data is not None:
+            image_part["image_url"] = f"data:{part.mime_type};base64,{part.data}"
+        return image_part
+
+    file_part: dict[str, Any] = {"type": "input_file"}
+    if part.id is not None:
+        file_part["file_id"] = part.id
+    elif part.url is not None:
+        file_part["file_url"] = part.url
+    elif part.data is not None:
+        file_part["file_data"] = part.data
+    if part.filename is not None:
+        file_part["filename"] = part.filename
+    return file_part
 
 
 def _build_agui_snapshot_messages(

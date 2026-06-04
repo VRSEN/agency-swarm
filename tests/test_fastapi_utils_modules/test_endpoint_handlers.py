@@ -10,6 +10,7 @@ from ag_ui.core import (
     RunErrorEvent,
     RunFinishedEvent,
     RunStartedEvent,
+    TextInputContent,
     UserMessage,
 )
 from ag_ui.encoder import EventEncoder
@@ -94,11 +95,7 @@ async def test_build_message_with_file_urls_context_escapes_untrusted_metadata()
 async def test_build_agui_message_input_wraps_content_parts() -> None:
     """AG-UI content-part arrays should be wrapped as one user message item."""
 
-    class _MessageStub:
-        role = "user"
-        content = [{"type": "input_text", "text": "hello"}]
-
-    message_input = _build_agui_message_input([_MessageStub()])
+    message_input = _build_agui_message_input([UserMessage(id="u1", content=[TextInputContent(text="hello")])])
 
     assert message_input == [
         {
@@ -379,13 +376,6 @@ async def test_agui_chat_endpoint_wraps_content_arrays_before_prepending_sources
         lambda _messages: [],
     )
 
-    class _ContentArrayMessage:
-        role = "user"
-        content = [{"type": "input_text", "text": "hello"}]
-
-        def model_dump(self):
-            return {"id": "u1", "role": "user", "content": self.content}
-
     class _StreamStub:
         def __aiter__(self):
             return self
@@ -418,7 +408,7 @@ async def test_agui_chat_endpoint_wraps_content_arrays_before_prepending_sources
         thread_id = "thread-1"
         run_id = "run-1"
         state = None
-        messages = [_ContentArrayMessage()]
+        messages = [UserMessage(id="u1", content=[TextInputContent(text="hello")])]
         tools = []
         context = []
         forwarded_props = None

@@ -32,6 +32,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "fastmcp" },
     { name = "filetype" },
+    { name = "griffe" },
     { name = "httpx" },
     { name = "jsonref" },
     { name = "mcp" },
@@ -110,6 +111,7 @@ requires-dist = [
     { name = "filetype", specifier = ">=1.2.0" },
     { name = "filetype", marker = "extra == 'fastapi'", specifier = ">=1.2.0" },
     { name = "graphviz", marker = "extra == 'viz'", specifier = ">=0.17" },
+    { name = "griffe", specifier = ">=1.15.0,<2" },
     { name = "httpx", specifier = ">=0.28.0" },
     { name = "httpx", marker = "extra == 'fastapi'", specifier = ">=0.28.0" },
     { name = "ipykernel", marker = "extra == 'jupyter'", specifier = ">=6.29.0,<7.0.0" },
@@ -1245,6 +1247,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/93/c5/3dc9475ace2c7a3680da12372cddd7f1ac874eb410a1ac48d3e9dab83782/greenlet-3.5.1-cp315-cp315t-musllinux_1_2_x86_64.whl", hash = "sha256:17d86354f0ae6b61bf9be5148d0dd34e06c3cb7c602c671f79f29ac3b150e659", size = 1678427, upload-time = "2026-05-20T13:14:43.71Z" },
     { url = "https://files.pythonhosted.org/packages/df/4e/750c15c317a41ffb36f0bf40b933e3d744a7dede61889f74443ea69690cf/greenlet-3.5.1-cp315-cp315t-win_amd64.whl", hash = "sha256:e7516cf6ae6b8a582c2770a0caed47b8a48373ed732c33d69a72913ae6ac923e", size = 245225, upload-time = "2026-05-20T13:13:59.366Z" },
     { url = "https://files.pythonhosted.org/packages/4f/fd/d3baea2eeb7b617efd47e87ca06e2ec2c6118d303aa9e918e0ce16eadc10/greenlet-3.5.1-cp315-cp315t-win_arm64.whl", hash = "sha256:5028648bf2253ec4745add746129d3904121fa7fe871a76bed23c5720573ce0a", size = 239590, upload-time = "2026-05-20T13:13:37.382Z" },
+]
+
+[[package]]
+name = "griffe"
+version = "1.15.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "colorama" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/0d/0c/3a471b6e31951dce2360477420d0a8d1e00dea6cf33b70f3e8c3ab6e28e1/griffe-1.15.0.tar.gz", hash = "sha256:7726e3afd6f298fbc3696e67958803e7ac843c1cfe59734b6251a40cdbfb5eea", size = 424112, upload-time = "2025-11-10T15:03:15.52Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9c/83/3b1d03d36f224edded98e9affd0467630fc09d766c0e56fb1498cbb04a9b/griffe-1.15.0-py3-none-any.whl", hash = "sha256:6f6762661949411031f5fcda9593f586e6ce8340f0ba88921a0f2ef7a81eb9a3", size = 150705, upload-time = "2025-11-10T15:03:13.549Z" },
 ]
 
 [[package]]
