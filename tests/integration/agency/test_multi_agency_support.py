@@ -206,15 +206,9 @@ class TestMultiAgencySupport:
         assert response1.final_output is not None
         assert response2.final_output is not None
 
-        # Verify context isolation after concurrent operations
-        get_task1 = asyncio.create_task(agency1.get_response("Use SharedStateTool to get the current test_value"))
-        get_task2 = asyncio.create_task(agency2.get_response("Use SharedStateTool to get the current test_value"))
-
-        get_response1, get_response2 = await asyncio.gather(get_task1, get_task2)
-
-        # Each should have its own value (context isolation maintained)
-        _assert_tool_output_contains(get_response1, "concurrent1")
-        _assert_tool_output_contains(get_response2, "concurrent2")
+        # Each context should have its own value without relying on live-model phrasing.
+        assert agency1.user_context["test_value"] == "concurrent1"
+        assert agency2.user_context["test_value"] == "concurrent2"
 
     @pytest.mark.asyncio
     async def test_streaming_context_isolation(self, shared_agent, agency1, agency2):
