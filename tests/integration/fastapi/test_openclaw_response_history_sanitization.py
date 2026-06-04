@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 import json
-import os
 import time
 from collections.abc import AsyncIterator
 from typing import Any
@@ -689,7 +688,6 @@ def test_store_false_sanitizer_keeps_prior_encrypted_reasoning_boundary() -> Non
     ]
 
 
-@pytest.mark.skipif(os.getenv("CI") == "true", reason="Live OpenAI can omit reasoning items in CI.")
 def test_live_openai_store_false_replays_encrypted_reasoning() -> None:
     """Live OpenAI proof for stateless Responses reasoning replay."""
     client = OpenAI()
@@ -703,8 +701,10 @@ def test_live_openai_store_false_replays_encrypted_reasoning() -> None:
     )
     first_items = [item.model_dump(exclude_none=True) for item in first.output]
     reasoning_items = [item for item in first_items if item.get("type") == "reasoning"]
+    output_types = [item.get("type") for item in first_items]
+    reasoning_tokens = first.usage.output_tokens_details.reasoning_tokens if first.usage else None
     assert first.output_text.strip() == "1517"
-    assert reasoning_items
+    assert reasoning_items, f"Expected encrypted reasoning output item; got {output_types=} {reasoning_tokens=}"
     assert all(item.get("encrypted_content") for item in reasoning_items)
 
     replay_input = sanitize_store_false_responses_input(
