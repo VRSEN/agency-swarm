@@ -4,10 +4,11 @@ The end-to-end behavior is covered in integration tests under `tests/integration
 """
 
 import logging
+from types import SimpleNamespace
 
 import pytest
 
-from agency_swarm.integrations.fastapi_utils import request_models
+from agency_swarm.integrations.fastapi_utils import endpoint_handlers, request_models
 from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest, ClientConfig
 
 
@@ -84,6 +85,52 @@ def test_base_request_client_config_roundtrip() -> None:
     assert request.client_config.base_url == "https://custom.api.com"
     assert request.client_config.api_key == "sk-custom-key"
     assert request.client_config.default_headers == {"x-test": "1"}
+
+
+def test_tui_bridge_stream_config_ignores_default_model_sentinel() -> None:
+    """The TUI bridge sentinel must not replace the agency's configured model."""
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(agency_swarm_tui_bridge=True)))
+    config = ClientConfig(model="agency-swarm/default", api_key="sk-test", default_headers={"x-test": "1"})
+
+    resolved = endpoint_handlers._resolve_stream_client_config(request, config)
+
+    assert resolved is not None
+    assert resolved.model is None
+    assert resolved.api_key == "sk-test"
+    assert resolved.default_headers == {"x-test": "1"}
+
+
+def test_tui_bridge_stream_config_keeps_explicit_openai_model() -> None:
+    """TUI-selected OpenAI models should replace the agency's configured model."""
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(agency_swarm_tui_bridge=True)))
+    config = ClientConfig(model="gpt-5.4", api_key="sk-test")
+
+    resolved = endpoint_handlers._resolve_stream_client_config(request, config)
+
+    assert resolved is config
+    assert resolved.model == "gpt-5.4"
+
+
+def test_regular_stream_config_keeps_request_model() -> None:
+    """Non-TUI FastAPI callers must retain explicit request model overrides."""
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+    config = ClientConfig(model="gpt-5.4", api_key="sk-test")
+
+    resolved = endpoint_handlers._resolve_stream_client_config(request, config)
+
+    assert resolved is config
+    assert resolved.model == "gpt-5.4"
+
+
+def test_tui_bridge_stream_config_keeps_explicit_litellm_model() -> None:
+    """TUI-selected LiteLLM models should replace the agency's configured model."""
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(agency_swarm_tui_bridge=True)))
+    config = ClientConfig(model="litellm/ollama_chat/gemma4:e4b")
+
+    resolved = endpoint_handlers._resolve_stream_client_config(request, config)
+
+    assert resolved is config
+    assert resolved.model == "litellm/ollama_chat/gemma4:e4b"
 
 
 def test_request_api_key_allows_client_build_without_env(monkeypatch) -> None:
@@ -193,6 +240,7 @@ def test_litellm_anthropic_does_not_use_generic_api_key_fallback() -> None:
     assert agent.model.model == "anthropic/claude-sonnet-4"
     # Must not be overridden with the OpenAI gateway key.
     assert agent.model.api_key is None
+    assert agent.model.base_url == "http://gw"
 
 
 def test_litellm_anthropic_does_not_use_codex_base_url_fallback() -> None:
@@ -253,6 +301,89 @@ def test_litellm_google_wrapper_uses_gemini_request_key() -> None:
     assert isinstance(agent.model, LitellmModel)
     assert agent.model.model == "google/gemini-2.5-pro"
     assert agent.model.api_key == "AIza-request"
+
+
+def test_litellm_google_wrapper_uses_gemini_request_proxy_base_url() -> None:
+    """Explicit LiteLLM proxy base_url should still reach Gemini wrappers."""
+    pytest.importorskip("agents")
+    pytest.importorskip("agents.extensions.models.litellm_model")
+
+    from agents.extensions.models.litellm_model import LitellmModel
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    class _Agency:
+        def __init__(self, agent: Agent):
+            self.agents = {"A": agent}
+
+    original_model = LitellmModel(model="google/gemini-2.5-pro", base_url=None, api_key=None)
+    agent = Agent(name="A", instructions="x", model=original_model)
+    agency = _Agency(agent)
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(base_url="http://litellm-proxy.local", litellm_keys={"gemini": "AIza-request"}),
+    )
+
+    assert isinstance(agent.model, LitellmModel)
+    assert agent.model.model == "google/gemini-2.5-pro"
+    assert agent.model.api_key == "AIza-request"
+    assert agent.model.base_url == "http://litellm-proxy.local"
+
+
+def test_litellm_ollama_does_not_use_request_base_url_fallback() -> None:
+    """Request gateway base_url must not override Ollama's provider-native endpoint."""
+    pytest.importorskip("agents")
+    pytest.importorskip("agents.extensions.models.litellm_model")
+
+    from agents.extensions.models.litellm_model import LitellmModel
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    class _Agency:
+        def __init__(self, agent: Agent):
+            self.agents = {"A": agent}
+
+    original_model = LitellmModel(model="ollama_chat/gemma4:e4b", base_url=None, api_key=None)
+    agent = Agent(name="A", instructions="x", model=original_model)
+    agency = _Agency(agent)
+
+    apply_openai_client_config(agency, ClientConfig(api_key="sk-openai-gateway", base_url="http://127.0.0.1:54321"))
+
+    assert isinstance(agent.model, LitellmModel)
+    assert agent.model.model == "ollama_chat/gemma4:e4b"
+    assert agent.model.base_url is None
+    assert agent.model.api_key is None
+
+
+def test_agency_swarm_default_model_does_not_override_litellm_agent_model() -> None:
+    """The TUI sentinel model should preserve the agency's configured model."""
+    pytest.importorskip("agents")
+    pytest.importorskip("agents.extensions.models.litellm_model")
+
+    from agents.extensions.models.litellm_model import LitellmModel
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    class _Agency:
+        def __init__(self, agent: Agent):
+            self.agents = {"A": agent}
+
+    original_model = LitellmModel(model="ollama_chat/gemma4:e4b", base_url="http://localhost:11434/", api_key=None)
+    agent = Agent(name="A", instructions="x", model=original_model)
+    agency = _Agency(agent)
+
+    apply_openai_client_config(agency, ClientConfig(model="agency-swarm/default"))
+
+    assert agent.model is original_model
+    assert agent.model.model == "ollama_chat/gemma4:e4b"
+    assert agent.model.base_url == "http://localhost:11434/"
 
 
 def test_litellm_openai_provider_can_use_generic_api_key_fallback() -> None:

@@ -154,7 +154,10 @@ def _env(port: int, agency_id: str) -> dict[str, str]:
                         "agency": agency_id,
                         "discoveryTimeoutMs": 2000,
                     },
-                }
+                },
+                "ollama": {
+                    "name": "Ollama",
+                },
             },
         }
     )
@@ -178,6 +181,7 @@ def _start_server(agency, capture: Path | None = None) -> _Server:
     )
     if app is None:
         raise RuntimeError("Failed to build the Agency Swarm FastAPI app for Agent Swarm CLI.")
+    app.state.agency_swarm_tui_bridge = True
 
     import uvicorn
 
