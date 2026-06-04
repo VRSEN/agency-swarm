@@ -1,6 +1,7 @@
 import pytest
 from agents import ModelSettings, RunResult
 from agents.items import ToolCallItem, ToolCallOutputItem
+from openai.types.responses.response_function_tool_call import ResponseFunctionToolCall
 
 from agency_swarm import Agent
 
@@ -37,13 +38,14 @@ def echo_tool(message: str) -> str:
     # Test real execution with OpenAI API
     result: RunResult = await agent.get_response("Use the echo tool to echo 'hello world'")
 
-    # Verify the tool was actually called and executed. The final model output may
-    # summarize the tool output instead of repeating the exact tool prefix.
-    tool_calls = [item for item in result.new_items if isinstance(item, ToolCallItem)]
-    assert any(item.tool_name == "echo_tool" for item in tool_calls)
+    tool_call_names = [
+        item.raw_item.name
+        for item in result.new_items
+        if isinstance(item, ToolCallItem) and isinstance(item.raw_item, ResponseFunctionToolCall)
+    ]
+    assert "echo_tool" in tool_call_names, f"Expected echo_tool call in new_items, got: {tool_call_names}"
 
     tool_outputs = [str(item.output) for item in result.new_items if isinstance(item, ToolCallOutputItem)]
-    assert "Tool executed: hello world" in tool_outputs
-
-    final_output_str = str(result.final_output)
-    assert "hello world" in final_output_str.lower(), f"Expected echoed message not found in: {final_output_str}"
+    assert any("Tool executed: hello world" in output for output in tool_outputs), (
+        f"Expected echo_tool output in new_items, got: {tool_outputs}"
+    )

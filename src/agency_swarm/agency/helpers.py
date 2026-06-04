@@ -21,7 +21,7 @@ def read_instructions(agency: "Agency", path: str) -> None:
     """
     Reads shared instructions from a specified file and stores them in the agency.
     """
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         agency.shared_instructions = f.read()
 
 

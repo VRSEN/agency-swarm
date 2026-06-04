@@ -22,7 +22,7 @@ class _DummyServer:
     ],
 )
 @patch("agents.mcp.util.MCPUtil.get_function_tools")
-@patch("agency_swarm.tools.mcp_manager.default_mcp_manager")
+@patch("agency_swarm.tools.mcp_converter.default_mcp_manager")
 async def test_mcp_config_convert_schemas_to_strict_is_propagated(
     mock_manager,
     mock_get_function_tools: AsyncMock,
@@ -48,8 +48,9 @@ async def test_mcp_config_convert_schemas_to_strict_is_propagated(
     mock_get_function_tools.side_effect = capture_convert_schemas_to_strict
 
     server = _DummyServer()
-    mock_manager.register.return_value = server
-    mock_manager.ensure_connected = AsyncMock()
+    mock_manager.get.return_value = None
+    mock_manager.register.side_effect = lambda srv: srv
+    mock_manager._ensure_driver.return_value = None
 
     agent_kwargs = {
         "name": "TestAgent",
