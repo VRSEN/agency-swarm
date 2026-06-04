@@ -5,7 +5,7 @@ import os
 import tempfile
 from pathlib import Path
 from typing import Literal
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 import pytest
 from agents import CodeInterpreterTool, FileSearchTool
@@ -706,28 +706,25 @@ class TestAgentFileManager:
             absolute_tmp_path = absolute_tmp.name
 
         try:
-            with patch("os.path.normpath") as mock_normpath, patch("os.path.isfile") as mock_isfile:
+            with (
+                patch("os.path.normpath") as mock_normpath,
+                patch("os.path.isfile", wraps=os.path.isfile) as mock_isfile,
+            ):
                 mock_normpath.return_value = relative_tmp_path
-                mock_isfile.return_value = True
 
                 file_manager.read_instructions()
                 assert mock_agent.instructions == "Test instructions content"
                 mock_normpath.assert_called_once()
+                mock_isfile.assert_called_once_with(relative_tmp_path)
 
-            mock_agent.instructions = "instructions.md"
-            with patch("os.path.normpath", return_value="/nonexistent/path"), patch("os.path.isfile") as mock_isfile:
-
-                def isfile_side_effect(path):
-                    if path == "/nonexistent/path":
-                        return False
-                    if path == "instructions.md":
-                        mock_agent.instructions = absolute_tmp_path
-                        return True
-                    return False
-
-                mock_isfile.side_effect = isfile_side_effect
+            mock_agent.instructions = absolute_tmp_path
+            with (
+                patch("os.path.normpath", return_value="/nonexistent/path"),
+                patch("os.path.isfile", wraps=os.path.isfile) as mock_isfile,
+            ):
                 file_manager.read_instructions()
-                assert "Absolute path instructions" in mock_agent.instructions
+                assert mock_agent.instructions == "Absolute path instructions"
+                assert mock_isfile.call_args_list == [call("/nonexistent/path"), call(absolute_tmp_path)]
         finally:
             os.unlink(relative_tmp_path)
             os.unlink(absolute_tmp_path)

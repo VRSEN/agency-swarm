@@ -331,10 +331,11 @@ class TestFastAPIFileProcessing:
     async def test_code_interpreter_attachment(self, file_server_base_url: str, fastapi_base_url: str):
         """Test processing an HTML file via file_urls."""
         url = f"{fastapi_base_url}/test_agency/get_response"
+        expected_marker = "second html"
         payload = {
             "message": (
                 "Search the HTML document with the code interpreter. "
-                "Return exactly one complete uppercase secret phrase from the document, preserving word order."
+                "Return exactly the two uppercase words immediately before SECRET PHRASE in the body text."
             ),
             "file_urls": {"webpage.html": f"{file_server_base_url}/test-html.html"},
         }
@@ -347,8 +348,7 @@ class TestFastAPIFileProcessing:
         response_data = response.json()
 
         response_text = response_data["response"].lower()
-        # Should find both secret phrases in HTML
-        assert "first html secret phrase" in response_text or "second html secret phrase" in response_text
+        assert expected_marker in response_text, f"Expected HTML marker not found. Response: {response_text}"
 
         file_ids = response_data["file_ids_map"]
         assert "webpage.html" in file_ids.keys()
