@@ -5,13 +5,19 @@ import json
 import pytest
 from ag_ui.core import (
     AssistantMessage,
+    AudioInputContent,
+    DocumentInputContent,
     EventType,
+    ImageInputContent,
+    InputContentDataSource,
+    InputContentUrlSource,
     MessagesSnapshotEvent,
     RunErrorEvent,
     RunFinishedEvent,
     RunStartedEvent,
     TextInputContent,
     UserMessage,
+    VideoInputContent,
 )
 from ag_ui.encoder import EventEncoder
 
@@ -95,12 +101,37 @@ async def test_build_message_with_file_urls_context_escapes_untrusted_metadata()
 async def test_build_agui_message_input_wraps_content_parts() -> None:
     """AG-UI content-part arrays should be wrapped as one user message item."""
 
-    message_input = _build_agui_message_input([UserMessage(id="u1", content=[TextInputContent(text="hello")])])
+    message_input = _build_agui_message_input(
+        [
+            UserMessage(
+                id="u1",
+                content=[
+                    TextInputContent(text="hello"),
+                    ImageInputContent(
+                        source=InputContentUrlSource(value="https://example.com/image.png", mime_type="image/png")
+                    ),
+                    DocumentInputContent(
+                        source=InputContentUrlSource(
+                            value="https://example.com/report.pdf", mime_type="application/pdf"
+                        )
+                    ),
+                    AudioInputContent(source=InputContentDataSource(value="AAAA", mime_type="audio/mpeg")),
+                    VideoInputContent(source=InputContentDataSource(value="BBBB", mime_type="video/mp4")),
+                ],
+            )
+        ]
+    )
 
     assert message_input == [
         {
             "role": "user",
-            "content": [{"type": "input_text", "text": "hello"}],
+            "content": [
+                {"type": "input_text", "text": "hello"},
+                {"type": "input_image", "detail": "auto", "image_url": "https://example.com/image.png"},
+                {"type": "input_file", "file_url": "https://example.com/report.pdf"},
+                {"type": "input_file", "file_data": "AAAA"},
+                {"type": "input_file", "file_data": "BBBB"},
+            ],
         }
     ]
 

@@ -14,8 +14,13 @@ from typing import Any, cast
 from weakref import WeakKeyDictionary
 
 from ag_ui.core import (
+    AudioInputContent,
     BinaryInputContent,
+    DocumentInputContent,
     EventType,
+    ImageInputContent,
+    InputContentDataSource,
+    InputContentUrlSource,
     Message,
     MessagesSnapshotEvent,
     RunErrorEvent,
@@ -23,6 +28,7 @@ from ag_ui.core import (
     RunStartedEvent,
     SystemMessage,
     TextInputContent,
+    VideoInputContent,
 )
 from ag_ui.encoder import EventEncoder
 from agents import (
@@ -546,6 +552,12 @@ def _convert_agui_content_part(part: Any) -> dict[str, Any]:
     if isinstance(part, TextInputContent):
         return {"type": "input_text", "text": part.text}
 
+    if isinstance(part, ImageInputContent):
+        return _convert_agui_image_content_part(part)
+
+    if isinstance(part, DocumentInputContent | AudioInputContent | VideoInputContent):
+        return _convert_agui_file_content_part(part.source)
+
     if isinstance(part, BinaryInputContent):
         return _convert_agui_binary_content_part(part)
 
@@ -553,6 +565,31 @@ def _convert_agui_content_part(part: Any) -> dict[str, Any]:
         return cast(dict[str, Any], copy.deepcopy(part))
 
     raise TypeError(f"Unsupported AG-UI content part: {type(part).__name__}")
+
+
+def _convert_agui_image_content_part(part: ImageInputContent) -> dict[str, Any]:
+    """Convert AG-UI image content into a Responses image input part."""
+    image_part: dict[str, Any] = {"type": "input_image", "detail": "auto"}
+    source = part.source
+    if isinstance(source, InputContentUrlSource):
+        image_part["image_url"] = source.value
+        return image_part
+    if isinstance(source, InputContentDataSource):
+        image_part["image_url"] = _build_data_url(source.mime_type, source.value)
+        return image_part
+    raise TypeError(f"Unsupported AG-UI image source: {type(source).__name__}")
+
+
+def _convert_agui_file_content_part(source: InputContentUrlSource | InputContentDataSource) -> dict[str, Any]:
+    """Convert AG-UI file-like content into a Responses file input part."""
+    file_part: dict[str, Any] = {"type": "input_file"}
+    if isinstance(source, InputContentUrlSource):
+        file_part["file_url"] = source.value
+        return file_part
+    if isinstance(source, InputContentDataSource):
+        file_part["file_data"] = source.value
+        return file_part
+    raise TypeError(f"Unsupported AG-UI file source: {type(source).__name__}")
 
 
 def _convert_agui_binary_content_part(part: BinaryInputContent) -> dict[str, Any]:
@@ -564,7 +601,7 @@ def _convert_agui_binary_content_part(part: BinaryInputContent) -> dict[str, Any
         elif part.url is not None:
             image_part["image_url"] = part.url
         elif part.data is not None:
-            image_part["image_url"] = f"data:{part.mime_type};base64,{part.data}"
+            image_part["image_url"] = _build_data_url(part.mime_type, part.data)
         return image_part
 
     file_part: dict[str, Any] = {"type": "input_file"}
@@ -577,6 +614,11 @@ def _convert_agui_binary_content_part(part: BinaryInputContent) -> dict[str, Any
     if part.filename is not None:
         file_part["filename"] = part.filename
     return file_part
+
+
+def _build_data_url(mime_type: str, data: str) -> str:
+    """Build a base64 data URL from AG-UI inline content."""
+    return f"data:{mime_type};base64,{data}"
 
 
 def _build_agui_snapshot_messages(
@@ -971,7 +1013,24 @@ def make_agui_chat_endpoint(
         encoder = EventEncoder()
 
         combined_file_ids = list(request.file_ids or []) if getattr(request, "file_ids", None) else []
-        message_input = _build_agui_message_input(request.messages)
+        try:
+            message_input = _build_agui_message_input(request.messages)
+        except Exception as exc:
+            run_started = RunStartedEvent(
+                type=EventType.RUN_STARTED,
+                thread_id=request.thread_id,
+                run_id=request.run_id,
+            )
+            run_error = RunErrorEvent(type=EventType.RUN_ERROR, message=f"Error converting AG-UI message: {exc}")
+            run_finished = RunFinishedEvent(
+                type=EventType.RUN_FINISHED,
+                thread_id=request.thread_id,
+                run_id=request.run_id,
+            )
+            return StreamingResponse(
+                (encoder.encode(event) for event in (run_started, run_error, run_finished)),
+                media_type=encoder.get_content_type(),
+            )
 
         if request.chat_history is not None:
             # Chat history is now a flat list
