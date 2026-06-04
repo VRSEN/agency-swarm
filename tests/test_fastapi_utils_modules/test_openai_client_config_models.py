@@ -794,6 +794,178 @@ def test_openrouter_model_override_routes_to_openrouter_client() -> None:
     assert str(agent.model._client.base_url).startswith("https://openrouter.ai/api/v1")
 
 
+def test_openrouter_model_override_uses_request_base_url() -> None:
+    """OpenRouter request models should honor request-scoped gateway base_url."""
+    pytest.importorskip("agents")
+
+    from agents import OpenAIChatCompletionsModel
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    agent = Agent(name="A", instructions="x", model="gpt-4o-mini")
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(
+            model="openrouter/anthropic/claude-sonnet-4.5",
+            base_url="https://openrouter-proxy.test/v1",
+            api_key="sk-openrouter",
+        ),
+    )
+
+    assert isinstance(agent.model, OpenAIChatCompletionsModel)
+    assert agent.model._client.api_key == "sk-openrouter"
+    assert str(agent.model._client.base_url).startswith("https://openrouter-proxy.test/v1")
+
+
+@pytest.mark.parametrize(
+    ("config", "expected_api_key", "expected_base_url", "expected_headers"),
+    [
+        (ClientConfig(api_key="sk-request"), "sk-request", "https://openrouter.ai/api/v1", {}),
+        (
+            ClientConfig(base_url="https://openrouter-proxy.test/v1"),
+            "sk-original",
+            "https://openrouter-proxy.test/v1",
+            {},
+        ),
+        (
+            ClientConfig(default_headers={"x-request-id": "req-1"}),
+            "sk-original",
+            "https://openrouter.ai/api/v1",
+            {"x-request-id": "req-1"},
+        ),
+    ],
+)
+def test_configured_openrouter_agent_applies_request_client_without_model_override(
+    monkeypatch: pytest.MonkeyPatch,
+    config: ClientConfig,
+    expected_api_key: str,
+    expected_base_url: str,
+    expected_headers: dict[str, str],
+) -> None:
+    """Configured OpenRouter agents should honor request client overrides without config.model."""
+    pytest.importorskip("agents")
+
+    from agents import OpenAIChatCompletionsModel
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.utils.openrouter import get_openrouter_model_name
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-original")
+
+    agent = Agent(name="A", instructions="x", model="openrouter/anthropic/claude-sonnet-4.5")
+    assert isinstance(agent.model, OpenAIChatCompletionsModel)
+    original_client = agent.model._client
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(agency, config)
+
+    assert config.model is None
+    assert isinstance(agent.model, OpenAIChatCompletionsModel)
+    assert agent.model.model == "anthropic/claude-sonnet-4.5"
+    assert get_openrouter_model_name(agent.model) == "openrouter/anthropic/claude-sonnet-4.5"
+    assert agent.model._client is not original_client
+    assert agent.model._client.api_key == expected_api_key
+    assert str(agent.model._client.base_url).startswith(expected_base_url)
+    headers = dict(agent.model._client.default_headers or {})
+    for key, value in expected_headers.items():
+        assert headers[key] == value
+
+
+def test_configured_openrouter_model_override_preserves_injected_client_without_env_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OpenRouter model swaps should reuse the configured client when no client override is requested."""
+    pytest.importorskip("agents")
+
+    from agents import OpenAIChatCompletionsModel
+    from openai import AsyncOpenAI
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+    from agency_swarm.utils.openrouter import build_openrouter_chat_model, get_openrouter_model_name
+
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    client = AsyncOpenAI(
+        api_key="sk-injected",
+        base_url="https://openrouter-proxy.test/v1",
+        default_headers={"x-client": "kept"},
+    )
+    source = build_openrouter_chat_model(
+        "openrouter/anthropic/claude-sonnet-4.5",
+        openai_client=client,
+    )
+    agent = Agent(name="A", instructions="x", model=source)
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(agency, ClientConfig(model="openrouter/openai/gpt-5"))
+
+    assert isinstance(agent.model, OpenAIChatCompletionsModel)
+    assert agent.model.model == "openai/gpt-5"
+    assert get_openrouter_model_name(agent.model) == "openrouter/openai/gpt-5"
+    assert agent.model._client is client
+    assert str(agent.model._client.base_url).startswith("https://openrouter-proxy.test/v1")
+    assert dict(agent.model._client.default_headers)["x-client"] == "kept"
+
+
+def test_configured_openrouter_agent_openai_override_drops_openrouter_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OpenAI request model overrides from OpenRouter agents must leave the OpenRouter gateway."""
+    pytest.importorskip("agents")
+
+    from agents import OpenAIChatCompletionsModel
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+    from agency_swarm.utils.openrouter import get_openrouter_model_name
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-openrouter")
+
+    agent = Agent(name="A", instructions="x", model="openrouter/anthropic/claude-sonnet-4.5")
+    assert isinstance(agent.model, OpenAIChatCompletionsModel)
+    openrouter_client = agent.model._client
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(agency, ClientConfig(model="gpt-4o-mini", api_key="sk-openai"))
+
+    assert isinstance(agent.model, OpenAIChatCompletionsModel)
+    assert agent.model.model == "gpt-4o-mini"
+    assert get_openrouter_model_name(agent.model) is None
+    assert agent.model._client is not openrouter_client
+    assert agent.model._client.api_key == "sk-openai"
+    assert not str(agent.model._client.base_url).startswith("https://openrouter.ai/api/v1")
+    assert str(agent.model._client.base_url).startswith("https://api.openai.com/v1")
+
+
+def test_openrouter_helper_uses_injected_client_without_env_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Injected OpenAI-compatible clients should not need OPENROUTER_API_KEY."""
+    pytest.importorskip("agents")
+
+    from agents import OpenAIChatCompletionsModel
+    from openai import AsyncOpenAI
+
+    from agency_swarm.utils.openrouter import build_openrouter_chat_model
+
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    client = AsyncOpenAI(api_key="sk-injected", base_url="https://openrouter-proxy.test/v1")
+
+    model = build_openrouter_chat_model(
+        "openrouter/anthropic/claude-sonnet-4.5",
+        openai_client=client,
+    )
+
+    assert isinstance(model, OpenAIChatCompletionsModel)
+    assert model._client is client
+    assert model.model == "anthropic/claude-sonnet-4.5"
+
+
 def test_openrouter_model_override_requires_api_key(monkeypatch) -> None:
     """OpenRouter overrides should fail explicitly when no key is available."""
     pytest.importorskip("agents")

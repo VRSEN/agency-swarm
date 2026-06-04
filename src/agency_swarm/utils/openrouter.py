@@ -37,14 +37,16 @@ def build_openrouter_chat_model(
 ) -> OpenAIChatCompletionsModel:
     """Build an OpenAI-compatible Chat Completions model for OpenRouter."""
     actual_model = strip_openrouter_prefix(model_name)
-    resolved_api_key = api_key or os.getenv(OPENROUTER_API_KEY_ENV)
-    if not resolved_api_key:
-        raise ValueError("OPENROUTER_API_KEY is required for openrouter/... models")
-    client = openai_client or AsyncOpenAI(
-        api_key=resolved_api_key,
-        base_url=base_url or OPENROUTER_BASE_URL,
-        default_headers=default_headers,
-    )
+    client = openai_client
+    if client is None:
+        resolved_api_key = api_key or os.getenv(OPENROUTER_API_KEY_ENV)
+        if not resolved_api_key:
+            raise ValueError("OPENROUTER_API_KEY is required for openrouter/... models")
+        client = AsyncOpenAI(
+            api_key=resolved_api_key,
+            base_url=base_url or OPENROUTER_BASE_URL,
+            default_headers=default_headers,
+        )
     model = OpenAIChatCompletionsModel(model=actual_model, openai_client=client)
     model._agency_swarm_openrouter_model_name = f"{OPENROUTER_MODEL_PREFIX}{actual_model}"  # type: ignore[attr-defined]
     model._agency_swarm_usage_model_name = f"{OPENROUTER_MODEL_PREFIX}{actual_model}"  # type: ignore[attr-defined]

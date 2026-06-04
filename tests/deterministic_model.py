@@ -38,6 +38,7 @@ _MESSAGE_RE = re.compile(r"message:\s*(?P<message>.+)$", re.IGNORECASE)
 _SECRET_RE = re.compile(r"secret code:\s*(?P<secret>[\w-]+)", re.IGNORECASE)
 _HANDLE_RE = re.compile(r"handle\s+(?P<task>[\w-]+)", re.IGNORECASE)
 _TASK_RE = re.compile(r"task\s+(?P<task>[\w-]+)", re.IGNORECASE)
+_ECHO_RE = re.compile(r"echo\s+['\"](?P<message>[^'\"]+)['\"]", re.IGNORECASE)
 
 
 def _extract_text_from_content(content: Any) -> str | None:
@@ -343,6 +344,11 @@ class DeterministicModel(Model):
             get_match = _GET_RE.search(user_text)
             if get_match:
                 return _build_tool_call_response("get_data", {"key": get_match.group("key")})
+
+        if "echo_tool" in tool_map:
+            echo_match = _ECHO_RE.search(user_text)
+            if echo_match:
+                return _build_tool_call_response("echo_tool", {"message": echo_match.group("message")})
 
         if "send_message" in tool_map:
             schema = tool_map["send_message"].params_json_schema

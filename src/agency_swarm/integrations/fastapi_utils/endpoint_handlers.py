@@ -68,7 +68,11 @@ from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
 from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
 from agency_swarm.ui.core.agui_adapter import AguiAdapter
 from agency_swarm.utils.dry_run import force_dry_run
-from agency_swarm.utils.openrouter import build_openrouter_chat_model, is_openrouter_model_name
+from agency_swarm.utils.openrouter import (
+    build_openrouter_chat_model,
+    get_openrouter_model_name,
+    is_openrouter_model_name,
+)
 from agency_swarm.utils.serialization import serialize
 from agency_swarm.utils.usage_tracking import (
     calculate_usage_with_cost,
@@ -166,15 +170,33 @@ def _apply_request_model_override(agent: Agent, model_name: str, config: ClientC
     during the swap so the caller can skip the downstream client-apply step.
     """
     model = agent.model
-    gateway_client = _resolve_request_gateway_client(agent, config)
 
     if is_openrouter_model_name(model_name):
+        gateway_client = _resolve_request_gateway_client(agent, config)
+        openrouter_client = None
+        if get_openrouter_model_name(model) is not None:
+            openrouter_client = gateway_client if gateway_client is not None else _get_openai_client_from_agent(agent)
         agent.model = build_openrouter_chat_model(
             model_name,
-            api_key=config.api_key if config is not None else None,
-            default_headers=config.default_headers if config is not None else None,
+            api_key=None if openrouter_client is not None or config is None else config.api_key,
+            base_url=None if openrouter_client is not None or config is None else config.base_url,
+            default_headers=None if openrouter_client is not None or config is None else config.default_headers,
+            openai_client=openrouter_client,
         )
-        return True
+        return gateway_client is not None
+
+    if get_openrouter_model_name(model) is not None:
+        if _is_litellm_model(model_name):
+            _apply_request_litellm_model(agent, model_name)
+            return False
+        client = _resolve_openai_client_after_openrouter_override(config)
+        if client is None:
+            agent.model = model_name
+            return False
+        agent.model = OpenAIChatCompletionsModel(model=model_name, openai_client=client)
+        return _has_request_openai_overrides(config)
+
+    gateway_client = _resolve_request_gateway_client(agent, config)
 
     if isinstance(model, OpenAIResponsesModel):
         if _is_litellm_model(model_name):
@@ -220,6 +242,26 @@ def _resolve_request_gateway_client(agent: Agent, config: ClientConfig | None) -
     if config.base_url is None and config.api_key is None and config.default_headers is None:
         return None
     return _build_openai_client_for_agent(agent, config)
+
+
+def _resolve_openai_client_after_openrouter_override(config: ClientConfig | None) -> AsyncOpenAI | None:
+    """Build a non-OpenRouter OpenAI client when an OpenRouter wrapper swaps away."""
+    base_client = get_default_openai_client()
+    if config is None:
+        return base_client
+    if base_client is None:
+        if config.api_key is None and config.base_url is None:
+            return None
+        return AsyncOpenAI(
+            api_key=config.api_key,
+            base_url=config.base_url,
+            default_headers=config.default_headers,
+        )
+    return base_client.copy(
+        api_key=config.api_key,
+        base_url=config.base_url,
+        default_headers=config.default_headers,
+    )
 
 
 def _rebuild_openai_responses_model(
@@ -1523,6 +1565,8 @@ def _get_model_name_for_override_logging(agent: Agent) -> str | None:
 
 def _agent_supports_openai_client_override(agent: Agent) -> bool:
     """Return True only when request OpenAI client overrides are applicable."""
+    if get_openrouter_model_name(agent.model) is not None:
+        return True
     model_name = _get_model_name_for_override_logging(agent)
     if model_name is None:
         return False
@@ -1593,6 +1637,12 @@ def _apply_client_to_agent(agent: Agent, client: AsyncOpenAI | None, config: Cli
             if _is_codex_base_url(str(client.base_url)):
                 _apply_codex_compatibility_model_settings(agent)
     elif isinstance(model, OpenAIChatCompletionsModel):
+        openrouter_model_name = get_openrouter_model_name(model)
+        if openrouter_model_name is not None:
+            if client is None:
+                return
+            agent.model = build_openrouter_chat_model(openrouter_model_name, openai_client=client)
+            return
         if _is_litellm_model(model.model):
             if has_litellm_overrides:
                 _apply_litellm_config(agent, model.model, config)
