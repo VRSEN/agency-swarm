@@ -1496,7 +1496,7 @@ def _apply_request_model_settings_extra_args(agent: Agent, config: ClientConfig)
     normalized_effort = _reasoning_effort_value(reasoning_effort)
     normalized_summary = _reasoning_summary_value(reasoning_summary)
     uses_litellm = _agent_uses_litellm(agent)
-    is_litellm_openai = uses_litellm and litellm_model_name.startswith("openai/")
+    is_litellm_openai = uses_litellm and _is_openai_model_name(litellm_model_name)
     if normalized_effort is not None and is_litellm_openai:
         current.reasoning = None
         if normalized_summary is not None:

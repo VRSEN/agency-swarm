@@ -769,7 +769,8 @@ def test_openai_model_override_maps_variant_include_to_response_include() -> Non
     assert agent.model_settings.extra_args is None
 
 
-def test_litellm_openai_variant_sets_reasoning_without_forcing_other_providers() -> None:
+@pytest.mark.parametrize("model_name", ["litellm/openai/gpt-5.4", "litellm/gpt-5"])
+def test_litellm_openai_variant_sets_reasoning_without_forcing_other_providers(model_name: str) -> None:
     """OpenAI LiteLLM variants should enable Agents reasoning state only from explicit UI settings."""
     pytest.importorskip("agents")
     pytest.importorskip("agents.extensions.models.litellm_model")
@@ -786,7 +787,7 @@ def test_litellm_openai_variant_sets_reasoning_without_forcing_other_providers()
     apply_openai_client_config(
         agency,
         ClientConfig(
-            model="litellm/openai/gpt-5.4",
+            model=model_name,
             model_settings_extra_args={"reasoning_effort": "high", "reasoning_summary": "auto"},
         ),
     )
@@ -796,7 +797,8 @@ def test_litellm_openai_variant_sets_reasoning_without_forcing_other_providers()
     assert agent.model_settings.extra_args == {"reasoning_effort": {"effort": "high", "summary": "auto"}}
 
 
-async def test_litellm_openai_variant_forwards_reasoning_summary_to_litellm(monkeypatch) -> None:
+@pytest.mark.parametrize("model_name", ["litellm/openai/gpt-5.4", "litellm/gpt-5"])
+async def test_litellm_openai_variant_forwards_reasoning_summary_to_litellm(monkeypatch, model_name: str) -> None:
     """OpenAI LiteLLM summaries must reach the SDK chat-completions call payload."""
     pytest.importorskip("agents")
     litellm = pytest.importorskip("litellm")
@@ -824,7 +826,7 @@ async def test_litellm_openai_variant_forwards_reasoning_summary_to_litellm(monk
     apply_openai_client_config(
         agency,
         ClientConfig(
-            model="litellm/openai/gpt-5.4",
+            model=model_name,
             model_settings_extra_args={"reasoning_effort": "high", "reasoning_summary": "auto"},
         ),
     )
