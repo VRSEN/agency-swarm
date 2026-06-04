@@ -20,6 +20,8 @@ from openai.types.responses import (
     ResponseContentPartAddedEvent,
     ResponseContentPartDoneEvent,
     ResponseCreatedEvent,
+    ResponseFunctionCallArgumentsDeltaEvent,
+    ResponseFunctionCallArgumentsDoneEvent,
     ResponseFunctionToolCall,
     ResponseOutputItemAddedEvent,
     ResponseOutputItemDoneEvent,
@@ -299,6 +301,79 @@ async def _stream_text_events(text: str, model_name: str) -> AsyncIterator[TResp
     )
     yield ResponseCompletedEvent(
         response=completed_response,
+        sequence_number=sequence_number,
+        type="response.completed",
+    )
+
+
+async def _stream_model_response(response: ModelResponse, model_name: str) -> AsyncIterator[TResponseStreamEvent]:
+    created_at = int(time.time())
+    response_id = response.response_id or f"resp_{uuid.uuid4().hex}"
+    sequence_number = 0
+
+    yield ResponseCreatedEvent(
+        response=Response(
+            id=response_id,
+            created_at=created_at,
+            model=model_name,
+            object="response",
+            output=[],
+            tool_choice="none",
+            tools=[],
+            parallel_tool_calls=False,
+            usage=None,
+        ),
+        sequence_number=sequence_number,
+        type="response.created",
+    )
+    sequence_number += 1
+
+    for output_index, item in enumerate(response.output):
+        yield ResponseOutputItemAddedEvent(
+            item=item,
+            output_index=output_index,
+            sequence_number=sequence_number,
+            type="response.output_item.added",
+        )
+        sequence_number += 1
+        if isinstance(item, ResponseFunctionToolCall):
+            yield ResponseFunctionCallArgumentsDeltaEvent(
+                delta=item.arguments,
+                item_id=item.id,
+                output_index=output_index,
+                sequence_number=sequence_number,
+                type="response.function_call_arguments.delta",
+            )
+            sequence_number += 1
+            yield ResponseFunctionCallArgumentsDoneEvent(
+                arguments=item.arguments,
+                item_id=item.id,
+                name=item.name,
+                output_index=output_index,
+                sequence_number=sequence_number,
+                type="response.function_call_arguments.done",
+            )
+            sequence_number += 1
+        yield ResponseOutputItemDoneEvent(
+            item=item,
+            output_index=output_index,
+            sequence_number=sequence_number,
+            type="response.output_item.done",
+        )
+        sequence_number += 1
+
+    yield ResponseCompletedEvent(
+        response=Response(
+            id=response_id,
+            created_at=created_at,
+            model=model_name,
+            object="response",
+            output=response.output,
+            tool_choice="none",
+            tools=[],
+            parallel_tool_calls=False,
+            usage=None,
+        ),
         sequence_number=sequence_number,
         type="response.completed",
     )

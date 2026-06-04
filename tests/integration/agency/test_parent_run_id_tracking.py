@@ -6,16 +6,96 @@ the necessity of enriching streaming events and saved messages with run IDs as
 documented (observability, streaming docs).
 """
 
-import asyncio
 import json
 import logging
+from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
+from agents.items import ModelResponse, TResponseInputItem, TResponseStreamEvent
 
 from agency_swarm import Agency, Agent
+from tests.deterministic_model import (
+    DeterministicModel,
+    _build_message_response,
+    _build_tool_call_response,
+    _extract_last_tool_output,
+    _stream_model_response,
+)
 
 logger = logging.getLogger(__name__)
+
+
+class ParentRunLineageModel(DeterministicModel):
+    def __init__(self, agent_name: str) -> None:
+        super().__init__(model=f"test-parent-run-{agent_name.lower()}")
+        self.agent_name = agent_name
+
+    def _build_response(self, input: str | list[TResponseInputItem], tools: list[Any]) -> ModelResponse:
+        tool_output = _extract_last_tool_output(input)
+        if tool_output is not None:
+            if self.agent_name == "CEO":
+                return _build_message_response(f"CEO executed: {tool_output}", self.model)
+            if self.agent_name == "Manager":
+                return _build_message_response(f"Manager coordinated: {tool_output}", self.model)
+            return _build_message_response(tool_output, self.model)
+
+        tool_names = {getattr(tool, "name", None) for tool in tools}
+        if self.agent_name == "CEO":
+            if "send_message" not in tool_names:
+                return _build_message_response("CEO missing send_message tool", self.model)
+            return _build_tool_call_response(
+                "send_message",
+                {
+                    "recipient_agent": "Manager",
+                    "message": "Please manage this task",
+                    "additional_instructions": "",
+                },
+            )
+        if self.agent_name == "Manager":
+            if "send_message" not in tool_names:
+                return _build_message_response("Manager missing send_message tool", self.model)
+            return _build_tool_call_response(
+                "send_message",
+                {
+                    "recipient_agent": "Worker",
+                    "message": "Please do the work",
+                    "additional_instructions": "",
+                },
+            )
+        return _build_message_response("Work completed by Worker", self.model)
+
+    async def get_response(
+        self,
+        system_instructions: str | None,
+        input: str | list[TResponseInputItem],
+        model_settings: Any,
+        tools: list[Any],
+        output_schema: Any,
+        handoffs: list[Any],
+        tracing: Any,
+        *,
+        previous_response_id: str | None,
+        conversation_id: str | None,
+        prompt: Any,
+    ) -> ModelResponse:
+        return self._build_response(input, tools)
+
+    def stream_response(
+        self,
+        system_instructions: str | None,
+        input: str | list[TResponseInputItem],
+        model_settings: Any,
+        tools: list[Any],
+        output_schema: Any,
+        handoffs: list[Any],
+        tracing: Any,
+        *,
+        previous_response_id: str | None,
+        conversation_id: str | None,
+        prompt: Any,
+    ) -> AsyncIterator[TResponseStreamEvent]:
+        return _stream_model_response(self._build_response(input, tools), self.model)
 
 
 def _assert_non_empty_agent_run_ids(messages: list[dict[str, Any]]) -> None:
@@ -29,7 +109,7 @@ def _assert_non_empty_agent_run_ids(messages: list[dict[str, Any]]) -> None:
 
 
 @pytest.fixture(scope="function")
-def three_level_agency():
+def three_level_agency() -> tuple[Agency, list[dict[str, Any]]]:
     """Create a shared 3-level agency for testing parent_run_id tracking."""
     # Track messages and their metadata
     captured_messages = []
@@ -42,7 +122,7 @@ def three_level_agency():
     worker = Agent(
         name="Worker",
         instructions="You are a Worker. When asked to do work, respond with 'Work completed by Worker'.",
-        model="gpt-5.4-mini",
+        model=ParentRunLineageModel("Worker"),
     )
 
     # Create Manager agent (middle layer - orchestrates Worker)
@@ -53,7 +133,7 @@ def three_level_agency():
             "Use send_message to ask Worker to 'Please do the work'. "
             "After receiving Worker's response, summarize as 'Manager coordinated: [Worker's response]'."
         ),
-        model="gpt-5.4-mini",
+        model=ParentRunLineageModel("Manager"),
     )
 
     # Create CEO agent (top layer - orchestrates Manager)
@@ -64,7 +144,7 @@ def three_level_agency():
             "Use send_message to ask Manager to 'Please manage this task'. "
             "After receiving Manager's response, summarize as 'CEO executed: [Manager's response]'."
         ),
-        model="gpt-5.4-mini",
+        model=ParentRunLineageModel("CEO"),
     )
 
     # Create agency with orchestration flows
@@ -104,9 +184,6 @@ async def test_parent_run_id_three_level_orchestration(three_level_agency) -> No
 
     # Execute a project that triggers the full delegation chain
     result = await agency.get_response(message="Execute project Alpha", agent_name="CEO")
-
-    # Give async operations time to complete
-    await asyncio.sleep(1)
 
     # Update delegation chain from captured messages
     update_delegation_chain()
