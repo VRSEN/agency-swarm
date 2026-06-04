@@ -50,13 +50,14 @@ def test_agentswarm_cli_tui_launches_agent_swarm_cli(monkeypatch):
 
     agentswarm_cli_demo.start_tui(agency, reload=False)
 
-    assert calls["cmd"] == ["/usr/local/bin/agentswarm", "--model", agentswarm_cli_demo._MODEL]
+    assert calls["cmd"] == [str(Path("/usr/local/bin/agentswarm")), "--model", agentswarm_cli_demo._MODEL]
     assert calls["cwd"] == "/tmp/project"
     assert calls["check"] is False
     config = json.loads(calls["env"]["OPENCODE_CONFIG_CONTENT"])
     assert config["model"] == agentswarm_cli_demo._MODEL
     assert config["provider"]["agency-swarm"]["options"]["baseURL"] == "http://127.0.0.1:43121"
     assert config["provider"]["agency-swarm"]["options"]["agency"] == "My_Agency"
+    assert config["provider"]["ollama"]["name"] == "Ollama"
     assert server.stopped is True
 
 
@@ -85,7 +86,7 @@ def test_agentswarm_cli_tui_installs_agent_swarm_cli(monkeypatch):
     monkeypatch.delenv(agentswarm_cli_demo._BIN_ENV, raising=False)
     monkeypatch.setattr(agentswarm_cli_demo, "_ensure_cli", lambda: Path("/tmp/cache/agentswarm"))
 
-    assert agentswarm_cli_demo._command() == ["/tmp/cache/agentswarm"]
+    assert agentswarm_cli_demo._command() == [str(Path("/tmp/cache/agentswarm"))]
 
 
 def test_agentswarm_cli_tui_prefers_explicit_cli(monkeypatch):

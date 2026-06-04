@@ -24,6 +24,10 @@ def test_request_override_policy_flags() -> None:
     assert model_only.has_client_overrides is True
     assert model_only.has_openai_overrides is False
 
+    tui_default_model = RequestOverridePolicy(ClientConfig(model="agency-swarm/default"))
+    assert tui_default_model.has_client_overrides is False
+    assert tui_default_model.has_openai_overrides is False
+
     litellm_cfg = cast(
         ClientConfig,
         SimpleNamespace(

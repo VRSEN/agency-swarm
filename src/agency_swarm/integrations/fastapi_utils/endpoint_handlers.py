@@ -74,6 +74,7 @@ from agency_swarm.utils.usage_tracking import (
 )
 
 logger = logging.getLogger(__name__)
+_AGENCY_SWARM_DEFAULT_MODEL = "agency-swarm/default"
 
 type _AgencyStateSnapshot = dict[
     str,
@@ -160,6 +161,9 @@ def _apply_request_model_override(agent: Agent, model_name: str, config: ClientC
     Returns ``True`` when the OpenAI gateway client has already been applied
     during the swap so the caller can skip the downstream client-apply step.
     """
+    if model_name == _AGENCY_SWARM_DEFAULT_MODEL:
+        return False
+
     model = agent.model
     gateway_client = _resolve_request_gateway_client(agent, config)
 
@@ -321,7 +325,7 @@ def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
     # Apply to all agents in the agency
     for agent in agency.agents.values():
         gateway_applied = False
-        if config.model is not None:
+        if config.model is not None and config.model != _AGENCY_SWARM_DEFAULT_MODEL:
             gateway_applied = _apply_request_model_override(agent, config.model, config)
             _refresh_framework_defaults_after_model_swap(agent)
 
@@ -359,6 +363,19 @@ def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
                 _apply_default_headers_to_agent_model_settings(agent, config.default_headers)
             continue
         _apply_client_to_agent(agent, client, config)
+
+
+def _resolve_stream_client_config(http_request: Request, config: ClientConfig | None) -> ClientConfig | None:
+    if config is None:
+        return None
+    app_state = getattr(http_request.app, "state", None)
+    if not bool(getattr(app_state, "agency_swarm_tui_bridge", False)):
+        return config
+    if config.model is None:
+        return config
+    if config.model.startswith("litellm/"):
+        return config
+    return config.model_copy(update={"model": None})
 
 
 @dataclass
@@ -550,7 +567,8 @@ def make_stream_endpoint(
                 return []
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
-        override_policy = RequestOverridePolicy(request.client_config)
+        client_config = _resolve_stream_client_config(http_request, request.client_config)
+        override_policy = RequestOverridePolicy(client_config)
         override_session = _RequestOverrideSession(agency=agency_instance, policy=override_policy)
         request_upload_client: AsyncOpenAI | None = None
 
@@ -565,7 +583,7 @@ def make_stream_endpoint(
 
             request_upload_client = _build_file_upload_client(
                 agency_instance,
-                request.client_config,
+                client_config,
                 recipient_agent=request.recipient_agent,
             )
             if request.file_urls is not None:
@@ -1568,9 +1586,11 @@ def _resolve_litellm_base_url(
     if config.base_url is None:
         return existing_base_url
 
-    # Preserve generic LiteLLM proxy support, but never leak the Codex browser-auth
-    # endpoint into non-OpenAI-compatible providers like Anthropic or Gemini.
-    if _is_codex_base_url(config.base_url) and not _is_openai_based_litellm_provider(provider):
+    # Preserve generic LiteLLM proxy/OpenAI-compatible support, but do not leak
+    # request gateway URLs into provider-native LiteLLM routes such as
+    # ollama_chat/gemma4:e4b. Those providers resolve their own endpoint from
+    # LiteLLM/env configuration; overriding them with the bridge URL produces 404s.
+    if not _is_openai_based_litellm_provider(provider):
         return existing_base_url
 
     return config.base_url
