@@ -58,6 +58,10 @@ from agency_swarm.integrations.fastapi_utils.override_policy import (
 )
 from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
 from agency_swarm.messages import MessageFilter, MessageFormatter
+from agency_swarm.messages.codex_input import (
+    is_codex_base_url as _is_codex_base_url,
+    rewrite_system_input_roles_for_codex,
+)
 from agency_swarm.messages.response_input_sanitizer import (
     REASONING_ENCRYPTED_CONTENT_INCLUDE,
     ensure_store_false_reasoning_encrypted_content,
@@ -1045,6 +1049,10 @@ Rules:
         else:
             codex_input = cast(list[TResponseInputItem], stripped_messages)
             codex_input = cast(list[TResponseInputItem], sanitize_store_false_responses_input(codex_input))
+        codex_input = cast(
+            list[TResponseInputItem],
+            rewrite_system_input_roles_for_codex(cast(list[dict[str, Any]], codex_input)),
+        )
 
         retry_suffix = ""
         for _attempt in range(4):
@@ -1186,12 +1194,6 @@ def _apply_default_headers_to_agent_model_settings(agent: Agent, headers: dict[s
     # ModelSettings is a dataclass (agents==0.6.4), so updating requires replacement.
     current.extra_headers = merged
     agent.model_settings = current
-
-
-def _is_codex_base_url(value: str | None) -> bool:
-    if not value:
-        return False
-    return value.rstrip("/") == "https://chatgpt.com/backend-api/codex"
 
 
 class _CodexAsyncStream:

@@ -25,10 +25,11 @@ async def test_conversation_starter_cache_reuse_without_llm(tmp_path, monkeypatc
     monkeypatch.setenv("AGENCY_SWARM_CHATS_DIR", str(tmp_path))
 
     starter = "What is the weather in London?"
+    model = DeterministicModel(default_response="Cached starter answer.")
     agent = Agent(
         name="StarterAgent",
         instructions="You are helpful.",
-        model="gpt-5.4-mini",
+        model=model,
         conversation_starters=[starter],
         cache_conversation_starters=True,
     )
@@ -55,8 +56,9 @@ async def test_conversation_starter_cache_reuse_without_llm(tmp_path, monkeypatc
     assert result.final_output == expected_text
     assert len(agency.thread_manager.get_all_messages()) >= 2
 
-    with pytest.raises(AgentsException):
-        await agency.get_response(starter)
+    model._default_response = "Live follow-up answer."
+    follow_up = await agency.get_response(starter)
+    assert follow_up.final_output == "Live follow-up answer."
 
     agent_cached = Agent(
         name="StarterAgent",
@@ -117,10 +119,11 @@ async def test_conversation_starter_cache_reuse_stream_without_llm(tmp_path, mon
     monkeypatch.setenv("AGENCY_SWARM_CHATS_DIR", str(tmp_path))
 
     starter = "What is the weather in London?"
+    model = DeterministicModel(default_response="Cached starter answer.")
     agent = Agent(
         name="StarterAgent",
         instructions="You are helpful.",
-        model="gpt-5.4-mini",
+        model=model,
         conversation_starters=[starter],
         cache_conversation_starters=True,
     )
@@ -154,33 +157,11 @@ async def test_conversation_starter_cache_skips_with_context_override(tmp_path, 
     monkeypatch.setenv("AGENCY_SWARM_CHATS_DIR", str(tmp_path))
 
     starter = "What is the weather in London?"
+    model = DeterministicModel(default_response="Cached starter answer.")
     agent = Agent(
         name="StarterAgent",
         instructions="You are helpful.",
-        model="gpt-5.4-mini",
-        conversation_starters=[starter],
-        cache_conversation_starters=True,
-    )
-    agency = Agency(agent)
-
-    cache_dir = Path(tmp_path) / "starter_cache"
-    cache_files = await _wait_for_cache_files(cache_dir, 1)
-    assert len(cache_files) == 1
-
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-invalid")
-    with pytest.raises(AgentsException):
-        await agency.get_response(starter, context_override={"user_id": "abc"})
-
-
-@pytest.mark.asyncio
-async def test_conversation_starter_cache_skips_stream_with_context_override(tmp_path, monkeypatch):
-    monkeypatch.setenv("AGENCY_SWARM_CHATS_DIR", str(tmp_path))
-
-    starter = "What is the weather in London?"
-    agent = Agent(
-        name="StarterAgent",
-        instructions="You are helpful.",
-        model="gpt-5.4-mini",
+        model=model,
         conversation_starters=[starter],
         cache_conversation_starters=True,
     )
@@ -196,12 +177,45 @@ async def test_conversation_starter_cache_skips_stream_with_context_override(tmp
     )
     assert cached is not None
     expected_text = extract_final_output_text(cached.items)
-    assert expected_text
+    assert expected_text == "Cached starter answer."
 
+    model._default_response = "Context override answer."
+    result = await agency.get_response(starter, context_override={"user_id": "abc"})
+    assert result.final_output == "Context override answer."
+
+
+@pytest.mark.asyncio
+async def test_conversation_starter_cache_skips_stream_with_context_override(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENCY_SWARM_CHATS_DIR", str(tmp_path))
+
+    starter = "What is the weather in London?"
+    model = DeterministicModel(default_response="Cached starter answer.")
+    agent = Agent(
+        name="StarterAgent",
+        instructions="You are helpful.",
+        model=model,
+        conversation_starters=[starter],
+        cache_conversation_starters=True,
+    )
+    agency = Agency(agent)
+
+    cache_dir = Path(tmp_path) / "starter_cache"
+    cache_files = await _wait_for_cache_files(cache_dir, 1)
+    assert len(cache_files) == 1
+    cached = load_cached_starter(
+        agent.name,
+        starter,
+        expected_fingerprint=agent._conversation_starters_fingerprint,
+    )
+    assert cached is not None
+    expected_text = extract_final_output_text(cached.items)
+    assert expected_text == "Cached starter answer."
+
+    model._default_response = "Context override answer."
     stream = agency.get_response_stream(starter, context_override={"user_id": "abc"})
     async for _event in stream:
         pass
-    assert stream.final_output != expected_text
+    assert stream.final_output == "Context override answer."
 
 
 @pytest.mark.asyncio
