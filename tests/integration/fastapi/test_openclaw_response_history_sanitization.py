@@ -689,10 +689,7 @@ def test_store_false_sanitizer_keeps_prior_encrypted_reasoning_boundary() -> Non
     ]
 
 
-@pytest.mark.skipif(
-    os.getenv("CI") == "true",
-    reason="Requires live OpenAI reasoning output; skipped on CI because the API can omit reasoning items.",
-)
+@pytest.mark.skipif(os.getenv("CI") == "true", reason="Live OpenAI can omit reasoning items in CI.")
 def test_live_openai_store_false_replays_encrypted_reasoning() -> None:
     """Live OpenAI proof for stateless Responses reasoning replay."""
     client = OpenAI()
@@ -706,7 +703,6 @@ def test_live_openai_store_false_replays_encrypted_reasoning() -> None:
     )
     first_items = [item.model_dump(exclude_none=True) for item in first.output]
     reasoning_items = [item for item in first_items if item.get("type") == "reasoning"]
-
     assert first.output_text.strip() == "1517"
     assert reasoning_items
     assert all(item.get("encrypted_content") for item in reasoning_items)
@@ -728,7 +724,6 @@ def test_live_openai_store_false_replays_encrypted_reasoning() -> None:
         reasoning={"effort": "high"},
         max_output_tokens=64,
     )
-
     assert second.output_text.strip() == "1517"
 
 

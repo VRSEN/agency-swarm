@@ -331,7 +331,7 @@ class TestFastAPIFileProcessing:
     async def test_code_interpreter_attachment(self, file_server_base_url: str, fastapi_base_url: str):
         """Test processing an HTML file via file_urls."""
         url = f"{fastapi_base_url}/test_agency/get_response"
-        expected_markers = ("first html", "second html")
+        expected_markers = ("first html", "second html", "html secret")
         payload = {
             "message": (
                 "Search the HTML document with the code interpreter. "
