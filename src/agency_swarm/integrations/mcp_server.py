@@ -21,6 +21,31 @@ from agency_swarm.tools import BaseTool, ToolFactory
 logger = logging.getLogger(__name__)
 
 
+def _agency_swarm_stateless_http_default(transport: str) -> bool:
+    return transport != "sse"
+
+
+class _AgencySwarmFastMCP(FastMCP):
+    """FastMCP with Agency Swarm's previous HTTP stateless default."""
+
+    async def run_http_async(self, *args: Any, **kwargs: Any) -> None:
+        transport = kwargs.get("transport")
+        if transport is None:
+            transport = args[1] if len(args) > 1 else "http"
+        has_positional_stateless = len(args) > 9
+        if not has_positional_stateless and kwargs.get("stateless_http") is None and kwargs.get("stateless") is None:
+            kwargs["stateless_http"] = _agency_swarm_stateless_http_default(transport)
+        await super().run_http_async(*args, **kwargs)
+
+    def http_app(self, *args: Any, **kwargs: Any) -> Any:
+        transport = kwargs.get("transport")
+        if transport is None:
+            transport = args[4] if len(args) > 4 else "http"
+        if len(args) <= 3 and kwargs.get("stateless_http") is None:
+            kwargs["stateless_http"] = _agency_swarm_stateless_http_default(transport)
+        return super().http_app(*args, **kwargs)
+
+
 def _load_tools_from_directory(tools_dir: str) -> list[type[BaseTool] | FunctionTool]:
     """Load BaseTool classes and FunctionTool instances from a directory."""
     tools: list[type[BaseTool] | FunctionTool] = []
@@ -78,8 +103,7 @@ def run_mcp(
         if not tools_list or len(tools_list) == 0:
             raise ValueError("No tools provided. Please provide at least one tool class.")
 
-    # stateless_http is required for oai agents
-    mcp: FastMCP = FastMCP(server_name, stateless_http=True)
+    mcp: FastMCP = _AgencySwarmFastMCP(server_name)
 
     # Get authentication token
     app_token = os.getenv(app_token_env)
@@ -139,11 +163,9 @@ def run_mcp(
 
                 def __init__(self, function_tool):
                     super().__init__(
-                        key=function_tool.name,
                         name=function_tool.name,
                         description=function_tool.description,
                         parameters=function_tool.params_json_schema,  # Use existing JSON schema directly
-                        enabled=True,
                     )
                     # Store the function_tool reference after super().__init__
                     object.__setattr__(self, "_function_tool", function_tool)
@@ -182,4 +204,17 @@ def run_mcp(
     if transport == "stdio":
         mcp.run(transport=transport)
     else:
-        mcp.run(transport=transport, host=host, port=port, uvicorn_config=uvicorn_config)
+        # Preserve Agency Swarm's previous direct HTTP server behavior
+        # after FastMCP v3 moved this option from construction to HTTP run helpers.
+        # SSE does not support stateless mode.
+        run_kwargs: dict[str, Any] = {
+            "transport": transport,
+            "host": host,
+            "port": port,
+            "uvicorn_config": uvicorn_config,
+        }
+        if transport != "sse":
+            run_kwargs["stateless_http"] = True
+        else:
+            run_kwargs["stateless_http"] = False
+        mcp.run(**run_kwargs)
