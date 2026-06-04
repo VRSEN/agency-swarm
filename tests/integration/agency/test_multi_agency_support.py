@@ -9,6 +9,8 @@ import asyncio
 from typing import Literal
 
 import pytest
+from agents import RunResult
+from agents.items import ToolCallOutputItem
 from pydantic import Field
 
 from agency_swarm import Agency, Agent
@@ -32,6 +34,22 @@ class SharedStateTool(BaseTool):
             stored_value = self.context.get("test_value", "NOT_SET")
             print(f"Current test_value: {stored_value}")
             return f"Current test_value: {stored_value}"
+
+
+def _tool_outputs(response: RunResult) -> list[str]:
+    return [str(item.output) for item in response.new_items if isinstance(item, ToolCallOutputItem)]
+
+
+def _assert_tool_output_contains(response: RunResult, expected: str) -> None:
+    tool_outputs = _tool_outputs(response)
+    assert any(expected in output for output in tool_outputs), f"Expected {expected!r} in tool outputs: {tool_outputs}"
+
+
+def _assert_tool_output_excludes(response: RunResult, unexpected: str) -> None:
+    tool_outputs = _tool_outputs(response)
+    assert all(unexpected not in output for output in tool_outputs), (
+        f"Did not expect {unexpected!r} in tool outputs: {tool_outputs}"
+    )
 
 
 @pytest.fixture
@@ -132,15 +150,15 @@ class TestMultiAgencySupport:
         response2 = await agency2.get_response("Use SharedStateTool to get the current test_value")
 
         # The value should be isolated - agency2 shouldn't see agency1's value
-        assert "agency1_secret" not in str(response2.final_output)
+        _assert_tool_output_excludes(response2, "agency1_secret")
 
         # Set different value in agency2
         await agency2.get_response("Use SharedStateTool to set test_value to 'agency2_secret'")
 
         # Verify agency1 still has its own value
         response1 = await agency1.get_response("Use SharedStateTool to get the current test_value")
-        assert "agency1_secret" in str(response1.final_output)
-        assert "agency2_secret" not in str(response1.final_output)
+        _assert_tool_output_contains(response1, "agency1_secret")
+        _assert_tool_output_excludes(response1, "agency2_secret")
 
     @pytest.mark.asyncio
     async def test_subagent_registration_isolation(self, shared_agent, agency1, agency2):
@@ -195,8 +213,8 @@ class TestMultiAgencySupport:
         get_response1, get_response2 = await asyncio.gather(get_task1, get_task2)
 
         # Each should have its own value (context isolation maintained)
-        assert "concurrent1" in str(get_response1.final_output)
-        assert "concurrent2" in str(get_response2.final_output)
+        _assert_tool_output_contains(get_response1, "concurrent1")
+        _assert_tool_output_contains(get_response2, "concurrent2")
 
     @pytest.mark.asyncio
     async def test_streaming_context_isolation(self, shared_agent, agency1, agency2):
@@ -220,11 +238,11 @@ class TestMultiAgencySupport:
         response2 = await agency2.get_response("Use SharedStateTool to get the current test_value")
 
         # Should have different values
-        output1 = str(response1.final_output)
-        output2 = str(response2.final_output)
-        assert "stream1" in output1
-        assert "stream2" in output2
-        assert output1 != output2
+        outputs1 = _tool_outputs(response1)
+        outputs2 = _tool_outputs(response2)
+        assert any("stream1" in output for output in outputs1), f"Expected stream1 in tool outputs: {outputs1}"
+        assert any("stream2" in output for output in outputs2), f"Expected stream2 in tool outputs: {outputs2}"
+        assert outputs1 != outputs2
 
 
 class TestStatelessContextPassing:
