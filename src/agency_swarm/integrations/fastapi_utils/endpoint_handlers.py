@@ -1212,17 +1212,22 @@ def _apply_request_model_settings_extra_args(agent: Agent, config: ClientConfig)
 
     reasoning_effort = extra_args.get("reasoning_effort")
     reasoning_summary = extra_args.get("reasoning_summary")
-    litellm_model_name = _litellm_model_name(agent)
-    is_litellm_gemini = litellm_model_name.startswith(("google/", "gemini/", "vertex_ai/"))
-    if litellm_model_name.startswith("anthropic/"):
+    uses_litellm = _agent_uses_litellm(agent)
+    model_name = _request_model_name(agent)
+    litellm_model_name = _normalize_litellm_model_name(model_name).lower() if uses_litellm else ""
+    variant_model_name = litellm_model_name or model_name.lower()
+    has_anthropic_thinking_budget = False
+    is_gemini = variant_model_name.startswith(("google/", "gemini/", "vertex_ai/"))
+    if variant_model_name.startswith("anthropic/"):
         _normalize_anthropic_litellm_variant_args(extra_args)
         reasoning_effort = extra_args.get("reasoning_effort")
         reasoning_summary = extra_args.get("reasoning_summary")
-    elif litellm_model_name.startswith("xai/"):
-        _normalize_xai_litellm_variant_args(extra_args, litellm_model_name)
+        has_anthropic_thinking_budget = _has_enabled_thinking_budget(extra_args)
+    elif variant_model_name.startswith("xai/"):
+        _normalize_xai_litellm_variant_args(extra_args, variant_model_name)
         reasoning_effort = extra_args.get("reasoning_effort")
         reasoning_summary = extra_args.get("reasoning_summary")
-    elif is_litellm_gemini:
+    elif is_gemini:
         requested_reasoning_summary = reasoning_summary
         _normalize_gemini_litellm_variant_args(extra_args)
         reasoning_effort = extra_args.get("reasoning_effort")
@@ -1230,8 +1235,9 @@ def _apply_request_model_settings_extra_args(agent: Agent, config: ClientConfig)
 
     normalized_effort = _reasoning_effort_value(reasoning_effort)
     normalized_summary = _reasoning_summary_value(reasoning_summary)
-    uses_litellm = _agent_uses_litellm(agent)
     is_litellm_openai = uses_litellm and _is_openai_model_name(litellm_model_name)
+    if normalized_effort is None and reasoning_effort is None and has_anthropic_thinking_budget:
+        normalized_effort = "high"
     if normalized_effort is not None and is_litellm_openai:
         current.reasoning = None
         if normalized_summary is not None:
@@ -1244,11 +1250,19 @@ def _apply_request_model_settings_extra_args(agent: Agent, config: ClientConfig)
     ):
         current.reasoning = Reasoning(
             effort=normalized_effort,
-            summary=normalized_summary,
+            summary=None if uses_litellm else normalized_summary,
         )
-        if not uses_litellm or is_litellm_gemini:
+        if not uses_litellm or is_gemini:
             extra_args.pop("reasoning_effort", None)
             extra_args.pop("reasoning_summary", None)
+    elif normalized_effort is not None and uses_litellm:
+        current.reasoning = None
+    elif normalized_summary is not None and not uses_litellm:
+        current.reasoning = Reasoning(
+            effort=current.reasoning.effort if current.reasoning is not None else None,
+            summary=normalized_summary,
+        )
+        extra_args.pop("reasoning_summary", None)
     elif isinstance(extra_args.get("reasoning"), dict) and not uses_litellm:
         raw_reasoning = cast(dict[str, Any], extra_args.pop("reasoning"))
         effort = raw_reasoning.get("effort")
@@ -1260,12 +1274,66 @@ def _apply_request_model_settings_extra_args(agent: Agent, config: ClientConfig)
                 effort=normalized_effort,
                 summary=normalized_summary,
             )
-    elif isinstance(reasoning_summary, str) and isinstance(reasoning_effort, dict):
+    elif isinstance(reasoning_summary, str) and isinstance(reasoning_effort, dict) and not uses_litellm:
         reasoning_effort.setdefault("summary", reasoning_summary)
         extra_args.pop("reasoning_summary", None)
+    elif uses_litellm:
+        extra_args.pop("reasoning_summary", None)
+
+    if _is_gateway_provider_variant(uses_litellm, variant_model_name):
+        _move_gateway_variant_extra_args(extra_args)
+
+    extra_body = extra_args.pop("extra_body", None)
+    if isinstance(extra_body, dict):
+        current_body = current.extra_body if isinstance(current.extra_body, dict) else {}
+        current.extra_body = {
+            **current_body,
+            **extra_body,
+        }
 
     current.extra_args = extra_args or None
     agent.model_settings = current
+
+
+def _request_model_name(agent: Agent) -> str:
+    model = agent.model
+    if isinstance(model, str):
+        name = model
+    elif isinstance(model, OpenAIResponsesModel | OpenAIChatCompletionsModel):
+        name = model.model
+    elif _LITELLM_AVAILABLE and LitellmModel is not None and isinstance(model, LitellmModel):
+        name = model.model
+    elif isinstance(model, Model):
+        name = getattr(model, "model", "")
+    else:
+        name = ""
+    return name if isinstance(name, str) else ""
+
+
+def _is_gateway_provider_variant(uses_litellm: bool, model_name: str) -> bool:
+    if uses_litellm or "/" not in model_name:
+        return False
+    return not model_name.startswith(("openai/", "azure/", "azure_ai/"))
+
+
+def _move_gateway_variant_extra_args(extra_args: dict[str, Any]) -> None:
+    provider_keys = {
+        "effort",
+        "includeThoughts",
+        "reasoning_effort",
+        "reasoning_summary",
+        "thinking",
+        "thinkingBudget",
+        "thinkingConfig",
+        "thinkingLevel",
+    }
+    body = extra_args.pop("extra_body", None)
+    extra_body = dict(body) if isinstance(body, dict) else {}
+    for key in provider_keys:
+        if key in extra_args:
+            extra_body[key] = extra_args.pop(key)
+    if extra_body:
+        extra_args["extra_body"] = extra_body
 
 
 def _reasoning_effort_value(value: Any) -> ReasoningEffortValue | None:
@@ -1353,6 +1421,13 @@ def _normalize_thinking_budget_tokens(extra_args: dict[str, Any]) -> None:
         normalized["budget_tokens"] = budget_tokens
         normalized.pop("budgetTokens", None)
         extra_args["thinking"] = normalized
+
+
+def _has_enabled_thinking_budget(extra_args: dict[str, Any]) -> bool:
+    thinking = extra_args.get("thinking")
+    if not isinstance(thinking, dict) or thinking.get("type") != "enabled":
+        return False
+    return isinstance(thinking.get("budget_tokens"), int)
 
 
 def _litellm_model_name(agent: Agent) -> str:
@@ -1655,8 +1730,9 @@ def _apply_client_to_agent(agent: Agent, client: AsyncOpenAI | None, config: Cli
     elif _LITELLM_AVAILABLE and LitellmModel is not None and isinstance(model, LitellmModel):
         if has_litellm_overrides:
             # Preserve existing settings unless explicitly overridden.
-            base_url = _resolve_litellm_base_url(model.model, config, existing_base_url=model.base_url)
-            api_key = _resolve_litellm_api_key(model.model, config, existing_api_key=model.api_key)
+            resolved_model = _normalize_litellm_model_name(model.model)
+            base_url = _resolve_litellm_base_url(resolved_model, config, existing_base_url=model.base_url)
+            api_key = _resolve_litellm_api_key(resolved_model, config, existing_api_key=model.api_key)
             agent.model = LitellmModel(model=model.model, base_url=base_url, api_key=api_key)
     elif isinstance(model, Model):
         # For other Model types, try to extract and wrap with OpenAIResponsesModel

@@ -35,6 +35,23 @@ _INPUT_GUARDRAIL_WRAPPED_ATTR = "_agency_swarm_input_guardrail_wrapped"
 _FRAMEWORK_DEFAULT_MODEL_SETTINGS = ModelSettings(truncation="auto", include_usage=True)
 
 
+def _patch_litellm_thinking_blocks_for_model(model: Any) -> None:
+    if not _is_litellm_model(model):
+        return
+    from agency_swarm.streaming.litellm_reasoning import patch_litellm_thinking_blocks
+
+    patch_litellm_thinking_blocks()
+
+
+def _is_litellm_model(model: Any) -> bool:
+    if isinstance(model, str):
+        return model.startswith("litellm/")
+    return any(
+        cls.__module__ == "agents.extensions.models.litellm_model" and cls.__name__ == "LitellmModel"
+        for cls in type(model).__mro__
+    )
+
+
 def _get_framework_default_model_settings(model: str | None = None) -> ModelSettings:
     """Get SDK defaults for a model and layer Agency Swarm defaults on top."""
     base = get_sdk_default_model_settings(model)
@@ -133,6 +150,7 @@ def apply_framework_defaults(kwargs: dict[str, Any]) -> None:
         kwargs: The initialization keyword arguments (modified in place)
     """
     model_arg = kwargs.get("model")
+    _patch_litellm_thinking_blocks_for_model(model_arg)
     model_name = get_default_settings_model_name(model_arg)
     base_defaults = _get_framework_default_model_settings(model_name)
 
