@@ -847,6 +847,7 @@ def test_gateway_provider_model_override_moves_provider_variant_args_to_extra_bo
             api_key="sk-gateway",
             base_url="https://gateway.example/v1",
             model_settings_extra_args={
+                "include": ["reasoning.encrypted_content"],
                 "thinking": {"type": "enabled", "budgetTokens": 16000},
                 "effort": "high",
             },
@@ -857,6 +858,7 @@ def test_gateway_provider_model_override_moves_provider_variant_args_to_extra_bo
     assert isinstance(agent.model._client, AsyncOpenAI)
     assert agent.model_settings.reasoning is not None
     assert agent.model_settings.reasoning.effort == "high"
+    assert agent.model_settings.response_include is None
     assert agent.model_settings.extra_body == {"thinking": {"type": "enabled", "budget_tokens": 16000}}
     assert agent.model_settings.extra_args is None
 

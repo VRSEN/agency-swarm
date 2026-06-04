@@ -1203,19 +1203,21 @@ def _apply_request_model_settings_extra_args(agent: Agent, config: ClientConfig)
     extra_args = dict(current.extra_args or {})
     extra_args.update(config.model_settings_extra_args)
 
-    include = extra_args.pop("include", None)
-    if isinstance(include, list) and not _agent_uses_litellm(agent):
-        existing_include = list(current.response_include or [])
-        current.response_include = [*existing_include, *include]
-    elif include is not None:
-        extra_args["include"] = include
-
-    reasoning_effort = extra_args.get("reasoning_effort")
-    reasoning_summary = extra_args.get("reasoning_summary")
     uses_litellm = _agent_uses_litellm(agent)
     model_name = _request_model_name(agent)
     litellm_model_name = _normalize_litellm_model_name(model_name).lower() if uses_litellm else ""
     variant_model_name = litellm_model_name or model_name.lower()
+    is_gateway_provider_variant = _is_gateway_provider_variant(uses_litellm, variant_model_name)
+
+    include = extra_args.pop("include", None)
+    if isinstance(include, list) and not uses_litellm and not is_gateway_provider_variant:
+        existing_include = list(current.response_include or [])
+        current.response_include = [*existing_include, *include]
+    elif include is not None and not is_gateway_provider_variant:
+        extra_args["include"] = include
+
+    reasoning_effort = extra_args.get("reasoning_effort")
+    reasoning_summary = extra_args.get("reasoning_summary")
     has_anthropic_thinking_budget = False
     is_gemini = variant_model_name.startswith(("google/", "gemini/", "vertex_ai/"))
     if variant_model_name.startswith("anthropic/"):
@@ -1280,7 +1282,7 @@ def _apply_request_model_settings_extra_args(agent: Agent, config: ClientConfig)
     elif uses_litellm:
         extra_args.pop("reasoning_summary", None)
 
-    if _is_gateway_provider_variant(uses_litellm, variant_model_name):
+    if is_gateway_provider_variant:
         _move_gateway_variant_extra_args(extra_args)
 
     extra_body = extra_args.pop("extra_body", None)
