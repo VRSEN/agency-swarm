@@ -6,6 +6,7 @@ import pytest
 from ag_ui.core import (
     AssistantMessage,
     AudioInputContent,
+    BinaryInputContent,
     DocumentInputContent,
     EventType,
     ImageInputContent,
@@ -131,8 +132,27 @@ async def test_build_agui_message_input_wraps_content_parts() -> None:
                 {"type": "input_text", "text": "hello"},
                 {"type": "input_image", "detail": "auto", "image_url": "https://example.com/image.png"},
                 {"type": "input_file", "file_url": "https://example.com/report.pdf"},
-                {"type": "input_file", "file_data": "AAAA"},
-                {"type": "input_file", "file_data": "BBBB"},
+                {"type": "input_file", "file_data": "data:audio/mpeg;base64,AAAA"},
+                {"type": "input_file", "file_data": "data:video/mp4;base64,BBBB"},
+            ],
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_build_agui_message_input_serializes_deprecated_binary_file_data() -> None:
+    """Deprecated AG-UI binary file data should still be valid Responses file input."""
+
+    with pytest.deprecated_call():
+        binary_content = BinaryInputContent(mime_type="application/pdf", data="CCCC", filename="report.pdf")
+
+    message_input = _build_agui_message_input([UserMessage(id="u1", content=[binary_content])])
+
+    assert message_input == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "input_file", "file_data": "data:application/pdf;base64,CCCC", "filename": "report.pdf"}
             ],
         }
     ]

@@ -602,7 +602,7 @@ def _convert_agui_file_content_part(source: InputContentUrlSource | InputContent
         file_part["file_url"] = source.value
         return file_part
     if isinstance(source, InputContentDataSource):
-        file_part["file_data"] = source.value
+        file_part["file_data"] = _build_data_url(source.mime_type, source.value)
         return file_part
     raise TypeError(f"Unsupported AG-UI file source: {type(source).__name__}")
 
@@ -625,7 +625,7 @@ def _convert_agui_binary_content_part(part: BinaryInputContent) -> dict[str, Any
     elif part.url is not None:
         file_part["file_url"] = part.url
     elif part.data is not None:
-        file_part["file_data"] = part.data
+        file_part["file_data"] = _build_data_url(part.mime_type, part.data)
     if part.filename is not None:
         file_part["filename"] = part.filename
     return file_part
