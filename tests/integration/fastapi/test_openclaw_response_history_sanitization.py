@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import time
 from collections.abc import AsyncIterator
 from typing import Any
@@ -688,6 +689,10 @@ def test_store_false_sanitizer_keeps_prior_encrypted_reasoning_boundary() -> Non
     ]
 
 
+@pytest.mark.skipif(
+    os.getenv("CI") == "true",
+    reason="Requires live OpenAI reasoning output; skipped on CI because the API can omit reasoning items.",
+)
 def test_live_openai_store_false_replays_encrypted_reasoning() -> None:
     """Live OpenAI proof for stateless Responses reasoning replay."""
     client = OpenAI()

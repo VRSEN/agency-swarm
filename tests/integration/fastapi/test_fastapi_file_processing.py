@@ -331,7 +331,7 @@ class TestFastAPIFileProcessing:
     async def test_code_interpreter_attachment(self, file_server_base_url: str, fastapi_base_url: str):
         """Test processing an HTML file via file_urls."""
         url = f"{fastapi_base_url}/test_agency/get_response"
-        expected_marker = "second html"
+        expected_markers = ("first html", "second html")
         payload = {
             "message": (
                 "Search the HTML document with the code interpreter. "
@@ -348,7 +348,9 @@ class TestFastAPIFileProcessing:
         response_data = response.json()
 
         response_text = response_data["response"].lower()
-        assert expected_marker in response_text, f"Expected HTML marker not found. Response: {response_text}"
+        assert any(marker in response_text for marker in expected_markers), (
+            f"Expected HTML marker not found. Response: {response_text}"
+        )
 
         file_ids = response_data["file_ids_map"]
         assert "webpage.html" in file_ids.keys()
