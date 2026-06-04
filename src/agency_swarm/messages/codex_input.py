@@ -37,6 +37,9 @@ def agent_uses_codex_browser_auth(agent: object, run_config_override: object | N
         if not _is_openai_model_name(model):
             return False
         return _default_openai_route_uses_codex()
+    model_codex = _model_object_uses_codex(model)
+    if model_codex is not None:
+        return model_codex
     return False
 
 
@@ -80,6 +83,13 @@ def _provider_uses_codex(provider: object | None, model: str | None) -> bool | N
     if isinstance(base_url, str):
         return is_codex_base_url(base_url)
     return is_codex_base_url(os.getenv("OPENAI_BASE_URL"))
+
+
+def _model_object_uses_codex(model: object) -> bool | None:
+    base_url = getattr(model, "base_url", None)
+    if base_url is None:
+        return None
+    return is_codex_base_url(str(base_url))
 
 
 def _default_openai_route_uses_codex() -> bool:

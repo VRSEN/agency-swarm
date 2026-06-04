@@ -265,6 +265,30 @@ def test_model_call_rewrites_system_replay_for_codex_multi_provider_base_url() -
 
 
 @pytest.mark.parametrize(
+    ("base_url", "expected_roles"),
+    [
+        (CODEX_BASE_URL, ["developer", "developer", "developer", "user"]),
+        (OPENAI_BASE_URL, ["system", "system", "system", "user"]),
+    ],
+)
+def test_model_call_rewrites_system_replay_for_litellm_model_base_url(
+    base_url: str,
+    expected_roles: list[str],
+) -> None:
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
+
+    from agents.extensions.models.litellm_model import LitellmModel
+
+    agent = Agent(
+        name="A",
+        instructions="normal agent instructions",
+        model=LitellmModel(model="openai/gpt-5.4-mini", base_url=base_url, api_key="sk-test"),
+    )
+
+    assert _model_call_roles(agent, None) == expected_roles
+
+
+@pytest.mark.parametrize(
     ("model", "expected_roles"),
     [
         ("openai/gpt-5.4-mini", ["developer", "developer", "developer", "user"]),
