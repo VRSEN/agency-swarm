@@ -1,3 +1,10 @@
+"""Deprecated Agency.user_context compatibility seam.
+
+This module exists only to keep the deprecated agency-owned context API alive
+until the next breaking release. Future removal should delete this property,
+the Agency constructor parameter, and the `_initial_user_context` store together.
+"""
+
 import warnings
 from typing import Any, Protocol
 

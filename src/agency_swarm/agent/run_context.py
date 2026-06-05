@@ -1,3 +1,9 @@
+"""Run context helpers and deprecated agency-context compatibility.
+
+The deprecated Agency.user_context sync-back path is isolated here so the next
+breaking release can remove it without changing the run-scoped context flow.
+"""
+
 from typing import TYPE_CHECKING, Any
 
 from agency_swarm.context import MasterContext
