@@ -10,7 +10,7 @@ from collections.abc import AsyncGenerator, Callable, Sequence
 from dataclasses import dataclass, field
 from importlib import metadata
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 from weakref import WeakKeyDictionary
 
 from ag_ui.core import (
@@ -54,6 +54,7 @@ from fastapi import Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from openai import AsyncOpenAI, OpenAI
+from openai.types.shared.reasoning import Reasoning
 from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
@@ -69,6 +70,7 @@ from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_url
 from agency_swarm.integrations.fastapi_utils.logging_middleware import get_logs_endpoint_impl
 from agency_swarm.integrations.fastapi_utils.override_policy import (
     RequestOverridePolicy,
+    _get_cached_openai_client_from_agent,
     _get_openai_client_from_agent,
     get_allowed_dirs_for_metadata,
 )
@@ -87,11 +89,19 @@ from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
 from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
 from agency_swarm.ui.core.agui_adapter import AguiAdapter
 from agency_swarm.utils.dry_run import force_dry_run
+from agency_swarm.utils.openrouter import (
+    build_openrouter_chat_model,
+    get_openrouter_model_name,
+    is_openrouter_model_name,
+)
 from agency_swarm.utils.serialization import serialize
 from agency_swarm.utils.usage_tracking import (
     calculate_usage_with_cost,
     extract_usage_from_run_result,
 )
+
+ReasoningEffortValue = Literal["none", "minimal", "low", "medium", "high", "xhigh"]
+ReasoningSummaryValue = Literal["auto", "concise", "detailed"]
 
 logger = logging.getLogger(__name__)
 
@@ -173,14 +183,44 @@ def _apply_request_model_override(agent: Agent, model_name: str, config: ClientC
     When ``config`` carries OpenAI gateway overrides (``base_url`` / ``api_key`` /
     ``default_headers``), the rebuilt OpenAI wrapper is routed through
     :func:`_build_openai_client_for_agent` so the request gateway reaches the
-    swapped model even when the new name is provider-prefixed (for example
-    ``anthropic/claude-sonnet-4``) and would otherwise fail the downstream
-    ``_agent_supports_openai_client_override`` gate.
+    swapped model when the target is OpenAI-compatible or an explicit gateway
+    ``base_url`` is supplied.
 
     Returns ``True`` when the OpenAI gateway client has already been applied
     during the swap so the caller can skip the downstream client-apply step.
     """
     model = agent.model
+
+    if is_openrouter_model_name(model_name):
+        source_openrouter_model = get_openrouter_model_name(model)
+        gateway_client = None
+        openrouter_client = None
+        if source_openrouter_model is not None:
+            gateway_client = _resolve_request_gateway_client(agent, config)
+            openrouter_client = gateway_client if gateway_client is not None else _get_openai_client_from_agent(agent)
+        agent.model = build_openrouter_chat_model(
+            model_name,
+            api_key=None if openrouter_client is not None or config is None else config.api_key,
+            base_url=None if openrouter_client is not None or config is None else config.base_url,
+            default_headers=None if openrouter_client is not None or config is None else config.default_headers,
+            openai_client=openrouter_client,
+        )
+        return gateway_client is not None or (source_openrouter_model is None and _has_request_openai_overrides(config))
+
+    if get_openrouter_model_name(model) is not None:
+        if _is_litellm_model(model_name):
+            _apply_request_litellm_model(agent, model_name)
+            return False
+        if not _should_wrap_openrouter_override_with_openai_client(model_name, config):
+            agent.model = model_name
+            return False
+        client = _resolve_openai_client_after_openrouter_override(config)
+        if client is None:
+            agent.model = model_name
+            return False
+        agent.model = OpenAIChatCompletionsModel(model=model_name, openai_client=client)
+        return _has_request_openai_overrides(config)
+
     gateway_client = _resolve_request_gateway_client(agent, config)
 
     if isinstance(model, OpenAIResponsesModel):
@@ -200,7 +240,7 @@ def _apply_request_model_override(agent: Agent, model_name: str, config: ClientC
         return gateway_client is not None
 
     if _LITELLM_AVAILABLE and LitellmModel is not None and isinstance(model, LitellmModel):
-        actual = model_name[8:] if model_name.startswith("litellm/") else model_name
+        actual = _normalize_litellm_model_name(model_name)
         agent.model = LitellmModel(model=actual, base_url=model.base_url, api_key=model.api_key)
         return False
 
@@ -227,6 +267,26 @@ def _resolve_request_gateway_client(agent: Agent, config: ClientConfig | None) -
     if config.base_url is None and config.api_key is None and config.default_headers is None:
         return None
     return _build_openai_client_for_agent(agent, config)
+
+
+def _resolve_openai_client_after_openrouter_override(config: ClientConfig | None) -> AsyncOpenAI | None:
+    """Build a non-OpenRouter OpenAI client when an OpenRouter wrapper swaps away."""
+    base_client = get_default_openai_client()
+    if config is None:
+        return base_client
+    if base_client is None:
+        if config.api_key is None and config.base_url is None:
+            return None
+        return AsyncOpenAI(
+            api_key=config.api_key,
+            base_url=config.base_url,
+            default_headers=config.default_headers,
+        )
+    return base_client.copy(
+        api_key=config.api_key,
+        base_url=config.base_url,
+        default_headers=config.default_headers,
+    )
 
 
 def _rebuild_openai_responses_model(
@@ -303,7 +363,7 @@ def _apply_request_litellm_model(agent: Agent, model_name: str) -> None:
             model_name,
         )
         return
-    actual = model_name[8:] if model_name.startswith("litellm/") else model_name
+    actual = _normalize_litellm_model_name(model_name)
     agent.model = LitellmModel(model=actual, base_url=None, api_key=None)
 
 
@@ -328,6 +388,7 @@ def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
         and config.default_headers is None
         and config.litellm_keys is None
         and config.model is None
+        and config.model_settings_extra_args is None
     ):
         return  # Nothing to override
 
@@ -344,11 +405,15 @@ def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
         if config.model is not None:
             gateway_applied = _apply_request_model_override(agent, config.model, config)
             _refresh_framework_defaults_after_model_swap(agent)
+        _apply_request_model_settings_extra_args(agent, config)
 
         # File attachment handling uses agent.client / agent.client_sync directly.
         # Keep those clients request-scoped too, so file_ids work without server env keys.
         if openai_overrides_present:
-            _apply_request_scoped_openai_clients_to_agent(agent, config)
+            if _uses_openrouter_request_client(agent, config):
+                _apply_openrouter_file_clients_to_agent(agent)
+            else:
+                _apply_request_scoped_openai_clients_to_agent(agent, config)
 
         if _agent_uses_litellm(agent):
             if config.default_headers is not None:
@@ -1427,6 +1492,26 @@ def _apply_request_scoped_openai_clients_to_agent(agent: Agent, config: ClientCo
     if async_client is None:
         return
 
+    _apply_openai_clients_to_agent(agent, async_client)
+
+
+def _uses_openrouter_request_client(agent: Agent, config: ClientConfig) -> bool:
+    if isinstance(config.model, str) and is_openrouter_model_name(config.model):
+        return True
+    return get_openrouter_model_name(agent.model) is not None
+
+
+def _apply_openrouter_file_clients_to_agent(agent: Agent) -> None:
+    """Keep direct file clients off the OpenRouter chat client."""
+    async_client = _get_cached_openai_client_from_agent(agent) or get_default_openai_client()
+    if async_client is None:
+        return
+
+    _apply_openai_clients_to_agent(agent, async_client)
+
+
+def _apply_openai_clients_to_agent(agent: Agent, async_client: AsyncOpenAI) -> None:
+    """Apply async and sync OpenAI clients used by direct file access paths."""
     agent._openai_client = async_client
     sync_base_url = str(async_client.base_url) if getattr(async_client, "base_url", None) is not None else None
     sync_headers_raw = async_client.default_headers
@@ -1451,6 +1536,274 @@ def _apply_default_headers_to_agent_model_settings(agent: Agent, headers: dict[s
     # ModelSettings is a dataclass (agents==0.6.4), so updating requires replacement.
     current.extra_headers = merged
     agent.model_settings = current
+
+
+def _apply_request_model_settings_extra_args(agent: Agent, config: ClientConfig) -> None:
+    """Apply explicit UI-selected model variant settings for this request only."""
+    if not config.model_settings_extra_args:
+        return
+
+    current: ModelSettings = getattr(agent, "model_settings", None) or ModelSettings()
+    extra_args = dict(current.extra_args or {})
+    extra_args.update(config.model_settings_extra_args)
+
+    uses_litellm = _agent_uses_litellm(agent)
+    model_name = _request_model_name(agent)
+    litellm_model_name = _normalize_litellm_model_name(model_name).lower() if uses_litellm else ""
+    variant_model_name = litellm_model_name or model_name.lower()
+    is_gateway_provider_variant = _is_gateway_provider_variant(uses_litellm, variant_model_name)
+
+    include = extra_args.pop("include", None)
+    if isinstance(include, list) and not uses_litellm and not is_gateway_provider_variant:
+        existing_include = list(current.response_include or [])
+        current.response_include = [*existing_include, *include]
+    elif include is not None and not is_gateway_provider_variant:
+        extra_args["include"] = include
+
+    reasoning_effort = extra_args.get("reasoning_effort")
+    reasoning_summary = extra_args.get("reasoning_summary")
+    has_anthropic_thinking_budget = False
+    is_gemini = variant_model_name.startswith(("google/", "gemini/", "vertex_ai/"))
+    if variant_model_name.startswith("anthropic/"):
+        _normalize_anthropic_litellm_variant_args(extra_args)
+        reasoning_effort = extra_args.get("reasoning_effort")
+        reasoning_summary = extra_args.get("reasoning_summary")
+        has_anthropic_thinking_budget = _has_enabled_thinking_budget(extra_args)
+    elif variant_model_name.startswith("xai/"):
+        _normalize_xai_litellm_variant_args(extra_args, variant_model_name)
+        reasoning_effort = extra_args.get("reasoning_effort")
+        reasoning_summary = extra_args.get("reasoning_summary")
+    elif is_gemini:
+        requested_reasoning_summary = reasoning_summary
+        _normalize_gemini_litellm_variant_args(extra_args)
+        reasoning_effort = extra_args.get("reasoning_effort")
+        reasoning_summary = requested_reasoning_summary if isinstance(requested_reasoning_summary, str) else "auto"
+
+    normalized_effort = _reasoning_effort_value(reasoning_effort)
+    normalized_summary = _reasoning_summary_value(reasoning_summary)
+    is_litellm_openai = uses_litellm and _is_openai_model_name(litellm_model_name)
+    if normalized_effort is None and reasoning_effort is None and has_anthropic_thinking_budget:
+        normalized_effort = "high"
+    if normalized_effort is not None and is_litellm_openai:
+        current.reasoning = None
+        if normalized_summary is not None:
+            extra_args["reasoning_effort"] = {"effort": normalized_effort, "summary": normalized_summary}
+        else:
+            extra_args["reasoning_effort"] = normalized_effort
+        extra_args.pop("reasoning_summary", None)
+    elif normalized_effort is not None and (
+        not uses_litellm or litellm_model_name.startswith(("anthropic/", "gemini/", "vertex_ai/"))
+    ):
+        current.reasoning = Reasoning(
+            effort=normalized_effort,
+            summary=None if uses_litellm else normalized_summary,
+        )
+        if not uses_litellm or is_gemini:
+            extra_args.pop("reasoning_effort", None)
+            extra_args.pop("reasoning_summary", None)
+    elif normalized_effort is not None and uses_litellm:
+        current.reasoning = None
+    elif normalized_summary is not None and not uses_litellm:
+        current.reasoning = Reasoning(
+            effort=current.reasoning.effort if current.reasoning is not None else None,
+            summary=normalized_summary,
+        )
+        extra_args.pop("reasoning_summary", None)
+    elif isinstance(extra_args.get("reasoning"), dict) and not uses_litellm:
+        raw_reasoning = cast(dict[str, Any], extra_args.pop("reasoning"))
+        effort = raw_reasoning.get("effort")
+        summary = raw_reasoning.get("summary")
+        normalized_effort = _reasoning_effort_value(effort)
+        normalized_summary = _reasoning_summary_value(summary)
+        if normalized_effort is not None or normalized_summary is not None:
+            current.reasoning = Reasoning(
+                effort=normalized_effort,
+                summary=normalized_summary,
+            )
+    elif isinstance(reasoning_summary, str) and isinstance(reasoning_effort, dict) and not uses_litellm:
+        reasoning_effort.setdefault("summary", reasoning_summary)
+        extra_args.pop("reasoning_summary", None)
+    elif uses_litellm:
+        extra_args.pop("reasoning_summary", None)
+
+    if is_gateway_provider_variant:
+        _move_gateway_variant_extra_args(extra_args)
+
+    extra_body = extra_args.pop("extra_body", None)
+    if isinstance(extra_body, dict):
+        current_body = current.extra_body if isinstance(current.extra_body, dict) else {}
+        current.extra_body = {
+            **current_body,
+            **extra_body,
+        }
+
+    extra_body = extra_args.pop("extra_body", None)
+    if isinstance(extra_body, dict):
+        current_extra_body = current.extra_body if isinstance(current.extra_body, dict) else {}
+        current.extra_body = {
+            **current_extra_body,
+            **extra_body,
+        }
+    max_tokens = extra_args.pop("max_tokens", None)
+    if isinstance(max_tokens, int):
+        current.max_tokens = max_tokens
+
+    current.extra_args = extra_args or None
+    agent.model_settings = current
+
+
+def _request_model_name(agent: Agent) -> str:
+    model = agent.model
+    if isinstance(model, str):
+        name = model
+    elif isinstance(model, OpenAIResponsesModel | OpenAIChatCompletionsModel):
+        name = model.model
+    elif _LITELLM_AVAILABLE and LitellmModel is not None and isinstance(model, LitellmModel):
+        name = model.model
+    elif isinstance(model, Model):
+        name = getattr(model, "model", "")
+    else:
+        name = ""
+    return name if isinstance(name, str) else ""
+
+
+def _is_gateway_provider_variant(uses_litellm: bool, model_name: str) -> bool:
+    if uses_litellm or "/" not in model_name:
+        return False
+    return not model_name.startswith(("openai/", "azure/", "azure_ai/"))
+
+
+def _move_gateway_variant_extra_args(extra_args: dict[str, Any]) -> None:
+    provider_keys = {
+        "effort",
+        "includeThoughts",
+        "reasoning_effort",
+        "reasoning_summary",
+        "thinking",
+        "thinkingBudget",
+        "thinkingConfig",
+        "thinkingLevel",
+    }
+    body = extra_args.pop("extra_body", None)
+    extra_body = dict(body) if isinstance(body, dict) else {}
+    for key in provider_keys:
+        if key in extra_args:
+            extra_body[key] = extra_args.pop(key)
+    if extra_body:
+        extra_args["extra_body"] = extra_body
+
+
+def _reasoning_effort_value(value: Any) -> ReasoningEffortValue | None:
+    if value in {"none", "minimal", "low", "medium", "high", "xhigh"}:
+        return cast(ReasoningEffortValue, value)
+    return None
+
+
+def _reasoning_summary_value(value: Any) -> ReasoningSummaryValue | None:
+    if value in {"auto", "concise", "detailed"}:
+        return cast(ReasoningSummaryValue, value)
+    return None
+
+
+def _normalize_anthropic_litellm_variant_args(extra_args: dict[str, Any]) -> None:
+    """Convert OpenCode Anthropic variant fields to LiteLLM-supported request params."""
+    effort = extra_args.pop("effort", None)
+    if isinstance(effort, str) and "reasoning_effort" not in extra_args:
+        extra_args["reasoning_effort"] = effort
+    extra_args.pop("reasoning_summary", None)
+    extra_args.pop("include", None)
+    _normalize_thinking_budget_tokens(extra_args)
+
+
+def _normalize_xai_litellm_variant_args(extra_args: dict[str, Any], model_name: str) -> None:
+    """Keep only xAI reasoning fields that LiteLLM forwards to Grok chat."""
+    effort = extra_args.pop("effort", None)
+    if _xai_litellm_model_supports_reasoning_effort(model_name):
+        if isinstance(effort, str) and "reasoning_effort" not in extra_args:
+            extra_args["reasoning_effort"] = effort
+    else:
+        extra_args.pop("reasoning_effort", None)
+    extra_args.pop("reasoning_summary", None)
+    extra_args.pop("include", None)
+
+
+def _xai_litellm_model_supports_reasoning_effort(model_name: str) -> bool:
+    try:
+        import litellm
+
+        return bool(litellm.supports_reasoning(model=model_name))
+    except Exception:
+        model = model_name.removeprefix("xai/").lower()
+        if "non-reasoning" in model:
+            return False
+        return (
+            "grok-3-mini" in model
+            or "grok-4.3" in model
+            or "grok-4-3" in model
+            or "grok-4-1-fast" in model
+            or "grok-code-fast" in model
+        )
+
+
+def _normalize_gemini_litellm_variant_args(extra_args: dict[str, Any]) -> None:
+    """Convert OpenCode Gemini thinkingConfig variants to LiteLLM-supported request params."""
+    thinking_config = extra_args.pop("thinkingConfig", None)
+    if isinstance(thinking_config, dict):
+        thinking_budget = thinking_config.get("thinkingBudget")
+        thinking_level = thinking_config.get("thinkingLevel")
+        if isinstance(thinking_budget, int):
+            extra_args["thinking"] = {"type": "enabled", "budget_tokens": thinking_budget}
+            extra_args.pop("reasoning_effort", None)
+        elif isinstance(thinking_level, str) and "reasoning_effort" not in extra_args:
+            extra_args["reasoning_effort"] = thinking_level
+    thinking_level = extra_args.pop("thinkingLevel", None)
+    if isinstance(thinking_level, str) and "reasoning_effort" not in extra_args:
+        extra_args["reasoning_effort"] = thinking_level
+    thinking_budget = extra_args.pop("thinkingBudget", None)
+    if isinstance(thinking_budget, int):
+        extra_args["thinking"] = {"type": "enabled", "budget_tokens": thinking_budget}
+        extra_args.pop("reasoning_effort", None)
+    extra_args.pop("includeThoughts", None)
+    extra_args.pop("reasoning_summary", None)
+    extra_args.pop("include", None)
+
+
+def _normalize_thinking_budget_tokens(extra_args: dict[str, Any]) -> None:
+    thinking = extra_args.get("thinking")
+    if not isinstance(thinking, dict):
+        return
+    budget_tokens = thinking.get("budgetTokens")
+    if isinstance(budget_tokens, int) and "budget_tokens" not in thinking:
+        normalized = dict(thinking)
+        normalized["budget_tokens"] = budget_tokens
+        normalized.pop("budgetTokens", None)
+        extra_args["thinking"] = normalized
+
+
+def _has_enabled_thinking_budget(extra_args: dict[str, Any]) -> bool:
+    thinking = extra_args.get("thinking")
+    if not isinstance(thinking, dict) or thinking.get("type") != "enabled":
+        return False
+    return isinstance(thinking.get("budget_tokens"), int)
+
+
+def _litellm_model_name(agent: Agent) -> str:
+    if not _agent_uses_litellm(agent):
+        return ""
+    model = agent.model
+    if isinstance(model, str):
+        name = model
+    elif isinstance(model, OpenAIResponsesModel | OpenAIChatCompletionsModel):
+        name = model.model
+    elif _LITELLM_AVAILABLE and LitellmModel is not None and isinstance(model, LitellmModel):
+        name = model.model
+    elif isinstance(model, Model):
+        name = getattr(model, "model", "")
+    else:
+        name = ""
+    if not isinstance(name, str):
+        return ""
+    return _normalize_litellm_model_name(name).lower()
 
 
 class _CodexAsyncStream:
@@ -1600,6 +1953,14 @@ def _is_litellm_model(model_name: str) -> bool:
     return model_name.startswith("litellm/")
 
 
+def _normalize_litellm_model_name(model_name: str) -> str:
+    actual = model_name[8:] if model_name.startswith("litellm/") else model_name
+    provider, sep, rest = actual.partition("/")
+    if sep and provider.lower() == "google":
+        return f"gemini/{rest}"
+    return actual
+
+
 def _is_openai_model_name(model_name: str) -> bool:
     """Return True if a model name should be treated as OpenAI-compatible.
 
@@ -1614,6 +1975,12 @@ def _is_openai_model_name(model_name: str) -> bool:
         return True
     prefix, _rest = model_name.split("/", 1)
     return prefix == "openai"
+
+
+def _should_wrap_openrouter_override_with_openai_client(model_name: str, config: ClientConfig | None) -> bool:
+    if _is_openai_model_name(model_name):
+        return True
+    return config is not None and config.base_url is not None
 
 
 def _get_model_name_for_override_logging(agent: Agent) -> str | None:
@@ -1632,6 +1999,8 @@ def _get_model_name_for_override_logging(agent: Agent) -> str | None:
 
 def _agent_supports_openai_client_override(agent: Agent) -> bool:
     """Return True only when request OpenAI client overrides are applicable."""
+    if get_openrouter_model_name(agent.model) is not None:
+        return True
     model_name = _get_model_name_for_override_logging(agent)
     if model_name is None:
         return False
@@ -1702,6 +2071,12 @@ def _apply_client_to_agent(agent: Agent, client: AsyncOpenAI | None, config: Cli
             if _is_codex_base_url(str(client.base_url)):
                 _apply_codex_compatibility_model_settings(agent)
     elif isinstance(model, OpenAIChatCompletionsModel):
+        openrouter_model_name = get_openrouter_model_name(model)
+        if openrouter_model_name is not None:
+            if client is None:
+                return
+            agent.model = build_openrouter_chat_model(openrouter_model_name, openai_client=client)
+            return
         if _is_litellm_model(model.model):
             if has_litellm_overrides:
                 _apply_litellm_config(agent, model.model, config)
@@ -1720,8 +2095,9 @@ def _apply_client_to_agent(agent: Agent, client: AsyncOpenAI | None, config: Cli
     elif _LITELLM_AVAILABLE and LitellmModel is not None and isinstance(model, LitellmModel):
         if has_litellm_overrides:
             # Preserve existing settings unless explicitly overridden.
-            base_url = _resolve_litellm_base_url(model.model, config, existing_base_url=model.base_url)
-            api_key = _resolve_litellm_api_key(model.model, config, existing_api_key=model.api_key)
+            resolved_model = _normalize_litellm_model_name(model.model)
+            base_url = _resolve_litellm_base_url(resolved_model, config, existing_base_url=model.base_url)
+            api_key = _resolve_litellm_api_key(resolved_model, config, existing_api_key=model.api_key)
             agent.model = LitellmModel(model=model.model, base_url=base_url, api_key=api_key)
     elif isinstance(model, Model):
         # For other Model types, try to extract and wrap with OpenAIResponsesModel
@@ -1844,11 +2220,10 @@ def _apply_litellm_config(agent: Agent, model_name: str, config: ClientConfig) -
         )
         return
 
-    # Strip the 'litellm/' prefix to get the actual model identifier
-    actual_model = model_name[8:] if model_name.startswith("litellm/") else model_name
+    actual_model = _normalize_litellm_model_name(model_name)
 
-    api_key = _resolve_litellm_api_key(model_name, config, existing_api_key=None)
-    base_url = _resolve_litellm_base_url(model_name, config, existing_base_url=None)
+    api_key = _resolve_litellm_api_key(actual_model, config, existing_api_key=None)
+    base_url = _resolve_litellm_base_url(actual_model, config, existing_base_url=None)
 
     agent.model = LitellmModel(
         model=actual_model,

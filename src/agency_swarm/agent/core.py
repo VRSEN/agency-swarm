@@ -23,6 +23,7 @@ from agency_swarm.agent import (
     load_tools_from_folder,
     normalize_agent_tool_definitions,
     normalize_input_guardrail_error_kwargs,
+    normalize_openrouter_model,
     parse_schemas,
     separate_kwargs,
     setup_file_manager,
@@ -167,6 +168,7 @@ class Agent(BaseAgent[MasterContext]):
         normalize_input_guardrail_error_kwargs(kwargs)
         validate_no_deprecated_agent_kwargs(kwargs)
         normalize_agent_tool_definitions(kwargs)
+        normalize_openrouter_model(kwargs)
 
         # Apply framework defaults (e.g., truncation="auto")
         apply_framework_defaults(kwargs)
