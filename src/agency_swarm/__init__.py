@@ -48,23 +48,15 @@ from agents import (  # noqa: E402
     trace,
 )
 
-# Optional: LitellmModel requires the litellm extra
-try:
-    from agents.extensions.models.litellm_model import LitellmModel  # noqa: E402, F401
-
-    _LITELLM_AVAILABLE = True
-except ImportError:
-    _LITELLM_AVAILABLE = False
-
-from .streaming.litellm_reasoning import patch_litellm_thinking_blocks  # noqa: E402
-
-patch_litellm_thinking_blocks()
-
 _JUPYTER_AVAILABLE = importlib.util.find_spec("jupyter_client") is not None
 _OPENCLAW_DEPS_AVAILABLE = (
     importlib.util.find_spec("fastapi") is not None and importlib.util.find_spec("httpx") is not None
 )
 _OPENCLAW_AGENT_DEPS_AVAILABLE = importlib.util.find_spec("httpx") is not None
+_LITELLM_EXPORT_AVAILABLE = (
+    importlib.util.find_spec("litellm") is not None
+    and importlib.util.find_spec("agents.extensions.models.litellm_model") is not None
+)
 
 from agents.model_settings import Headers, MCPToolChoice, ToolChoice  # noqa: E402
 from openai._types import Body, Query  # noqa: E402
@@ -219,9 +211,7 @@ if _OPENCLAW_DEPS_AVAILABLE:
     __all__.extend(sorted(_OPENCLAW_EXPORTS))
 if _OPENCLAW_AGENT_DEPS_AVAILABLE:
     __all__.append("OpenClawAgent")
-
-# Conditionally add LitellmModel if available
-if _LITELLM_AVAILABLE:
+if _LITELLM_EXPORT_AVAILABLE:
     __all__.append("LitellmModel")
 
 # Conditionally add IPythonInterpreter if available
@@ -231,12 +221,20 @@ if _JUPYTER_AVAILABLE:
 
 def __getattr__(name: str):
     """Provide helpful error messages for optional dependencies."""
-    if name == "LitellmModel" and not _LITELLM_AVAILABLE:
-        raise ImportError(
-            "`litellm` is required to use the LitellmModel. "
-            "You can install it via the optional dependency group: "
-            "`pip install 'openai-agents[litellm]'`."
-        )
+    if name == "LitellmModel":
+        try:
+            from agents.extensions.models.litellm_model import LitellmModel
+        except ImportError as exc:
+            raise ImportError(
+                "`litellm` is required to use the LitellmModel. "
+                "You can install it via the optional dependency group: "
+                "`pip install 'agency-swarm[litellm]'`."
+            ) from exc
+        from .streaming.litellm_reasoning import patch_litellm_thinking_blocks
+
+        patch_litellm_thinking_blocks()
+        globals()[name] = LitellmModel
+        return LitellmModel
     if name == "IPythonInterpreter":
         from .tools import IPythonInterpreter
 

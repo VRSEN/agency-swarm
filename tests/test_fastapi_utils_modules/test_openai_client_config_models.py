@@ -229,6 +229,32 @@ def test_litellm_anthropic_does_not_use_codex_base_url_fallback() -> None:
     assert agent.model.api_key == "sk-ant"
 
 
+def test_litellm_google_wrapper_uses_gemini_request_key() -> None:
+    """Existing Google Gemini LiteLLM wrappers should resolve keys against Gemini."""
+    pytest.importorskip("agents")
+    pytest.importorskip("agents.extensions.models.litellm_model")
+
+    from agents.extensions.models.litellm_model import LitellmModel
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    class _Agency:
+        def __init__(self, agent: Agent):
+            self.agents = {"A": agent}
+
+    original_model = LitellmModel(model="google/gemini-2.5-pro", base_url=None, api_key=None)
+    agent = Agent(name="A", instructions="x", model=original_model)
+    agency = _Agency(agent)
+
+    apply_openai_client_config(agency, ClientConfig(litellm_keys={"gemini": "AIza-request"}))
+
+    assert isinstance(agent.model, LitellmModel)
+    assert agent.model.model == "google/gemini-2.5-pro"
+    assert agent.model.api_key == "AIza-request"
+
+
 def test_litellm_openai_provider_can_use_generic_api_key_fallback() -> None:
     """For openai-ish LiteLLM providers, config.api_key remains a valid fallback."""
     pytest.importorskip("agents")
@@ -601,8 +627,8 @@ async def test_litellm_gemini_budget_forwards_only_thinking_payload(monkeypatch)
     assert seen["reasoning_effort"] is None
 
 
-async def test_litellm_anthropic_variant_preserves_reasoning_for_tool_replay(monkeypatch) -> None:
-    """Anthropic thinking variants should replay signed thinking blocks across tool calls."""
+async def test_litellm_anthropic_budget_variant_preserves_reasoning_for_tool_replay(monkeypatch) -> None:
+    """Anthropic budget-only thinking variants should replay signed thinking blocks across tool calls."""
     pytest.importorskip("agents")
     litellm = pytest.importorskip("litellm")
     pytest.importorskip("agents.extensions.models.litellm_model")
@@ -631,8 +657,7 @@ async def test_litellm_anthropic_variant_preserves_reasoning_for_tool_replay(mon
         ClientConfig(
             model="litellm/anthropic/claude-sonnet-4-6",
             model_settings_extra_args={
-                "thinking": {"type": "adaptive"},
-                "effort": "high",
+                "thinking": {"type": "enabled", "budgetTokens": 16000},
             },
         ),
     )
@@ -640,6 +665,7 @@ async def test_litellm_anthropic_variant_preserves_reasoning_for_tool_replay(mon
     assert isinstance(agent.model, LitellmModel)
     assert agent.model_settings.reasoning is not None
     assert agent.model_settings.reasoning.effort == "high"
+    assert agent.model_settings.extra_args == {"thinking": {"type": "enabled", "budget_tokens": 16000}}
 
     await agent.model._fetch_response(
         None,
@@ -671,7 +697,7 @@ async def test_litellm_anthropic_variant_preserves_reasoning_for_tool_replay(mon
     )
 
     assert seen["reasoning_effort"] == "high"
-    assert seen["thinking"] == {"type": "adaptive"}
+    assert seen["thinking"] == {"type": "enabled", "budget_tokens": 16000}
     messages = seen["messages"]
     assert isinstance(messages, list)
     assistant = messages[0]
@@ -710,7 +736,7 @@ def test_litellm_gemini_variant_maps_top_level_thinking_level() -> None:
     assert agent.model.model == "gemini/gemini-3.5-flash"
     assert agent.model_settings.reasoning is not None
     assert agent.model_settings.reasoning.effort == "high"
-    assert agent.model_settings.reasoning.summary == "auto"
+    assert agent.model_settings.reasoning.summary is None
     assert agent.model_settings.extra_args is None
 
 
@@ -737,6 +763,103 @@ def test_openai_model_override_applies_explicit_variant_reasoning() -> None:
     assert agent.model_settings.reasoning is not None
     assert agent.model_settings.reasoning.effort == "high"
     assert agent.model_settings.reasoning.summary == "auto"
+    assert agent.model_settings.extra_args is None
+
+
+def test_openai_model_override_applies_summary_without_effort() -> None:
+    """OpenAI summary-only variants should not forward raw reasoning_summary."""
+    pytest.importorskip("agents")
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    control = Agent(name="A", instructions="x", model="gpt-4o-mini")
+    control_agency = type("Agency", (), {"agents": {"A": control}})()
+    apply_openai_client_config(control_agency, ClientConfig(model="gpt-5"))
+    default_effort = control.model_settings.reasoning.effort if control.model_settings.reasoning is not None else None
+
+    agent = Agent(name="A", instructions="x", model="gpt-4o-mini")
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(
+            model="gpt-5",
+            model_settings_extra_args={"reasoning_summary": "auto"},
+        ),
+    )
+
+    assert agent.model == "gpt-5"
+    assert agent.model_settings.reasoning is not None
+    assert agent.model_settings.reasoning.effort == default_effort
+    assert agent.model_settings.reasoning.summary == "auto"
+    assert agent.model_settings.extra_args is None
+
+
+def test_litellm_extra_arg_reasoning_effort_clears_stale_reasoning() -> None:
+    """LiteLLM extra-arg providers should not keep stale template reasoning."""
+    pytest.importorskip("agents.extensions.models.litellm_model")
+
+    from agents import ModelSettings
+    from agents.extensions.models.litellm_model import LitellmModel
+    from openai.types.shared import Reasoning
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    agent = Agent(
+        name="A",
+        instructions="x",
+        model=LitellmModel(model="xai/grok-code-fast"),
+        model_settings=ModelSettings(reasoning=Reasoning(effort="low")),
+    )
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(model_settings_extra_args={"reasoning_effort": "high"}),
+    )
+
+    assert agent.model_settings.reasoning is None
+    assert agent.model_settings.extra_args == {"reasoning_effort": "high"}
+
+
+def test_gateway_provider_model_override_moves_provider_variant_args_to_extra_body() -> None:
+    """Gateway-routed provider models should not leak provider args as OpenAI kwargs."""
+    pytest.importorskip("agents")
+
+    from agents import OpenAIResponsesModel
+    from openai import AsyncOpenAI
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    agent = Agent(name="A", instructions="x", model="gpt-4o-mini")
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(
+            model="anthropic/claude-sonnet-4-6",
+            api_key="sk-gateway",
+            base_url="https://gateway.example/v1",
+            model_settings_extra_args={
+                "include": ["reasoning.encrypted_content"],
+                "thinking": {"type": "enabled", "budgetTokens": 16000},
+                "effort": "high",
+            },
+        ),
+    )
+
+    assert isinstance(agent.model, OpenAIResponsesModel)
+    assert isinstance(agent.model._client, AsyncOpenAI)
+    assert agent.model_settings.reasoning is not None
+    assert agent.model_settings.reasoning.effort == "high"
+    assert agent.model_settings.response_include is None
+    assert agent.model_settings.extra_body == {"thinking": {"type": "enabled", "budget_tokens": 16000}}
     assert agent.model_settings.extra_args is None
 
 
@@ -845,6 +968,7 @@ async def test_litellm_openai_variant_forwards_reasoning_summary_to_litellm(monk
     )
 
     assert seen["reasoning_effort"] == {"effort": "high", "summary": "auto"}
+    assert "reasoning_summary" not in seen
 
 
 def test_litellm_prefixed_string_model_normalizes_variant_extra_args_without_model_override() -> None:

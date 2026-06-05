@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from inspect import signature
 from typing import Any
 
 
@@ -16,16 +17,22 @@ def patch_litellm_thinking_blocks() -> None:
         return
 
     original = handler_cls.handle_stream.__func__
+    forwards_strict_feature_validation = "strict_feature_validation" in signature(original).parameters
 
     async def handle_stream(
-        cls, response: Any, stream: AsyncIterator[Any], model: str | None = None
+        cls,
+        response: Any,
+        stream: AsyncIterator[Any],
+        model: str | None = None,
+        strict_feature_validation: bool = False,
     ) -> AsyncIterator[Any]:
         async def normalized_stream() -> AsyncIterator[Any]:
             async for chunk in stream:
                 _copy_thinking_blocks_to_reasoning_content(chunk)
                 yield chunk
 
-        async for event in original(cls, response, normalized_stream(), model):
+        kwargs = {"strict_feature_validation": strict_feature_validation} if forwards_strict_feature_validation else {}
+        async for event in original(cls, response, normalized_stream(), model, **kwargs):
             yield event
 
     handler_cls.handle_stream = classmethod(handle_stream)
@@ -41,7 +48,7 @@ def _copy_thinking_blocks_to_reasoning_content(chunk: Any) -> None:
         delta = getattr(choice, "delta", None)
         if delta is None:
             continue
-        if getattr(delta, "reasoning_content", None) or getattr(delta, "reasoning", None):
+        if getattr(delta, "reasoning_content", None):
             continue
 
         text = (
