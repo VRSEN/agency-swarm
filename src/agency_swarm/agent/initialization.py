@@ -21,6 +21,7 @@ from agency_swarm.agent.file_manager import AgentFileManager
 from agency_swarm.messages.response_input_sanitizer import ensure_store_false_reasoning_encrypted_content
 from agency_swarm.tools import BaseTool, ToolFactory
 from agency_swarm.tools.function_tool_compat import normalize_function_tool
+from agency_swarm.utils.dry_run import is_dry_run
 from agency_swarm.utils.model_utils import get_default_settings_model_name
 from agency_swarm.utils.openrouter import build_openrouter_chat_model, is_openrouter_model_name
 
@@ -127,6 +128,8 @@ def normalize_openrouter_model(kwargs: dict[str, Any]) -> None:
     """Convert direct ``Agent(model="openrouter/...")`` strings into OpenRouter chat models."""
     model = kwargs.get("model")
     if isinstance(model, str) and is_openrouter_model_name(model):
+        if is_dry_run():
+            return
         kwargs["model"] = build_openrouter_chat_model(model)
 
 

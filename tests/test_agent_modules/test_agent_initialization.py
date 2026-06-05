@@ -368,6 +368,24 @@ def test_agent_initialization_openrouter_model_requires_api_key(monkeypatch: pyt
         Agent(name="OpenRouterAgent", instructions="Test", model="openrouter/anthropic/claude-sonnet-4.5")
 
 
+def test_agent_initialization_openrouter_model_skips_client_in_dry_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Dry-run metadata setup should not require or build an OpenRouter client."""
+    from agency_swarm.agent import initialization
+    from agency_swarm.utils.dry_run import force_dry_run
+
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+
+    def _fail_build(*_args, **_kwargs):
+        raise AssertionError("dry-run must not build an OpenRouter client")
+
+    monkeypatch.setattr(initialization, "build_openrouter_chat_model", _fail_build)
+
+    with force_dry_run():
+        agent = Agent(name="OpenRouterAgent", instructions="Test", model="openrouter/anthropic/claude-sonnet-4.5")
+
+    assert agent.model == "openrouter/anthropic/claude-sonnet-4.5"
+
+
 @pytest.mark.parametrize("provider_model", ["openai/gpt-5.4-mini", "azure/gpt-5.4-mini"])
 def test_agent_initialization_model_objects_use_openclaw_default_settings_alias(
     monkeypatch: pytest.MonkeyPatch,

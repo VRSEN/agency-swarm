@@ -3,6 +3,7 @@ import uuid
 
 import pytest
 from agents import ModelSettings, RunResult
+from agents.items import ModelResponse
 
 from agency_swarm import Agency, Agent
 from tests.deterministic_model import (
@@ -12,6 +13,15 @@ from tests.deterministic_model import (
     _extract_last_tool_output,
     _extract_last_user_text,
 )
+
+
+def _build_tool_calls_response(calls: list[tuple[str, dict[str, str]]]) -> ModelResponse:
+    responses = [_build_tool_call_response(name, args) for name, args in calls]
+    return ModelResponse(
+        output=[item for response in responses for item in response.output],
+        usage=responses[0].usage,
+        response_id=responses[0].response_id,
+    )
 
 
 class CommunicationFlowModel(DeterministicModel):
@@ -42,6 +52,27 @@ class CommunicationFlowModel(DeterministicModel):
         if self.agent_name == "Planner":
             if "send_message" not in tool_names:
                 return _build_message_response("Planner missing send_message tool", self.model)
+            if "same time" in user_text.lower() and "reporter" in user_text.lower():
+                return _build_tool_calls_response(
+                    [
+                        (
+                            "send_message",
+                            {
+                                "recipient_agent": "Worker",
+                                "message": user_text,
+                                "additional_instructions": "",
+                            },
+                        ),
+                        (
+                            "send_message",
+                            {
+                                "recipient_agent": "Reporter",
+                                "message": user_text,
+                                "additional_instructions": "",
+                            },
+                        ),
+                    ]
+                )
             return _build_tool_call_response(
                 "send_message",
                 {
@@ -150,6 +181,9 @@ async def test_multi_agent_communication_flow(multi_agent_agency: Agency):
 @pytest.mark.asyncio
 async def test_context_preservation_in_agent_communication(multi_agent_agency: Agency):
     """Proves agent-to-agent thread isolation with correct caller/agent identifiers in flat storage."""
+    for name in ("Planner", "Worker", "Reporter"):
+        multi_agent_agency.agents[name].model = CommunicationFlowModel(name)
+
     initial_task = "Simple task for testing context preservation."
     print(f"\n--- Testing Context Preservation --- TASK: {initial_task}")
 
@@ -218,6 +252,8 @@ async def test_non_blocking_parallel_agent_interactions(
         ],
         shared_instructions="",
     )
+    for name in ("Planner", "Worker", "Reporter"):
+        agency.agents[name].model = CommunicationFlowModel(name)
 
     before_count = len(agency.thread_manager.get_all_messages())
 

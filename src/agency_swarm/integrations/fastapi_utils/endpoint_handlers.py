@@ -54,6 +54,7 @@ from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_url
 from agency_swarm.integrations.fastapi_utils.logging_middleware import get_logs_endpoint_impl
 from agency_swarm.integrations.fastapi_utils.override_policy import (
     RequestOverridePolicy,
+    _get_cached_openai_client_from_agent,
     _get_openai_client_from_agent,
     get_allowed_dirs_for_metadata,
 )
@@ -162,9 +163,8 @@ def _apply_request_model_override(agent: Agent, model_name: str, config: ClientC
     When ``config`` carries OpenAI gateway overrides (``base_url`` / ``api_key`` /
     ``default_headers``), the rebuilt OpenAI wrapper is routed through
     :func:`_build_openai_client_for_agent` so the request gateway reaches the
-    swapped model even when the new name is provider-prefixed (for example
-    ``anthropic/claude-sonnet-4``) and would otherwise fail the downstream
-    ``_agent_supports_openai_client_override`` gate.
+    swapped model when the target is OpenAI-compatible or an explicit gateway
+    ``base_url`` is supplied.
 
     Returns ``True`` when the OpenAI gateway client has already been applied
     during the swap so the caller can skip the downstream client-apply step.
@@ -172,9 +172,11 @@ def _apply_request_model_override(agent: Agent, model_name: str, config: ClientC
     model = agent.model
 
     if is_openrouter_model_name(model_name):
-        gateway_client = _resolve_request_gateway_client(agent, config)
+        source_openrouter_model = get_openrouter_model_name(model)
+        gateway_client = None
         openrouter_client = None
-        if get_openrouter_model_name(model) is not None:
+        if source_openrouter_model is not None:
+            gateway_client = _resolve_request_gateway_client(agent, config)
             openrouter_client = gateway_client if gateway_client is not None else _get_openai_client_from_agent(agent)
         agent.model = build_openrouter_chat_model(
             model_name,
@@ -183,11 +185,14 @@ def _apply_request_model_override(agent: Agent, model_name: str, config: ClientC
             default_headers=None if openrouter_client is not None or config is None else config.default_headers,
             openai_client=openrouter_client,
         )
-        return gateway_client is not None
+        return gateway_client is not None or (source_openrouter_model is None and _has_request_openai_overrides(config))
 
     if get_openrouter_model_name(model) is not None:
         if _is_litellm_model(model_name):
             _apply_request_litellm_model(agent, model_name)
+            return False
+        if not _should_wrap_openrouter_override_with_openai_client(model_name, config):
+            agent.model = model_name
             return False
         client = _resolve_openai_client_after_openrouter_override(config)
         if client is None:
@@ -385,7 +390,10 @@ def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
         # File attachment handling uses agent.client / agent.client_sync directly.
         # Keep those clients request-scoped too, so file_ids work without server env keys.
         if openai_overrides_present:
-            _apply_request_scoped_openai_clients_to_agent(agent, config)
+            if _uses_openrouter_request_client(agent, config):
+                _apply_openrouter_file_clients_to_agent(agent)
+            else:
+                _apply_request_scoped_openai_clients_to_agent(agent, config)
 
         if _agent_uses_litellm(agent):
             if config.default_headers is not None:
@@ -1219,6 +1227,26 @@ def _apply_request_scoped_openai_clients_to_agent(agent: Agent, config: ClientCo
     if async_client is None:
         return
 
+    _apply_openai_clients_to_agent(agent, async_client)
+
+
+def _uses_openrouter_request_client(agent: Agent, config: ClientConfig) -> bool:
+    if isinstance(config.model, str) and is_openrouter_model_name(config.model):
+        return True
+    return get_openrouter_model_name(agent.model) is not None
+
+
+def _apply_openrouter_file_clients_to_agent(agent: Agent) -> None:
+    """Keep direct file clients off the OpenRouter chat client."""
+    async_client = _get_cached_openai_client_from_agent(agent) or get_default_openai_client()
+    if async_client is None:
+        return
+
+    _apply_openai_clients_to_agent(agent, async_client)
+
+
+def _apply_openai_clients_to_agent(agent: Agent, async_client: AsyncOpenAI) -> None:
+    """Apply async and sync OpenAI clients used by direct file access paths."""
     agent._openai_client = async_client
     sync_base_url = str(async_client.base_url) if getattr(async_client, "base_url", None) is not None else None
     sync_headers_raw = async_client.default_headers
@@ -1547,6 +1575,12 @@ def _is_openai_model_name(model_name: str) -> bool:
         return True
     prefix, _rest = model_name.split("/", 1)
     return prefix == "openai"
+
+
+def _should_wrap_openrouter_override_with_openai_client(model_name: str, config: ClientConfig | None) -> bool:
+    if _is_openai_model_name(model_name):
+        return True
+    return config is not None and config.base_url is not None
 
 
 def _get_model_name_for_override_logging(agent: Agent) -> str | None:
