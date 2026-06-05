@@ -1,4 +1,3 @@
-# --- Core Agency class definition ---
 import asyncio
 import atexit
 import logging
@@ -27,6 +26,7 @@ from .setup import (
     parse_agent_flows,
     register_all_agents_and_set_entry_points,
 )
+from .user_context import deprecated_user_context, warn_agency_user_context_init_deprecated
 
 if TYPE_CHECKING:
     from agency_swarm.agent.context_types import AgentRuntimeState
@@ -73,8 +73,7 @@ class Agency:
     send_message_tool_class: type | None  # Fallback SendMessage tool class when flows have no override
 
     _agent_runtime_state: dict[str, "AgentRuntimeState"]
-
-    # Communication tool class mappings for agent-to-agent specific tools
+    user_context = deprecated_user_context
     _communication_tool_classes: dict[tuple[str, str], type]  # (sender_name, receiver_name) -> tool_class
 
     def __init__(
@@ -161,13 +160,7 @@ class Agency:
         else:
             self.shared_instructions = ""
         if user_context is not None:
-            warnings.warn(
-                "`Agency(user_context=...)` is deprecated and will be removed in a future release. "
-                "Pass per-run context with `get_response(..., context_override=...)`, "
-                "`get_response_stream(..., context_override=...)`, or construct `MasterContext` directly.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
+            warn_agency_user_context_init_deprecated()
         self._initial_user_context = dict(user_context or {})
         self.send_message_tool_class = send_message_tool_class
         self.shared_tools = shared_tools
@@ -211,28 +204,6 @@ class Agency:
         # Register MCP shutdown at process exit so persistent servers are cleaned in scripts
         if default_mcp_manager.mark_atexit_registered():
             atexit.register(default_mcp_manager.shutdown_sync)
-
-    @property
-    def user_context(self) -> dict[str, Any]:
-        """Deprecated initial context seed; use per-run `context_override` instead."""
-        warnings.warn(
-            "`Agency.user_context` is deprecated and will be removed in a future release. "
-            "Read run context from `RunResult.context_wrapper.context.user_context` and pass it back with "
-            "`context_override` when you need caller-owned state.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return self._initial_user_context
-
-    @user_context.setter
-    def user_context(self, value: dict[str, Any]) -> None:
-        warnings.warn(
-            "`Agency.user_context` is deprecated and will be removed in a future release. "
-            "Keep state outside the agency and pass it per run with `context_override`.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        self._initial_user_context = dict(value or {})
 
     def get_agent_context(
         self,

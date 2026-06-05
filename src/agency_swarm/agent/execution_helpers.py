@@ -29,6 +29,7 @@ from agency_swarm.messages import MessageFormatter
 from agency_swarm.tools.mcp_manager import default_mcp_manager
 
 from .execution_guardrails import append_guardrail_feedback, extract_guardrail_texts
+from .run_context import get_agency_user_context_store, resolve_latest_shared_instructions, sync_context_back_to_agency
 
 if TYPE_CHECKING:
     from agency_swarm.agent.core import AgencyContext, Agent
@@ -195,29 +196,6 @@ def run_item_to_tresponse_input_item(item: RunItem) -> TResponseInputItem | None
         return None
 
 
-def _resolve_latest_shared_instructions(agency_context: "AgencyContext | None") -> str | None:
-    """Return the freshest shared instructions and keep the context in sync."""
-    if not agency_context:
-        return None
-
-    agency_instance = getattr(agency_context, "agency_instance", None)
-    if agency_instance and hasattr(agency_instance, "shared_instructions"):
-        latest = getattr(agency_instance, "shared_instructions", None)
-        normalized = latest if isinstance(latest, str) else None
-        normalized = normalized or None
-        agency_context.shared_instructions = normalized
-        return normalized
-
-    existing = agency_context.shared_instructions
-    if isinstance(existing, str):
-        normalized = existing or None
-        agency_context.shared_instructions = normalized
-        return normalized
-
-    agency_context.shared_instructions = None
-    return None
-
-
 def prepare_master_context(
     agent: "Agent", context_override: dict[str, Any] | None, agency_context: "AgencyContext | None" = None
 ) -> MasterContext:
@@ -227,7 +205,7 @@ def prepare_master_context(
 
     thread_manager = agency_context.thread_manager
     agency_instance = agency_context.agency_instance
-    shared_instructions_for_run = _resolve_latest_shared_instructions(agency_context)
+    shared_instructions_for_run = resolve_latest_shared_instructions(agency_context)
 
     # For standalone agent usage (no agency), create minimal context
     if not agency_instance or not hasattr(agency_instance, "agents"):
@@ -240,16 +218,13 @@ def prepare_master_context(
             agent_runtime_state={agent.name: AgentRuntimeState(agent.tool_concurrency_manager)},
         )
 
-    shared_run_user_context = getattr(agency_instance, "_shared_run_user_context", None)
-    if isinstance(shared_run_user_context, dict) and context_override is None:
-        user_context = shared_run_user_context
-    else:
-        base_user_context = (
-            shared_run_user_context
-            if isinstance(shared_run_user_context, dict)
-            else getattr(agency_instance, "_initial_user_context", {})
-        )
+    base_user_context = get_agency_user_context_store(agency_instance)
+    if base_user_context is None:
+        base_user_context = {}
+    if context_override:
         user_context = {**base_user_context, **(context_override or {})}
+    else:
+        user_context = base_user_context
 
     runtime_state_map = getattr(agency_instance, "_agent_runtime_state", {})
     if not isinstance(runtime_state_map, dict):
@@ -314,7 +289,7 @@ def setup_execution(
     original_instructions = agent.instructions
 
     # Temporarily modify instructions if shared or additional instructions provided
-    shared_instructions_text = _resolve_latest_shared_instructions(agency_context)
+    shared_instructions_text = resolve_latest_shared_instructions(agency_context)
 
     if additional_instructions and not isinstance(additional_instructions, str):
         raise ValueError("additional_instructions must be a string")
@@ -425,9 +400,13 @@ def _validate_agency_for_delegation(
 def cleanup_execution(
     agent: "Agent",
     original_instructions: str | Callable | None,
+    context_override: dict[str, Any] | None,
     agency_context: "AgencyContext | None",
+    master_context_for_run: MasterContext,
 ) -> None:
     """Common cleanup logic for execution methods."""
+    sync_context_back_to_agency(context_override, agency_context, master_context_for_run)
+
     # Always restore original instructions
     agent.instructions = original_instructions
 

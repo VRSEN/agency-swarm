@@ -376,7 +376,13 @@ class Execution:
         finally:
             # Cleanup execution state
             if "master_context_for_run" in locals() and master_context_for_run is not None:  # type: ignore[used-before-def]
-                cleanup_execution(self.agent, original_instructions, agency_context)
+                cleanup_execution(
+                    self.agent,
+                    original_instructions,
+                    context_override,
+                    agency_context,
+                    master_context_for_run,
+                )
             else:
                 # Ensure instructions are restored even if context was not prepared
                 self.agent.instructions = original_instructions
@@ -615,7 +621,13 @@ class Execution:
                 raise
             finally:
                 if master_context_for_run is not None:
-                    cleanup_execution(self.agent, original_instructions, agency_context)
+                    cleanup_execution(
+                        self.agent,
+                        original_instructions,
+                        context_override,
+                        agency_context,
+                        master_context_for_run,
+                    )
                 else:
                     self.agent.instructions = original_instructions
                 if (

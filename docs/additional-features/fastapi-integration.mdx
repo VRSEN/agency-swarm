@@ -297,7 +297,7 @@ print("Response:", agency_response.json())
 ### How user_context is applied
 - Passed as run-scoped `context_override`.
 - Useful for structured data (ids, preferences, feature flags) you do not want in the prompt.
-- Accessible within tools for the duration of the run. It does not mutate the agency instance. See [Agency Context](/additional-features/agency-context).
+- Accessible within tools for the duration of the run. See [Agency Context](/additional-features/agency-context).
 
 ### How client_config is applied
 - Applies only to **OpenAI models** (no prefix or `openai/...`) and **LiteLLM models** (`litellm/...`).

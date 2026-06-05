@@ -202,7 +202,7 @@ response = await agency.get_response(
     context_override=session_context,
 )
 
-# Carry tool changes into the next turn without storing state on the agency.
+# Carry tool changes into the next turn through caller-owned state.
 session_context = response.context_wrapper.context.user_context
 next_response = await agency.get_response(
     "Use the same preferences for the next analysis.",
