@@ -695,7 +695,11 @@ def test_store_false_sanitizer_keeps_prior_encrypted_reasoning_boundary() -> Non
 )
 def test_live_openai_store_false_replays_encrypted_reasoning() -> None:
     """Live OpenAI proof for stateless Responses reasoning replay."""
-    client = OpenAI()
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        pytest.skip("OPENAI_API_KEY not found in environment")
+
+    client = OpenAI(api_key=api_key)
     first = client.responses.create(
         model="gpt-5.4-nano",
         input="Compute 37*41. Return only the number.",

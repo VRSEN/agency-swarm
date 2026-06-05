@@ -10,6 +10,7 @@ from agency_swarm.ui.demos.agentswarm_cli import start_tui
 from agency_swarm.ui.demos.copilot import CopilotDemoLauncher
 from agency_swarm.ui.generators.html_generator import HTMLVisualizationGenerator
 from agency_swarm.utils.model_utils import get_agent_capabilities
+from agency_swarm.utils.openrouter import get_openrouter_model_name
 
 if TYPE_CHECKING:
     from .core import Agency
@@ -207,6 +208,10 @@ def _describe_model(model: Any) -> str:
         return ""
     if isinstance(model, str):
         return model
+
+    openrouter_model = get_openrouter_model_name(model)
+    if openrouter_model is not None:
+        return openrouter_model
 
     model_name = getattr(model, "model", None)
     if isinstance(model_name, str):

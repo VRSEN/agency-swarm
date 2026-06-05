@@ -28,6 +28,10 @@ def test_request_override_policy_flags() -> None:
     assert extra_args_only.has_client_overrides is True
     assert extra_args_only.has_openai_overrides is False
 
+    settings_only = RequestOverridePolicy(ClientConfig(model_settings_extra_args={"max_tokens": 2500}))
+    assert settings_only.has_client_overrides is True
+    assert settings_only.has_openai_overrides is False
+
     litellm_cfg = cast(
         ClientConfig,
         SimpleNamespace(
@@ -94,6 +98,50 @@ def test_build_file_upload_client_uses_selected_agent_client() -> None:
     headers = dict(client.default_headers or {})
     assert headers["x-agency-id"] == "agency-1"
     assert headers["x-request-id"] == "req-1"
+
+
+def test_build_file_upload_client_ignores_openrouter_request_client(monkeypatch) -> None:
+    from agency_swarm.utils.openrouter import build_openrouter_chat_model
+
+    default = AsyncOpenAI(api_key="sk-openai", base_url="https://api.openai.com/v1")
+    openrouter = AsyncOpenAI(api_key="sk-openrouter", base_url="https://openrouter.ai/api/v1")
+    agent = SimpleNamespace(model=build_openrouter_chat_model("openrouter/openai/gpt-5", openai_client=openrouter))
+    agency = SimpleNamespace(agents={"A": agent}, entry_points=[SimpleNamespace(name="A")])
+
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.override_policy.get_default_openai_client", lambda: default
+    )
+
+    policy = RequestOverridePolicy(ClientConfig(model="openrouter/openai/gpt-5", api_key="sk-openrouter"))
+    client = policy.build_file_upload_client(agency, recipient_agent="A")
+
+    assert client is default
+    assert str(client.base_url).startswith("https://api.openai.com/v1")
+
+
+def test_build_file_upload_client_prefers_agent_file_client_for_openrouter(monkeypatch) -> None:
+    from agency_swarm.utils.openrouter import build_openrouter_chat_model
+
+    default = AsyncOpenAI(api_key="sk-default", base_url="https://api.default.test/v1")
+    file_client = AsyncOpenAI(api_key="sk-agent-files", base_url="https://api.agent-files.test/v1")
+    openrouter = AsyncOpenAI(api_key="sk-openrouter", base_url="https://openrouter.ai/api/v1")
+    agent = SimpleNamespace(
+        model=build_openrouter_chat_model("openrouter/openai/gpt-5", openai_client=openrouter),
+        _openai_client=file_client,
+    )
+    agency = SimpleNamespace(agents={"A": agent}, entry_points=[SimpleNamespace(name="A")])
+
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.override_policy.get_default_openai_client", lambda: default
+    )
+
+    policy = RequestOverridePolicy(ClientConfig(model="openrouter/openai/gpt-5", api_key="sk-openrouter"))
+    client = policy.build_file_upload_client(agency, recipient_agent="A")
+
+    assert client is file_client
+    assert client is not openrouter
+    assert client is not default
+    assert str(client.base_url).startswith("https://api.agent-files.test/v1")
 
 
 def test_build_file_upload_client_headers_only_without_baseline_returns_none(monkeypatch) -> None:
