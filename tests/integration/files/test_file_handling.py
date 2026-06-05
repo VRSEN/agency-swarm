@@ -50,7 +50,7 @@ async def test_agent_processes_message_files_attachment(real_openai_client: Asyn
     attachment_tester_agent._openai_client = real_openai_client
 
     # 3. Setup a real Agency for proper testing
-    agency = Agency(attachment_tester_agent, user_context=None)
+    agency = Agency(attachment_tester_agent)
 
     # 4. Call get_response with file_ids - OpenAI will automatically process the file
     message_to_agent = "What is my favorite food?"
@@ -135,7 +135,7 @@ async def test_multi_file_type_processing(real_openai_client: AsyncOpenAI, tmp_p
         file_processor_agent._openai_client = real_openai_client
 
         # Initialize agency for the agent
-        Agency(file_processor_agent, user_context=None)
+        Agency(file_processor_agent)
 
         # Test processing the PDF file
         question = "What is my favorite food?"
@@ -301,7 +301,7 @@ async def test_files_folder_reuse_without_missing_directory_warning(
     first_agent = Agent(**agent_kwargs)
     first_agent._openai_client = real_openai_client
 
-    Agency(first_agent, user_context=None)
+    Agency(first_agent)
     await _wait_for_vector_store(real_openai_client, first_agent)
 
     initial_folder = first_agent.files_folder_path
@@ -317,7 +317,7 @@ async def test_files_folder_reuse_without_missing_directory_warning(
     reuse_agent = Agent(**agent_kwargs)
     reuse_agent._openai_client = real_openai_client
 
-    Agency(reuse_agent, user_context=None)
+    Agency(reuse_agent)
     await _wait_for_vector_store(real_openai_client, reuse_agent)
 
     assert reuse_agent.files_folder_path == initial_folder
@@ -345,7 +345,7 @@ async def test_file_search_tool(real_openai_client: AsyncOpenAI, tmp_path: Path)
         await _wait_for_vector_store(real_openai_client, file_search_agent)
 
         # Initialize agency and run test
-        agency = Agency(file_search_agent, user_context=None)
+        agency = Agency(file_search_agent)
         question = (
             "Use FileSearch with the query 'hobbit' to find the answer: What is the title of the 4th book in the list?"
         )
@@ -431,7 +431,7 @@ async def test_code_interpreter_tool(real_openai_client: AsyncOpenAI, tmp_path: 
         assert folder_path, "No vector store folder found"
 
         # Initialize agency for the agent
-        agency = Agency(code_interpreter_agent, user_context=None)
+        agency = Agency(code_interpreter_agent)
 
         # Test the simple usage of the code interpreter tool (answer is always 37)
         # Use a deterministic script to avoid RNG differences across environments
@@ -523,7 +523,7 @@ async def test_agent_vision_capabilities(real_openai_client: AsyncOpenAI, tmp_pa
     vision_agent._openai_client = real_openai_client
 
     # Initialize agency for the agent
-    Agency(vision_agent, user_context=None)
+    Agency(vision_agent)
 
     # Test processing each image
     for image_path, question, expected_content in test_images:
@@ -611,7 +611,7 @@ async def test_vector_store_cleanup_on_init(real_openai_client: AsyncOpenAI, tmp
     # First init: uploads both files and creates VS
     agent1 = Agent(**agent_kwargs)
     agent1._openai_client = real_openai_client
-    Agency(agent1, user_context=None)
+    Agency(agent1)
     await _wait_for_vector_store(real_openai_client, agent1)
 
     # Find VS folder and collect uploaded ids
@@ -637,7 +637,7 @@ async def test_vector_store_cleanup_on_init(real_openai_client: AsyncOpenAI, tmp
     # Re-init: should detach removed from VS and delete OpenAI file object
     agent2 = Agent(**agent_kwargs)
     agent2._openai_client = real_openai_client
-    Agency(agent2, user_context=None)
+    Agency(agent2)
     await _wait_for_vector_store(real_openai_client, agent2)
 
     vs_id = agent2._associated_vector_store_id
@@ -682,7 +682,7 @@ async def test_file_reupload_on_mtime_update(real_openai_client: AsyncOpenAI, tm
     # First init: upload original file
     agent1 = Agent(**agent_kwargs)
     agent1._openai_client = real_openai_client
-    Agency(agent1, user_context=None)
+    Agency(agent1)
     await _wait_for_vector_store(real_openai_client, agent1)
 
     # Locate vector store folder and uploaded file id
@@ -710,7 +710,7 @@ async def test_file_reupload_on_mtime_update(real_openai_client: AsyncOpenAI, tm
     # Re-init agent: should detect newer mtime and re-upload
     agent2 = Agent(**agent_kwargs)
     agent2._openai_client = real_openai_client
-    Agency(agent2, user_context=None)
+    Agency(agent2)
     await _wait_for_vector_store(real_openai_client, agent2)
 
     vs_id = agent2._associated_vector_store_id

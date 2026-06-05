@@ -82,6 +82,11 @@ def build_fastapi_agencies(agency: "Agency") -> dict[str, Callable[..., "Agency"
             tool_cls = agency._communication_tool_classes.get((sender.name, receiver.name))
             flows.append((sender, receiver, tool_cls) if tool_cls else (sender, receiver))
 
+        kwargs: dict[str, Any] = {}
+        initial_user_context = deepcopy(getattr(agency, "_initial_user_context", {}))
+        if initial_user_context:
+            kwargs["user_context"] = initial_user_context
+
         return agency_cls(
             *agency.entry_points,
             communication_flows=flows,
@@ -94,7 +99,7 @@ def build_fastapi_agencies(agency: "Agency") -> dict[str, Callable[..., "Agency"
             send_message_tool_class=agency.send_message_tool_class,
             load_threads_callback=load_threads_callback,
             save_threads_callback=save_threads_callback,
-            user_context=deepcopy(agency.user_context),
+            **kwargs,
         )
 
     return {agency.name or "agency": agency_factory}

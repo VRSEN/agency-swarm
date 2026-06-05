@@ -4,15 +4,15 @@ description: "Sharing data and state across tools and agents using agency contex
 icon: "database"
 ---
 
-`Agency Context` is a centralized data store accessible by all tools and agents within an agency. It allows you to share data between agents, control execution flow, and maintain state across tool calls without passing large data structures in messages.
+`Agency Context` is run-scoped data stored on `MasterContext`. It lets tools and agents share structured data during a run without putting that data in messages.
 
 <Note>
-Agency context is available when tools are deployed together with agents. If tools are deployed as separate APIs, they won't share the same context, and you'll need to implement your own state management solution.
+Agency context lives in the `MasterContext` for a run. Keep session state outside the `Agency` instance and pass it into each call with `context_override`.
 </Note>
 
 ## Understanding Agency Context
 
-Agency context is particularly useful when your agents interact with multiple tools that need to exchange information. Here's why:
+Agency context is useful when your agents interact with multiple tools that need to exchange information. Here's why:
 
 - **Without Agency Context**: Suppose `Tool A` collects data that `Tool B` needs. The agent must explicitly pass this data as a parameter to `Tool B`, consuming tokens and potentially hitting message limits.
 
@@ -115,7 +115,7 @@ In this example, calling the Query Database tool stores database context, which 
 ## Advanced Agency Context Patterns
 
 ### Complex Data Structures
-Agency context can store any Python object, making it perfect for complex workflows:
+Agency context can store any Python object, making it useful for complex workflows:
 
 ```python
 @function_tool
@@ -182,22 +182,31 @@ async def step_2_data_processing(ctx: RunContextWrapper[MasterContext]) -> str:
 ```
 
 ### Session Management
-Agency context is perfect for maintaining session state:
+Keep session state outside the agency and pass it into each run:
 
 ```python
-# Initialize agency with session context
-agency = Agency(
-    entry_agent,
-    communication_flows=[(entry_agent, worker_agent)],
-    user_context={
-        'session_id': 'user_123',
-        'user_preferences': {
-            'language': 'en',
-            'timezone': 'UTC',
-            'risk_tolerance': 'moderate'
-        },
-        'session_start': datetime.now().isoformat()
-    }
+agency = Agency(entry_agent, communication_flows=[(entry_agent, worker_agent)])
+
+session_context = {
+    'session_id': 'user_123',
+    'user_preferences': {
+        'language': 'en',
+        'timezone': 'UTC',
+        'risk_tolerance': 'moderate'
+    },
+    'session_start': datetime.now().isoformat()
+}
+
+response = await agency.get_response(
+    "Analyze my portfolio.",
+    context_override=session_context,
+)
+
+# Carry tool changes into the next turn without storing state on the agency.
+session_context = response.context_wrapper.context.user_context
+next_response = await agency.get_response(
+    "Use the same preferences for the next analysis.",
+    context_override=session_context,
 )
 ```
 
@@ -229,7 +238,7 @@ risk_level = ctx.context.get('risk_tolerance')
 ```
 
 ### Clean Up Unneeded Data
-For long-running sessions, clean up temporary data to avoid memory issues:
+For long-running sessions, clean up temporary data before carrying the context into the next run:
 
 ```python
 @function_tool
@@ -278,4 +287,4 @@ For a full example showing agency context in action, see the [Agency Context Wor
 - Workflow coordination
 - Context monitoring and debugging
 
-Agency context eliminates the need for complex parameter passing and enables multi-agent workflows while maintaining clean separation of concerns.
+Agency context eliminates complex parameter passing during a run while keeping session state separate from the agency definition.

@@ -1,8 +1,8 @@
 """
 Integration test for agency context sharing between agents.
 
-This test verifies that agents can share data through the agency context,
-ensuring that changes made by one agent are visible to other agents.
+This test verifies that agents can share data through run context,
+ensuring callers can carry that state between agency calls.
 """
 
 import pytest
@@ -51,48 +51,48 @@ async def test_context_sharing_between_agents():
         tool_use_behavior="stop_on_first_tool",
     )
 
-    # Create agency with both agents as entry points
     agency = Agency(
         agent1,
         agent2,
         communication_flows=[agent1 > agent2],
-        user_context={"initial": "test"},
     )
 
-    # Agent1 stores data
+    session_context = {"initial": "test"}
+
     response1 = await agency.get_response(
         "Store shared_key with value shared_value",
         recipient_agent=agent1,
+        context_override=session_context,
     )
     tool_outputs_1 = [item.output for item in response1.new_items if hasattr(item, "output")]
     assert any("Stored shared_key=shared_value" in str(output) for output in tool_outputs_1)
 
-    # Verify data is in agency context
-    assert agency.user_context.get("shared_key") == "shared_value"
-    assert agency.user_context.get("initial") == "test"  # Original value preserved
+    session_context = response1.context_wrapper.context.user_context
+    assert session_context["shared_key"] == "shared_value"
+    assert session_context["initial"] == "test"
 
-    # Directly ask Agent2 to retrieve the data
     response2 = await agency.get_response(
         "Get the value for shared_key",
         recipient_agent=agent2,
+        context_override=session_context,
     )
     tool_outputs_2 = [item.output for item in response2.new_items if hasattr(item, "output")]
     assert any("Value for shared_key: shared_value" in str(output) for output in tool_outputs_2)
 
-    # Agent2 can also store data that's visible to the agency
-    await agency.get_response(
+    response3 = await agency.get_response(
         "Store agent2_key with value agent2_value",
         recipient_agent=agent2,
+        context_override=response2.context_wrapper.context.user_context,
     )
 
-    # Verify Agent2's data is in agency context
-    assert agency.user_context.get("agent2_key") == "agent2_value"
-    assert agency.user_context.get("shared_key") == "shared_value"  # Previous data preserved
+    session_context = response3.context_wrapper.context.user_context
+    assert session_context["agent2_key"] == "agent2_value"
+    assert session_context["shared_key"] == "shared_value"
 
-    # Retrieve Agent2's data directly from Agent2
     response4 = await agency.get_response(
         "Get the value for agent2_key",
         recipient_agent=agent2,
+        context_override=session_context,
     )
     tool_outputs_4 = [item.output for item in response4.new_items if hasattr(item, "output")]
     assert any("Value for agent2_key: agent2_value" in str(output) for output in tool_outputs_4)

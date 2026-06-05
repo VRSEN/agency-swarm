@@ -234,15 +234,14 @@ def prepare_master_context(
         return MasterContext(
             thread_manager=thread_manager,
             agents={agent.name: agent},  # Only include self
-            user_context=context_override or {},
+            user_context=dict(context_override or {}),
             current_agent_name=agent.name,
             shared_instructions=shared_instructions_for_run,
             agent_runtime_state={agent.name: AgentRuntimeState(agent.tool_concurrency_manager)},
         )
 
-    # Use reference for persistence, or create merged copy if override provided
-    base_user_context = getattr(agency_instance, "user_context", {})
-    user_context = {**base_user_context, **context_override} if context_override else base_user_context
+    base_user_context = getattr(agency_instance, "_initial_user_context", {})
+    user_context = {**base_user_context, **(context_override or {})}
 
     runtime_state_map = getattr(agency_instance, "_agent_runtime_state", {})
     if not isinstance(runtime_state_map, dict):
@@ -418,19 +417,9 @@ def _validate_agency_for_delegation(
 def cleanup_execution(
     agent: "Agent",
     original_instructions: str | Callable | None,
-    context_override: dict[str, Any] | None,
     agency_context: "AgencyContext | None",
-    master_context_for_run: MasterContext,
 ) -> None:
     """Common cleanup logic for execution methods."""
-    # Sync back context changes if we used a merged context due to override
-    if context_override and agency_context and agency_context.agency_instance:
-        base_user_context = getattr(agency_context.agency_instance, "user_context", {})
-        # Sync back any new keys that weren't part of the original override
-        for key, value in master_context_for_run.user_context.items():
-            if key not in context_override:  # Don't sync back override keys
-                base_user_context[key] = value
-
     # Always restore original instructions
     agent.instructions = original_instructions
 

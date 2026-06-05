@@ -55,7 +55,7 @@ class Agency:
         thread_manager (ThreadManager): The manager responsible for handling conversation threads.
         persistence_hooks (PersistenceHooks | None): Optional hooks for loading/saving thread state.
         shared_instructions (str | None): Optional instructions prepended to every agent's system prompt.
-        user_context (dict[str, Any]): A dictionary for shared user-defined context within `MasterContext` during runs.
+        user_context (dict[str, Any]): Deprecated initial context seed. Use per-run `context_override` instead.
         send_message_tool_class (type | None): Optional fallback SendMessage tool class when no
             flow-specific tool is provided.
     """
@@ -69,7 +69,7 @@ class Agency:
     shared_tools_folder: str | None  # Folder path containing tools for all agents
     shared_files_folder: str | None  # Folder path containing files for all agents
     shared_mcp_servers: list[Any] | None  # MCP servers shared across all agents
-    user_context: dict[str, Any]  # Shared user context for MasterContext
+    _initial_user_context: dict[str, Any]  # Deprecated initial context seed for MasterContext
     send_message_tool_class: type | None  # Fallback SendMessage tool class when flows have no override
 
     _agent_runtime_state: dict[str, "AgentRuntimeState"]
@@ -123,7 +123,8 @@ class Agency:
                 a tool via `communication_flows`. Prefer per-flow configuration.
             load_threads_callback (ThreadLoadCallback | None, optional): Callable to load conversation threads.
             save_threads_callback (ThreadSaveCallback | None, optional): Callable to save conversation threads.
-            user_context (dict[str, Any] | None, optional): Initial shared context accessible to all agents.
+            user_context (dict[str, Any] | None, optional): Deprecated. Pass per-run context with
+                `get_response(..., context_override=...)` instead.
 
         Raises:
             ValueError: If the agency structure is not defined, or if agent names are duplicated.
@@ -159,7 +160,15 @@ class Agency:
                 self.shared_instructions = shared_instructions
         else:
             self.shared_instructions = ""
-        self.user_context = user_context or {}
+        if user_context is not None:
+            warnings.warn(
+                "`Agency(user_context=...)` is deprecated and will be removed in a future release. "
+                "Pass per-run context with `get_response(..., context_override=...)`, "
+                "`get_response_stream(..., context_override=...)`, or construct `MasterContext` directly.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        self._initial_user_context = dict(user_context or {})
         self.send_message_tool_class = send_message_tool_class
         self.shared_tools = shared_tools
         self.shared_tools_folder = shared_tools_folder
@@ -202,6 +211,28 @@ class Agency:
         # Register MCP shutdown at process exit so persistent servers are cleaned in scripts
         if default_mcp_manager.mark_atexit_registered():
             atexit.register(default_mcp_manager.shutdown_sync)
+
+    @property
+    def user_context(self) -> dict[str, Any]:
+        """Deprecated initial context seed; use per-run `context_override` instead."""
+        warnings.warn(
+            "`Agency.user_context` is deprecated and will be removed in a future release. "
+            "Read run context from `RunResult.context_wrapper.context.user_context` and pass it back with "
+            "`context_override` when you need caller-owned state.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._initial_user_context
+
+    @user_context.setter
+    def user_context(self, value: dict[str, Any]) -> None:
+        warnings.warn(
+            "`Agency.user_context` is deprecated and will be removed in a future release. "
+            "Keep state outside the agency and pass it per run with `context_override`.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        self._initial_user_context = dict(value or {})
 
     def get_agent_context(
         self,
@@ -250,7 +281,8 @@ class Agency:
             message (str | list[dict[str, Any]]): The input message for the agent.
             recipient_agent (str | Agent | None, optional): The target agent instance or its name.
                                                            If None, defaults to the first entry point agent.
-            context_override (dict[str, Any] | None, optional): Additional context to pass to the agent run.
+            context_override (dict[str, Any] | None, optional): Run-scoped context passed into
+                `MasterContext.user_context`.
             agency_context_override (AgencyContext | None, optional): Run-scoped agency context to use instead of
                 the default context derived from the agency instance.
             hooks_override (RunHooks | None, optional): Specific hooks to use for this run, overriding
@@ -331,7 +363,8 @@ class Agency:
             message (str | list[dict[str, Any]]): The input message for the agent.
             recipient_agent (str | Agent | None, optional): The target agent instance or its name.
                                                            If None, defaults to the first entry point agent.
-            context_override (dict[str, Any] | None, optional): Additional context for the run.
+            context_override (dict[str, Any] | None, optional): Run-scoped context passed into
+                `MasterContext.user_context`.
             agency_context_override (AgencyContext | None, optional): Run-scoped agency context to use instead of
                 the default context derived from the agency instance.
             hooks_override (RunHooks | None, optional): Specific hooks for this run.

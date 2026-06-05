@@ -106,7 +106,7 @@ class RunAgentInputCustom(RunAgentInput):
     additional_instructions: str | None = None
     user_context: dict[str, Any] | None = Field(
         default=None,
-        description="Structured context merged into MasterContext.user_context for this run only.",
+        description="Structured context passed into MasterContext.user_context for this run only.",
     )
     file_ids: list[str] | None = None
     file_urls: dict[str, str] | None = Field(
@@ -153,7 +153,7 @@ class BaseRequest(BaseModel):
     additional_instructions: str | None = None
     user_context: dict[str, Any] | None = Field(
         default=None,
-        description="Structured context merged into MasterContext.user_context for this run only.",
+        description="Structured context passed into MasterContext.user_context for this run only.",
     )
     generate_chat_name: bool | None = Field(
         default=False, description="Generate a fitting chat name for the user input."

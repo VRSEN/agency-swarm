@@ -40,7 +40,6 @@ def _agency_factory() -> Agency:
     return Agency(
         agent,
         name="mcp_stdio_agency",
-        user_context={"session_id": "mcp_stdio_session"},
         shared_instructions="Test MCP StdIO Integration",
     )
 

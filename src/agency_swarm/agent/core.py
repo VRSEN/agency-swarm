@@ -396,7 +396,7 @@ class Agent(BaseAgent[MasterContext]):
         Args:
             message: The input message as a string or structured input items list
             sender_name: Name of the sending agent (None for user interactions)
-            context_override: Optional context data to override default MasterContext values
+            context_override: Run-scoped context passed into MasterContext.user_context
             hooks_override: Optional hooks to override default agent hooks
             run_config_override: Optional run configuration settings
             file_ids: List of OpenAI file IDs to attach to the message
@@ -441,7 +441,7 @@ class Agent(BaseAgent[MasterContext]):
         Args:
             message: The input message or list of message items
             sender_name: Name of the sending agent (None for user interactions)
-            context_override: Optional context data to override default values
+            context_override: Run-scoped context passed into MasterContext.user_context
             hooks_override: Optional hooks to override default agent hooks
             run_config_override: Optional run configuration
             additional_instructions: Additional instructions to be appended to the agent's

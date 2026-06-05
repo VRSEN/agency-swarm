@@ -30,14 +30,14 @@ async def test_basetool_context_integration():
         model="gpt-5.4-mini",
     )
 
-    # Create agency with initial context
-    agency = Agency(
-        agent,
-        user_context={"test_key": "test_value", "another_key": "another_value"},
-    )
+    agency = Agency(agent)
 
     # Test reading from context
-    response = await agency.get_response("Read the value of test_key using ContextReaderTool", recipient_agent=agent)
+    response = await agency.get_response(
+        "Read the value of test_key using ContextReaderTool",
+        recipient_agent=agent,
+        context_override={"test_key": "test_value", "another_key": "another_value"},
+    )
 
     # Check that the tool was called and returned the correct value
     tool_outputs = [item.output for item in response.new_items if hasattr(item, "output")]
@@ -67,12 +67,12 @@ async def test_basetool_async_context():
         model="gpt-5.4-mini",
     )
 
-    agency = Agency(
-        agent,
-        user_context={"async_key": "async_value"},
-    )
+    agency = Agency(agent)
 
-    response = await agency.get_response("Process 'test_data' using AsyncContextTool")
+    response = await agency.get_response(
+        "Process 'test_data' using AsyncContextTool",
+        context_override={"async_key": "async_value"},
+    )
     # Check that the tool was called with context
     tool_outputs = [item.output for item in response.new_items if hasattr(item, "output")]
     assert any("Async processed: test_data with context: async_value" in str(output) for output in tool_outputs)
