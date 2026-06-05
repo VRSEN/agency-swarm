@@ -22,15 +22,15 @@
 1.19 `Full Suite`: `make ci`.
 1.20 `Docs Preview`: `cd docs && mintlify dev`.
 1.21 `Documentation Rule Set`: `.cursor/rules/writing-docs.mdc`.
-1.22 `Codex Review`: the required clean Codex review, whether local or hosted.
+1.22 `Codex Review`: a clean independent Codex review, required only when this contract, risk, or the User Request requires it.
 1.23 `Codex Channel`: a native Codex subagent or the `codex` CLI.
 1.24 `General Review Command`: `codex review --base origin/main -c model_reasoning_effort="high"`.
 1.25 `Policy Review Command`: `codex -m gpt-5.5 review --base origin/main -c model_reasoning_effort="xhigh"`.
 1.26 `Pre-Release Review Command`: `codex -m gpt-5.5 review --base origin/main -c model_reasoning_effort="xhigh"`.
 1.27 `Fallback Review Command`: an equivalent `codex exec` diff review using the same base and reasoning class.
 1.28 `Primary Review Artifact`: `/tmp/codex_review_<short_sha>.txt`.
-1.29 `Pre-PR Gate`: the required local verification before pull-request mutation, including the Formatter, the Checker, focused tests, and docs lint when applicable.
-1.30 `CI`: the required continuous-integration status for the current change.
+1.29 `Pre-PR Gate`: the risk-based local verification before pull-request mutation, ranging from focused checks to the Full Suite.
+1.30 `CI`: a hosted continuous-integration signal, required only when policy, risk, or the User Request requires it.
 1.31 `UX Verification Gap`: any unresolved mismatch between claimed user behavior and proved user behavior.
 1.32 `Merge Mandate`: the minimum internal merge-readiness state. It does not grant merge authority.
 1.33 `Danger Zone`: any Public Operation.
@@ -187,11 +187,11 @@
 7.19 Mark blockers in the Execution Plan. Keep only Critical Path blockers there.
 7.20 Treat approvals, merges, commits, pushes, and reviews as blockers only when they stop the Critical Path.
 7.21 Remove dead work branches from the plan immediately.
-7.22 Pending Hosted Check or Hosted Review state remains outstanding work while it can be observed or advanced.
-7.23 If only external signals remain, report that state and keep polling.
-7.24 When polling is next, poll directly, at least once per minute, with a wait loop sized to the real window.
-7.25 If a pull-request-bound Codex review stays non-terminal for fifteen minutes, inspect and retrigger it.
-7.26 If the next step is polling, retriggering, or fixing an external workflow, keep working until terminal state or proven external block.
+7.22 Pending required Hosted Check or Hosted Review state remains outstanding work while it can be observed or advanced.
+7.23 If only required external signals remain, report that state and keep polling.
+7.24 When required polling is next, poll directly, at least once per minute, with a wait loop sized to the real window.
+7.25 If a required pull-request-bound Codex review stays non-terminal for fifteen minutes, inspect and retrigger it.
+7.26 If the required next step is polling, retriggering, or fixing an external workflow, keep working until terminal state or proven external block.
   - Commentary: Fresh drift checks preserve rebuild-from-upstream capability and stop silent drift.
 
 ## 8. Response Format
@@ -261,9 +261,9 @@
 10.12 Observe a non-empty streamed response through that same interface.
 10.13 Automated auth smoke never satisfies clauses 10.11 and 10.12 by itself.
 10.14 Any launch, credential, dependency, or interface failure in clauses 10.11 and 10.12 blocks release until reproduced and root-caused.
-10.15 No Policy Edit shall ship inside a Public PR.
+10.15 No Policy Edit shall ship inside a Public PR; repo Policy Edits ship directly to the Default Branch only after Danger Zone approval and required proof are satisfied.
 10.16 Keep release cuts minimal. Exclude Policy Edits and tooling churn from user-facing bugfix releases.
-10.17 A Merge Mandate exists when CI, Codex Review, and the Pre-PR Gate are green and no UX Verification Gap remains unresolved.
+10.17 A Merge Mandate exists when the risk-based Pre-PR Gate is green, required Hosted Checks are green, risk-required Codex Review is clean, and no UX Verification Gap remains unresolved.
 10.18 A Merge Mandate does not replace explicit user approval.
 10.19 Do not hand off build-impact pull-request work until unresolved threads are closed and the latest head has explicit approval.
   - Commentary: Recent hotfix tags bundled policy churn with user-facing fixes.
@@ -296,10 +296,10 @@
 11.24 Use only the approval gates in this contract. Do not invent slower gates.
 11.25 After each meaningful tool call or edit, validate the result in one or two lines and self-correct on failure.
 11.26 Run the most relevant focused test first.
-11.27 Run the Formatter before each commit.
-11.28 Run the Checker before staging or committing.
-11.29 Run the Full Suite before a pull request, merge, or repository-wide health claim.
-11.30 After each change, run the Formatter, the Checker, and the most relevant focused tests unless the change is docs-only or formatting-only.
+11.27 Run the Formatter before each commit when touched files are covered by repository formatting.
+11.28 Run the Checker before staging or committing runtime, interface, or integration changes.
+11.29 Run the Full Suite before release, broad or risky merge-readiness claims, repository-wide health claims, or when focused proof cannot bound the risk.
+11.30 After each change, run risk-based validation: focused checks for small bounded work, broader checks for risky or uncertain work, and the Full Suite only when scope or confidence requires it.
 11.31 Do not proceed if a required validation command fails.
 11.32 Update documentation and examples when behavior or interfaces change.
 11.33 Choose the smallest high-signal proof that reduces uncertainty fastest.
@@ -435,10 +435,10 @@
 
 ## 17. Tool And Model Policy
 17.1 Model and tool availability varies by machine; use the strongest available path that fits task risk and state any substitution before relying on it.
-17.2 General non-policy, non-release review may use the General Review Command unless a repo skill or user Mandate requires a stronger path.
-17.3 Pull-request mutation, review-thread work, and merge-readiness review shall use the `codex-cli-review` skill and its current canonical review command.
-17.4 Policy, repo-skill, and workflow-rule edits shall use the Policy Review Command through a separate isolated Codex Channel worker when available.
-17.5 Policy Review requires GPT-5.5 or an approved substitute with `xhigh` reasoning; `high` is not enough.
+17.2 General non-policy, non-release review may use the General Review Command when risk or the User Request requires independent review.
+17.3 Pull-request mutation, review-thread work, and merge-readiness review shall use the `codex-cli-review` skill when risk, unresolved threads, or the User Request requires independent review.
+17.4 Broad, public, high-risk, or low-confidence Policy Edits shall use the Policy Review Command through a separate isolated Codex Channel worker when available.
+17.5 When Policy Review is required, it requires GPT-5.5 or an approved substitute with `xhigh` reasoning; `high` is not enough.
 17.6 Release and safety claims shall use the Pre-Release Review Command against the exact release commit.
 17.7 If the active model or review path is below the required floor for the task class, stop before relying on it and Escalate.
 17.8 Claude output and duplicate weaker runs may support high-reliability decisions but never replace the required Codex review path.
@@ -462,7 +462,7 @@
 18.16 Do not write chatty status comments or unnecessary mentions on the review platform.
 18.17 Keep required review comments short and technical.
 18.18 If you do not know how a mention triggers, inspect the automation first. When in doubt, do not post.
-18.19 If local coding work targets an open pull request and comments can be posted, run the required review loop.
+18.19 If local coding work targets an open pull request, run the review loop when risk, unresolved comments, or the User Request requires it.
 18.20 Resolve every correct active thread finding on that pull request.
 18.21 Route pull-request-side mutation work through a Native Subagent by default.
 18.22 This includes thread review, replies, issue-link checks, and pull-request body edits.
@@ -475,7 +475,7 @@
 18.29 If local or hosted review remains non-terminal for fifteen minutes, inspect output and retrigger once if service appears stuck.
 18.30 If required hosted CI remains non-terminal for thirty minutes, inspect output and retrigger once if service appears stuck.
 18.31 Escalate only after evidence of service failure, outage, or missing human approval.
-18.32 Repeat the review loop until unresolved threads are zero, review is clean, required checks are green, and the latest head has explicit approval.
+18.32 When the review loop is required, repeat it until unresolved threads are zero, review is clean, required checks are green, and the latest head has explicit approval.
 18.33 Skip clause 18.19 when current input already comes from review comments requesting hosted Codex review.
 ## 19. Memory, Policy, and Closeout
 19.1 Memory files store durable facts, lessons, and task procedures only.
@@ -487,12 +487,12 @@
 19.7 Treat even hinted negative performance signals as policy triggers.
 19.8 Ground each Policy Edit in a concrete failure pattern and preserve its motivation.
 19.9 If a non-Codex agent touched a Policy Edit, revert that policy work first.
-19.10 Route every Policy Edit through the Codex Channel and Tool And Model Policy.
+19.10 Route Policy Edits through the Codex Channel and Tool And Model Policy when risk, scope, confidence, or the User Request requires independent review.
 19.11 Supply root cause, enough background, and the live diff for every Policy Edit.
 19.12 Review each Policy Edit for motivation, duplication, conflict, and process cost.
 19.13 Keep critical priming non-duplicative. Update or move existing rules instead of restating them.
 19.14 For self-initiated Policy Edits, request user approval before editing.
 19.15 Do not pause normal coding, testing, or review loops solely to seek extra policy approval.
 19.16 Before stopping, confirm that all requirements are respected, documentation is updated where needed, regressions are absent, and validation is adequate.
-19.17 Before stopping, confirm that tests pass, review is clean, and affected examples or user flows ran as required.
+19.17 Before stopping, confirm that risk-based validation passed, required review is clean, and affected examples or user flows ran when required.
 19.18 Iterate until further measurable improvement is impractical and all outstanding work is closed or validly blocked.
