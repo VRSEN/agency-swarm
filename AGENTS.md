@@ -164,6 +164,7 @@
 6.17 Treat the review platform as the source of truth for live pull-request state.
 6.18 Reuse or repair an existing pull request or public durable artifact when it covers the same intent; create a new artifact only when reuse is impossible and recorded.
 6.19 Before opening, updating, or merging a pull request, verify the source branch, base branch, head identifier, live diff, and relevant status checks.
+6.20 If an active pull request includes the same dependency or lockfile update as an open Dependabot pull request, treat the Dependabot pull request as duplicate and close it through the normal public-mutation approval path.
 
 ## 7. Execution and Continuous Work
 7.1 Complete one change at a time.
@@ -382,6 +383,7 @@
 14.31 Prefer methods between ten and forty lines, and keep them under one hundred lines.
 14.32 Target test coverage at ninety percent or higher.
 14.33 If you must edit an oversized file, keep the net change minimal and reduce size in the same change unless the user approves otherwise.
+14.34 When dependency requirements or resolved dependency versions change, update every affected lockfile in the same change without a separate request.
   - Commentary: Earlier terminology drift forced readers to translate between code and product terms.
 
 ## 15. Testing and Strictness
