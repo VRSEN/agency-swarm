@@ -240,8 +240,16 @@ def prepare_master_context(
             agent_runtime_state={agent.name: AgentRuntimeState(agent.tool_concurrency_manager)},
         )
 
-    base_user_context = getattr(agency_instance, "_initial_user_context", {})
-    user_context = {**base_user_context, **(context_override or {})}
+    shared_run_user_context = getattr(agency_instance, "_shared_run_user_context", None)
+    if isinstance(shared_run_user_context, dict) and context_override is None:
+        user_context = shared_run_user_context
+    else:
+        base_user_context = (
+            shared_run_user_context
+            if isinstance(shared_run_user_context, dict)
+            else getattr(agency_instance, "_initial_user_context", {})
+        )
+        user_context = {**base_user_context, **(context_override or {})}
 
     runtime_state_map = getattr(agency_instance, "_agent_runtime_state", {})
     if not isinstance(runtime_state_map, dict):

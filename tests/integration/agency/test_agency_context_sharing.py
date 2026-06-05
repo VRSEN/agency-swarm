@@ -96,3 +96,32 @@ async def test_context_sharing_between_agents():
     )
     tool_outputs_4 = [item.output for item in response4.new_items if hasattr(item, "output")]
     assert any("Value for agent2_key: agent2_value" in str(output) for output in tool_outputs_4)
+
+
+@pytest.mark.asyncio
+async def test_context_override_is_shared_with_send_message_recipient():
+    """Sub-agents called by send_message receive the caller's run context."""
+    agent1 = Agent(
+        name="Agent1",
+        instructions="You delegate context reads to Agent2.",
+        model=DeterministicModel(),
+        model_settings=ModelSettings(tool_choice="required"),
+    )
+    agent2 = Agent(
+        name="Agent2",
+        instructions="You retrieve data from the context.",
+        tools=[get_data],
+        model=DeterministicModel(),
+        model_settings=ModelSettings(tool_choice="required"),
+        tool_use_behavior="stop_on_first_tool",
+    )
+    agency = Agency(agent1, communication_flows=[agent1 > agent2])
+
+    response = await agency.get_response(
+        "Ask Agent2 for the value for shared_key",
+        recipient_agent=agent1,
+        context_override={"shared_key": "shared_value"},
+    )
+
+    tool_outputs = [item.output for item in response.new_items if hasattr(item, "output")]
+    assert any("Value for shared_key: shared_value" in str(output) for output in tool_outputs)
