@@ -34,6 +34,7 @@ from openai.types.responses.response_usage import InputTokensDetails, OutputToke
 
 _STORE_RE = re.compile(r"store\s+(?P<key>\w+)\s+with\s+value\s+(?P<value>\w+)", re.IGNORECASE)
 _GET_RE = re.compile(r"value\s+for\s+(?P<key>\w+)", re.IGNORECASE)
+_SHARED_SET_RE = re.compile(r"set\s+test_value\s+to\s+'?(?P<value>[\w-]+)'?", re.IGNORECASE)
 _MESSAGE_RE = re.compile(r"message:\s*(?P<message>.+)$", re.IGNORECASE)
 _SECRET_RE = re.compile(r"secret code:\s*(?P<secret>[\w-]+)", re.IGNORECASE)
 _HANDLE_RE = re.compile(r"handle\s+(?P<task>[\w-]+)", re.IGNORECASE)
@@ -343,6 +344,16 @@ class DeterministicModel(Model):
             get_match = _GET_RE.search(user_text)
             if get_match:
                 return _build_tool_call_response("get_data", {"key": get_match.group("key")})
+
+        if "SharedStateTool" in tool_map:
+            shared_set_match = _SHARED_SET_RE.search(user_text)
+            if shared_set_match:
+                return _build_tool_call_response(
+                    "SharedStateTool",
+                    {"action": "set", "value": shared_set_match.group("value")},
+                )
+            if "current test_value" in lower or "get" in lower:
+                return _build_tool_call_response("SharedStateTool", {"action": "get", "value": ""})
 
         if "send_message" in tool_map:
             schema = tool_map["send_message"].params_json_schema

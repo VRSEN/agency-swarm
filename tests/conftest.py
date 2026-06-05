@@ -60,7 +60,7 @@ def mock_thread_manager():
 def mock_agency_instance(mock_thread_manager):
     agency = MagicMock()
     agency.agents = {}
-    agency.user_context = {}
+    agency._initial_user_context = {}
     agency.thread_manager = mock_thread_manager
     return agency
 

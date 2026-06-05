@@ -9,12 +9,13 @@ import asyncio
 from typing import Literal
 
 import pytest
-from agents import RunResult
+from agents import ModelSettings, RunResult
 from agents.items import ToolCallOutputItem
 from pydantic import Field
 
 from agency_swarm import Agency, Agent
 from agency_swarm.tools import BaseTool
+from tests.deterministic_model import DeterministicModel
 
 
 class SharedStateTool(BaseTool):
@@ -59,20 +60,26 @@ def shared_agent():
         name="SharedAgent",
         instructions="You are a shared agent that can set and get values using the SharedStateTool.",
         tools=[SharedStateTool],
+        model=DeterministicModel(),
+        model_settings=ModelSettings(tool_choice="required"),
+        tool_use_behavior="stop_on_first_tool",
     )
 
 
 @pytest.fixture
 def agency1(shared_agent):
     """Create the first agency."""
-    assistant1 = Agent(name="Assistant1", instructions="You are Assistant1 in Agency1")
+    assistant1 = Agent(
+        name="Assistant1",
+        instructions="You are Assistant1 in Agency1",
+        model=DeterministicModel(),
+    )
 
     agency = Agency(
         shared_agent,
         assistant1,
         communication_flows=[shared_agent > assistant1],
         name="Agency1",
-        user_context={"agency_name": "Agency1", "test_data": "agency1_data"},
     )
     return agency
 
@@ -80,16 +87,31 @@ def agency1(shared_agent):
 @pytest.fixture
 def agency2(shared_agent):
     """Create the second agency using the same shared agent."""
-    assistant2 = Agent(name="Assistant2", instructions="You are Assistant2 in Agency2")
+    assistant2 = Agent(
+        name="Assistant2",
+        instructions="You are Assistant2 in Agency2",
+        model=DeterministicModel(),
+    )
 
     agency = Agency(
         shared_agent,
         assistant2,
         communication_flows=[shared_agent > assistant2],
         name="Agency2",
-        user_context={"agency_name": "Agency2", "test_data": "agency2_data"},
     )
     return agency
+
+
+@pytest.fixture
+def agency1_context():
+    """Create caller-owned context for the first agency."""
+    return {"agency_name": "Agency1", "test_data": "agency1_data"}
+
+
+@pytest.fixture
+def agency2_context():
+    """Create caller-owned context for the second agency."""
+    return {"agency_name": "Agency2", "test_data": "agency2_data"}
 
 
 class TestMultiAgencySupport:
@@ -141,24 +163,35 @@ class TestMultiAgencySupport:
         assert messages1 != messages2
 
     @pytest.mark.asyncio
-    async def test_context_isolation_between_agencies(self, shared_agent, agency1, agency2):
+    async def test_context_isolation_between_agencies(
+        self, shared_agent, agency1, agency2, agency1_context, agency2_context
+    ):
         """Test that MasterContext is isolated between agencies."""
-        # Set values in agency1
-        await agency1.get_response("Use SharedStateTool to set test_value to 'agency1_secret'")
+        response_set_1 = await agency1.get_response(
+            "Use SharedStateTool to set test_value to 'agency1_secret'",
+            context_override=agency1_context,
+        )
+        agency1_context = response_set_1.context_wrapper.context.user_context
 
-        # Get value in agency2 - should not see agency1's value
-        response2 = await agency2.get_response("Use SharedStateTool to get the current test_value")
+        response2 = await agency2.get_response(
+            "Use SharedStateTool to get the current test_value",
+            context_override=agency2_context,
+        )
 
-        # The value should be isolated - agency2 shouldn't see agency1's value
         _assert_tool_output_excludes(response2, "agency1_secret")
 
-        # Set different value in agency2
-        await agency2.get_response("Use SharedStateTool to set test_value to 'agency2_secret'")
+        response_set_2 = await agency2.get_response(
+            "Use SharedStateTool to set test_value to 'agency2_secret'",
+            context_override=response2.context_wrapper.context.user_context,
+        )
 
-        # Verify agency1 still has its own value
-        response1 = await agency1.get_response("Use SharedStateTool to get the current test_value")
+        response1 = await agency1.get_response(
+            "Use SharedStateTool to get the current test_value",
+            context_override=agency1_context,
+        )
         _assert_tool_output_contains(response1, "agency1_secret")
         _assert_tool_output_excludes(response1, "agency2_secret")
+        assert response_set_2.context_wrapper.context.user_context["test_value"] == "agency2_secret"
 
     @pytest.mark.asyncio
     async def test_subagent_registration_isolation(self, shared_agent, agency1, agency2):
@@ -178,65 +211,69 @@ class TestMultiAgencySupport:
         assert "Assistant2" not in subagents1
 
     @pytest.mark.asyncio
-    async def test_user_context_isolation(self, shared_agent, agency1, agency2):
-        """Test that user context is isolated between agencies."""
-        # Verify each agency has its own user context
-        assert agency1.user_context["agency_name"] == "Agency1"
-        assert agency1.user_context["test_data"] == "agency1_data"
-
-        assert agency2.user_context["agency_name"] == "Agency2"
-        assert agency2.user_context["test_data"] == "agency2_data"
-
-        # User contexts should be different
-        assert agency1.user_context != agency2.user_context
+    async def test_user_context_isolation(self, shared_agent, agency1, agency2, agency1_context, agency2_context):
+        """Test that caller-owned user context is isolated between agencies."""
+        assert agency1_context["agency_name"] == "Agency1"
+        assert agency1_context["test_data"] == "agency1_data"
+        assert agency2_context["agency_name"] == "Agency2"
+        assert agency2_context["test_data"] == "agency2_data"
+        assert agency1_context != agency2_context
 
     @pytest.mark.asyncio
-    async def test_concurrent_agency_operations(self, shared_agent, agency1, agency2):
+    async def test_concurrent_agency_operations(self, shared_agent, agency1, agency2, agency1_context, agency2_context):
         """Test concurrent operations on the same agent from different agencies (now safe with stateless design)."""
-        # Run concurrent operations - this should be safe with stateless context passing
         import asyncio
 
-        task1 = asyncio.create_task(agency1.get_response("Use SharedStateTool to set test_value to 'concurrent1'"))
-        task2 = asyncio.create_task(agency2.get_response("Use SharedStateTool to set test_value to 'concurrent2'"))
+        task1 = asyncio.create_task(
+            agency1.get_response(
+                "Use SharedStateTool to set test_value to 'concurrent1'", context_override=agency1_context
+            )
+        )
+        task2 = asyncio.create_task(
+            agency2.get_response(
+                "Use SharedStateTool to set test_value to 'concurrent2'", context_override=agency2_context
+            )
+        )
 
-        # Wait for both to complete
         response1, response2 = await asyncio.gather(task1, task2)
 
-        # Both should complete successfully with no race conditions
         assert response1.final_output is not None
         assert response2.final_output is not None
-
-        # Each context should have its own value without relying on live-model phrasing.
-        assert agency1.user_context["test_value"] == "concurrent1"
-        assert agency2.user_context["test_value"] == "concurrent2"
+        assert response1.context_wrapper.context.user_context["test_value"] == "concurrent1"
+        assert response2.context_wrapper.context.user_context["test_value"] == "concurrent2"
 
     @pytest.mark.asyncio
-    async def test_streaming_context_isolation(self, shared_agent, agency1, agency2):
+    async def test_streaming_context_isolation(self, shared_agent, agency1, agency2, agency1_context, agency2_context):
         """Test that streaming responses maintain context isolation."""
-        # Test streaming from agency1
         events1 = []
-        async for event in agency1.get_response_stream("Use SharedStateTool to set test_value to 'stream1'"):
+        stream1 = agency1.get_response_stream(
+            "Use SharedStateTool to set test_value to 'stream1'",
+            context_override=agency1_context,
+        )
+        async for event in stream1:
             events1.append(event)
 
-        # Test streaming from agency2
         events2 = []
-        async for event in agency2.get_response_stream("Use SharedStateTool to set test_value to 'stream2'"):
+        stream2 = agency2.get_response_stream(
+            "Use SharedStateTool to set test_value to 'stream2'",
+            context_override=agency2_context,
+        )
+        async for event in stream2:
             events2.append(event)
 
-        # Both streams should complete
         assert len(events1) > 0
         assert len(events2) > 0
+        assert stream1.final_result is not None
+        assert stream2.final_result is not None
 
-        # Verify context isolation after streaming
-        response1 = await agency1.get_response("Use SharedStateTool to get the current test_value")
-        response2 = await agency2.get_response("Use SharedStateTool to get the current test_value")
+        stream_context_1 = stream1.final_result.context_wrapper.context.user_context
+        stream_context_2 = stream2.final_result.context_wrapper.context.user_context
 
-        # Should have different values
-        outputs1 = _tool_outputs(response1)
-        outputs2 = _tool_outputs(response2)
-        assert any("stream1" in output for output in outputs1), f"Expected stream1 in tool outputs: {outputs1}"
-        assert any("stream2" in output for output in outputs2), f"Expected stream2 in tool outputs: {outputs2}"
-        assert outputs1 != outputs2
+        assert stream_context_1["agency_name"] == "Agency1"
+        assert stream_context_2["agency_name"] == "Agency2"
+        assert stream_context_1["test_data"] == "agency1_data"
+        assert stream_context_2["test_data"] == "agency2_data"
+        assert stream_context_1 != stream_context_2
 
 
 class TestStatelessContextPassing:

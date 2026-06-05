@@ -25,7 +25,6 @@ class Agency:
         send_message_tool_class: type | None = None,
         load_threads_callback: ThreadLoadCallback | None = None,
         save_threads_callback: ThreadSaveCallback | None = None,
-        user_context: dict[str, Any] | None = None,
     ):
         """
         Initialize an Agency instance.
@@ -42,7 +41,6 @@ class Agency:
             send_message_tool_class: Fallback SendMessage tool class when a communication flow does not define its own
             load_threads_callback: Callable used to load persisted conversation threads
             save_threads_callback: Callable used to save conversation threads
-            user_context: Initial shared context accessible to all agents
         """
 ```
 
@@ -65,7 +63,6 @@ class Agency:
 - **`shared_tools_folder`** (str | None): Path to folder containing shared tool files
 - **`shared_files_folder`** (str | None): Path to folder of files shared via a common vector store
 - **`shared_mcp_servers`** (list[Any] | None): MCP server instances attached to all agents
-- **`user_context`** (dict[str, Any]): Shared user-defined context accessible within MasterContext
 - **`send_message_tool_class`** (type | None): Fallback SendMessage tool when no flow-specific tool is set
 
 ### Key Methods
@@ -91,7 +88,7 @@ async def get_response(
     Parameters:
         message: The input message for the agent
         recipient_agent: Target agent instance or name (defaults to first entry point)
-        context_override: Additional context to pass to the agent run
+        context_override: Run-scoped context passed into MasterContext.user_context
         hooks_override: Specific hooks to use for this run, overriding agency defaults
         run_config: Configuration for the agent run
         file_ids: Additional file IDs for the agent run
@@ -123,7 +120,7 @@ def get_response_sync(
     Parameters:
         message: The input message for the agent
         recipient_agent: Target agent instance or name (defaults to first entry point)
-        context_override: Additional context to pass to the agent run
+        context_override: Run-scoped context passed into MasterContext.user_context
         hooks_override: Specific hooks to use for this run, overriding agency defaults
         run_config: Configuration for the agent run
         file_ids: Additional file IDs for the agent run
@@ -155,7 +152,7 @@ def get_response_stream(
     Parameters:
         message: The input message for the agent
         recipient_agent: Target agent instance or name (defaults to first entry point)
-        context_override: Additional context for the run
+        context_override: Run-scoped context passed into MasterContext.user_context
         hooks_override: Specific hooks for this run
         run_config_override: Specific run configuration for this run
         file_ids: Additional file IDs for the agent run
@@ -344,7 +341,7 @@ async def get_response(
     Parameters:
         message: Input message as string or structured input items list
         sender_name: Name of sending agent (None for user interactions)
-        context_override: Optional context data to override default MasterContext values
+        context_override: Run-scoped context passed into MasterContext.user_context
         hooks_override: Optional hooks to override default agent hooks
         run_config_override: Optional run configuration settings
         file_ids: List of OpenAI file IDs to attach to the message
@@ -376,7 +373,7 @@ def get_response_stream(
     Parameters:
         message: Input message or list of message items
         sender_name: Name of sending agent (None for user interactions)
-        context_override: Optional context data to override default values
+        context_override: Run-scoped context passed into MasterContext.user_context
         hooks_override: Optional hooks to override default agent hooks
         run_config_override: Optional run configuration
         file_ids: List of OpenAI file IDs to attach to the message

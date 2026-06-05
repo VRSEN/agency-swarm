@@ -156,7 +156,8 @@ async def get_response(
         message (str | list[dict[str, Any]]): The input message for the agent.
         recipient_agent (str | Agent | None, optional): The target agent instance or its name.
                                                        If None, defaults to the first entry point agent.
-        context_override (dict[str, Any] | None, optional): Additional context to pass to the agent run.
+        context_override (dict[str, Any] | None, optional): Run-scoped context passed into
+            `MasterContext.user_context`.
         hooks_override (RunHooks | None, optional): Specific hooks to use for this run, overriding
                                                    agency-level persistence hooks.
         run_config (RunConfig | None, optional): Configuration for the agent run.
@@ -291,7 +292,8 @@ def get_response_stream(
         message (str | list[dict[str, Any]]): The input message for the agent.
         recipient_agent (str | Agent | None, optional): The target agent instance or its name.
                                                        If None, defaults to the first entry point agent.
-        context_override (dict[str, Any] | None, optional): Additional context for the run.
+        context_override (dict[str, Any] | None, optional): Run-scoped context passed into
+            `MasterContext.user_context`.
         hooks_override (RunHooks | None, optional): Specific hooks for this run.
         run_config_override (RunConfig | None, optional): Specific run configuration for this run.
         file_ids (list[str] | None, optional): Additional file IDs for the agent run.

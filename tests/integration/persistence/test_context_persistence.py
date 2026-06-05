@@ -1,104 +1,178 @@
 """
 Integration test for context persistence across agent calls.
 
-This test verifies that modifications to user_context are preserved
-between different agent invocations within the same agency.
+This test verifies that modifications to user_context can be carried
+between agent invocations while preserving deprecated Agency.user_context
+sync-back compatibility.
 """
 
 import pytest
-from pydantic import Field
+from agents import ModelSettings, RunContextWrapper, function_tool
 
-from agency_swarm import Agency, Agent
-from agency_swarm.tools import BaseTool
+from agency_swarm import Agency, Agent, MasterContext
+from tests.deterministic_model import DeterministicModel
 
 
-class StoreValueTool(BaseTool):
+@function_tool
+async def store_data(ctx: RunContextWrapper[MasterContext], key: str, value: str) -> str:
     """Store a value in the shared context."""
-
-    key: str = Field(..., description="Key to store")
-    value: str = Field(..., description="Value to store")
-
-    def run(self):
-        if self.context:
-            self.context.set(self.key, self.value)
-            return f"Stored {self.key}={self.value}"
-        return "No context available"
+    ctx.context.set(key, value)
+    return f"Stored {key}={value}"
 
 
-class ReadValueTool(BaseTool):
+@function_tool
+async def get_data(ctx: RunContextWrapper[MasterContext], key: str) -> str:
     """Read a value from the shared context."""
-
-    key: str = Field(..., description="Key to read")
-
-    def run(self):
-        if self.context:
-            value = self.context.get(self.key, "not_found")
-            return f"Value for {self.key}: {value}"
-        return "No context available"
+    value = ctx.context.get(key, "not_found")
+    return f"Value for {key}: {value}"
 
 
 @pytest.mark.asyncio
-async def test_context_persistence_between_calls():
-    """Test that context changes persist between separate agent calls."""
-
-    # Create agent with both tools
+async def test_caller_owned_context_can_be_carried_between_calls():
+    """Context changes persist when the caller passes the returned run context forward."""
     agent = Agent(
         name="ContextAgent",
         instructions="You store and retrieve data using the provided tools.",
-        tools=[StoreValueTool, ReadValueTool],
-        model="gpt-5.4-mini",
+        tools=[store_data, get_data],
+        model=DeterministicModel(),
+        model_settings=ModelSettings(tool_choice="required"),
+        tool_use_behavior="stop_on_first_tool",
+    )
+    agency = Agency(agent)
+
+    session_context = {"initial": "value"}
+    response1 = await agency.get_response(
+        "Store stored_key with value test_data",
+        context_override=session_context,
     )
 
-    # Create agency with initial context
-    agency = Agency(
-        agent,
-        user_context={"initial": "value"},
-    )
-
-    # First call: Store a value
-    response1 = await agency.get_response("Store the value 'test_data' with key 'stored_key' using StoreValueTool")
-
-    # Verify the tool was called
     tool_outputs = [item.output for item in response1.new_items if hasattr(item, "output")]
     assert any("Stored stored_key=test_data" in str(output) for output in tool_outputs)
 
-    # Second call: Read the value back
-    response2 = await agency.get_response("Read the value for key 'stored_key' using ReadValueTool")
+    next_context = response1.context_wrapper.context.user_context
+    response2 = await agency.get_response(
+        "Read the value for stored_key",
+        context_override=next_context,
+    )
 
-    # Verify the value was persisted
     tool_outputs2 = [item.output for item in response2.new_items if hasattr(item, "output")]
     assert any("Value for stored_key: test_data" in str(output) for output in tool_outputs2)
+    assert response2.context_wrapper.context.user_context["initial"] == "value"
 
-    # Verify agency context was updated
-    assert agency.user_context.get("stored_key") == "test_data"
-    assert agency.user_context.get("initial") == "value"  # Original value still there
+    with pytest.warns(DeprecationWarning, match=r"Agency\.user_context"):
+        assert agency.user_context == {"stored_key": "test_data"}
 
 
 @pytest.mark.asyncio
-async def test_context_override_does_not_affect_agency():
-    """Test that context_override doesn't modify the agency's user_context."""
-
+async def test_deprecated_agency_user_context_syncs_new_override_run_keys():
+    """Deprecated agency user_context preserves legacy sync-back for override runs."""
     agent = Agent(
         name="TestAgent",
-        instructions="You read data using ReadValueTool.",
-        tools=[ReadValueTool],
-        model="gpt-5.4-mini",
+        instructions="You store and retrieve data using the provided tools.",
+        tools=[store_data, get_data],
+        model=DeterministicModel(),
+        model_settings=ModelSettings(tool_choice="required"),
+        tool_use_behavior="stop_on_first_tool",
     )
 
-    agency = Agency(
-        agent,
-        user_context={"agency_key": "agency_value"},
-    )
+    with pytest.warns(DeprecationWarning, match=r"Agency\(user_context"):
+        agency = Agency(agent, user_context={"agency_key": "agency_value"})
 
-    # Call with context override
     response = await agency.get_response(
-        "Read the value for key 'override_key' using ReadValueTool", context_override={"override_key": "override_value"}
+        "Store stored_key with value test_data",
+        context_override={"override_key": "override_value"},
     )
 
-    # Verify the override was used in the call
     tool_outputs = [item.output for item in response.new_items if hasattr(item, "output")]
-    assert any("Value for override_key: override_value" in str(output) for output in tool_outputs)
+    assert any("Stored stored_key=test_data" in str(output) for output in tool_outputs)
 
-    # Verify agency context was NOT modified
-    assert "override_key" not in agency.user_context
-    assert agency.user_context == {"agency_key": "agency_value"}
+    assert response.context_wrapper.context.user_context == {
+        "agency_key": "agency_value",
+        "override_key": "override_value",
+        "stored_key": "test_data",
+    }
+    with pytest.warns(DeprecationWarning, match=r"Agency\.user_context"):
+        assert agency.user_context == {
+            "agency_key": "agency_value",
+            "stored_key": "test_data",
+        }
+
+
+@pytest.mark.asyncio
+async def test_deprecated_agency_user_context_persists_without_override():
+    """Deprecated agency user_context is still the mutable run context without an override."""
+    agent = Agent(
+        name="TestAgent",
+        instructions="You store and retrieve data using the provided tools.",
+        tools=[store_data, get_data],
+        model=DeterministicModel(),
+        model_settings=ModelSettings(tool_choice="required"),
+        tool_use_behavior="stop_on_first_tool",
+    )
+
+    with pytest.warns(DeprecationWarning, match=r"Agency\(user_context"):
+        agency = Agency(agent, user_context={"agency_key": "agency_value"})
+
+    response = await agency.get_response("Store stored_key with value test_data")
+
+    tool_outputs = [item.output for item in response.new_items if hasattr(item, "output")]
+    assert any("Stored stored_key=test_data" in str(output) for output in tool_outputs)
+    with pytest.warns(DeprecationWarning, match=r"Agency\.user_context"):
+        assert agency.user_context == {
+            "agency_key": "agency_value",
+            "stored_key": "test_data",
+        }
+
+
+@pytest.mark.asyncio
+async def test_deprecated_agency_user_context_preserves_constructor_dict_reference():
+    """Deprecated agency user_context keeps the caller-provided dict identity."""
+    agent = Agent(
+        name="TestAgent",
+        instructions="You store and retrieve data using the provided tools.",
+        tools=[store_data, get_data],
+        model=DeterministicModel(),
+        model_settings=ModelSettings(tool_choice="required"),
+        tool_use_behavior="stop_on_first_tool",
+    )
+    user_context = {"agency_key": "agency_value"}
+
+    with pytest.warns(DeprecationWarning, match=r"Agency\(user_context"):
+        agency = Agency(agent, user_context=user_context)
+
+    with pytest.warns(DeprecationWarning, match=r"Agency\.user_context"):
+        assert agency.user_context is user_context
+
+    await agency.get_response("Store stored_key with value test_data")
+
+    assert user_context == {
+        "agency_key": "agency_value",
+        "stored_key": "test_data",
+    }
+
+
+@pytest.mark.asyncio
+async def test_deprecated_agency_user_context_setter_preserves_dict_reference():
+    """Deprecated agency user_context assignment keeps the assigned dict identity."""
+    agent = Agent(
+        name="TestAgent",
+        instructions="You store and retrieve data using the provided tools.",
+        tools=[store_data, get_data],
+        model=DeterministicModel(),
+        model_settings=ModelSettings(tool_choice="required"),
+        tool_use_behavior="stop_on_first_tool",
+    )
+    agency = Agency(agent)
+    user_context = {"agency_key": "agency_value"}
+
+    with pytest.warns(DeprecationWarning, match=r"Agency\.user_context"):
+        agency.user_context = user_context
+    with pytest.warns(DeprecationWarning, match=r"Agency\.user_context"):
+        assert agency.user_context is user_context
+
+    await agency.get_response("Store stored_key with value test_data")
+
+    assert user_context == {
+        "agency_key": "agency_value",
+        "stored_key": "test_data",
+    }

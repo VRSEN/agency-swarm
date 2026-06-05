@@ -105,7 +105,6 @@ analyst_agent = Agent(
 agency = Agency(
     data_agent,
     communication_flows=[data_agent > analyst_agent],
-    user_context={"session_id": "demo_session", "system": "agency_context_demo"},
 )
 
 # --- Demo --- #
@@ -113,24 +112,35 @@ agency = Agency(
 
 async def run_demo():
     """Demonstrate agency context sharing between agents."""
+    session_context = {"session_id": "demo_session", "system": "agency_context_demo"}
+
     print("Agency Context Demo")
     print("=" * 40)
 
     # Step 1: Store customer data
     print("\nStep 1: Storing customer data...")
-    response1 = await agency.get_response(message="Please store customer data: ID 'CUST123', name 'Alice Johnson'")
+    response1 = await agency.get_response(
+        message="Please store customer data: ID 'CUST123', name 'Alice Johnson'",
+        context_override=session_context,
+    )
+    session_context = response1.context_wrapper.context.user_context
     print(f"✅ {response1.final_output}")
 
     # Step 2: Delegate analysis to another agent
     print("\nStep 2: Asking data agent to delegate analysis...")
     response2 = await agency.get_response(
-        message="Please ask the analyst agent to analyze the customer data I just stored."
+        message="Please ask the analyst agent to analyze the customer data I just stored.",
+        context_override=session_context,
     )
+    session_context = response2.context_wrapper.context.user_context
     print(f"✅ {response2.final_output}")
 
     # Step 3: Show final context state
     print("\nStep 3: Checking final agency context...")
-    response3 = await agency.get_response(message="Show me a summary of what's currently stored in the agency context.")
+    response3 = await agency.get_response(
+        message="Show me a summary of what's currently stored in the agency context.",
+        context_override=session_context,
+    )
     print(f"✅ {response3.final_output}")
 
     print("\nDemo complete!")

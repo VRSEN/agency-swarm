@@ -90,7 +90,7 @@ class Execution:
         Args:
             message: The input message as a string or structured input items list
             sender_name: Name of the sending agent (None for user interactions)
-            context_override: Optional context data to override default MasterContext values
+            context_override: Run-scoped context passed into MasterContext.user_context
             hooks_override: Optional hooks to override default agent hooks
             run_config_override: Optional run configuration settings
             file_ids: List of OpenAI file IDs to attach to the message
@@ -371,28 +371,17 @@ class Execution:
                 except Exception as e:
                     logger.debug(f"Failed to cache conversation starter: {e}")
 
-            # Sync back context changes if we used a merged context due to override
-            if context_override and agency_context and agency_context.agency_instance is not None:
-                from agency_swarm.agency.core import Agency
-
-                agency_instance = agency_context.agency_instance
-                if isinstance(agency_instance, Agency):
-                    base_user_context = agency_instance.user_context
-                else:
-                    base_user_context = None
-                # Sync back any new keys that weren't part of the original override
-                if base_user_context is not None:
-                    for key, value in master_context_for_run.user_context.items():
-                        if key not in context_override:  # Don't sync back override keys
-                            base_user_context[key] = value
-
             return run_result
 
         finally:
             # Cleanup execution state
             if "master_context_for_run" in locals() and master_context_for_run is not None:  # type: ignore[used-before-def]
                 cleanup_execution(
-                    self.agent, original_instructions, context_override, agency_context, master_context_for_run
+                    self.agent,
+                    original_instructions,
+                    context_override,
+                    agency_context,
+                    master_context_for_run,
                 )
             else:
                 # Ensure instructions are restored even if context was not prepared
@@ -423,7 +412,7 @@ class Execution:
         Args:
             message: The input message as a string or structured input items list
             sender_name: Name of the sending agent (None for user interactions)
-            context_override: Optional context data to override default MasterContext values
+            context_override: Run-scoped context passed into MasterContext.user_context
             hooks_override: Optional hooks to override default agent hooks
             run_config_override: Optional run configuration settings
             file_ids: List of OpenAI file IDs to attach to the message
@@ -633,7 +622,11 @@ class Execution:
             finally:
                 if master_context_for_run is not None:
                     cleanup_execution(
-                        self.agent, original_instructions, context_override, agency_context, master_context_for_run
+                        self.agent,
+                        original_instructions,
+                        context_override,
+                        agency_context,
+                        master_context_for_run,
                     )
                 else:
                     self.agent.instructions = original_instructions
