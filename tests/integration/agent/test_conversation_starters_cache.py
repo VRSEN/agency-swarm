@@ -20,6 +20,20 @@ async def _wait_for_cache_files(cache_dir: Path, expected: int) -> list[Path]:
     return list(cache_dir.glob("*.json"))
 
 
+async def _wait_for_cached_starter(agent: Agent, starter: str):
+    deadline = time.monotonic() + 30.0
+    while time.monotonic() < deadline:
+        cached = load_cached_starter(
+            agent.name,
+            starter,
+            expected_fingerprint=agent._conversation_starters_fingerprint,
+        )
+        if cached is not None:
+            return cached
+        await asyncio.sleep(0.1)
+    return None
+
+
 @pytest.mark.asyncio
 async def test_conversation_starter_cache_reuse_without_llm(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENCY_SWARM_CHATS_DIR", str(tmp_path))
@@ -266,11 +280,7 @@ async def test_conversation_starter_cache_populates_for_agency_tools(tmp_path, m
     cache_files = sorted(await _wait_for_cache_files(cache_dir, len(starters)))
     assert len(cache_files) == len(starters)
 
-    cached = load_cached_starter(
-        ceo.name,
-        starters[0],
-        expected_fingerprint=ceo._conversation_starters_fingerprint,
-    )
+    cached = await _wait_for_cached_starter(ceo, starters[0])
     assert cached is not None
     items = cached.items
     tool_call_index = next(
