@@ -161,7 +161,7 @@ class Agency:
             self.shared_instructions = ""
         if user_context is not None:
             warn_agency_user_context_init_deprecated()
-        self._initial_user_context = dict(user_context or {})
+        self._initial_user_context = user_context or {}
         self.send_message_tool_class = send_message_tool_class
         self.shared_tools = shared_tools
         self.shared_tools_folder = shared_tools_folder

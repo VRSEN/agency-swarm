@@ -212,7 +212,7 @@ def prepare_master_context(
         return MasterContext(
             thread_manager=thread_manager,
             agents={agent.name: agent},  # Only include self
-            user_context=dict(context_override or {}),
+            user_context=context_override or {},
             current_agent_name=agent.name,
             shared_instructions=shared_instructions_for_run,
             agent_runtime_state={agent.name: AgentRuntimeState(agent.tool_concurrency_manager)},

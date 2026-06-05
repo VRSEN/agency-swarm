@@ -122,3 +122,57 @@ async def test_deprecated_agency_user_context_persists_without_override():
             "agency_key": "agency_value",
             "stored_key": "test_data",
         }
+
+
+@pytest.mark.asyncio
+async def test_deprecated_agency_user_context_preserves_constructor_dict_reference():
+    """Deprecated agency user_context keeps the caller-provided dict identity."""
+    agent = Agent(
+        name="TestAgent",
+        instructions="You store and retrieve data using the provided tools.",
+        tools=[store_data, get_data],
+        model=DeterministicModel(),
+        model_settings=ModelSettings(tool_choice="required"),
+        tool_use_behavior="stop_on_first_tool",
+    )
+    user_context = {"agency_key": "agency_value"}
+
+    with pytest.warns(DeprecationWarning, match=r"Agency\(user_context"):
+        agency = Agency(agent, user_context=user_context)
+
+    with pytest.warns(DeprecationWarning, match=r"Agency\.user_context"):
+        assert agency.user_context is user_context
+
+    await agency.get_response("Store stored_key with value test_data")
+
+    assert user_context == {
+        "agency_key": "agency_value",
+        "stored_key": "test_data",
+    }
+
+
+@pytest.mark.asyncio
+async def test_deprecated_agency_user_context_setter_preserves_dict_reference():
+    """Deprecated agency user_context assignment keeps the assigned dict identity."""
+    agent = Agent(
+        name="TestAgent",
+        instructions="You store and retrieve data using the provided tools.",
+        tools=[store_data, get_data],
+        model=DeterministicModel(),
+        model_settings=ModelSettings(tool_choice="required"),
+        tool_use_behavior="stop_on_first_tool",
+    )
+    agency = Agency(agent)
+    user_context = {"agency_key": "agency_value"}
+
+    with pytest.warns(DeprecationWarning, match=r"Agency\.user_context"):
+        agency.user_context = user_context
+    with pytest.warns(DeprecationWarning, match=r"Agency\.user_context"):
+        assert agency.user_context is user_context
+
+    await agency.get_response("Store stored_key with value test_data")
+
+    assert user_context == {
+        "agency_key": "agency_value",
+        "stored_key": "test_data",
+    }

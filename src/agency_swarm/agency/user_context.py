@@ -34,7 +34,7 @@ def _set_user_context(self: _HasInitialUserContext, value: dict[str, Any]) -> No
         DeprecationWarning,
         stacklevel=2,
     )
-    self._initial_user_context = dict(value or {})
+    self._initial_user_context = value
 
 
 deprecated_user_context = property(_get_user_context, _set_user_context)
