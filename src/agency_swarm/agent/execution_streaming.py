@@ -18,6 +18,7 @@ from agents.items import MessageOutputItem, RunItem
 from agents.stream_events import RunItemStreamEvent, StreamEvent
 from openai.types.responses import ResponseOutputMessage, ResponseOutputText
 
+from agency_swarm.agent.codex_model_input import with_codex_model_input_role_rewrite
 from agency_swarm.context import MasterContext
 from agency_swarm.messages import MessageFilter, MessageFormatter
 from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
@@ -134,7 +135,7 @@ def perform_streamed_run(
         input=history_for_runner,
         context=master_context_for_run,
         hooks=hooks_override,
-        run_config=run_config_override or RunConfig(),
+        run_config=with_codex_model_input_role_rewrite(run_config_override or RunConfig()),
         max_turns=kwargs.get("max_turns", 1000000),
     )
 

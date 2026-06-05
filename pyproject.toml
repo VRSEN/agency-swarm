@@ -32,10 +32,11 @@ dependencies = [
     "watchfiles>=1.0.0,<2.0.0",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.35.0",
-    "ag-ui-protocol>=0.1.4",
+    "ag-ui-protocol>=0.1.18",
     "aiofiles>=23.2.1",
     "filetype>=1.2.0",
     "httpx>=0.28.0",
+    "griffe>=1.15.0,<2",
 ]
 classifiers = [
     "Typing :: Typed",
@@ -66,7 +67,7 @@ jupyter = ["ipykernel>=6.29.0,<7.0.0", "jupyter_client>=8.0.0,<9.0.0", "nest_asy
 fastapi = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.35.0",
-    "ag-ui-protocol>=0.1.4",
+    "ag-ui-protocol>=0.1.18",
     "aiofiles>=23.2.1",
     "filetype>=1.2.0",
     "httpx>=0.28.0",
@@ -86,7 +87,7 @@ dev = [
     "langchain-community>=0.0.20",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.35.0",
-    "ag-ui-protocol>=0.1.4",
+    "ag-ui-protocol>=0.1.18",
     "aiofiles>=23.2.1",
     "filetype>=1.2.0",
     "httpx>=0.28.0",

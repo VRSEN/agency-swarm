@@ -43,8 +43,10 @@ class _StubAgency:
         self.agents = {}
         self.entry_points = []
         self._stream = stream
+        self.last_kwargs: dict[str, Any] | None = None
 
     def get_response_stream(self, **_kwargs: Any) -> StreamingRunResponse:
+        self.last_kwargs = dict(_kwargs)
         return self._stream
 
 
@@ -80,6 +82,128 @@ def _parse_sse_stream_events(chunks: list[str]) -> list[dict[str, Any]]:
             if isinstance(data, dict) and isinstance(data.get("type"), str):
                 events.append(data)
     return events
+
+
+def _parse_file_urls_context(content: str) -> dict[str, Any]:
+    return json.loads(content.split("Attached file sources (JSON):\n", 1)[1])
+
+
+@pytest.mark.asyncio
+async def test_stream_endpoint_excludes_file_url_context_from_chat_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Streaming chat names should use the user prompt, not synthetic file_urls metadata."""
+
+    async def _noop_attach(_agency: Any) -> None:
+        return None
+
+    async def _fake_upload_from_urls(_file_urls, allowed_local_dirs=None, openai_client=None):
+        del allowed_local_dirs, openai_client
+        return {"doc.txt": "file-123"}
+
+    async def _fake_generate_chat_name(messages, openai_client=None):
+        del openai_client
+        assert messages[0] == {"role": "user", "content": "hello"}
+        assert all(
+            "The user has provided file attachments in their message." not in str(message.get("content", ""))
+            for message in messages
+            if isinstance(message, dict)
+        )
+        return "stream title"
+
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.attach_persistent_mcp_servers",
+        _noop_attach,
+    )
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.upload_from_urls",
+        _fake_upload_from_urls,
+    )
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.generate_chat_name",
+        _fake_generate_chat_name,
+    )
+
+    async def _stream() -> AsyncGenerator[dict[str, Any]]:
+        if False:
+            yield {}
+
+    thread_manager = _StubThreadManager()
+    agency = _StubAgency(StreamingRunResponse(_stream()), thread_manager)
+
+    def get_response_stream(**kwargs: Any) -> StreamingRunResponse:
+        agency.last_kwargs = dict(kwargs)
+        thread_manager._messages.extend(cast(list[dict[str, Any]], kwargs["message"]))
+        thread_manager._messages.append({"role": "assistant", "content": "ok", "type": "message"})
+        return agency._stream
+
+    agency.get_response_stream = get_response_stream  # type: ignore[method-assign]
+
+    def agency_factory(**_kwargs: Any) -> _StubAgency:
+        return agency
+
+    handler = make_stream_endpoint(BaseRequest, agency_factory, lambda: None, ActiveRunRegistry())
+    response = await handler(
+        http_request=_StubRequest(),
+        request=BaseRequest(
+            message="hello",
+            file_urls={"doc.txt": "https://example.com/doc.txt"},
+            generate_chat_name=True,
+        ),
+        token=None,
+    )
+    chunks = [chunk async for chunk in response.body_iterator]
+
+    payload = _parse_sse_messages_payload(chunks)
+    assert payload["chat_name"] == "stream title"
+
+
+@pytest.mark.asyncio
+async def test_stream_endpoint_prepends_file_url_source_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Streaming FastAPI requests should prepend persisted file_urls source context."""
+
+    async def _noop_attach(_agency: Any) -> None:
+        return None
+
+    async def _fake_upload_from_urls(_file_urls, allowed_local_dirs=None, openai_client=None):
+        del allowed_local_dirs, openai_client
+        return {"doc.txt": "file-123"}
+
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.attach_persistent_mcp_servers",
+        _noop_attach,
+    )
+    monkeypatch.setattr(
+        "agency_swarm.integrations.fastapi_utils.endpoint_handlers.upload_from_urls",
+        _fake_upload_from_urls,
+    )
+
+    async def _stream() -> AsyncGenerator[dict[str, Any]]:
+        if False:
+            yield {}
+
+    thread_manager = _StubThreadManager()
+    agency = _StubAgency(StreamingRunResponse(_stream()), thread_manager)
+
+    def agency_factory(**_kwargs: Any) -> _StubAgency:
+        return agency
+
+    handler = make_stream_endpoint(BaseRequest, agency_factory, lambda: None, ActiveRunRegistry())
+    response = await handler(
+        http_request=_StubRequest(),
+        request=BaseRequest(message="hello", file_urls={"doc.txt": "https://example.com/doc.txt"}),
+        token=None,
+    )
+    _ = [chunk async for chunk in response.body_iterator]
+
+    assert agency.last_kwargs is not None
+    assert agency.last_kwargs["file_ids"] == ["file-123"]
+    assert isinstance(agency.last_kwargs["message"], list)
+    assert agency.last_kwargs["message"][0]["role"] == "system"
+    assert _parse_file_urls_context(str(agency.last_kwargs["message"][0]["content"])) == {
+        "doc.txt": {"url": "https://example.com/doc.txt", "oai_file_id": "file-123"}
+    }
+    assert agency.last_kwargs["message"][1] == {"role": "user", "content": "hello"}
 
 
 @pytest.mark.asyncio

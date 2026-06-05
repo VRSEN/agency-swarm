@@ -22,6 +22,7 @@ from openai.types.responses import (
     ResponseFunctionWebSearch,
 )
 
+from agency_swarm.agent.codex_model_input import with_codex_model_input_role_rewrite
 from agency_swarm.agent.context_types import AgentRuntimeState
 from agency_swarm.context import MasterContext
 from agency_swarm.messages import MessageFormatter
@@ -73,7 +74,7 @@ async def perform_single_run(
             input=history_for_runner,
             context=master_context_for_run,
             hooks=hooks_override,
-            run_config=run_config_override or RunConfig(),
+            run_config=with_codex_model_input_role_rewrite(run_config_override or RunConfig()),
             max_turns=kwargs.get("max_turns", 1000000),
         )
     return result

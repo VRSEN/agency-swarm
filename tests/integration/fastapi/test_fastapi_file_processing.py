@@ -8,6 +8,7 @@ containing the expected file content.
 
 import asyncio
 import json
+import re
 import socket
 import subprocess
 import sys
@@ -270,6 +271,35 @@ class TestFastAPIFileProcessing:
         response_text = response_data["response"].lower()
         assert "local secret phrase" in response_text
 
+        new_messages = response_data["new_messages"]
+        file_path_json_fragment = json.dumps(str(file_path))[1:-1]
+        source_message = next(
+            msg
+            for msg in new_messages
+            if isinstance(msg, dict)
+            and msg.get("role") == "system"
+            and file_path_json_fragment in str(msg.get("content", ""))
+        )
+        assert "The user has provided file attachments in their message." in str(source_message["content"])
+        assert "upload provenance only" in str(source_message["content"])
+
+        follow_up_payload = {
+            "message": "What exact attachment source string was used for local-file.txt? Reply with only that string.",
+            "chat_history": new_messages,
+        }
+
+        async with self.get_http_client(timeout_seconds=120) as client:
+            follow_up_response = await client.post(url, json=follow_up_payload, headers=headers)
+
+        assert follow_up_response.status_code == 200
+        follow_up_data = follow_up_response.json()
+        normalized_follow_up_response = re.sub(
+            r"(?<=[/\\\\])\s+",
+            "",
+            str(follow_up_data["response"]).strip("` \n"),
+        )
+        assert str(file_path) in normalized_follow_up_response
+
     @pytest.mark.asyncio
     async def test_local_allowlist_created_after_start(self, tmp_path, agency_factory):
         """Allowlist entries should activate when created after server start."""
@@ -331,10 +361,11 @@ class TestFastAPIFileProcessing:
     async def test_code_interpreter_attachment(self, file_server_base_url: str, fastapi_base_url: str):
         """Test processing an HTML file via file_urls."""
         url = f"{fastapi_base_url}/test_agency/get_response"
+        expected_marker = "html_body_2718"
         payload = {
             "message": (
-                "Search the HTML document with the code interpreter. "
-                "Return exactly one complete uppercase secret phrase from the document, preserving word order."
+                "Search only the HTML document body text with the code interpreter. "
+                "Return exactly the marker token after BODY_TOKEN."
             ),
             "file_urls": {"webpage.html": f"{file_server_base_url}/test-html.html"},
         }
@@ -347,8 +378,7 @@ class TestFastAPIFileProcessing:
         response_data = response.json()
 
         response_text = response_data["response"].lower()
-        # Should find both secret phrases in HTML
-        assert "first html secret phrase" in response_text or "second html secret phrase" in response_text
+        assert expected_marker in response_text, f"Expected HTML marker not found. Response: {response_text}"
 
         file_ids = response_data["file_ids_map"]
         assert "webpage.html" in file_ids.keys()
