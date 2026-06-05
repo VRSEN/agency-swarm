@@ -1716,12 +1716,6 @@ def _litellm_model_name(agent: Agent) -> str:
     return _normalize_litellm_model_name(name).lower()
 
 
-def _is_codex_base_url(value: str | None) -> bool:
-    if not value:
-        return False
-    return value.rstrip("/") == "https://chatgpt.com/backend-api/codex"
-
-
 class _CodexAsyncStream:
     """Async iterator wrapper that patches missing output items in ResponseCompletedEvent.
 
