@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from openai import AsyncOpenAI
 
 from agency_swarm import Agency, Agent
 
@@ -56,6 +57,21 @@ class TestMetadataDetails:
         data = agent_node["data"]
         assert data["conversationStarters"] == ["I need help with billing"]
         assert data["quickReplies"] == ["hi", "hello"]
+
+    def test_get_metadata_uses_openrouter_model_alias(self):
+        from agency_swarm.utils.openrouter import build_openrouter_chat_model
+
+        model = build_openrouter_chat_model(
+            "openrouter/anthropic/claude-sonnet-4.5",
+            openai_client=AsyncOpenAI(api_key="sk-openrouter", base_url="https://openrouter.ai/api/v1"),
+        )
+        agent = Agent(name="OpenRouterAgent", instructions="Use OpenRouter", model=model)
+        agency = Agency(agent)
+
+        payload = agency.get_metadata()
+        agent_node = next(n for n in payload["nodes"] if n["id"] == "OpenRouterAgent")
+
+        assert agent_node["data"]["model"] == "openrouter/anthropic/claude-sonnet-4.5"
 
     def test_hosted_mcp_tools_unique_ids(self):
         """HostedMCPTool instances should produce unique tool nodes and server labels."""

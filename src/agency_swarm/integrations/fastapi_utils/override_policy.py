@@ -64,7 +64,9 @@ class RequestOverridePolicy:
             if base_client is None:
                 base_client = get_default_openai_client()
         else:
-            return get_default_openai_client()
+            if selected_agent is not None:
+                base_client = _get_cached_openai_client_from_agent(selected_agent)
+            return base_client or get_default_openai_client()
 
         if base_client is None:
             if self.config.api_key is None:
@@ -97,6 +99,11 @@ def _get_openai_client_from_agent(agent: Agent) -> AsyncOpenAI | None:
         if isinstance(maybe, AsyncOpenAI):
             return maybe
     return None
+
+
+def _get_cached_openai_client_from_agent(agent: Agent) -> AsyncOpenAI | None:
+    maybe = getattr(agent, "_openai_client", None)
+    return maybe if isinstance(maybe, AsyncOpenAI) else None
 
 
 def _get_upload_client_agent(agency: Agency, recipient_agent: str | None = None) -> Agent | None:
