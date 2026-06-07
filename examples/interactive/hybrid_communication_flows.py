@@ -20,7 +20,7 @@ The agency demonstrates a real-world software development workflow:
 
 ## Usage
 
-Run this example with: python examples/hybrid_communication_flows.py
+Run this example with: python examples/interactive/hybrid_communication_flows.py
 
 It will open the TUI for the agency, where you can interact with the agency.
 Ask ProjectManager to implement a new feature with code quality review and security audit.

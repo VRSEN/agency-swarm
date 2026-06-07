@@ -6,7 +6,8 @@ This directory contains runnable examples demonstrating key features of Agency S
 - **`multi_agent_workflow.py`** – Multi-agent collaboration with validation patterns
 - **`agency_context.py`** – Sharing data between agents using agency context
 - **`streaming.py`** – Real-time streaming responses
-- **`guardrails.py`** – Input and output guardrails
+- **`guardrails_input.py`** – Input guardrails
+- **`guardrails_output.py`** – Output guardrails
 - **`custom_persistence.py`** – Chat history persistence between sessions
 - **`tools.py`** – Tool patterns: BaseTool and @function_tool with validation
 
@@ -32,7 +33,7 @@ This directory contains runnable examples demonstrating key features of Agency S
 - **`connectors.py`** – Google Calendar integration using OpenAI hosted tools
 
 ## Model Providers
-- **`third_party_models.py`** – Using third-party models (Claude, Gemini, Grok) via LiteLLM
+- **`interactive/third_party_models.py`** – Using third-party models (Claude, Gemini, Grok) via LiteLLM
 
 ## Observability
 - **`observability.py`** – OpenAI, Langfuse and AgentOps tracing integration

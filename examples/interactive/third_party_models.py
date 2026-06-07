@@ -13,7 +13,7 @@ Pre-requisites:
 2. Install openai-agents optional litellm package by running `pip install 'openai-agents[litellm]'`
 3. Install litellm[proxy] separatelly by running `pip install 'litellm[proxy]'`
 
-Run the agency by running `python examples/third_party_models.py`
+Run the agency by running `python examples/interactive/third_party_models.py`
 This will open the TUI for a startup validation agency with 3 agents:
 1. strategy_agent - gpt agent coordinates and summarizes work of other agents.
 2. market_research_agent - gemini agent that performs market research and competitive analysis.
