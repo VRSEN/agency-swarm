@@ -22,6 +22,12 @@ class OtherCustomSendMessage(SendMessage):
     pass
 
 
+class UnsupportedCommunicationTool:
+    """Tool class outside the supported communication families."""
+
+    pass
+
+
 # --- Agency Integration Tests ---
 
 
@@ -115,6 +121,20 @@ def test_duplicate_communication_tool_class_is_rejected():
             communication_flows=[
                 (agent1, agent2, CustomSendMessage),
                 (agent1, agent2, OtherCustomSendMessage),
+            ],
+        )
+
+
+def test_unsupported_communication_tool_class_is_rejected():
+    """Test that communication flows only accept supported tool families."""
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
+
+    with pytest.raises(TypeError, match="Expected a SendMessage or Handoff subclass"):
+        Agency(
+            agent1,
+            communication_flows=[
+                (agent1, agent2, [UnsupportedCommunicationTool, CustomSendMessage]),
             ],
         )
 

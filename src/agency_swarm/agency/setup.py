@@ -24,6 +24,14 @@ logger = logging.getLogger(__name__)
 _warned_deprecated_send_message_handoff = False
 
 
+def _validate_communication_tool_class(tool_class: type) -> None:
+    if not issubclass(tool_class, SendMessage | Handoff):
+        raise TypeError(
+            f"Invalid communication tool class: {tool_class.__name__}. "
+            "Expected a SendMessage or Handoff subclass."
+        )
+
+
 def _add_tool_class_for_pair(
     mapping: dict[tuple[str, str], list[type]],
     default_tool_pairs: set[tuple[str, str]],
@@ -32,6 +40,7 @@ def _add_tool_class_for_pair(
 ) -> None:
     if tool_class is None:
         return
+    _validate_communication_tool_class(tool_class)
     if pair_key in default_tool_pairs and issubclass(tool_class, SendMessage):
         raise ValueError(
             f"Duplicate communication tool class detected for {pair_key[0]} -> {pair_key[1]}: "
