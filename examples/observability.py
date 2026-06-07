@@ -12,7 +12,7 @@ AgentOps setup guide: https://docs.agentops.ai/v2/integrations/openai_agents_pyt
 
 Results can be found in the platform's respective dashboards.
 
-Run with: python examples/observability_demo.py
+Run with: python examples/observability.py
 """
 
 import asyncio
