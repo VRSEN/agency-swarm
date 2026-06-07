@@ -279,8 +279,8 @@ def configure_agents(agency: "Agency", defined_communication_flows: list[tuple[A
                 if not tool_classes:
                     tool_classes.append(agency.send_message_tool_class or SendMessage)
 
-                try:
-                    for effective_tool_class in tool_classes:
+                for effective_tool_class in tool_classes:
+                    try:
                         if isinstance(effective_tool_class, Handoff) or (
                             isinstance(effective_tool_class, type) and issubclass(effective_tool_class, Handoff)
                         ):
@@ -298,6 +298,7 @@ def configure_agents(agency: "Agency", defined_communication_flows: list[tuple[A
                                 _warned_deprecated_send_message_handoff = True
 
                             handoff_instance = effective_tool_class().create_handoff(recipient_agent=recipient_agent)
+                            handoff_instance._agency_swarm_tool_class = effective_tool_class
                             runtime_state.handoffs.append(handoff_instance)
                             logger.debug(f"Added Handoff for {agent_name} -> {recipient_name}")
                         else:
@@ -313,11 +314,11 @@ def configure_agents(agency: "Agency", defined_communication_flows: list[tuple[A
                                 runtime_state=runtime_state,
                             )
 
-                except Exception as e:
-                    logger.error(
-                        f"Error registering subagent '{recipient_name}' for sender '{agent_name}': {e}",
-                        exc_info=True,
-                    )
+                    except Exception as e:
+                        logger.error(
+                            f"Error registering subagent '{recipient_name}' for sender '{agent_name}': {e}",
+                            exc_info=True,
+                        )
         else:
             logger.debug(f"Agent '{agent_name}' has no explicitly defined outgoing communication paths.")
     logger.info("Agent configuration complete.")

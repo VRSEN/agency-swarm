@@ -44,8 +44,12 @@ Streaming helpers moved to execution_streaming.py.
 TRACE_REGEX = re.compile(r"^trace_[a-f0-9]{32}$")
 
 
-def _handoff_identity(handoff: Any) -> tuple[Any, Any]:
-    return (getattr(handoff, "agent_name", None), getattr(handoff, "tool_name", None))
+def _handoff_identity(handoff: Any) -> tuple[Any, Any, Any]:
+    return (
+        getattr(handoff, "agent_name", None),
+        getattr(handoff, "tool_name", None),
+        getattr(handoff, "_agency_swarm_tool_class", None),
+    )
 
 
 async def perform_single_run(

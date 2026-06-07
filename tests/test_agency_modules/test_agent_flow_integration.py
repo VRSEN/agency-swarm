@@ -40,6 +40,26 @@ class CustomHandoff(Handoff):
         return handoff
 
 
+class DefaultNamedCustomHandoff(Handoff):
+    """Handoff variant that keeps the default tool name."""
+
+    pass
+
+
+class OtherDefaultNamedCustomHandoff(Handoff):
+    """Second handoff variant that keeps the default tool name."""
+
+    pass
+
+
+class BrokenHandoff(Handoff):
+    """Handoff variant that fails while wiring."""
+
+    def create_handoff(self, recipient_agent: Agent) -> Any:
+        _ = recipient_agent
+        raise RuntimeError("broken handoff")
+
+
 # --- Agency Integration Tests ---
 
 
@@ -135,6 +155,47 @@ def test_runtime_handoff_variant_is_preserved_with_static_handoff() -> None:
         assert handoff_names == ["transfer_to_Agent2", "custom_transfer_to_Agent2"]
     finally:
         cleanup_execution(agent1, original_instructions, None, context, master_context)
+
+
+def test_same_name_handoff_variants_are_preserved_with_static_handoff() -> None:
+    """Test distinct handoff classes are preserved even when they share one tool name."""
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
+    agent1.handoffs.append(Handoff().create_handoff(recipient_agent=agent2))
+
+    agency = Agency(
+        agent1,
+        communication_flows=[
+            (agent1, agent2, [DefaultNamedCustomHandoff, OtherDefaultNamedCustomHandoff]),
+        ],
+    )
+
+    context = agency.get_agent_context("Agent1")
+    master_context = prepare_master_context(agent1, None, context)
+    original_instructions = setup_execution(agent1, None, context, None)
+
+    try:
+        handoff_names = [handoff.tool_name for handoff in agent1.handoffs]
+        assert handoff_names == ["transfer_to_Agent2", "transfer_to_Agent2", "transfer_to_Agent2"]
+    finally:
+        cleanup_execution(agent1, original_instructions, None, context, master_context)
+
+
+def test_later_communication_tool_is_wired_after_handoff_failure() -> None:
+    """Test one broken tool class does not prevent later configured tools from wiring."""
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
+
+    agency = Agency(
+        agent1,
+        communication_flows=[
+            (agent1, agent2, [BrokenHandoff, CustomHandoff]),
+        ],
+    )
+
+    runtime_state = agency.get_agent_runtime_state("Agent1")
+    handoff_names = [handoff.tool_name for handoff in runtime_state.handoffs]
+    assert handoff_names == ["custom_transfer_to_Agent2"]
 
 
 def test_duplicate_communication_tool_class_is_rejected():
