@@ -38,6 +38,13 @@ def _add_tool_class_for_pair(
             f"{tool_class.__name__}. Each SendMessage tool for a pair can only be defined once."
         )
     classes = mapping.setdefault(pair_key, [])
+    if issubclass(tool_class, SendMessage):
+        for existing_tool_class in classes:
+            if issubclass(existing_tool_class, SendMessage):
+                raise ValueError(
+                    f"Duplicate communication tool class detected for {pair_key[0]} -> {pair_key[1]}: "
+                    f"{tool_class.__name__}. Each SendMessage tool for a pair can only be defined once."
+                )
     if tool_class in classes:
         raise ValueError(
             f"Duplicate communication tool class detected for {pair_key[0]} -> {pair_key[1]}: "

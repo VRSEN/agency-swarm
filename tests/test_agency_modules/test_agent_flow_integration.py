@@ -16,6 +16,12 @@ class CustomSendMessage(SendMessage):
     pass
 
 
+class OtherCustomSendMessage(SendMessage):
+    """Second custom send message tool for duplicate-family testing."""
+
+    pass
+
+
 # --- Agency Integration Tests ---
 
 
@@ -90,7 +96,7 @@ def test_agent_pair_can_use_send_message_and_handoff():
 
 
 def test_duplicate_communication_tool_class_is_rejected():
-    """Test that duplicate tool classes for the same pair are rejected."""
+    """Test that multiple SendMessage tools for the same pair are rejected."""
     agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
     agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
 
@@ -100,6 +106,15 @@ def test_duplicate_communication_tool_class_is_rejected():
             communication_flows=[
                 (agent1, agent2, SendMessage),
                 (agent1, agent2, SendMessage),
+            ],
+        )
+
+    with pytest.raises(ValueError, match="Each SendMessage tool for a pair can only be defined once"):
+        Agency(
+            agent1,
+            communication_flows=[
+                (agent1, agent2, CustomSendMessage),
+                (agent1, agent2, OtherCustomSendMessage),
             ],
         )
 
