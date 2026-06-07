@@ -181,6 +181,30 @@ def test_same_name_handoff_variants_are_preserved_with_static_handoff() -> None:
         cleanup_execution(agent1, original_instructions, None, context, master_context)
 
 
+def test_same_base_handoff_is_deduplicated_with_static_handoff() -> None:
+    """Test the same base handoff is not duplicated when static and runtime sources overlap."""
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
+    agent1.handoffs.append(Handoff().create_handoff(recipient_agent=agent2))
+
+    agency = Agency(
+        agent1,
+        communication_flows=[
+            (agent1, agent2, Handoff),
+        ],
+    )
+
+    context = agency.get_agent_context("Agent1")
+    master_context = prepare_master_context(agent1, None, context)
+    original_instructions = setup_execution(agent1, None, context, None)
+
+    try:
+        handoff_names = [handoff.tool_name for handoff in agent1.handoffs]
+        assert handoff_names == ["transfer_to_Agent2"]
+    finally:
+        cleanup_execution(agent1, original_instructions, None, context, master_context)
+
+
 def test_later_communication_tool_is_wired_after_handoff_failure() -> None:
     """Test one broken tool class does not prevent later configured tools from wiring."""
     agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")

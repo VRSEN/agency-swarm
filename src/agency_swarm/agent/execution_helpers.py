@@ -26,6 +26,7 @@ from agency_swarm.agent.context_types import AgentRuntimeState
 from agency_swarm.context import MasterContext
 from agency_swarm.messages import MessageFormatter
 from agency_swarm.tools.mcp_manager import default_mcp_manager
+from agency_swarm.tools.send_message import Handoff
 
 from .execution_guardrails import append_guardrail_feedback, extract_guardrail_texts
 
@@ -48,7 +49,7 @@ def _handoff_identity(handoff: Any) -> tuple[Any, Any, Any]:
     return (
         getattr(handoff, "agent_name", None),
         getattr(handoff, "tool_name", None),
-        getattr(handoff, "_agency_swarm_tool_class", None),
+        getattr(handoff, "_agency_swarm_tool_class", Handoff),
     )
 
 
