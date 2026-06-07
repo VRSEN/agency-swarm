@@ -139,6 +139,15 @@ def test_unsupported_communication_tool_class_is_rejected():
         )
 
 
+def test_empty_communication_tool_class_list_is_rejected():
+    """Test that an explicit empty tool class list is not treated as a default flow."""
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
+
+    with pytest.raises(ValueError, match="tool class list cannot be empty"):
+        Agency(agent1, communication_flows=[(agent1, agent2, [])])
+
+
 def test_duplicate_flow_detection_with_chains():
     """Test that duplicate flows are detected with AgentFlow chains."""
     agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")

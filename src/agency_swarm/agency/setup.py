@@ -164,6 +164,8 @@ def parse_agent_flows(
             # The agency factory reconstructs flows from _communication_tool_classes,
             # which stores lists of types per pair. Accept both a single class and a list.
             tool_classes = raw_tool_class if isinstance(raw_tool_class, (list, tuple)) else [raw_tool_class]
+            if not tool_classes:
+                raise ValueError("Communication flow tool class list cannot be empty.")
             for tc in tool_classes:
                 if not isinstance(tc, type):
                     raise TypeError(f"Invalid tool class in communication flow: {tc}. Expected a class type.")
