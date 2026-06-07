@@ -4,9 +4,12 @@ Unit tests for AgentFlow integration with Agency class.
 Tests the parsing and handling of AgentFlow objects in communication_flows.
 """
 
+from typing import Any
+
 import pytest
 
 from agency_swarm import Agency, Agent
+from agency_swarm.agent.execution_helpers import cleanup_execution, prepare_master_context, setup_execution
 from agency_swarm.tools.send_message import Handoff, SendMessage, SendMessageHandoff
 
 
@@ -26,6 +29,15 @@ class UnsupportedCommunicationTool:
     """Tool class outside the supported communication families."""
 
     pass
+
+
+class CustomHandoff(Handoff):
+    """Handoff variant with a distinct tool name."""
+
+    def create_handoff(self, recipient_agent: Agent) -> Any:
+        handoff = super().create_handoff(recipient_agent)
+        handoff.tool_name = f"custom_transfer_to_{recipient_agent.name.replace(' ', '_')}"
+        return handoff
 
 
 # --- Agency Integration Tests ---
@@ -99,6 +111,30 @@ def test_agent_pair_can_use_send_message_and_handoff():
 
     handoff_names = [handoff.tool_name for handoff in runtime_state.handoffs]
     assert "transfer_to_Agent2" in handoff_names
+
+
+def test_runtime_handoff_variant_is_preserved_with_static_handoff() -> None:
+    """Test runtime handoff variants are not dropped when a static handoff targets the same agent."""
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
+    agent1.handoffs.append(Handoff().create_handoff(recipient_agent=agent2))
+
+    agency = Agency(
+        agent1,
+        communication_flows=[
+            (agent1, agent2, CustomHandoff),
+        ],
+    )
+
+    context = agency.get_agent_context("Agent1")
+    master_context = prepare_master_context(agent1, None, context)
+    original_instructions = setup_execution(agent1, None, context, None)
+
+    try:
+        handoff_names = [handoff.tool_name for handoff in agent1.handoffs]
+        assert handoff_names == ["transfer_to_Agent2", "custom_transfer_to_Agent2"]
+    finally:
+        cleanup_execution(agent1, original_instructions, None, context, master_context)
 
 
 def test_duplicate_communication_tool_class_is_rejected():
