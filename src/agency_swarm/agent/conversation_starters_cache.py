@@ -519,11 +519,15 @@ def _runtime_tool_signatures(runtime_state: AgentRuntimeState | None) -> list[di
 def _handoff_signature(handoff: SDKHandoff) -> dict[str, Any]:
     schema = handoff.input_json_schema
     serialized_schema = _sanitize_mapping(schema) if isinstance(schema, dict) else _serialize_value(schema)
-    return {
+    signature = {
         "tool_name": handoff.tool_name,
         "agent_name": handoff.agent_name,
         "input_json_schema": serialized_schema,
     }
+    tool_class = getattr(handoff, "_agency_swarm_tool_class", None)
+    if tool_class is not None:
+        signature["tool_class"] = _serialize_value(tool_class)
+    return signature
 
 
 def _handoff_signatures(agent: Agent, runtime_state: AgentRuntimeState | None) -> list[dict[str, Any]]:

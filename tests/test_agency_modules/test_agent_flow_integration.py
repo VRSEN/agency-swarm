@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from agency_swarm import Agency, Agent
+from agency_swarm.agent.context_types import AgentRuntimeState
 from agency_swarm.agent.execution_helpers import cleanup_execution, prepare_master_context, setup_execution
 from agency_swarm.tools.send_message import Handoff, SendMessage, SendMessageHandoff
 
@@ -131,6 +132,21 @@ def test_agent_pair_can_use_send_message_and_handoff():
 
     handoff_names = [handoff.tool_name for handoff in runtime_state.handoffs]
     assert "transfer_to_Agent2" in handoff_names
+
+
+def test_runtime_registration_keeps_multiple_send_message_tool_classes() -> None:
+    """Test runtime registration creates each requested SendMessage class for one recipient."""
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
+    runtime_state = AgentRuntimeState()
+
+    agent1.register_subagent(agent2, send_message_tool_class=CustomSendMessage, runtime_state=runtime_state)
+    agent1.register_subagent(agent2, send_message_tool_class=OtherCustomSendMessage, runtime_state=runtime_state)
+
+    assert runtime_state.subagents == {"agent2": agent2}
+    assert set(runtime_state.send_message_tools) == {"CustomSendMessage", "OtherCustomSendMessage"}
+    assert isinstance(runtime_state.send_message_tools["CustomSendMessage"], CustomSendMessage)
+    assert isinstance(runtime_state.send_message_tools["OtherCustomSendMessage"], OtherCustomSendMessage)
 
 
 def test_runtime_handoff_variant_is_preserved_with_static_handoff() -> None:
