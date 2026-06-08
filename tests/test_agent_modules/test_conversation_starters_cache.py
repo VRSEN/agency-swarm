@@ -420,6 +420,30 @@ def test_starter_cache_fingerprint_changes_for_guardrails_runtime_tools_and_hand
     assert handoff_before != handoff_after
 
 
+def test_starter_cache_fingerprint_preserves_same_name_handoff_classes() -> None:
+    class FirstDefaultNamedHandoff(Handoff):
+        pass
+
+    class SecondDefaultNamedHandoff(Handoff):
+        pass
+
+    sender = Agent(name="HandoffSender", instructions="You are helpful.", model="gpt-5.4-mini")
+    recipient = Agent(name="HandoffRecipient", instructions="You are helpful.", model="gpt-5.4-mini")
+    runtime_state = AgentRuntimeState()
+
+    runtime_state.handoffs.append(FirstDefaultNamedHandoff().create_handoff(recipient))
+    first_fingerprint = compute_starter_cache_fingerprint(sender, runtime_state=runtime_state)
+
+    runtime_state.handoffs.append(SecondDefaultNamedHandoff().create_handoff(recipient))
+    second_fingerprint = compute_starter_cache_fingerprint(sender, runtime_state=runtime_state)
+
+    runtime_state.handoffs.append(FirstDefaultNamedHandoff().create_handoff(recipient))
+    duplicate_fingerprint = compute_starter_cache_fingerprint(sender, runtime_state=runtime_state)
+
+    assert first_fingerprint != second_fingerprint
+    assert second_fingerprint == duplicate_fingerprint
+
+
 class _StructuredOutput(BaseModel):
     answer: str
 

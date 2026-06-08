@@ -76,14 +76,9 @@ def register_subagent(
     if runtime_state is not None:
         recipient_key = recipient_name.lower()
 
-        if recipient_key in runtime_state.subagents:
-            logger.warning(
-                f"Agent '{recipient_name}' is already registered as a subagent for '{agent.name}'. Skipping."
-            )
-            return
-
-        runtime_state.subagents[recipient_key] = recipient_agent
-        logger.info(f"Agent '{agent.name}' registered subagent: '{recipient_name}'")
+        if recipient_key not in runtime_state.subagents:
+            runtime_state.subagents[recipient_key] = recipient_agent
+            logger.info(f"Agent '{agent.name}' registered subagent: '{recipient_name}'")
 
         send_message_cls = _resolve_send_message_class(agent, send_message_tool_class)
         tool_key = send_message_cls.__name__

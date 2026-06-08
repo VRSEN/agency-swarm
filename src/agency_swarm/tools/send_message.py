@@ -10,7 +10,7 @@ recipient details.
 import asyncio
 import json
 import logging
-from typing import TYPE_CHECKING, Any, Literal, get_type_hints
+from typing import TYPE_CHECKING, Any, Literal, cast, get_type_hints
 
 from agents import (
     FunctionTool,
@@ -588,6 +588,7 @@ class Handoff:
 
         schema = strict_schema.ensure_strict_json_schema(InputArgs.model_json_schema())
         handoff_object.input_json_schema = schema
+        cast(Any, handoff_object)._agency_swarm_tool_class = type(self)
 
         # Conditionally modify invoke function to include system message into context
         if self.add_reminder:

@@ -8,7 +8,7 @@ from pathlib import Path
 import agency_swarm
 from agency_swarm import Agency, Agent
 from agency_swarm.agency.helpers import run_fastapi as helpers_run_fastapi
-from agency_swarm.tools import SendMessage
+from agency_swarm.tools import Handoff, SendMessage
 
 
 class _BlockOptionalDepsFinder(importlib.abc.MetaPathFinder):
@@ -96,9 +96,34 @@ def test_run_fastapi_preserves_custom_tool_mappings(mocker):
     new_agency = factory()
 
     pair = ("A", "B")
-    assert new_agency._communication_tool_classes.get(pair) is CustomSendMessage, (
+    assert new_agency._communication_tool_classes.get(pair) == [CustomSendMessage], (
         "Custom tool mapping was not preserved"
     )
+
+
+def test_run_fastapi_preserves_default_and_custom_tool_mappings(mocker):
+    sender = Agent(name="A", instructions="test", model="gpt-5.4-mini")
+    recipient = Agent(name="B", instructions="test", model="gpt-5.4-mini")
+    agency = Agency(sender, recipient, communication_flows=[(sender, recipient), (sender, recipient, Handoff)])
+
+    captured = {}
+
+    def fake_run_fastapi(*, agencies=None, **kwargs):
+        captured["factory"] = agencies["agency"]
+        return None
+
+    mocker.patch("agency_swarm.integrations.fastapi.run_fastapi", side_effect=fake_run_fastapi)
+
+    helpers_run_fastapi(agency)
+    factory = captured["factory"]
+    new_agency = factory()
+
+    pair = ("A", "B")
+    runtime_state = new_agency.get_agent_runtime_state("A")
+    assert pair in new_agency._default_communication_tool_pairs
+    assert new_agency._communication_tool_classes.get(pair) == [Handoff]
+    assert "SendMessage" in runtime_state.send_message_tools
+    assert "transfer_to_B" in [handoff.tool_name for handoff in runtime_state.handoffs]
 
 
 def test_run_fastapi_normalizes_relative_shared_folders_for_factory_calls(mocker, tmp_path: Path):
