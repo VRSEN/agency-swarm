@@ -290,9 +290,7 @@ def _should_reuse_source_openai_client(client: AsyncOpenAI | None) -> bool:
     if client is None:
         return False
     base_url = str(client.base_url).rstrip("/")
-    if base_url == "https://api.openai.com/v1":
-        return False
-    return True
+    return base_url == OPENROUTER_BASE_URL
 
 
 def _should_preserve_source_openai_headers(client: AsyncOpenAI | None) -> bool:
@@ -317,7 +315,7 @@ def _should_copy_source_openai_client_for_openrouter(
     base_url = str(client.base_url).rstrip("/")
     if base_url != "https://api.openai.com/v1":
         return False
-    return bool((None if config is None else config.api_key) or os.getenv(OPENROUTER_API_KEY_ENV) or client.api_key)
+    return bool((None if config is None else config.api_key) or os.getenv(OPENROUTER_API_KEY_ENV))
 
 
 def _copy_source_openai_client_for_openrouter(
@@ -325,7 +323,7 @@ def _copy_source_openai_client_for_openrouter(
     config: ClientConfig | None,
 ) -> AsyncOpenAI:
     return client.copy(
-        api_key=(None if config is None else config.api_key) or os.getenv(OPENROUTER_API_KEY_ENV) or client.api_key,
+        api_key=(None if config is None else config.api_key) or os.getenv(OPENROUTER_API_KEY_ENV),
         base_url=(None if config is None else config.base_url) or OPENROUTER_BASE_URL,
         default_headers=(None if config is None else config.default_headers)
         or cast(dict[str, str], dict(client.default_headers or {}))

@@ -12,8 +12,10 @@ from openai.types.completion_usage import CompletionUsage
 from agency_swarm import Agent, Runner, set_tracing_disabled
 from agency_swarm.utils.openrouter import (
     _OPENROUTER_REPLAY_DETAILS,
+    OPENROUTER_REASONING_DETAILS_KEY,
     _details_from_reasoning_item,
     _normalize_openrouter_reasoning_stream,
+    _openrouter_replay_details,
     build_openrouter_chat_model,
 )
 
@@ -172,6 +174,24 @@ class _TextOnlyStreamChat:
 class _TextOnlyStreamClient:
     def __init__(self) -> None:
         self.chat = _TextOnlyStreamChat()
+        self.base_url = "https://openrouter.ai/api/v1"
+
+
+class _SplitReasoningStreamCompletions:
+    async def create(self, **kwargs: Any) -> ChatCompletion | AsyncIterator[ChatCompletionChunk]:
+        if kwargs.get("stream"):
+            return _split_reasoning_stream_chunks()
+        raise AssertionError("streaming test must request stream=True")
+
+
+class _SplitReasoningStreamChat:
+    def __init__(self) -> None:
+        self.completions = _SplitReasoningStreamCompletions()
+
+
+class _SplitReasoningStreamClient:
+    def __init__(self) -> None:
+        self.chat = _SplitReasoningStreamChat()
         self.base_url = "https://openrouter.ai/api/v1"
 
 
@@ -498,7 +518,7 @@ async def test_openrouter_streamed_encrypted_only_reasoning_details_surface_thro
     assert reasoning.type == "reasoning"
     assert reasoning.summary[0].text == "[REDACTED]"
     assert reasoning.content is None
-    assert reasoning.encrypted_content == "encrypted-data"
+    assert reasoning.encrypted_content == "encrypted-data\nsecond-encrypted-data"
 
 
 @pytest.mark.asyncio
@@ -624,6 +644,30 @@ async def test_openrouter_default_replay_blocks_cross_family_reasoning() -> None
 
 
 @pytest.mark.asyncio
+async def test_openrouter_default_replay_blocks_same_provider_different_model() -> None:
+    """OpenRouter reasoning replay should match the exact normalized model."""
+    set_tracing_disabled(True)
+    client = _ReplayClient()
+    source = build_openrouter_chat_model(
+        "openrouter/anthropic/claude-sonnet-4.5",
+        openai_client=cast(Any, client),
+    )
+    agent = Agent(name="OpenRouterAgent", instructions="Reply briefly.", model=source)
+
+    first = await Runner.run(agent, "hello")
+    target = build_openrouter_chat_model(
+        "openrouter/anthropic/claude-opus-4.5",
+        openai_client=cast(Any, client),
+    )
+    agent.model = target
+    await Runner.run(agent, [*first.to_input_list(), {"role": "user", "content": "again"}])
+
+    messages = client.chat.completions.requests[1]["messages"]
+    assistant = next(message for message in messages if message["role"] == "assistant")
+    assert "reasoning_details" not in assistant
+
+
+@pytest.mark.asyncio
 async def test_openrouter_default_replay_blocks_proxy_endpoint() -> None:
     """OpenRouter details should not replay through non-OpenRouter gateways by default."""
     set_tracing_disabled(True)
@@ -659,9 +703,7 @@ async def test_openrouter_replays_synthesized_reasoning_content() -> None:
 
     messages = client.chat.completions.requests[1]["messages"]
     assistant = next(message for message in messages if message["role"] == "assistant")
-    assert assistant["reasoning_details"] == [
-        {"type": "reasoning.summary", "summary": "content reasoning"}
-    ]
+    assert assistant["reasoning_details"] == [{"type": "reasoning.summary", "summary": "content reasoning"}]
 
 
 @pytest.mark.asyncio
@@ -733,8 +775,8 @@ async def test_openrouter_replay_details_do_not_mutate_caller_messages() -> None
 
 
 @pytest.mark.asyncio
-async def test_openrouter_replay_details_respect_sdk_replay_policy() -> None:
-    """Replay enrichment should not add details when the SDK did not mark replay."""
+async def test_openrouter_replay_details_attach_to_plain_assistant_message() -> None:
+    """Replay enrichment should add details to ordinary assistant turns."""
     client = _MutationClient()
     model = build_openrouter_chat_model(
         "openrouter/anthropic/claude-sonnet-4.5",
@@ -748,7 +790,7 @@ async def test_openrouter_replay_details_respect_sdk_replay_policy() -> None:
         _OPENROUTER_REPLAY_DETAILS.reset(token)
 
     assert client.chat.completions.messages is not None
-    assert "reasoning_details" not in client.chat.completions.messages[0]
+    assert client.chat.completions.messages[0]["reasoning_details"] == _reasoning_details()
 
 
 @pytest.mark.asyncio
@@ -775,6 +817,30 @@ async def test_openrouter_replay_details_attach_to_latest_assistant_message() ->
     assert client.chat.completions.messages[2]["reasoning_details"] == _reasoning_details()
 
 
+@pytest.mark.asyncio
+async def test_openrouter_replay_details_attach_to_matching_assistant_message() -> None:
+    """Replay enrichment should follow assistant-turn slots, not newest suffix."""
+    client = _MutationClient()
+    model = build_openrouter_chat_model(
+        "openrouter/anthropic/claude-sonnet-4.5",
+        openai_client=cast(Any, client),
+    )
+    messages = [
+        {"role": "assistant", "content": "older"},
+        {"role": "user", "content": "next"},
+        {"role": "assistant", "content": "current"},
+    ]
+    token = _OPENROUTER_REPLAY_DETAILS.set([_reasoning_details(), []])
+    try:
+        await model._get_client().chat.completions.create(messages=messages)
+    finally:
+        _OPENROUTER_REPLAY_DETAILS.reset(token)
+
+    assert client.chat.completions.messages is not None
+    assert client.chat.completions.messages[0]["reasoning_details"] == _reasoning_details()
+    assert "reasoning_details" not in client.chat.completions.messages[2]
+
+
 def test_openrouter_replay_fallback_drops_redaction_placeholder() -> None:
     """A local display placeholder should not be sent back as provider reasoning."""
     details = _details_from_reasoning_item(
@@ -790,6 +856,29 @@ def test_openrouter_replay_fallback_drops_redaction_placeholder() -> None:
         {"type": "reasoning.encrypted", "data": "encrypted-data"},
         {"type": "reasoning.text", "text": "real text", "signature": "text-signature"},
     ]
+
+
+def test_openrouter_replay_details_keep_assistant_turn_slots() -> None:
+    """Replay collection should align details with assistant turn order."""
+    replay = _openrouter_replay_details(
+        [
+            {
+                "type": "reasoning",
+                "provider_data": {
+                    "model": "anthropic/claude-sonnet-4.5",
+                    OPENROUTER_REASONING_DETAILS_KEY: _reasoning_details(),
+                },
+            },
+            {"type": "message", "role": "assistant", "content": "older"},
+            {"role": "user", "content": "next"},
+            {"role": "assistant", "content": "current"},
+        ],
+        model="anthropic/claude-sonnet-4.5",
+        base_url="https://openrouter.ai/api/v1",
+        should_replay=lambda _context: True,
+    )
+
+    assert replay == [_reasoning_details(), []]
 
 
 @pytest.mark.asyncio
@@ -829,9 +918,7 @@ async def test_openrouter_stream_without_details_keeps_litellm_reasoning_fallbac
 
     normalized = chunks[0].choices[0].delta
     assert not getattr(normalized, "_agency_swarm_skip_reasoning_content_copy", False)
-    assert normalized.thinking_blocks == [
-        {"thinking": "fallback reasoning", "signature": "fallback-signature"}
-    ]
+    assert normalized.thinking_blocks == [{"thinking": "fallback reasoning", "signature": "fallback-signature"}]
 
 
 @pytest.mark.asyncio
@@ -858,6 +945,31 @@ async def test_openrouter_streamed_text_only_reasoning_details_surface_through_r
     assert reasoning.type == "reasoning"
     assert reasoning.summary[0].text == "text-only detail"
     assert reasoning.content[0].text == "text-only detail"
+
+
+@pytest.mark.asyncio
+async def test_openrouter_streamed_reasoning_fragments_preserve_boundaries() -> None:
+    """Streaming reasoning fragments should preserve newline boundaries."""
+    set_tracing_disabled(True)
+    model = build_openrouter_chat_model(
+        "openrouter/anthropic/claude-sonnet-4.5",
+        openai_client=cast(Any, _SplitReasoningStreamClient()),
+    )
+    agent = Agent(name="OpenRouterAgent", instructions="Reply briefly.", model=model)
+
+    result = Runner.run_streamed(agent, "hello")
+    events = [event async for event in result.stream_events()]
+    raw = [event.data for event in events if isinstance(event, RawResponsesStreamEvent)]
+
+    summary_deltas = [event.delta for event in raw if event.type == "response.reasoning_summary_text.delta"]
+    text_deltas = [event.delta for event in raw if event.type == "response.reasoning_text.delta"]
+    completed = next(event.response for event in raw if event.type == "response.completed")
+    reasoning = completed.output[0]
+
+    assert summary_deltas == ["first summary", "\nsecond summary"]
+    assert text_deltas == ["first text", "\nsecond text"]
+    assert reasoning.summary[0].text == "first summary\nsecond summary"
+    assert [content.text for content in reasoning.content] == ["first text\nsecond text"]
 
 
 @pytest.mark.asyncio
@@ -924,6 +1036,16 @@ def _encrypted_reasoning_detail() -> dict[str, object]:
     }
 
 
+def _second_encrypted_reasoning_detail() -> dict[str, object]:
+    return {
+        "type": "reasoning.encrypted",
+        "data": "second-encrypted-data",
+        "id": "reasoning-encrypted-2",
+        "format": "anthropic-claude-v1",
+        "index": 1,
+    }
+
+
 async def _stream_chunks() -> AsyncIterator[ChatCompletionChunk]:
     for index, detail in enumerate(_reasoning_details()):
         delta = ChoiceDelta()
@@ -936,6 +1058,9 @@ async def _encrypted_stream_chunks() -> AsyncIterator[ChatCompletionChunk]:
     delta = ChoiceDelta()
     delta.reasoning_details = [_encrypted_reasoning_detail()]
     yield _chunk("chunk_encrypted", delta)
+    second = ChoiceDelta()
+    second.reasoning_details = [_second_encrypted_reasoning_detail()]
+    yield _chunk("chunk_encrypted_second", second)
     yield _chunk("chunk_content", ChoiceDelta(content="final answer"))
 
 
@@ -943,6 +1068,21 @@ async def _text_only_stream_chunks() -> AsyncIterator[ChatCompletionChunk]:
     delta = ChoiceDelta()
     delta.reasoning_details = [{"type": "reasoning.text", "text": "text-only detail"}]
     yield _chunk("chunk_text_only", delta)
+    yield _chunk("chunk_content", ChoiceDelta(content="final answer"))
+
+
+async def _split_reasoning_stream_chunks() -> AsyncIterator[ChatCompletionChunk]:
+    for index, detail in enumerate(
+        [
+            {"type": "reasoning.summary", "summary": "first summary"},
+            {"type": "reasoning.summary", "summary": "second summary"},
+            {"type": "reasoning.text", "text": "first text"},
+            {"type": "reasoning.text", "text": "second text"},
+        ]
+    ):
+        delta = ChoiceDelta()
+        delta.reasoning_details = [detail]
+        yield _chunk(f"chunk_split_{index}", delta)
     yield _chunk("chunk_content", ChoiceDelta(content="final answer"))
 
 

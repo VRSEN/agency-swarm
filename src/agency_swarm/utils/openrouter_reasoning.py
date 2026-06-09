@@ -32,7 +32,7 @@ def _should_replay_openrouter_reasoning(context: ReasoningContentReplayContext) 
     return (
         _is_openrouter_base_url(context.base_url)
         and origin is not None
-        and _model_family(origin) == _model_family(context.model)
+        and _normalized_model(origin) == _normalized_model(context.model)
     )
 
 
@@ -40,9 +40,9 @@ def _is_openrouter_base_url(base_url: str | None) -> bool:
     return base_url is not None and base_url.rstrip("/") == OPENROUTER_BASE_URL
 
 
-def _model_family(model: str) -> str:
+def _normalized_model(model: str) -> str:
     name = model[len(OPENROUTER_MODEL_PREFIX) :] if model.startswith(OPENROUTER_MODEL_PREFIX) else model
-    return name.split("/", 1)[0].lower()
+    return name.lower()
 
 
 class _OpenRouterClientProxy:
@@ -124,6 +124,8 @@ async def _normalize_openrouter_reasoning_stream(
 class _OpenRouterStreamState:
     signatures: list[str] = field(default_factory=list)
     has_reasoning: bool = False
+    has_summary: bool = False
+    has_text: bool = False
     output_details: list[dict[str, object]] = field(default_factory=list)
 
 
@@ -145,19 +147,26 @@ def _normalize_openrouter_reasoning_chunk(
             summary = _encrypted_reasoning_placeholder(details)
 
         if summary and not _field(delta, "reasoning_content"):
-            dynamic.reasoning_content = summary
+            dynamic.reasoning_content = _stream_reasoning_fragment(summary, state.has_summary)
+            state.has_summary = True
 
         if text and not summary and not state.has_reasoning and not _field(delta, "reasoning_content"):
-            dynamic.reasoning_content = text
+            dynamic.reasoning_content = _stream_reasoning_fragment(text, state.has_summary)
+            state.has_summary = True
 
         if text and not _field(delta, "reasoning"):
-            dynamic.reasoning = text
+            dynamic.reasoning = _stream_reasoning_fragment(text, state.has_text)
+            state.has_text = True
 
         state.signatures.extend(_openrouter_reasoning_signatures(details))
         if state.signatures and not _field(delta, "thinking_blocks"):
             dynamic.thinking_blocks = [{"signature": "\n".join(state.signatures)}]
 
         state.has_reasoning = state.has_reasoning or bool(summary or text)
+
+
+def _stream_reasoning_fragment(value: str, has_previous: bool) -> str:
+    return f"\n{value}" if has_previous else value
 
 
 def _has_openrouter_reasoning(value: Any) -> bool:
@@ -207,10 +216,12 @@ def _openrouter_replay_details(
                 details if details and _should_replay_openrouter_item(item, model, base_url, should_replay) else None
             )
             continue
-        if pending and _is_assistant_output_item(item):
-            replay.append(pending)
+        if _is_assistant_output_item(item):
+            replay.append(pending or [])
             pending = None
-    return replay
+            continue
+        pending = None
+    return replay if any(replay) else []
 
 
 def _attach_openrouter_replay_details(messages: Any, replay: list[list[dict[str, object]]]) -> None:
@@ -220,15 +231,15 @@ def _attach_openrouter_replay_details(messages: Any, replay: list[list[dict[str,
     targets = [
         message
         for message in messages
-        if isinstance(message, dict)
-        and message.get("role") == "assistant"
-        and ("reasoning_content" in message or message.get("tool_calls"))
-        and "reasoning_details" not in message
+        if isinstance(message, dict) and message.get("role") == "assistant" and "reasoning_details" not in message
     ]
-    selected = targets[-len(replay) :]
-    selected_replay = replay[-len(selected) :] if selected else []
-    for message, details in zip(selected, selected_replay, strict=True):
-        message["reasoning_details"] = details
+    if len(replay) != len(targets) and all(replay):
+        targets = targets[-len(replay) :]
+        replay = replay[-len(targets) :] if targets else []
+
+    for message, details in zip(targets, replay, strict=False):
+        if details:
+            message["reasoning_details"] = details
 
 
 def _is_assistant_output_item(item: Any) -> bool:

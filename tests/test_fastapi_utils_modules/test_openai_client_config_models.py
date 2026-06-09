@@ -1520,6 +1520,7 @@ def test_configured_openrouter_model_override_preserves_replay_policy(
         api_key="sk-injected",
         base_url="https://openrouter-proxy.test/v1",
     )
+
     def replay(_context):
         return False
 
@@ -1537,10 +1538,10 @@ def test_configured_openrouter_model_override_preserves_replay_policy(
     assert agent.model.should_replay_reasoning_content is replay
 
 
-def test_openrouter_override_reuses_non_default_source_openai_client(
+def test_openrouter_override_does_not_reuse_custom_gateway_source_client(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """OpenRouter swaps should keep an existing gateway client from normal OpenAI wrappers."""
+    """OpenRouter swaps should not send OpenRouter models to a custom gateway."""
     pytest.importorskip("agents")
 
     from agents import OpenAIChatCompletionsModel
@@ -1551,7 +1552,7 @@ def test_openrouter_override_reuses_non_default_source_openai_client(
     from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
     from agency_swarm.utils.openrouter import get_openrouter_model_name
 
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-openrouter-env")
     client = AsyncOpenAI(
         api_key="sk-gateway",
         base_url="https://gateway.test/v1",
@@ -1574,7 +1575,9 @@ def test_openrouter_override_reuses_non_default_source_openai_client(
     assert isinstance(agent.model, OpenAIChatCompletionsModel)
     assert agent.model.model == "anthropic/claude-sonnet-4.5"
     assert get_openrouter_model_name(agent.model) == "openrouter/anthropic/claude-sonnet-4.5"
-    assert agent.model._client is client
+    assert agent.model._client is not client
+    assert agent.model._client.api_key == "sk-openrouter-env"
+    assert str(agent.model._client.base_url).startswith("https://openrouter.ai/api/v1")
     assert agent.model.should_replay_reasoning_content is replay
 
 
