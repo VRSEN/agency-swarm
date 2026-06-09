@@ -7,7 +7,11 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, cast
 
-from agents.models.chatcmpl_converter import ReasoningContentReplayContext
+from agents.models.chatcmpl_converter import (
+    ReasoningContentReplayContext,
+    ReasoningContentSource,
+    ShouldReplayReasoningContent,
+)
 from agents.models.openai_chatcompletions import OpenAIChatCompletionsModel
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletion, ChatCompletionChunk
@@ -47,7 +51,8 @@ class OpenRouterChatCompletionsModel(OpenAIChatCompletionsModel):
     """OpenRouter chat model with provider reasoning normalized for Agents."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        kwargs.setdefault("should_replay_reasoning_content", _should_replay_openrouter_reasoning)
+        if kwargs.get("should_replay_reasoning_content") is None:
+            kwargs["should_replay_reasoning_content"] = _should_replay_openrouter_reasoning
         super().__init__(*args, **kwargs)
 
     async def get_response(self, *args: Any, **kwargs: Any) -> Any:
@@ -74,7 +79,14 @@ class OpenRouterChatCompletionsModel(OpenAIChatCompletionsModel):
 
     async def _fetch_response(self, *args: Any, **kwargs: Any) -> Any:
         input_value = args[1] if len(args) > 1 else kwargs.get("input")
-        token = _OPENROUTER_REPLAY_DETAILS.set(_openrouter_replay_details(input_value))
+        token = _OPENROUTER_REPLAY_DETAILS.set(
+            _openrouter_replay_details(
+                input_value,
+                model=str(self.model),
+                base_url=str(self._client.base_url),
+                should_replay=self.should_replay_reasoning_content,
+            )
+        )
         try:
             result = await super()._fetch_response(*args, **kwargs)
             if isinstance(result, ChatCompletion):
@@ -100,6 +112,7 @@ def build_openrouter_chat_model(
     base_url: str | None = None,
     default_headers: dict[str, str] | None = None,
     openai_client: AsyncOpenAI | None = None,
+    should_replay_reasoning_content: ShouldReplayReasoningContent | None = None,
 ) -> OpenAIChatCompletionsModel:
     """Build an OpenAI-compatible Chat Completions model for OpenRouter."""
     actual_model = strip_openrouter_prefix(model_name)
@@ -113,7 +126,11 @@ def build_openrouter_chat_model(
             base_url=base_url or OPENROUTER_BASE_URL,
             default_headers=default_headers,
         )
-    model = OpenRouterChatCompletionsModel(model=actual_model, openai_client=client)
+    model = OpenRouterChatCompletionsModel(
+        model=actual_model,
+        openai_client=client,
+        should_replay_reasoning_content=should_replay_reasoning_content,
+    )
     model._agency_swarm_openrouter_model_name = f"{OPENROUTER_MODEL_PREFIX}{actual_model}"  # type: ignore[attr-defined]
     model._agency_swarm_usage_model_name = f"{OPENROUTER_MODEL_PREFIX}{actual_model}"  # type: ignore[attr-defined]
     model._agency_swarm_default_model_name = _default_settings_model_name(actual_model)  # type: ignore[attr-defined]
@@ -237,6 +254,9 @@ def _normalize_openrouter_reasoning_chunk(
         if summary and not _field(delta, "reasoning_content"):
             dynamic.reasoning_content = summary
 
+        if text and not summary and not state.has_reasoning and not _field(delta, "reasoning_content"):
+            dynamic.reasoning_content = text
+
         if text and not _field(delta, "reasoning"):
             dynamic.reasoning = text
 
@@ -274,7 +294,13 @@ def _openrouter_reasoning_summary(value: Any) -> str:
     )
 
 
-def _openrouter_replay_details(input_value: Any) -> list[list[dict[str, object]]]:
+def _openrouter_replay_details(
+    input_value: Any,
+    *,
+    model: str,
+    base_url: str | None,
+    should_replay: ShouldReplayReasoningContent | None,
+) -> list[list[dict[str, object]]]:
     if not isinstance(input_value, list):
         return []
 
@@ -283,7 +309,12 @@ def _openrouter_replay_details(input_value: Any) -> list[list[dict[str, object]]
     for item in input_value:
         item_type = _field(item, "type")
         if item_type == "reasoning":
-            pending = _original_reasoning_details(item) or _details_from_reasoning_item(item)
+            details = _original_reasoning_details(item) or _details_from_reasoning_item(item)
+            pending = (
+                details
+                if details and _should_replay_openrouter_item(item, model, base_url, should_replay)
+                else None
+            )
             continue
         if pending and _is_assistant_output_item(item):
             replay.append(pending)
@@ -300,7 +331,7 @@ def _attach_openrouter_replay_details(messages: Any, replay: list[list[dict[str,
         for message in messages
         if isinstance(message, dict)
         and message.get("role") == "assistant"
-        and "reasoning_content" in message
+        and ("reasoning_content" in message or message.get("tool_calls"))
         and "reasoning_details" not in message
     ]
     selected = targets[-len(replay) :]
@@ -314,6 +345,29 @@ def _is_assistant_output_item(item: Any) -> bool:
     if item_type in {"message", "function_call"}:
         return True
     return _field(item, "role") == "assistant"
+
+
+def _should_replay_openrouter_item(
+    item: Any,
+    model: str,
+    base_url: str | None,
+    should_replay: ShouldReplayReasoningContent | None,
+) -> bool:
+    provider_data = _field(item, "provider_data")
+    provider = provider_data if isinstance(provider_data, dict) else {}
+    origin = provider.get("model")
+    context = ReasoningContentReplayContext(
+        model=model,
+        base_url=base_url.rstrip("/") if base_url is not None else None,
+        reasoning=ReasoningContentSource(
+            item=item,
+            origin_model=origin if isinstance(origin, str) else None,
+            provider_data=provider,
+        ),
+    )
+    if should_replay is not None:
+        return should_replay(context)
+    return False
 
 
 def _attach_openrouter_output_details(output: Any, details: list[list[dict[str, object]]]) -> None:

@@ -157,6 +157,24 @@ class _EncryptedStreamClient:
         self.base_url = "https://openrouter.ai/api/v1"
 
 
+class _TextOnlyStreamCompletions:
+    async def create(self, **kwargs: Any) -> ChatCompletion | AsyncIterator[ChatCompletionChunk]:
+        if kwargs.get("stream"):
+            return _text_only_stream_chunks()
+        raise AssertionError("streaming test must request stream=True")
+
+
+class _TextOnlyStreamChat:
+    def __init__(self) -> None:
+        self.completions = _TextOnlyStreamCompletions()
+
+
+class _TextOnlyStreamClient:
+    def __init__(self) -> None:
+        self.chat = _TextOnlyStreamChat()
+        self.base_url = "https://openrouter.ai/api/v1"
+
+
 class _ReplayCompletions:
     def __init__(self) -> None:
         self.requests: list[dict[str, Any]] = []
@@ -482,6 +500,26 @@ async def test_openrouter_replays_reasoning_details_on_next_request() -> None:
 
 
 @pytest.mark.asyncio
+async def test_openrouter_replay_details_can_be_disabled() -> None:
+    """A caller-provided replay policy should be able to block OpenRouter detail replay."""
+    set_tracing_disabled(True)
+    client = _ReplayClient()
+    model = build_openrouter_chat_model(
+        "openrouter/anthropic/claude-sonnet-4.5",
+        openai_client=cast(Any, client),
+        should_replay_reasoning_content=lambda _context: False,
+    )
+    agent = Agent(name="OpenRouterAgent", instructions="Reply briefly.", model=model)
+
+    first = await Runner.run(agent, "hello")
+    await Runner.run(agent, [*first.to_input_list(), {"role": "user", "content": "again"}])
+
+    messages = client.chat.completions.requests[1]["messages"]
+    assistant = next(message for message in messages if message["role"] == "assistant")
+    assert "reasoning_details" not in assistant
+
+
+@pytest.mark.asyncio
 async def test_openrouter_runner_surfaces_non_stream_reasoning_content() -> None:
     """OpenRouter sync responses can provide reasoning_content without details."""
     set_tracing_disabled(True)
@@ -652,6 +690,32 @@ async def test_openrouter_stream_without_details_keeps_litellm_reasoning_fallbac
 
 
 @pytest.mark.asyncio
+async def test_openrouter_streamed_text_only_reasoning_details_surface_through_runner() -> None:
+    """Streaming text-only reasoning_details should still create reasoning output."""
+    set_tracing_disabled(True)
+    model = build_openrouter_chat_model(
+        "openrouter/anthropic/claude-sonnet-4.5",
+        openai_client=cast(Any, _TextOnlyStreamClient()),
+    )
+    agent = Agent(name="OpenRouterAgent", instructions="Reply briefly.", model=model)
+
+    result = Runner.run_streamed(agent, "hello")
+    events = [event async for event in result.stream_events()]
+    raw = [event.data for event in events if isinstance(event, RawResponsesStreamEvent)]
+
+    summary_deltas = [event.delta for event in raw if event.type == "response.reasoning_summary_text.delta"]
+    text_deltas = [event.delta for event in raw if event.type == "response.reasoning_text.delta"]
+    completed = next(event.response for event in raw if event.type == "response.completed")
+    reasoning = completed.output[0]
+
+    assert summary_deltas == ["text-only detail"]
+    assert text_deltas == ["text-only detail"]
+    assert reasoning.type == "reasoning"
+    assert reasoning.summary[0].text == "text-only detail"
+    assert reasoning.content[0].text == "text-only detail"
+
+
+@pytest.mark.asyncio
 async def test_openrouter_parallel_runs_keep_provider_data_separate() -> None:
     """Overlapping runs on one model should attach their own reasoning_details."""
     set_tracing_disabled(True)
@@ -727,6 +791,13 @@ async def _encrypted_stream_chunks() -> AsyncIterator[ChatCompletionChunk]:
     delta = ChoiceDelta()
     delta.reasoning_details = [_encrypted_reasoning_detail()]
     yield _chunk("chunk_encrypted", delta)
+    yield _chunk("chunk_content", ChoiceDelta(content="final answer"))
+
+
+async def _text_only_stream_chunks() -> AsyncIterator[ChatCompletionChunk]:
+    delta = ChoiceDelta()
+    delta.reasoning_details = [{"type": "reasoning.text", "text": "text-only detail"}]
+    yield _chunk("chunk_text_only", delta)
     yield _chunk("chunk_content", ChoiceDelta(content="final answer"))
 
 
