@@ -12,6 +12,7 @@ from openai.types.completion_usage import CompletionUsage
 from agency_swarm import Agent, Runner, set_tracing_disabled
 from agency_swarm.utils.openrouter import (
     _OPENROUTER_REPLAY_DETAILS,
+    _details_from_reasoning_item,
     _normalize_openrouter_reasoning_stream,
     build_openrouter_chat_model,
 )
@@ -436,6 +437,23 @@ async def test_openrouter_replay_details_do_not_mutate_caller_messages() -> None
     assert client.chat.completions.messages is not messages
     assert client.chat.completions.messages is not None
     assert client.chat.completions.messages[0]["reasoning_details"] == _reasoning_details()
+
+
+def test_openrouter_replay_fallback_drops_redaction_placeholder() -> None:
+    """A local display placeholder should not be sent back as provider reasoning."""
+    details = _details_from_reasoning_item(
+        {
+            "type": "reasoning",
+            "summary": [{"text": "[REDACTED]"}],
+            "content": [{"text": "real text"}],
+            "encrypted_content": "encrypted-data\ntext-signature",
+        }
+    )
+
+    assert details == [
+        {"type": "reasoning.encrypted", "data": "encrypted-data"},
+        {"type": "reasoning.text", "text": "real text", "signature": "text-signature"},
+    ]
 
 
 @pytest.mark.asyncio

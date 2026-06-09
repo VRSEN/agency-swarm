@@ -315,7 +315,7 @@ def _details_from_reasoning_item(item: Any) -> list[dict[str, object]]:
     contents = _content_texts(_field(item, "content"))
 
     for summary in _summary_texts(item):
-        if summary != OPENROUTER_ENCRYPTED_REASONING_PLACEHOLDER or contents:
+        if summary != OPENROUTER_ENCRYPTED_REASONING_PLACEHOLDER:
             details.append({"type": "reasoning.summary", "summary": summary})
 
     extra_count = max(0, len(encrypted) - len(contents))
