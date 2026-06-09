@@ -550,6 +550,36 @@ async def test_openrouter_replay_accepts_trailing_slash_base_url() -> None:
 
 
 @pytest.mark.asyncio
+async def test_openrouter_replay_accepts_legacy_reasoning_without_detail_marker() -> None:
+    """Older OpenRouter reasoning items without detail markers should still replay."""
+    set_tracing_disabled(True)
+    client = _ReplayClient()
+    model = build_openrouter_chat_model(
+        "openrouter/anthropic/claude-sonnet-4.5",
+        openai_client=cast(Any, client),
+    )
+    agent = Agent(name="OpenRouterAgent", instructions="Reply briefly.", model=model)
+
+    first = await Runner.run(agent, "hello")
+    items = first.to_input_list()
+    for item in items:
+        if isinstance(item, dict) and item.get("type") == "reasoning":
+            provider = item.get("provider_data")
+            if isinstance(provider, dict):
+                provider.pop("openrouter_reasoning_details", None)
+
+    await Runner.run(agent, [*items, {"role": "user", "content": "again"}])
+
+    messages = client.chat.completions.requests[1]["messages"]
+    assistant = next(message for message in messages if message["role"] == "assistant")
+    assert assistant["reasoning_details"] == [
+        {"type": "reasoning.summary", "summary": "documented summary"},
+        {"type": "reasoning.encrypted", "data": "encrypted-data"},
+        {"type": "reasoning.text", "text": "documented text", "signature": "text-signature"},
+    ]
+
+
+@pytest.mark.asyncio
 async def test_openrouter_replay_details_can_be_disabled() -> None:
     """A caller-provided replay policy should be able to block OpenRouter detail replay."""
     set_tracing_disabled(True)

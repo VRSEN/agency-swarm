@@ -2,6 +2,7 @@ import asyncio
 import copy
 import json
 import logging
+import os
 import threading
 import time
 import traceback
@@ -90,6 +91,8 @@ from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
 from agency_swarm.ui.core.agui_adapter import AguiAdapter
 from agency_swarm.utils.dry_run import force_dry_run
 from agency_swarm.utils.openrouter import (
+    OPENROUTER_API_KEY_ENV,
+    OPENROUTER_BASE_URL,
     build_openrouter_chat_model,
     get_openrouter_model_name,
     is_openrouter_model_name,
@@ -195,16 +198,27 @@ def _apply_request_model_override(agent: Agent, model_name: str, config: ClientC
         source_openrouter_model = get_openrouter_model_name(model)
         gateway_client = None
         openrouter_client = None
+        source_default_headers: dict[str, str] | None = None
         if source_openrouter_model is not None:
             gateway_client = _resolve_request_gateway_client(agent, config)
             openrouter_client = gateway_client if gateway_client is not None else _get_openai_client_from_agent(agent)
-        elif not _has_request_openai_overrides(config):
-            openrouter_client = _get_non_default_openai_client_from_agent(agent)
+        elif _has_request_openai_overrides(config):
+            source_client = _get_openai_client_from_agent(agent)
+            if source_client is not None and _should_copy_source_openai_client_for_openrouter(source_client, config):
+                openrouter_client = _copy_source_openai_client_for_openrouter(source_client, config)
+        else:
+            source_client = _get_openai_client_from_agent(agent)
+            if _should_reuse_source_openai_client(source_client):
+                openrouter_client = source_client
+            elif source_client is not None and _should_copy_source_openai_client_for_openrouter(source_client):
+                openrouter_client = _copy_source_openai_client_for_openrouter(source_client, config)
+            elif source_client is not None and _should_preserve_source_openai_headers(source_client):
+                source_default_headers = cast(dict[str, str], dict(source_client.default_headers or {})) or None
         agent.model = build_openrouter_chat_model(
             model_name,
             api_key=None if openrouter_client is not None or config is None else config.api_key,
             base_url=None if openrouter_client is not None or config is None else config.base_url,
-            default_headers=None if openrouter_client is not None or config is None else config.default_headers,
+            default_headers=_openrouter_override_default_headers(config, openrouter_client, source_default_headers),
             openai_client=openrouter_client,
             should_replay_reasoning_content=getattr(model, "should_replay_reasoning_content", None),
         )
@@ -272,14 +286,63 @@ def _resolve_request_gateway_client(agent: Agent, config: ClientConfig | None) -
     return _build_openai_client_for_agent(agent, config)
 
 
-def _get_non_default_openai_client_from_agent(agent: Agent) -> AsyncOpenAI | None:
-    client = _get_openai_client_from_agent(agent)
+def _should_reuse_source_openai_client(client: AsyncOpenAI | None) -> bool:
     if client is None:
-        return None
+        return False
     base_url = str(client.base_url).rstrip("/")
     if base_url == "https://api.openai.com/v1":
+        return False
+    return True
+
+
+def _should_preserve_source_openai_headers(client: AsyncOpenAI | None) -> bool:
+    if client is None:
+        return False
+    if client is get_default_openai_client():
+        return False
+    base_url = str(client.base_url).rstrip("/")
+    if base_url != "https://api.openai.com/v1":
+        return False
+    return bool(client.default_headers)
+
+
+def _should_copy_source_openai_client_for_openrouter(
+    client: AsyncOpenAI | None,
+    config: ClientConfig | None = None,
+) -> bool:
+    if client is None:
+        return False
+    if client is get_default_openai_client():
+        return False
+    base_url = str(client.base_url).rstrip("/")
+    if base_url != "https://api.openai.com/v1":
+        return False
+    return bool((None if config is None else config.api_key) or os.getenv(OPENROUTER_API_KEY_ENV))
+
+
+def _copy_source_openai_client_for_openrouter(
+    client: AsyncOpenAI,
+    config: ClientConfig | None,
+) -> AsyncOpenAI:
+    return client.copy(
+        api_key=(None if config is None else config.api_key) or os.environ[OPENROUTER_API_KEY_ENV],
+        base_url=(None if config is None else config.base_url) or OPENROUTER_BASE_URL,
+        default_headers=(None if config is None else config.default_headers)
+        or cast(dict[str, str], dict(client.default_headers or {}))
+        or None,
+    )
+
+
+def _openrouter_override_default_headers(
+    config: ClientConfig | None,
+    openrouter_client: AsyncOpenAI | None,
+    source_default_headers: dict[str, str] | None,
+) -> dict[str, str] | None:
+    if openrouter_client is not None:
         return None
-    return client
+    if config is not None and config.default_headers is not None:
+        return config.default_headers
+    return source_default_headers
 
 
 def _resolve_openai_client_after_openrouter_override(config: ClientConfig | None) -> AsyncOpenAI | None:
