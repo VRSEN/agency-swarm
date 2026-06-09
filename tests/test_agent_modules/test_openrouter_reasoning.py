@@ -10,7 +10,11 @@ from openai.types.chat.chat_completion_chunk import Choice as ChunkChoice, Choic
 from openai.types.completion_usage import CompletionUsage
 
 from agency_swarm import Agent, Runner, set_tracing_disabled
-from agency_swarm.utils.openrouter import _normalize_openrouter_reasoning_stream, build_openrouter_chat_model
+from agency_swarm.utils.openrouter import (
+    _OPENROUTER_REPLAY_DETAILS,
+    _normalize_openrouter_reasoning_stream,
+    build_openrouter_chat_model,
+)
 
 
 class _Completions:
@@ -189,6 +193,71 @@ class _ReplayClient:
         self.base_url = "https://openrouter.ai/api/v1"
 
 
+class _MixedChoiceCompletions:
+    async def create(self, **_kwargs: Any) -> ChatCompletion:
+        first = ChatCompletionMessage(role="assistant", content="first answer")
+        first.reasoning = "first summary"
+        second = ChatCompletionMessage(role="assistant", content="second answer")
+        second.reasoning_details = [
+            {"type": "reasoning.text", "text": "second detail", "signature": "second-signature"}
+        ]
+        return ChatCompletion(
+            id="chatcmpl_mixed",
+            choices=[
+                Choice(finish_reason="stop", index=0, logprobs=None, message=first),
+                Choice(finish_reason="stop", index=1, logprobs=None, message=second),
+            ],
+            created=0,
+            model="anthropic/claude-sonnet-4.5",
+            object="chat.completion",
+            usage=CompletionUsage(completion_tokens=2, prompt_tokens=1, total_tokens=3),
+        )
+
+
+class _MixedChoiceChat:
+    def __init__(self) -> None:
+        self.completions = _MixedChoiceCompletions()
+
+
+class _MixedChoiceClient:
+    def __init__(self) -> None:
+        self.chat = _MixedChoiceChat()
+        self.base_url = "https://openrouter.ai/api/v1"
+
+
+class _MutationCompletions:
+    def __init__(self) -> None:
+        self.messages: list[dict[str, Any]] | None = None
+
+    async def create(self, **kwargs: Any) -> ChatCompletion:
+        self.messages = kwargs["messages"]
+        return ChatCompletion(
+            id="chatcmpl_mutation",
+            choices=[
+                Choice(
+                    finish_reason="stop",
+                    index=0,
+                    logprobs=None,
+                    message=ChatCompletionMessage(role="assistant", content="ok"),
+                )
+            ],
+            created=0,
+            model="anthropic/claude-sonnet-4.5",
+            object="chat.completion",
+        )
+
+
+class _MutationChat:
+    def __init__(self) -> None:
+        self.completions = _MutationCompletions()
+
+
+class _MutationClient:
+    def __init__(self) -> None:
+        self.chat = _MutationChat()
+        self.base_url = "https://openrouter.ai/api/v1"
+
+
 @pytest.mark.asyncio
 async def test_openrouter_runner_surfaces_reasoning_metadata() -> None:
     """Runner output should include OpenRouter reasoning from OpenAI-compatible chat."""
@@ -329,6 +398,44 @@ async def test_openrouter_replays_reasoning_details_on_next_request() -> None:
     messages = client.chat.completions.requests[1]["messages"]
     assistant = next(message for message in messages if message["role"] == "assistant")
     assert assistant["reasoning_details"] == _reasoning_details()
+
+
+@pytest.mark.asyncio
+async def test_openrouter_details_from_second_choice_do_not_attach_to_first_choice() -> None:
+    """Runner converts the first chat choice, so provider details must follow that choice."""
+    set_tracing_disabled(True)
+    model = build_openrouter_chat_model(
+        "openrouter/anthropic/claude-sonnet-4.5",
+        openai_client=cast(Any, _MixedChoiceClient()),
+    )
+    agent = Agent(name="OpenRouterAgent", instructions="Reply briefly.", model=model)
+
+    result = await Runner.run(agent, "hello")
+
+    reasoning = result.raw_responses[0].output[0]
+    assert reasoning.summary[0].text == "first summary"
+    assert "openrouter_reasoning_details" not in reasoning.provider_data
+
+
+@pytest.mark.asyncio
+async def test_openrouter_replay_details_do_not_mutate_caller_messages() -> None:
+    """Replay enrichment should copy request messages before adding OpenRouter fields."""
+    client = _MutationClient()
+    model = build_openrouter_chat_model(
+        "openrouter/anthropic/claude-sonnet-4.5",
+        openai_client=cast(Any, client),
+    )
+    messages = [{"role": "assistant", "content": "previous"}]
+    token = _OPENROUTER_REPLAY_DETAILS.set([_reasoning_details()])
+    try:
+        await model._get_client().chat.completions.create(messages=messages)
+    finally:
+        _OPENROUTER_REPLAY_DETAILS.reset(token)
+
+    assert "reasoning_details" not in messages[0]
+    assert client.chat.completions.messages is not messages
+    assert client.chat.completions.messages is not None
+    assert client.chat.completions.messages[0]["reasoning_details"] == _reasoning_details()
 
 
 @pytest.mark.asyncio

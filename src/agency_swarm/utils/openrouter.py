@@ -149,9 +149,12 @@ class _OpenRouterCompletionsProxy:
         self._completions = completions
 
     async def create(self, **kwargs: Any) -> Any:
+        replay = _OPENROUTER_REPLAY_DETAILS.get() or []
+        if replay and isinstance(kwargs.get("messages"), list):
+            kwargs = {**kwargs, "messages": deepcopy(kwargs["messages"])}
         _attach_openrouter_replay_details(
             kwargs.get("messages"),
-            _OPENROUTER_REPLAY_DETAILS.get() or [],
+            replay,
         )
         return await self._completions.create(**kwargs)
 
@@ -160,13 +163,13 @@ class _OpenRouterCompletionsProxy:
 
 
 def _normalize_openrouter_reasoning(response: ChatCompletion) -> list[list[dict[str, object]]]:
-    output_details: list[list[dict[str, object]]] = []
-    for choice in response.choices:
+    output_details: list[dict[str, object]] = []
+    for index, choice in enumerate(response.choices):
         message = choice.message
         dynamic = cast(Any, message)
         details = _copy_reasoning_details(_field(message, "reasoning_details"))
-        if details:
-            output_details.append(details)
+        if index == 0:
+            output_details = details
 
         summary = _openrouter_reasoning_summary(message)
         if summary and not _field(message, "reasoning_content"):
@@ -175,7 +178,7 @@ def _normalize_openrouter_reasoning(response: ChatCompletion) -> list[list[dict[
         blocks = _openrouter_reasoning_blocks(_field(message, "reasoning_details"))
         if blocks and not _field(message, "thinking_blocks"):
             dynamic.thinking_blocks = blocks
-    return output_details
+    return [output_details] if output_details else []
 
 
 async def _normalize_openrouter_reasoning_stream(
@@ -185,11 +188,11 @@ async def _normalize_openrouter_reasoning_stream(
     output = _OPENROUTER_OUTPUT_DETAILS.get()
     async for chunk in stream:
         if isinstance(chunk, ChatCompletionChunk):
+            primary = chunk.choices[0].index if chunk.choices else None
             _normalize_openrouter_reasoning_chunk(chunk, states)
-            if output is not None:
-                output[:] = [
-                    state.output_details for _, state in sorted(states.items()) if state.output_details
-                ]
+            state = states.get(primary) if primary is not None else None
+            if output is not None and state is not None:
+                output[:] = [state.output_details] if state.output_details else []
         yield chunk
 
 
