@@ -2,7 +2,9 @@
 
 import os
 from collections.abc import AsyncIterator
+from contextvars import ContextVar
 from copy import deepcopy
+from dataclasses import dataclass, field
 from typing import Any, cast
 
 from agents.models.openai_chatcompletions import OpenAIChatCompletionsModel
@@ -14,6 +16,14 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 OPENROUTER_MODEL_PREFIX = "openrouter/"
 OPENROUTER_ENCRYPTED_REASONING_PLACEHOLDER = "[REDACTED]"
 OPENROUTER_REASONING_DETAILS_KEY = "openrouter_reasoning_details"
+_OPENROUTER_OUTPUT_DETAILS: ContextVar[list[list[dict[str, object]]] | None] = ContextVar(
+    "_OPENROUTER_OUTPUT_DETAILS",
+    default=None,
+)
+_OPENROUTER_REPLAY_DETAILS: ContextVar[list[list[dict[str, object]]] | None] = ContextVar(
+    "_OPENROUTER_REPLAY_DETAILS",
+    default=None,
+)
 
 
 def is_openrouter_model_name(model_name: str) -> bool:
@@ -35,57 +45,47 @@ def get_openrouter_model_name(model: object) -> str | None:
 class OpenRouterChatCompletionsModel(OpenAIChatCompletionsModel):
     """OpenRouter chat model with provider reasoning normalized for Agents."""
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        self._agency_swarm_openrouter_output_details: list[list[dict[str, object]]] = []
-        self._agency_swarm_openrouter_replay_details: list[list[dict[str, object]]] = []
-
     async def get_response(self, *args: Any, **kwargs: Any) -> Any:
-        current = getattr(self, "_agency_swarm_openrouter_output_details", [])
-        self._agency_swarm_openrouter_output_details = []
+        details: list[list[dict[str, object]]] = []
+        token = _OPENROUTER_OUTPUT_DETAILS.set(details)
         try:
             response = await super().get_response(*args, **kwargs)
-            _attach_openrouter_output_details(
-                response.output,
-                getattr(self, "_agency_swarm_openrouter_output_details", []),
-            )
+            _attach_openrouter_output_details(response.output, details)
             return response
         finally:
-            self._agency_swarm_openrouter_output_details = current
+            _OPENROUTER_OUTPUT_DETAILS.reset(token)
 
     async def stream_response(self, *args: Any, **kwargs: Any) -> AsyncIterator[Any]:
-        current = getattr(self, "_agency_swarm_openrouter_output_details", [])
-        self._agency_swarm_openrouter_output_details = []
+        details: list[list[dict[str, object]]] = []
+        token = _OPENROUTER_OUTPUT_DETAILS.set(details)
         try:
             async for event in super().stream_response(*args, **kwargs):
                 if getattr(event, "type", None) == "response.completed":
                     completed = cast(Any, event)
-                    _attach_openrouter_output_details(
-                        completed.response.output,
-                        getattr(self, "_agency_swarm_openrouter_output_details", []),
-                    )
+                    _attach_openrouter_output_details(completed.response.output, details)
                 yield event
         finally:
-            self._agency_swarm_openrouter_output_details = current
+            _OPENROUTER_OUTPUT_DETAILS.reset(token)
 
     async def _fetch_response(self, *args: Any, **kwargs: Any) -> Any:
         input_value = args[1] if len(args) > 1 else kwargs.get("input")
-        current = getattr(self, "_agency_swarm_openrouter_replay_details", [])
-        self._agency_swarm_openrouter_replay_details = _openrouter_replay_details(input_value)
+        token = _OPENROUTER_REPLAY_DETAILS.set(_openrouter_replay_details(input_value))
         try:
             result = await super()._fetch_response(*args, **kwargs)
             if isinstance(result, ChatCompletion):
-                self._agency_swarm_openrouter_output_details = _normalize_openrouter_reasoning(result)
+                details = _OPENROUTER_OUTPUT_DETAILS.get()
+                if details is not None:
+                    details[:] = _normalize_openrouter_reasoning(result)
                 return result
             if isinstance(result, tuple):
                 response, stream = result
-                return response, _normalize_openrouter_reasoning_stream(stream, self)
+                return response, _normalize_openrouter_reasoning_stream(stream)
             return result
         finally:
-            self._agency_swarm_openrouter_replay_details = current
+            _OPENROUTER_REPLAY_DETAILS.reset(token)
 
     def _get_client(self) -> Any:
-        return _OpenRouterClientProxy(super()._get_client(), self)
+        return _OpenRouterClientProxy(super()._get_client())
 
 
 def build_openrouter_chat_model(
@@ -127,32 +127,31 @@ def is_openrouter_model(model: Any) -> bool:
 
 
 class _OpenRouterClientProxy:
-    def __init__(self, client: Any, model: OpenRouterChatCompletionsModel) -> None:
+    def __init__(self, client: Any) -> None:
         self._client = client
-        self.chat = _OpenRouterChatProxy(client.chat, model)
+        self.chat = _OpenRouterChatProxy(client.chat)
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._client, name)
 
 
 class _OpenRouterChatProxy:
-    def __init__(self, chat: Any, model: OpenRouterChatCompletionsModel) -> None:
+    def __init__(self, chat: Any) -> None:
         self._chat = chat
-        self.completions = _OpenRouterCompletionsProxy(chat.completions, model)
+        self.completions = _OpenRouterCompletionsProxy(chat.completions)
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._chat, name)
 
 
 class _OpenRouterCompletionsProxy:
-    def __init__(self, completions: Any, model: OpenRouterChatCompletionsModel) -> None:
+    def __init__(self, completions: Any) -> None:
         self._completions = completions
-        self._model = model
 
     async def create(self, **kwargs: Any) -> Any:
         _attach_openrouter_replay_details(
             kwargs.get("messages"),
-            getattr(self._model, "_agency_swarm_openrouter_replay_details", []),
+            _OPENROUTER_REPLAY_DETAILS.get() or [],
         )
         return await self._completions.create(**kwargs)
 
@@ -181,34 +180,40 @@ def _normalize_openrouter_reasoning(response: ChatCompletion) -> list[list[dict[
 
 async def _normalize_openrouter_reasoning_stream(
     stream: AsyncIterator[Any],
-    model: OpenRouterChatCompletionsModel,
 ) -> AsyncIterator[Any]:
-    signatures: list[str] = []
-    has_reasoning = False
-    output_details: list[dict[str, object]] = []
+    states: dict[int, _OpenRouterStreamState] = {}
+    output = _OPENROUTER_OUTPUT_DETAILS.get()
     async for chunk in stream:
         if isinstance(chunk, ChatCompletionChunk):
-            has_reasoning = _normalize_openrouter_reasoning_chunk(chunk, signatures, has_reasoning, output_details)
-            if output_details:
-                model._agency_swarm_openrouter_output_details = [output_details]
+            _normalize_openrouter_reasoning_chunk(chunk, states)
+            if output is not None:
+                output[:] = [
+                    state.output_details for _, state in sorted(states.items()) if state.output_details
+                ]
         yield chunk
+
+
+@dataclass
+class _OpenRouterStreamState:
+    signatures: list[str] = field(default_factory=list)
+    has_reasoning: bool = False
+    output_details: list[dict[str, object]] = field(default_factory=list)
 
 
 def _normalize_openrouter_reasoning_chunk(
     chunk: ChatCompletionChunk,
-    signatures: list[str],
-    has_reasoning: bool,
-    output_details: list[dict[str, object]],
-) -> bool:
+    states: dict[int, _OpenRouterStreamState],
+) -> None:
     for choice in chunk.choices:
+        state = states.setdefault(choice.index, _OpenRouterStreamState())
         delta = choice.delta
         dynamic = cast(Any, delta)
         dynamic._agency_swarm_skip_reasoning_content_copy = True
         details = _field(delta, "reasoning_details")
-        output_details.extend(_copy_reasoning_details(details))
+        state.output_details.extend(_copy_reasoning_details(details))
         text = _reasoning_details_text(details)
         summary = _reasoning_details_summary(details)
-        if not summary and not text and not has_reasoning:
+        if not summary and not text and not state.has_reasoning:
             summary = _encrypted_reasoning_placeholder(details)
 
         if summary and not _field(delta, "reasoning_content"):
@@ -217,12 +222,11 @@ def _normalize_openrouter_reasoning_chunk(
         if text and not _field(delta, "reasoning"):
             dynamic.reasoning = text
 
-        signatures.extend(_openrouter_reasoning_signatures(details))
-        if signatures and not _field(delta, "thinking_blocks"):
-            dynamic.thinking_blocks = [{"signature": "\n".join(signatures)}]
+        state.signatures.extend(_openrouter_reasoning_signatures(details))
+        if state.signatures and not _field(delta, "thinking_blocks"):
+            dynamic.thinking_blocks = [{"signature": "\n".join(state.signatures)}]
 
-        has_reasoning = has_reasoning or bool(summary or text)
-    return has_reasoning
+        state.has_reasoning = state.has_reasoning or bool(summary or text)
 
 
 def _openrouter_reasoning_summary(value: Any) -> str:

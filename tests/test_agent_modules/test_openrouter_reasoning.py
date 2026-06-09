@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncIterator
 from typing import Any, cast
 
@@ -9,7 +10,7 @@ from openai.types.chat.chat_completion_chunk import Choice as ChunkChoice, Choic
 from openai.types.completion_usage import CompletionUsage
 
 from agency_swarm import Agent, Runner, set_tracing_disabled
-from agency_swarm.utils.openrouter import build_openrouter_chat_model
+from agency_swarm.utils.openrouter import _normalize_openrouter_reasoning_stream, build_openrouter_chat_model
 
 
 class _Completions:
@@ -330,6 +331,47 @@ async def test_openrouter_replays_reasoning_details_on_next_request() -> None:
     assert assistant["reasoning_details"] == _reasoning_details()
 
 
+@pytest.mark.asyncio
+async def test_openrouter_streamed_reasoning_details_stay_separate_by_choice() -> None:
+    """Multi-choice streams should not mix reasoning metadata across choices."""
+    stream = _normalize_openrouter_reasoning_stream(_multi_choice_stream_chunks())
+
+    chunks = [chunk async for chunk in stream]
+
+    first = chunks[0].choices[0].delta
+    second = chunks[0].choices[1].delta
+    assert first.reasoning_content == "choice zero"
+    assert first.reasoning == "zero text"
+    assert first.thinking_blocks == [{"signature": "zero-signature"}]
+    assert second.reasoning_content == "choice one"
+    assert second.reasoning == "one text"
+    assert second.thinking_blocks == [{"signature": "one-signature"}]
+
+
+@pytest.mark.asyncio
+async def test_openrouter_parallel_runs_keep_provider_data_separate() -> None:
+    """Overlapping runs on one model should attach their own reasoning_details."""
+    set_tracing_disabled(True)
+    client = _ParallelClient()
+    model = build_openrouter_chat_model(
+        "openrouter/anthropic/claude-sonnet-4.5",
+        openai_client=cast(Any, client),
+    )
+    agent = Agent(name="OpenRouterAgent", instructions="Reply briefly.", model=model)
+
+    first, second = await asyncio.gather(
+        Runner.run(agent, "first"),
+        Runner.run(agent, "second"),
+    )
+
+    assert first.raw_responses[0].output[0].provider_data["openrouter_reasoning_details"] == [
+        {"type": "reasoning.text", "text": "first detail", "signature": "first-signature"}
+    ]
+    assert second.raw_responses[0].output[0].provider_data["openrouter_reasoning_details"] == [
+        {"type": "reasoning.text", "text": "second detail", "signature": "second-signature"}
+    ]
+
+
 def _reasoning_details() -> list[dict[str, object]]:
     return [
         {
@@ -385,6 +427,29 @@ async def _encrypted_stream_chunks() -> AsyncIterator[ChatCompletionChunk]:
     yield _chunk("chunk_content", ChoiceDelta(content="final answer"))
 
 
+async def _multi_choice_stream_chunks() -> AsyncIterator[ChatCompletionChunk]:
+    first = ChoiceDelta()
+    first.reasoning_details = [
+        {"type": "reasoning.summary", "summary": "choice zero"},
+        {"type": "reasoning.text", "text": "zero text", "signature": "zero-signature"},
+    ]
+    second = ChoiceDelta()
+    second.reasoning_details = [
+        {"type": "reasoning.summary", "summary": "choice one"},
+        {"type": "reasoning.text", "text": "one text", "signature": "one-signature"},
+    ]
+    yield ChatCompletionChunk(
+        id="chunk_multi",
+        choices=[
+            ChunkChoice(delta=first, finish_reason=None, index=0, logprobs=None),
+            ChunkChoice(delta=second, finish_reason=None, index=1, logprobs=None),
+        ],
+        created=0,
+        model="anthropic/claude-sonnet-4.5",
+        object="chat.completion.chunk",
+    )
+
+
 def _chunk(chunk_id: str, delta: ChoiceDelta) -> ChatCompletionChunk:
     return ChatCompletionChunk(
         id=chunk_id,
@@ -400,3 +465,57 @@ def _chunk(chunk_id: str, delta: ChoiceDelta) -> ChatCompletionChunk:
         model="anthropic/claude-sonnet-4.5",
         object="chat.completion.chunk",
     )
+
+
+class _ParallelCompletions:
+    async def create(self, **kwargs: Any) -> ChatCompletion:
+        text = _last_user_text(kwargs["messages"])
+        await asyncio.sleep(0)
+        message = ChatCompletionMessage(role="assistant", content=f"{text} answer")
+        message.reasoning_details = [
+            {
+                "type": "reasoning.text",
+                "text": f"{text} detail",
+                "signature": f"{text}-signature",
+            }
+        ]
+        return ChatCompletion(
+            id=f"chatcmpl_{text}",
+            choices=[
+                Choice(
+                    finish_reason="stop",
+                    index=0,
+                    logprobs=None,
+                    message=message,
+                )
+            ],
+            created=0,
+            model="anthropic/claude-sonnet-4.5",
+            object="chat.completion",
+            usage=CompletionUsage(completion_tokens=2, prompt_tokens=1, total_tokens=3),
+        )
+
+
+class _ParallelChat:
+    def __init__(self) -> None:
+        self.completions = _ParallelCompletions()
+
+
+class _ParallelClient:
+    def __init__(self) -> None:
+        self.chat = _ParallelChat()
+        self.base_url = "https://openrouter.ai/api/v1"
+
+
+def _last_user_text(messages: list[dict[str, Any]]) -> str:
+    for message in reversed(messages):
+        if message.get("role") != "user":
+            continue
+        content = message.get("content")
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            text = next((item.get("text") for item in content if isinstance(item, dict)), None)
+            if isinstance(text, str):
+                return text
+    raise AssertionError("missing user message")
