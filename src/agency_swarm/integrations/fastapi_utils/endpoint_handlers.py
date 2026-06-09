@@ -317,7 +317,7 @@ def _should_copy_source_openai_client_for_openrouter(
     base_url = str(client.base_url).rstrip("/")
     if base_url != "https://api.openai.com/v1":
         return False
-    return bool((None if config is None else config.api_key) or os.getenv(OPENROUTER_API_KEY_ENV))
+    return bool((None if config is None else config.api_key) or os.getenv(OPENROUTER_API_KEY_ENV) or client.api_key)
 
 
 def _copy_source_openai_client_for_openrouter(
@@ -325,7 +325,7 @@ def _copy_source_openai_client_for_openrouter(
     config: ClientConfig | None,
 ) -> AsyncOpenAI:
     return client.copy(
-        api_key=(None if config is None else config.api_key) or os.environ[OPENROUTER_API_KEY_ENV],
+        api_key=(None if config is None else config.api_key) or os.getenv(OPENROUTER_API_KEY_ENV) or client.api_key,
         base_url=(None if config is None else config.base_url) or OPENROUTER_BASE_URL,
         default_headers=(None if config is None else config.default_headers)
         or cast(dict[str, str], dict(client.default_headers or {}))
