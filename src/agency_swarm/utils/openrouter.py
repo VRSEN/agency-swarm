@@ -1,11 +1,12 @@
 """OpenRouter model helpers."""
 
 import os
+from collections.abc import AsyncIterator
 from typing import Any, cast
 
 from agents.models.openai_chatcompletions import OpenAIChatCompletionsModel
 from openai import AsyncOpenAI
-from openai.types.chat import ChatCompletion
+from openai.types.chat import ChatCompletion, ChatCompletionChunk
 
 OPENROUTER_API_KEY_ENV = "OPENROUTER_API_KEY"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -36,6 +37,9 @@ class OpenRouterChatCompletionsModel(OpenAIChatCompletionsModel):
         if isinstance(result, ChatCompletion):
             _normalize_openrouter_reasoning(result)
             return result
+        if isinstance(result, tuple):
+            response, stream = result
+            return response, _normalize_openrouter_reasoning_stream(stream)
         return result
 
 
@@ -81,22 +85,57 @@ def _normalize_openrouter_reasoning(response: ChatCompletion) -> None:
     for choice in response.choices:
         message = choice.message
         dynamic = cast(Any, message)
-        text = _openrouter_reasoning_text(message)
-        if text and not _field(message, "reasoning_content"):
-            dynamic.reasoning_content = text
+        summary = _openrouter_reasoning_summary(message)
+        if summary and not _field(message, "reasoning_content"):
+            dynamic.reasoning_content = summary
 
         blocks = _openrouter_reasoning_blocks(_field(message, "reasoning_details"))
         if blocks and not _field(message, "thinking_blocks"):
             dynamic.thinking_blocks = blocks
 
 
-def _openrouter_reasoning_text(value: Any) -> str:
+async def _normalize_openrouter_reasoning_stream(stream: AsyncIterator[Any]) -> AsyncIterator[Any]:
+    signatures: list[str] = []
+    async for chunk in stream:
+        if isinstance(chunk, ChatCompletionChunk):
+            _normalize_openrouter_reasoning_chunk(chunk, signatures)
+        yield chunk
+
+
+def _normalize_openrouter_reasoning_chunk(chunk: ChatCompletionChunk, signatures: list[str]) -> None:
+    for choice in chunk.choices:
+        delta = choice.delta
+        dynamic = cast(Any, delta)
+        details = _field(delta, "reasoning_details")
+        summary = _reasoning_details_summary(details)
+        if summary and not _field(delta, "reasoning_content"):
+            dynamic.reasoning_content = summary
+
+        text = _reasoning_details_text(details)
+        if text and not _field(delta, "reasoning"):
+            dynamic.reasoning = text
+
+        signatures.extend(_openrouter_reasoning_signatures(details))
+        if signatures and not _field(delta, "thinking_blocks"):
+            dynamic.thinking_blocks = [{"signature": "\n".join(signatures)}]
+
+
+def _openrouter_reasoning_summary(value: Any) -> str:
     reasoning = _field(value, "reasoning")
     if isinstance(reasoning, str):
         return reasoning
     if isinstance(reasoning, dict):
-        return _first_text(reasoning, ("thinking", "text", "reasoning", "content"))
-    return _reasoning_details_text(_field(value, "reasoning_details"))
+        return _first_text(reasoning, ("summary", "thinking", "text", "reasoning", "content"))
+    details = _field(value, "reasoning_details")
+    return _reasoning_details_summary(details) or _reasoning_details_text(details)
+
+
+def _reasoning_details_summary(details: Any) -> str:
+    if not isinstance(details, list):
+        return ""
+    return "".join(
+        text for item in details if isinstance(item, dict) for text in [_first_text(item, ("summary",))] if text
+    )
 
 
 def _reasoning_details_text(details: Any) -> str:
@@ -111,7 +150,7 @@ def _reasoning_details_text(details: Any) -> str:
     )
 
 
-def _openrouter_reasoning_blocks(details: Any) -> list[dict[str, str]]:
+def _openrouter_reasoning_blocks(details: Any, *, include_text: bool = True) -> list[dict[str, str]]:
     if not isinstance(details, list):
         return []
 
@@ -119,7 +158,7 @@ def _openrouter_reasoning_blocks(details: Any) -> list[dict[str, str]]:
     for item in details:
         if not isinstance(item, dict):
             continue
-        text = _first_text(item, ("thinking", "text", "reasoning", "content"))
+        text = _first_text(item, ("thinking", "text", "reasoning", "content")) if include_text else ""
         signature = _first_text(item, ("signature", "data", "encrypted_content"))
         block: dict[str, str] = {}
         if text:
@@ -129,6 +168,18 @@ def _openrouter_reasoning_blocks(details: Any) -> list[dict[str, str]]:
         if block:
             blocks.append(block)
     return blocks
+
+
+def _openrouter_reasoning_signatures(details: Any) -> list[str]:
+    if not isinstance(details, list):
+        return []
+    return [
+        signature
+        for item in details
+        if isinstance(item, dict)
+        for signature in [_first_text(item, ("signature", "data", "encrypted_content"))]
+        if signature
+    ]
 
 
 def _first_text(value: dict[str, Any], keys: tuple[str, ...]) -> str:
