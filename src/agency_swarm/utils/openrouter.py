@@ -216,8 +216,9 @@ def _normalize_openrouter_reasoning_chunk(
         state = states.setdefault(choice.index, _OpenRouterStreamState())
         delta = choice.delta
         dynamic = cast(Any, delta)
-        dynamic._agency_swarm_skip_reasoning_content_copy = True
         details = _field(delta, "reasoning_details")
+        if details:
+            dynamic._agency_swarm_skip_reasoning_content_copy = True
         state.output_details.extend(_copy_reasoning_details(details))
         text = _reasoning_details_text(details)
         summary = _reasoning_details_summary(details)
@@ -247,6 +248,9 @@ def _has_openrouter_reasoning(value: Any) -> bool:
 
 
 def _openrouter_reasoning_summary(value: Any) -> str:
+    content = _field(value, "reasoning_content")
+    if isinstance(content, str):
+        return content
     reasoning = _field(value, "reasoning")
     if isinstance(reasoning, str):
         return reasoning
@@ -256,6 +260,7 @@ def _openrouter_reasoning_summary(value: Any) -> str:
     return (
         _reasoning_details_summary(details)
         or _reasoning_details_text(details)
+        or _reasoning_details_text(_field(value, "thinking_blocks"))
         or _encrypted_reasoning_placeholder(details)
     )
 

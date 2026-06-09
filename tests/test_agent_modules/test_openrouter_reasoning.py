@@ -226,6 +226,56 @@ class _MixedChoiceClient:
         self.base_url = "https://openrouter.ai/api/v1"
 
 
+class _ReasoningContentCompletions:
+    async def create(self, **_kwargs: Any) -> ChatCompletion:
+        message = ChatCompletionMessage(role="assistant", content="final answer")
+        message.reasoning_content = "content reasoning"
+        return ChatCompletion(
+            id="chatcmpl_reasoning_content",
+            choices=[Choice(finish_reason="stop", index=0, logprobs=None, message=message)],
+            created=0,
+            model="anthropic/claude-sonnet-4.5",
+            object="chat.completion",
+            usage=CompletionUsage(completion_tokens=2, prompt_tokens=1, total_tokens=3),
+        )
+
+
+class _ReasoningContentChat:
+    def __init__(self) -> None:
+        self.completions = _ReasoningContentCompletions()
+
+
+class _ReasoningContentClient:
+    def __init__(self) -> None:
+        self.chat = _ReasoningContentChat()
+        self.base_url = "https://openrouter.ai/api/v1"
+
+
+class _ThinkingBlocksCompletions:
+    async def create(self, **_kwargs: Any) -> ChatCompletion:
+        message = ChatCompletionMessage(role="assistant", content="final answer")
+        message.thinking_blocks = [{"thinking": "block reasoning", "signature": "block-signature"}]
+        return ChatCompletion(
+            id="chatcmpl_thinking_blocks",
+            choices=[Choice(finish_reason="stop", index=0, logprobs=None, message=message)],
+            created=0,
+            model="anthropic/claude-sonnet-4.5",
+            object="chat.completion",
+            usage=CompletionUsage(completion_tokens=2, prompt_tokens=1, total_tokens=3),
+        )
+
+
+class _ThinkingBlocksChat:
+    def __init__(self) -> None:
+        self.completions = _ThinkingBlocksCompletions()
+
+
+class _ThinkingBlocksClient:
+    def __init__(self) -> None:
+        self.chat = _ThinkingBlocksChat()
+        self.base_url = "https://openrouter.ai/api/v1"
+
+
 class _MutationCompletions:
     def __init__(self) -> None:
         self.messages: list[dict[str, Any]] | None = None
@@ -402,6 +452,39 @@ async def test_openrouter_replays_reasoning_details_on_next_request() -> None:
 
 
 @pytest.mark.asyncio
+async def test_openrouter_runner_surfaces_non_stream_reasoning_content() -> None:
+    """OpenRouter sync responses can provide reasoning_content without details."""
+    set_tracing_disabled(True)
+    model = build_openrouter_chat_model(
+        "openrouter/anthropic/claude-sonnet-4.5",
+        openai_client=cast(Any, _ReasoningContentClient()),
+    )
+    agent = Agent(name="OpenRouterAgent", instructions="Reply briefly.", model=model)
+
+    result = await Runner.run(agent, "hello")
+
+    reasoning = result.raw_responses[0].output[0]
+    assert reasoning.summary[0].text == "content reasoning"
+
+
+@pytest.mark.asyncio
+async def test_openrouter_runner_surfaces_non_stream_thinking_blocks() -> None:
+    """OpenRouter sync responses can provide thinking_blocks without details."""
+    set_tracing_disabled(True)
+    model = build_openrouter_chat_model(
+        "openrouter/anthropic/claude-sonnet-4.5",
+        openai_client=cast(Any, _ThinkingBlocksClient()),
+    )
+    agent = Agent(name="OpenRouterAgent", instructions="Reply briefly.", model=model)
+
+    result = await Runner.run(agent, "hello")
+
+    reasoning = result.raw_responses[0].output[0]
+    assert reasoning.summary[0].text == "block reasoning"
+    assert reasoning.encrypted_content == "block-signature"
+
+
+@pytest.mark.asyncio
 async def test_openrouter_details_from_second_choice_do_not_attach_to_first_choice() -> None:
     """OpenRouter reasoning does not silently drop later chat choices."""
     set_tracing_disabled(True)
@@ -484,6 +567,22 @@ async def test_openrouter_streamed_reasoning_details_stay_separate_by_choice() -
 
     with pytest.raises(ValueError, match="single-choice"):
         _ = [chunk async for chunk in stream]
+
+
+@pytest.mark.asyncio
+async def test_openrouter_stream_without_details_keeps_litellm_reasoning_fallback() -> None:
+    """OpenRouter should not disable shared reasoning fallback without reasoning_details."""
+    delta = ChoiceDelta()
+    delta.thinking_blocks = [{"thinking": "fallback reasoning", "signature": "fallback-signature"}]
+    stream = _normalize_openrouter_reasoning_stream(_single_chunk_stream(_chunk("chunk_fallback", delta)))
+
+    chunks = [chunk async for chunk in stream]
+
+    normalized = chunks[0].choices[0].delta
+    assert not getattr(normalized, "_agency_swarm_skip_reasoning_content_copy", False)
+    assert normalized.thinking_blocks == [
+        {"thinking": "fallback reasoning", "signature": "fallback-signature"}
+    ]
 
 
 @pytest.mark.asyncio
@@ -586,6 +685,10 @@ async def _multi_choice_stream_chunks() -> AsyncIterator[ChatCompletionChunk]:
         model="anthropic/claude-sonnet-4.5",
         object="chat.completion.chunk",
     )
+
+
+async def _single_chunk_stream(chunk: ChatCompletionChunk) -> AsyncIterator[ChatCompletionChunk]:
+    yield chunk
 
 
 def _chunk(chunk_id: str, delta: ChoiceDelta) -> ChatCompletionChunk:
