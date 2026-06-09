@@ -196,7 +196,7 @@ def _normalize_openrouter_reasoning(response: ChatCompletion) -> list[list[dict[
     for index, choice in enumerate(response.choices):
         message = choice.message
         dynamic = cast(Any, message)
-        details = _copy_reasoning_details(_field(message, "reasoning_details"))
+        details = _openrouter_message_details(message)
         if index == 0:
             output_details = details
 
@@ -245,7 +245,7 @@ def _normalize_openrouter_reasoning_chunk(
         details = _field(delta, "reasoning_details")
         if details:
             dynamic._agency_swarm_skip_reasoning_content_copy = True
-        state.output_details.extend(_copy_reasoning_details(details))
+        state.output_details.extend(_openrouter_message_details(delta))
         text = _reasoning_details_text(details)
         summary = _reasoning_details_summary(details)
         if not summary and not text and not state.has_reasoning:
@@ -415,6 +415,29 @@ def _details_from_reasoning_item(item: Any) -> list[dict[str, object]]:
         details.append(detail)
 
     return details
+
+
+def _openrouter_message_details(value: Any) -> list[dict[str, object]]:
+    details = _copy_reasoning_details(_field(value, "reasoning_details"))
+    if details:
+        return details
+
+    synthesized: list[dict[str, object]] = []
+    summary = _field(value, "reasoning_content") or _openrouter_reasoning_summary(value)
+    if isinstance(summary, str) and summary:
+        synthesized.append({"type": "reasoning.summary", "summary": summary})
+
+    for block in _openrouter_reasoning_blocks(_field(value, "thinking_blocks")):
+        text = block.get("thinking")
+        signature = block.get("signature")
+        if text:
+            detail: dict[str, object] = {"type": "reasoning.text", "text": text}
+            if signature:
+                detail["signature"] = signature
+            synthesized.append(detail)
+        elif signature:
+            synthesized.append({"type": "reasoning.encrypted", "data": signature})
+    return synthesized
 
 
 def _copy_reasoning_details(details: Any) -> list[dict[str, object]]:

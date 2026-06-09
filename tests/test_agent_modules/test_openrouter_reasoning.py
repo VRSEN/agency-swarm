@@ -269,6 +269,36 @@ class _ReasoningContentClient:
         self.base_url = "https://openrouter.ai/api/v1"
 
 
+class _ReasoningContentReplayCompletions:
+    def __init__(self) -> None:
+        self.requests: list[dict[str, Any]] = []
+
+    async def create(self, **kwargs: Any) -> ChatCompletion:
+        self.requests.append(kwargs)
+        message = ChatCompletionMessage(role="assistant", content=f"turn {len(self.requests)}")
+        if len(self.requests) == 1:
+            message.reasoning_content = "content reasoning"
+        return ChatCompletion(
+            id=f"chatcmpl_content_replay_{len(self.requests)}",
+            choices=[Choice(finish_reason="stop", index=0, logprobs=None, message=message)],
+            created=0,
+            model="anthropic/claude-sonnet-4.5",
+            object="chat.completion",
+            usage=CompletionUsage(completion_tokens=2, prompt_tokens=1, total_tokens=3),
+        )
+
+
+class _ReasoningContentReplayChat:
+    def __init__(self) -> None:
+        self.completions = _ReasoningContentReplayCompletions()
+
+
+class _ReasoningContentReplayClient:
+    def __init__(self) -> None:
+        self.chat = _ReasoningContentReplayChat()
+        self.base_url = "https://openrouter.ai/api/v1"
+
+
 class _ThinkingBlocksCompletions:
     async def create(self, **_kwargs: Any) -> ChatCompletion:
         message = ChatCompletionMessage(role="assistant", content="final answer")
@@ -517,6 +547,27 @@ async def test_openrouter_replay_details_can_be_disabled() -> None:
     messages = client.chat.completions.requests[1]["messages"]
     assistant = next(message for message in messages if message["role"] == "assistant")
     assert "reasoning_details" not in assistant
+
+
+@pytest.mark.asyncio
+async def test_openrouter_replays_synthesized_reasoning_content() -> None:
+    """Reasoning_content-only responses should keep replay metadata for the next turn."""
+    set_tracing_disabled(True)
+    client = _ReasoningContentReplayClient()
+    model = build_openrouter_chat_model(
+        "openrouter/anthropic/claude-sonnet-4.5",
+        openai_client=cast(Any, client),
+    )
+    agent = Agent(name="OpenRouterAgent", instructions="Reply briefly.", model=model)
+
+    first = await Runner.run(agent, "hello")
+    await Runner.run(agent, [*first.to_input_list(), {"role": "user", "content": "again"}])
+
+    messages = client.chat.completions.requests[1]["messages"]
+    assistant = next(message for message in messages if message["role"] == "assistant")
+    assert assistant["reasoning_details"] == [
+        {"type": "reasoning.summary", "summary": "content reasoning"}
+    ]
 
 
 @pytest.mark.asyncio
