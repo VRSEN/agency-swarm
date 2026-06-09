@@ -2,6 +2,7 @@
 
 import os
 from collections.abc import AsyncIterator
+from copy import deepcopy
 from typing import Any, cast
 
 from agents.models.openai_chatcompletions import OpenAIChatCompletionsModel
@@ -12,6 +13,7 @@ OPENROUTER_API_KEY_ENV = "OPENROUTER_API_KEY"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 OPENROUTER_MODEL_PREFIX = "openrouter/"
 OPENROUTER_ENCRYPTED_REASONING_PLACEHOLDER = "[REDACTED]"
+OPENROUTER_REASONING_DETAILS_KEY = "openrouter_reasoning_details"
 
 
 def is_openrouter_model_name(model_name: str) -> bool:
@@ -33,6 +35,39 @@ def get_openrouter_model_name(model: object) -> str | None:
 class OpenRouterChatCompletionsModel(OpenAIChatCompletionsModel):
     """OpenRouter chat model with provider reasoning normalized for Agents."""
 
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._agency_swarm_openrouter_output_details: list[list[dict[str, object]]] = []
+        self._agency_swarm_openrouter_replay_details: list[list[dict[str, object]]] = []
+
+    async def get_response(self, *args: Any, **kwargs: Any) -> Any:
+        current = getattr(self, "_agency_swarm_openrouter_output_details", [])
+        self._agency_swarm_openrouter_output_details = []
+        try:
+            response = await super().get_response(*args, **kwargs)
+            _attach_openrouter_output_details(
+                response.output,
+                getattr(self, "_agency_swarm_openrouter_output_details", []),
+            )
+            return response
+        finally:
+            self._agency_swarm_openrouter_output_details = current
+
+    async def stream_response(self, *args: Any, **kwargs: Any) -> AsyncIterator[Any]:
+        current = getattr(self, "_agency_swarm_openrouter_output_details", [])
+        self._agency_swarm_openrouter_output_details = []
+        try:
+            async for event in super().stream_response(*args, **kwargs):
+                if getattr(event, "type", None) == "response.completed":
+                    completed = cast(Any, event)
+                    _attach_openrouter_output_details(
+                        completed.response.output,
+                        getattr(self, "_agency_swarm_openrouter_output_details", []),
+                    )
+                yield event
+        finally:
+            self._agency_swarm_openrouter_output_details = current
+
     async def _fetch_response(self, *args: Any, **kwargs: Any) -> Any:
         input_value = args[1] if len(args) > 1 else kwargs.get("input")
         current = getattr(self, "_agency_swarm_openrouter_replay_details", [])
@@ -40,11 +75,11 @@ class OpenRouterChatCompletionsModel(OpenAIChatCompletionsModel):
         try:
             result = await super()._fetch_response(*args, **kwargs)
             if isinstance(result, ChatCompletion):
-                _normalize_openrouter_reasoning(result)
+                self._agency_swarm_openrouter_output_details = _normalize_openrouter_reasoning(result)
                 return result
             if isinstance(result, tuple):
                 response, stream = result
-                return response, _normalize_openrouter_reasoning_stream(stream)
+                return response, _normalize_openrouter_reasoning_stream(stream, self)
             return result
         finally:
             self._agency_swarm_openrouter_replay_details = current
@@ -125,10 +160,15 @@ class _OpenRouterCompletionsProxy:
         return getattr(self._completions, name)
 
 
-def _normalize_openrouter_reasoning(response: ChatCompletion) -> None:
+def _normalize_openrouter_reasoning(response: ChatCompletion) -> list[list[dict[str, object]]]:
+    output_details: list[list[dict[str, object]]] = []
     for choice in response.choices:
         message = choice.message
         dynamic = cast(Any, message)
+        details = _copy_reasoning_details(_field(message, "reasoning_details"))
+        if details:
+            output_details.append(details)
+
         summary = _openrouter_reasoning_summary(message)
         if summary and not _field(message, "reasoning_content"):
             dynamic.reasoning_content = summary
@@ -136,14 +176,21 @@ def _normalize_openrouter_reasoning(response: ChatCompletion) -> None:
         blocks = _openrouter_reasoning_blocks(_field(message, "reasoning_details"))
         if blocks and not _field(message, "thinking_blocks"):
             dynamic.thinking_blocks = blocks
+    return output_details
 
 
-async def _normalize_openrouter_reasoning_stream(stream: AsyncIterator[Any]) -> AsyncIterator[Any]:
+async def _normalize_openrouter_reasoning_stream(
+    stream: AsyncIterator[Any],
+    model: OpenRouterChatCompletionsModel,
+) -> AsyncIterator[Any]:
     signatures: list[str] = []
     has_reasoning = False
+    output_details: list[dict[str, object]] = []
     async for chunk in stream:
         if isinstance(chunk, ChatCompletionChunk):
-            has_reasoning = _normalize_openrouter_reasoning_chunk(chunk, signatures, has_reasoning)
+            has_reasoning = _normalize_openrouter_reasoning_chunk(chunk, signatures, has_reasoning, output_details)
+            if output_details:
+                model._agency_swarm_openrouter_output_details = [output_details]
         yield chunk
 
 
@@ -151,11 +198,13 @@ def _normalize_openrouter_reasoning_chunk(
     chunk: ChatCompletionChunk,
     signatures: list[str],
     has_reasoning: bool,
+    output_details: list[dict[str, object]],
 ) -> bool:
     for choice in chunk.choices:
         delta = choice.delta
         dynamic = cast(Any, delta)
         details = _field(delta, "reasoning_details")
+        output_details.extend(_copy_reasoning_details(details))
         text = _reasoning_details_text(details)
         summary = _reasoning_details_summary(details)
         if not summary and not text and not has_reasoning:
@@ -198,7 +247,7 @@ def _openrouter_replay_details(input_value: Any) -> list[list[dict[str, object]]
     for item in input_value:
         item_type = _field(item, "type")
         if item_type == "reasoning":
-            pending = _details_from_reasoning_item(item)
+            pending = _original_reasoning_details(item) or _details_from_reasoning_item(item)
             continue
         if pending and _is_assistant_output_item(item):
             replay.append(pending)
@@ -228,6 +277,30 @@ def _is_assistant_output_item(item: Any) -> bool:
     return _field(item, "role") == "assistant"
 
 
+def _attach_openrouter_output_details(output: Any, details: list[list[dict[str, object]]]) -> None:
+    if not isinstance(output, list) or not details:
+        return
+
+    remaining = list(details)
+    for item in output:
+        if not remaining:
+            return
+        if _field(item, "type") != "reasoning":
+            continue
+        provider_data = _field(item, "provider_data")
+        provider = dict(provider_data) if isinstance(provider_data, dict) else {}
+        provider[OPENROUTER_REASONING_DETAILS_KEY] = _copy_reasoning_details(remaining.pop(0))
+        dynamic = cast(Any, item)
+        dynamic.provider_data = provider
+
+
+def _original_reasoning_details(item: Any) -> list[dict[str, object]]:
+    provider_data = _field(item, "provider_data")
+    if not isinstance(provider_data, dict):
+        return []
+    return _copy_reasoning_details(provider_data.get(OPENROUTER_REASONING_DETAILS_KEY))
+
+
 def _details_from_reasoning_item(item: Any) -> list[dict[str, object]]:
     details: list[dict[str, object]] = []
     encrypted = _encrypted_parts(item)
@@ -249,6 +322,12 @@ def _details_from_reasoning_item(item: Any) -> list[dict[str, object]]:
         details.append(detail)
 
     return details
+
+
+def _copy_reasoning_details(details: Any) -> list[dict[str, object]]:
+    if not isinstance(details, list):
+        return []
+    return [cast(dict[str, object], deepcopy(item)) for item in details if isinstance(item, dict)]
 
 
 def _summary_texts(item: Any) -> list[str]:

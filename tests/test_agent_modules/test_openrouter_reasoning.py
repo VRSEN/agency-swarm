@@ -327,21 +327,7 @@ async def test_openrouter_replays_reasoning_details_on_next_request() -> None:
 
     messages = client.chat.completions.requests[1]["messages"]
     assistant = next(message for message in messages if message["role"] == "assistant")
-    assert assistant["reasoning_details"] == [
-        {
-            "type": "reasoning.summary",
-            "summary": "documented summary",
-        },
-        {
-            "type": "reasoning.encrypted",
-            "data": "encrypted-data",
-        },
-        {
-            "type": "reasoning.text",
-            "text": "documented text",
-            "signature": "text-signature",
-        },
-    ]
+    assert assistant["reasoning_details"] == _reasoning_details()
 
 
 def _reasoning_details() -> list[dict[str, object]]:
@@ -352,6 +338,7 @@ def _reasoning_details() -> list[dict[str, object]]:
             "id": "reasoning-summary-1",
             "format": "anthropic-claude-v1",
             "index": 0,
+            "unknown_field": "summary-extra",
         },
         {
             "type": "reasoning.encrypted",
@@ -359,6 +346,7 @@ def _reasoning_details() -> list[dict[str, object]]:
             "id": "reasoning-encrypted-1",
             "format": "anthropic-claude-v1",
             "index": 1,
+            "unknown_field": "encrypted-extra",
         },
         {
             "type": "reasoning.text",
@@ -367,6 +355,7 @@ def _reasoning_details() -> list[dict[str, object]]:
             "id": "reasoning-text-1",
             "format": "anthropic-claude-v1",
             "index": 2,
+            "unknown_field": "text-extra",
         },
     ]
 
