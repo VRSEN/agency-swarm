@@ -11,6 +11,7 @@ from openai.types.chat import ChatCompletion, ChatCompletionChunk
 OPENROUTER_API_KEY_ENV = "OPENROUTER_API_KEY"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 OPENROUTER_MODEL_PREFIX = "openrouter/"
+OPENROUTER_ENCRYPTED_REASONING_PLACEHOLDER = "[REDACTED]"
 
 
 def is_openrouter_model_name(model_name: str) -> bool:
@@ -96,28 +97,39 @@ def _normalize_openrouter_reasoning(response: ChatCompletion) -> None:
 
 async def _normalize_openrouter_reasoning_stream(stream: AsyncIterator[Any]) -> AsyncIterator[Any]:
     signatures: list[str] = []
+    has_reasoning = False
     async for chunk in stream:
         if isinstance(chunk, ChatCompletionChunk):
-            _normalize_openrouter_reasoning_chunk(chunk, signatures)
+            has_reasoning = _normalize_openrouter_reasoning_chunk(chunk, signatures, has_reasoning)
         yield chunk
 
 
-def _normalize_openrouter_reasoning_chunk(chunk: ChatCompletionChunk, signatures: list[str]) -> None:
+def _normalize_openrouter_reasoning_chunk(
+    chunk: ChatCompletionChunk,
+    signatures: list[str],
+    has_reasoning: bool,
+) -> bool:
     for choice in chunk.choices:
         delta = choice.delta
         dynamic = cast(Any, delta)
         details = _field(delta, "reasoning_details")
+        text = _reasoning_details_text(details)
         summary = _reasoning_details_summary(details)
+        if not summary and not text and not has_reasoning:
+            summary = _encrypted_reasoning_placeholder(details)
+
         if summary and not _field(delta, "reasoning_content"):
             dynamic.reasoning_content = summary
 
-        text = _reasoning_details_text(details)
         if text and not _field(delta, "reasoning"):
             dynamic.reasoning = text
 
         signatures.extend(_openrouter_reasoning_signatures(details))
         if signatures and not _field(delta, "thinking_blocks"):
             dynamic.thinking_blocks = [{"signature": "\n".join(signatures)}]
+
+        has_reasoning = has_reasoning or bool(summary or text)
+    return has_reasoning
 
 
 def _openrouter_reasoning_summary(value: Any) -> str:
@@ -127,7 +139,11 @@ def _openrouter_reasoning_summary(value: Any) -> str:
     if isinstance(reasoning, dict):
         return _first_text(reasoning, ("summary", "thinking", "text", "reasoning", "content"))
     details = _field(value, "reasoning_details")
-    return _reasoning_details_summary(details) or _reasoning_details_text(details)
+    return (
+        _reasoning_details_summary(details)
+        or _reasoning_details_text(details)
+        or _encrypted_reasoning_placeholder(details)
+    )
 
 
 def _reasoning_details_summary(details: Any) -> str:
@@ -148,6 +164,12 @@ def _reasoning_details_text(details: Any) -> str:
         for text in [_first_text(item, ("thinking", "text", "reasoning", "content"))]
         if text
     )
+
+
+def _encrypted_reasoning_placeholder(details: Any) -> str:
+    if _openrouter_reasoning_signatures(details):
+        return OPENROUTER_ENCRYPTED_REASONING_PLACEHOLDER
+    return ""
 
 
 def _openrouter_reasoning_blocks(details: Any, *, include_text: bool = True) -> list[dict[str, str]]:
