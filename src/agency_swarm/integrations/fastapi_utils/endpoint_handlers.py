@@ -198,6 +198,8 @@ def _apply_request_model_override(agent: Agent, model_name: str, config: ClientC
         if source_openrouter_model is not None:
             gateway_client = _resolve_request_gateway_client(agent, config)
             openrouter_client = gateway_client if gateway_client is not None else _get_openai_client_from_agent(agent)
+        elif not _has_request_openai_overrides(config):
+            openrouter_client = _get_non_default_openai_client_from_agent(agent)
         agent.model = build_openrouter_chat_model(
             model_name,
             api_key=None if openrouter_client is not None or config is None else config.api_key,
@@ -268,6 +270,16 @@ def _resolve_request_gateway_client(agent: Agent, config: ClientConfig | None) -
     if config.base_url is None and config.api_key is None and config.default_headers is None:
         return None
     return _build_openai_client_for_agent(agent, config)
+
+
+def _get_non_default_openai_client_from_agent(agent: Agent) -> AsyncOpenAI | None:
+    client = _get_openai_client_from_agent(agent)
+    if client is None:
+        return None
+    base_url = str(client.base_url).rstrip("/")
+    if base_url == "https://api.openai.com/v1":
+        return None
+    return client
 
 
 def _resolve_openai_client_after_openrouter_override(config: ClientConfig | None) -> AsyncOpenAI | None:

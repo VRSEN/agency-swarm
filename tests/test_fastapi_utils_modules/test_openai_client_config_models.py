@@ -1537,6 +1537,47 @@ def test_configured_openrouter_model_override_preserves_replay_policy(
     assert agent.model.should_replay_reasoning_content is replay
 
 
+def test_openrouter_override_reuses_non_default_source_openai_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OpenRouter swaps should keep an existing gateway client from normal OpenAI wrappers."""
+    pytest.importorskip("agents")
+
+    from agents import OpenAIChatCompletionsModel
+    from openai import AsyncOpenAI
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+    from agency_swarm.utils.openrouter import get_openrouter_model_name
+
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    client = AsyncOpenAI(
+        api_key="sk-gateway",
+        base_url="https://gateway.test/v1",
+        default_headers={"x-source": "kept"},
+    )
+
+    def replay(_context):
+        return False
+
+    source = OpenAIChatCompletionsModel(
+        model="gpt-4o-mini",
+        openai_client=client,
+        should_replay_reasoning_content=replay,
+    )
+    agent = Agent(name="A", instructions="x", model=source)
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(agency, ClientConfig(model="openrouter/anthropic/claude-sonnet-4.5"))
+
+    assert isinstance(agent.model, OpenAIChatCompletionsModel)
+    assert agent.model.model == "anthropic/claude-sonnet-4.5"
+    assert get_openrouter_model_name(agent.model) == "openrouter/anthropic/claude-sonnet-4.5"
+    assert agent.model._client is client
+    assert agent.model.should_replay_reasoning_content is replay
+
+
 def test_configured_openrouter_agent_openai_override_drops_openrouter_client(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
