@@ -281,15 +281,17 @@ def _attach_openrouter_replay_details(messages: Any, replay: list[list[dict[str,
     if not isinstance(messages, list) or not replay:
         return
 
-    remaining = list(replay)
-    for message in messages:
-        if not remaining:
-            return
-        if not isinstance(message, dict) or message.get("role") != "assistant":
-            continue
-        if "reasoning_details" in message:
-            continue
-        message["reasoning_details"] = remaining.pop(0)
+    targets = [
+        message
+        for message in messages
+        if isinstance(message, dict)
+        and message.get("role") == "assistant"
+        and "reasoning_details" not in message
+    ]
+    selected = targets[-len(replay) :]
+    selected_replay = replay[-len(selected) :] if selected else []
+    for message, details in zip(selected, selected_replay, strict=True):
+        message["reasoning_details"] = details
 
 
 def _is_assistant_output_item(item: Any) -> bool:

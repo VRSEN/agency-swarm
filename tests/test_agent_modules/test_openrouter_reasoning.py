@@ -436,6 +436,30 @@ async def test_openrouter_replay_details_do_not_mutate_caller_messages() -> None
     assert client.chat.completions.messages[0]["reasoning_details"] == _reasoning_details()
 
 
+@pytest.mark.asyncio
+async def test_openrouter_replay_details_attach_to_latest_assistant_message() -> None:
+    """Replay enrichment should not attach current reasoning to older assistant turns."""
+    client = _MutationClient()
+    model = build_openrouter_chat_model(
+        "openrouter/anthropic/claude-sonnet-4.5",
+        openai_client=cast(Any, client),
+    )
+    messages = [
+        {"role": "assistant", "content": "older"},
+        {"role": "user", "content": "next"},
+        {"role": "assistant", "content": "current"},
+    ]
+    token = _OPENROUTER_REPLAY_DETAILS.set([_reasoning_details()])
+    try:
+        await model._get_client().chat.completions.create(messages=messages)
+    finally:
+        _OPENROUTER_REPLAY_DETAILS.reset(token)
+
+    assert client.chat.completions.messages is not None
+    assert "reasoning_details" not in client.chat.completions.messages[0]
+    assert client.chat.completions.messages[2]["reasoning_details"] == _reasoning_details()
+
+
 def test_openrouter_replay_fallback_drops_redaction_placeholder() -> None:
     """A local display placeholder should not be sent back as provider reasoning."""
     details = _details_from_reasoning_item(
