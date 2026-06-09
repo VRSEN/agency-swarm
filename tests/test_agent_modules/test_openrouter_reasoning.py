@@ -530,6 +530,26 @@ async def test_openrouter_replays_reasoning_details_on_next_request() -> None:
 
 
 @pytest.mark.asyncio
+async def test_openrouter_replay_accepts_trailing_slash_base_url() -> None:
+    """The default OpenRouter endpoint should replay with or without a trailing slash."""
+    set_tracing_disabled(True)
+    client = _ReplayClient()
+    client.base_url = "https://openrouter.ai/api/v1/"
+    model = build_openrouter_chat_model(
+        "openrouter/anthropic/claude-sonnet-4.5",
+        openai_client=cast(Any, client),
+    )
+    agent = Agent(name="OpenRouterAgent", instructions="Reply briefly.", model=model)
+
+    first = await Runner.run(agent, "hello")
+    await Runner.run(agent, [*first.to_input_list(), {"role": "user", "content": "again"}])
+
+    messages = client.chat.completions.requests[1]["messages"]
+    assistant = next(message for message in messages if message["role"] == "assistant")
+    assert assistant["reasoning_details"] == _reasoning_details()
+
+
+@pytest.mark.asyncio
 async def test_openrouter_replay_details_can_be_disabled() -> None:
     """A caller-provided replay policy should be able to block OpenRouter detail replay."""
     set_tracing_disabled(True)

@@ -152,10 +152,14 @@ def _should_replay_openrouter_reasoning(context: ReasoningContentReplayContext) 
     origin = context.reasoning.origin_model
     return (
         OPENROUTER_REASONING_DETAILS_KEY in context.reasoning.provider_data
-        and context.base_url == OPENROUTER_BASE_URL
+        and _is_openrouter_base_url(context.base_url)
         and origin is not None
         and _model_family(origin) == _model_family(context.model)
     )
+
+
+def _is_openrouter_base_url(base_url: str | None) -> bool:
+    return base_url is not None and base_url.rstrip("/") == OPENROUTER_BASE_URL
 
 
 def _model_family(model: str) -> str:
