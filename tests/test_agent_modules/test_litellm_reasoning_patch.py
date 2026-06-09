@@ -211,3 +211,16 @@ async def test_litellm_stream_patch_forwards_strict_feature_validation(monkeypat
         "model": "model",
         "strict_feature_validation": True,
     }
+
+
+def test_litellm_patch_skips_already_normalized_chunks() -> None:
+    patch = importlib.import_module("agency_swarm.streaming.litellm_reasoning")
+    delta = SimpleNamespace(
+        reasoning="OpenRouter text",
+        _agency_swarm_skip_reasoning_content_copy=True,
+    )
+    chunk = SimpleNamespace(choices=[SimpleNamespace(delta=delta)])
+
+    patch._copy_thinking_blocks_to_reasoning_content(chunk)
+
+    assert not hasattr(delta, "reasoning_content")

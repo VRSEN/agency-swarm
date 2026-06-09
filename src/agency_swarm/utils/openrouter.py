@@ -203,6 +203,7 @@ def _normalize_openrouter_reasoning_chunk(
     for choice in chunk.choices:
         delta = choice.delta
         dynamic = cast(Any, delta)
+        dynamic._agency_swarm_skip_reasoning_content_copy = True
         details = _field(delta, "reasoning_details")
         output_details.extend(_copy_reasoning_details(details))
         text = _reasoning_details_text(details)

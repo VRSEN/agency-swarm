@@ -48,6 +48,8 @@ def _copy_thinking_blocks_to_reasoning_content(chunk: Any) -> None:
         delta = getattr(choice, "delta", None)
         if delta is None:
             continue
+        if getattr(delta, "_agency_swarm_skip_reasoning_content_copy", False):
+            continue
         if getattr(delta, "reasoning_content", None):
             continue
 
