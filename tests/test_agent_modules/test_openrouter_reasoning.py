@@ -276,6 +276,36 @@ class _ThinkingBlocksClient:
         self.base_url = "https://openrouter.ai/api/v1"
 
 
+class _SplitReasoningCompletions:
+    async def create(self, **_kwargs: Any) -> ChatCompletion:
+        message = ChatCompletionMessage(role="assistant", content="final answer")
+        message.reasoning_details = [
+            {"type": "reasoning.summary", "summary": "first summary"},
+            {"type": "reasoning.summary", "summary": "second summary"},
+            {"type": "reasoning.text", "text": "first text"},
+            {"type": "reasoning.text", "text": "second text"},
+        ]
+        return ChatCompletion(
+            id="chatcmpl_split_reasoning",
+            choices=[Choice(finish_reason="stop", index=0, logprobs=None, message=message)],
+            created=0,
+            model="anthropic/claude-sonnet-4.5",
+            object="chat.completion",
+            usage=CompletionUsage(completion_tokens=2, prompt_tokens=1, total_tokens=3),
+        )
+
+
+class _SplitReasoningChat:
+    def __init__(self) -> None:
+        self.completions = _SplitReasoningCompletions()
+
+
+class _SplitReasoningClient:
+    def __init__(self) -> None:
+        self.chat = _SplitReasoningChat()
+        self.base_url = "https://openrouter.ai/api/v1"
+
+
 class _MutationCompletions:
     def __init__(self) -> None:
         self.messages: list[dict[str, Any]] | None = None
@@ -506,7 +536,7 @@ async def test_openrouter_replay_details_do_not_mutate_caller_messages() -> None
         "openrouter/anthropic/claude-sonnet-4.5",
         openai_client=cast(Any, client),
     )
-    messages = [{"role": "assistant", "content": "previous"}]
+    messages = [{"role": "assistant", "content": "previous", "reasoning_content": "documented summary"}]
     token = _OPENROUTER_REPLAY_DETAILS.set([_reasoning_details()])
     try:
         await model._get_client().chat.completions.create(messages=messages)
@@ -520,6 +550,25 @@ async def test_openrouter_replay_details_do_not_mutate_caller_messages() -> None
 
 
 @pytest.mark.asyncio
+async def test_openrouter_replay_details_respect_sdk_replay_policy() -> None:
+    """Replay enrichment should not add details when the SDK did not mark replay."""
+    client = _MutationClient()
+    model = build_openrouter_chat_model(
+        "openrouter/anthropic/claude-sonnet-4.5",
+        openai_client=cast(Any, client),
+    )
+    messages = [{"role": "assistant", "content": "previous"}]
+    token = _OPENROUTER_REPLAY_DETAILS.set([_reasoning_details()])
+    try:
+        await model._get_client().chat.completions.create(messages=messages)
+    finally:
+        _OPENROUTER_REPLAY_DETAILS.reset(token)
+
+    assert client.chat.completions.messages is not None
+    assert "reasoning_details" not in client.chat.completions.messages[0]
+
+
+@pytest.mark.asyncio
 async def test_openrouter_replay_details_attach_to_latest_assistant_message() -> None:
     """Replay enrichment should not attach current reasoning to older assistant turns."""
     client = _MutationClient()
@@ -530,7 +579,7 @@ async def test_openrouter_replay_details_attach_to_latest_assistant_message() ->
     messages = [
         {"role": "assistant", "content": "older"},
         {"role": "user", "content": "next"},
-        {"role": "assistant", "content": "current"},
+        {"role": "assistant", "content": "current", "reasoning_content": "documented summary"},
     ]
     token = _OPENROUTER_REPLAY_DETAILS.set([_reasoning_details()])
     try:
@@ -558,6 +607,23 @@ def test_openrouter_replay_fallback_drops_redaction_placeholder() -> None:
         {"type": "reasoning.encrypted", "data": "encrypted-data"},
         {"type": "reasoning.text", "text": "real text", "signature": "text-signature"},
     ]
+
+
+@pytest.mark.asyncio
+async def test_openrouter_reasoning_fragments_preserve_boundaries() -> None:
+    """Multiple reasoning fragments should keep readable separators."""
+    set_tracing_disabled(True)
+    model = build_openrouter_chat_model(
+        "openrouter/anthropic/claude-sonnet-4.5",
+        openai_client=cast(Any, _SplitReasoningClient()),
+    )
+    agent = Agent(name="OpenRouterAgent", instructions="Reply briefly.", model=model)
+
+    result = await Runner.run(agent, "hello")
+
+    reasoning = result.raw_responses[0].output[0]
+    assert reasoning.summary[0].text == "first summary\nsecond summary"
+    assert [content.text for content in reasoning.content] == ["first text", "second text"]
 
 
 @pytest.mark.asyncio

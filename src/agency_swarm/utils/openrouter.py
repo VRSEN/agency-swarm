@@ -7,6 +7,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, cast
 
+from agents.models.chatcmpl_converter import ReasoningContentReplayContext
 from agents.models.openai_chatcompletions import OpenAIChatCompletionsModel
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletion, ChatCompletionChunk
@@ -44,6 +45,10 @@ def get_openrouter_model_name(model: object) -> str | None:
 
 class OpenRouterChatCompletionsModel(OpenAIChatCompletionsModel):
     """OpenRouter chat model with provider reasoning normalized for Agents."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        kwargs.setdefault("should_replay_reasoning_content", _should_replay_openrouter_reasoning)
+        super().__init__(*args, **kwargs)
 
     async def get_response(self, *args: Any, **kwargs: Any) -> Any:
         details: list[list[dict[str, object]]] = []
@@ -124,6 +129,10 @@ def _default_settings_model_name(actual_model: str) -> str:
 def is_openrouter_model(model: Any) -> bool:
     """Return whether a model object was built for OpenRouter."""
     return get_openrouter_model_name(model) is not None
+
+
+def _should_replay_openrouter_reasoning(context: ReasoningContentReplayContext) -> bool:
+    return OPENROUTER_REASONING_DETAILS_KEY in context.reasoning.provider_data
 
 
 class _OpenRouterClientProxy:
@@ -291,6 +300,7 @@ def _attach_openrouter_replay_details(messages: Any, replay: list[list[dict[str,
         for message in messages
         if isinstance(message, dict)
         and message.get("role") == "assistant"
+        and "reasoning_content" in message
         and "reasoning_details" not in message
     ]
     selected = targets[-len(replay) :]
@@ -387,7 +397,7 @@ def _encrypted_parts(item: Any) -> list[str]:
 def _reasoning_details_summary(details: Any) -> str:
     if not isinstance(details, list):
         return ""
-    return "".join(
+    return "\n".join(
         text for item in details if isinstance(item, dict) for text in [_first_text(item, ("summary",))] if text
     )
 
@@ -395,7 +405,7 @@ def _reasoning_details_summary(details: Any) -> str:
 def _reasoning_details_text(details: Any) -> str:
     if not isinstance(details, list):
         return ""
-    return "".join(
+    return "\n".join(
         text
         for item in details
         if isinstance(item, dict)
