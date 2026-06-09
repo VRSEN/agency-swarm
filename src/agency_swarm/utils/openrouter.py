@@ -34,14 +34,23 @@ class OpenRouterChatCompletionsModel(OpenAIChatCompletionsModel):
     """OpenRouter chat model with provider reasoning normalized for Agents."""
 
     async def _fetch_response(self, *args: Any, **kwargs: Any) -> Any:
-        result = await super()._fetch_response(*args, **kwargs)
-        if isinstance(result, ChatCompletion):
-            _normalize_openrouter_reasoning(result)
+        input_value = args[1] if len(args) > 1 else kwargs.get("input")
+        current = getattr(self, "_agency_swarm_openrouter_replay_details", [])
+        self._agency_swarm_openrouter_replay_details = _openrouter_replay_details(input_value)
+        try:
+            result = await super()._fetch_response(*args, **kwargs)
+            if isinstance(result, ChatCompletion):
+                _normalize_openrouter_reasoning(result)
+                return result
+            if isinstance(result, tuple):
+                response, stream = result
+                return response, _normalize_openrouter_reasoning_stream(stream)
             return result
-        if isinstance(result, tuple):
-            response, stream = result
-            return response, _normalize_openrouter_reasoning_stream(stream)
-        return result
+        finally:
+            self._agency_swarm_openrouter_replay_details = current
+
+    def _get_client(self) -> Any:
+        return _OpenRouterClientProxy(super()._get_client(), self)
 
 
 def build_openrouter_chat_model(
@@ -80,6 +89,40 @@ def _default_settings_model_name(actual_model: str) -> str:
 def is_openrouter_model(model: Any) -> bool:
     """Return whether a model object was built for OpenRouter."""
     return get_openrouter_model_name(model) is not None
+
+
+class _OpenRouterClientProxy:
+    def __init__(self, client: Any, model: OpenRouterChatCompletionsModel) -> None:
+        self._client = client
+        self.chat = _OpenRouterChatProxy(client.chat, model)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._client, name)
+
+
+class _OpenRouterChatProxy:
+    def __init__(self, chat: Any, model: OpenRouterChatCompletionsModel) -> None:
+        self._chat = chat
+        self.completions = _OpenRouterCompletionsProxy(chat.completions, model)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._chat, name)
+
+
+class _OpenRouterCompletionsProxy:
+    def __init__(self, completions: Any, model: OpenRouterChatCompletionsModel) -> None:
+        self._completions = completions
+        self._model = model
+
+    async def create(self, **kwargs: Any) -> Any:
+        _attach_openrouter_replay_details(
+            kwargs.get("messages"),
+            getattr(self._model, "_agency_swarm_openrouter_replay_details", []),
+        )
+        return await self._completions.create(**kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._completions, name)
 
 
 def _normalize_openrouter_reasoning(response: ChatCompletion) -> None:
@@ -146,6 +189,93 @@ def _openrouter_reasoning_summary(value: Any) -> str:
     )
 
 
+def _openrouter_replay_details(input_value: Any) -> list[list[dict[str, object]]]:
+    if not isinstance(input_value, list):
+        return []
+
+    pending: list[dict[str, object]] | None = None
+    replay: list[list[dict[str, object]]] = []
+    for item in input_value:
+        item_type = _field(item, "type")
+        if item_type == "reasoning":
+            pending = _details_from_reasoning_item(item)
+            continue
+        if pending and _is_assistant_output_item(item):
+            replay.append(pending)
+            pending = None
+    return replay
+
+
+def _attach_openrouter_replay_details(messages: Any, replay: list[list[dict[str, object]]]) -> None:
+    if not isinstance(messages, list) or not replay:
+        return
+
+    remaining = list(replay)
+    for message in messages:
+        if not remaining:
+            return
+        if not isinstance(message, dict) or message.get("role") != "assistant":
+            continue
+        if "reasoning_details" in message:
+            continue
+        message["reasoning_details"] = remaining.pop(0)
+
+
+def _is_assistant_output_item(item: Any) -> bool:
+    item_type = _field(item, "type")
+    if item_type in {"message", "function_call"}:
+        return True
+    return _field(item, "role") == "assistant"
+
+
+def _details_from_reasoning_item(item: Any) -> list[dict[str, object]]:
+    details: list[dict[str, object]] = []
+    encrypted = _encrypted_parts(item)
+    contents = _content_texts(_field(item, "content"))
+
+    for summary in _summary_texts(item):
+        if summary != OPENROUTER_ENCRYPTED_REASONING_PLACEHOLDER or contents:
+            details.append({"type": "reasoning.summary", "summary": summary})
+
+    extra_count = max(0, len(encrypted) - len(contents))
+    for value in encrypted[:extra_count]:
+        details.append({"type": "reasoning.encrypted", "data": value})
+
+    signatures = encrypted[extra_count:]
+    for index, text in enumerate(contents):
+        detail: dict[str, object] = {"type": "reasoning.text", "text": text}
+        if index < len(signatures):
+            detail["signature"] = signatures[index]
+        details.append(detail)
+
+    return details
+
+
+def _summary_texts(item: Any) -> list[str]:
+    summary = _field(item, "summary")
+    if not isinstance(summary, list):
+        return []
+    return [text for value in summary for text in [_first_text_from_any(value, ("text", "summary"))] if text]
+
+
+def _content_texts(content: Any) -> list[str]:
+    if not isinstance(content, list):
+        return []
+    return [
+        text
+        for value in content
+        for text in [_first_text_from_any(value, ("text", "thinking", "reasoning", "content"))]
+        if text
+    ]
+
+
+def _encrypted_parts(item: Any) -> list[str]:
+    encrypted = _field(item, "encrypted_content")
+    if not isinstance(encrypted, str):
+        return []
+    return [part for part in encrypted.split("\n") if part]
+
+
 def _reasoning_details_summary(details: Any) -> str:
     if not isinstance(details, list):
         return ""
@@ -207,6 +337,16 @@ def _openrouter_reasoning_signatures(details: Any) -> list[str]:
 def _first_text(value: dict[str, Any], keys: tuple[str, ...]) -> str:
     for key in keys:
         found = value.get(key)
+        if isinstance(found, str):
+            return found
+    return ""
+
+
+def _first_text_from_any(value: Any, keys: tuple[str, ...]) -> str:
+    if isinstance(value, dict):
+        return _first_text(value, keys)
+    for key in keys:
+        found = getattr(value, key, None)
         if isinstance(found, str):
             return found
     return ""

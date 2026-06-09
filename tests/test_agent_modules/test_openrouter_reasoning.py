@@ -151,6 +151,43 @@ class _EncryptedStreamClient:
         self.base_url = "https://openrouter.ai/api/v1"
 
 
+class _ReplayCompletions:
+    def __init__(self) -> None:
+        self.requests: list[dict[str, Any]] = []
+
+    async def create(self, **kwargs: Any) -> ChatCompletion:
+        self.requests.append(kwargs)
+        message = ChatCompletionMessage(role="assistant", content=f"turn {len(self.requests)}")
+        if len(self.requests) == 1:
+            message.reasoning_details = _reasoning_details()
+        return ChatCompletion(
+            id=f"chatcmpl_test_{len(self.requests)}",
+            choices=[
+                Choice(
+                    finish_reason="stop",
+                    index=0,
+                    logprobs=None,
+                    message=message,
+                )
+            ],
+            created=0,
+            model="anthropic/claude-sonnet-4.5",
+            object="chat.completion",
+            usage=CompletionUsage(completion_tokens=2, prompt_tokens=1, total_tokens=3),
+        )
+
+
+class _ReplayChat:
+    def __init__(self) -> None:
+        self.completions = _ReplayCompletions()
+
+
+class _ReplayClient:
+    def __init__(self) -> None:
+        self.chat = _ReplayChat()
+        self.base_url = "https://openrouter.ai/api/v1"
+
+
 @pytest.mark.asyncio
 async def test_openrouter_runner_surfaces_reasoning_metadata() -> None:
     """Runner output should include OpenRouter reasoning from OpenAI-compatible chat."""
@@ -263,6 +300,48 @@ async def test_openrouter_streamed_encrypted_only_reasoning_details_surface_thro
     assert reasoning.summary[0].text == "[REDACTED]"
     assert reasoning.content is None
     assert reasoning.encrypted_content == "encrypted-data"
+
+
+@pytest.mark.asyncio
+async def test_openrouter_replays_reasoning_details_on_next_request() -> None:
+    """A second turn should pass prior OpenRouter reasoning details back."""
+    set_tracing_disabled(True)
+    client = _ReplayClient()
+    model = build_openrouter_chat_model(
+        "openrouter/anthropic/claude-sonnet-4.5",
+        openai_client=cast(Any, client),
+    )
+    agent = Agent(name="OpenRouterAgent", instructions="Reply briefly.", model=model)
+
+    first = await Runner.run(agent, "hello")
+    await Runner.run(
+        agent,
+        [
+            *first.to_input_list(),
+            {
+                "role": "user",
+                "content": "again",
+            },
+        ],
+    )
+
+    messages = client.chat.completions.requests[1]["messages"]
+    assistant = next(message for message in messages if message["role"] == "assistant")
+    assert assistant["reasoning_details"] == [
+        {
+            "type": "reasoning.summary",
+            "summary": "documented summary",
+        },
+        {
+            "type": "reasoning.encrypted",
+            "data": "encrypted-data",
+        },
+        {
+            "type": "reasoning.text",
+            "text": "documented text",
+            "signature": "text-signature",
+        },
+    ]
 
 
 def _reasoning_details() -> list[dict[str, object]]:
