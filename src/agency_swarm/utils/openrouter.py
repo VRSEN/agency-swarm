@@ -149,7 +149,16 @@ def is_openrouter_model(model: Any) -> bool:
 
 
 def _should_replay_openrouter_reasoning(context: ReasoningContentReplayContext) -> bool:
-    return OPENROUTER_REASONING_DETAILS_KEY in context.reasoning.provider_data
+    origin = context.reasoning.origin_model
+    return (
+        OPENROUTER_REASONING_DETAILS_KEY in context.reasoning.provider_data
+        and origin is not None
+        and _model_family(origin) == _model_family(context.model)
+    )
+
+
+def _model_family(model: str) -> str:
+    return strip_openrouter_prefix(model).split("/", 1)[0].lower()
 
 
 class _OpenRouterClientProxy:

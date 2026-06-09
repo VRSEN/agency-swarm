@@ -1501,6 +1501,42 @@ def test_configured_openrouter_model_override_preserves_injected_client_without_
     assert dict(agent.model._client.default_headers)["x-client"] == "kept"
 
 
+def test_configured_openrouter_model_override_preserves_replay_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OpenRouter model swaps should keep custom reasoning replay policy."""
+    pytest.importorskip("agents")
+
+    from agents import OpenAIChatCompletionsModel
+    from openai import AsyncOpenAI
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+    from agency_swarm.utils.openrouter import build_openrouter_chat_model
+
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    client = AsyncOpenAI(
+        api_key="sk-injected",
+        base_url="https://openrouter-proxy.test/v1",
+    )
+    def replay(_context):
+        return False
+
+    source = build_openrouter_chat_model(
+        "openrouter/anthropic/claude-sonnet-4.5",
+        openai_client=client,
+        should_replay_reasoning_content=replay,
+    )
+    agent = Agent(name="A", instructions="x", model=source)
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(agency, ClientConfig(model="openrouter/openai/gpt-5"))
+
+    assert isinstance(agent.model, OpenAIChatCompletionsModel)
+    assert agent.model.should_replay_reasoning_content is replay
+
+
 def test_configured_openrouter_agent_openai_override_drops_openrouter_client(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

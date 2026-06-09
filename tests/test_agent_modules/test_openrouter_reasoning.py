@@ -550,6 +550,30 @@ async def test_openrouter_replay_details_can_be_disabled() -> None:
 
 
 @pytest.mark.asyncio
+async def test_openrouter_default_replay_blocks_cross_family_reasoning() -> None:
+    """OpenRouter reasoning should not replay across provider families by default."""
+    set_tracing_disabled(True)
+    client = _ReplayClient()
+    source = build_openrouter_chat_model(
+        "openrouter/openai/gpt-5",
+        openai_client=cast(Any, client),
+    )
+    agent = Agent(name="OpenRouterAgent", instructions="Reply briefly.", model=source)
+
+    first = await Runner.run(agent, "hello")
+    target = build_openrouter_chat_model(
+        "openrouter/anthropic/claude-sonnet-4.5",
+        openai_client=cast(Any, client),
+    )
+    agent.model = target
+    await Runner.run(agent, [*first.to_input_list(), {"role": "user", "content": "again"}])
+
+    messages = client.chat.completions.requests[1]["messages"]
+    assistant = next(message for message in messages if message["role"] == "assistant")
+    assert "reasoning_details" not in assistant
+
+
+@pytest.mark.asyncio
 async def test_openrouter_replays_synthesized_reasoning_content() -> None:
     """Reasoning_content-only responses should keep replay metadata for the next turn."""
     set_tracing_disabled(True)

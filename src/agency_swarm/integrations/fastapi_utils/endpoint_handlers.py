@@ -204,6 +204,7 @@ def _apply_request_model_override(agent: Agent, model_name: str, config: ClientC
             base_url=None if openrouter_client is not None or config is None else config.base_url,
             default_headers=None if openrouter_client is not None or config is None else config.default_headers,
             openai_client=openrouter_client,
+            should_replay_reasoning_content=getattr(model, "should_replay_reasoning_content", None),
         )
         return gateway_client is not None or (source_openrouter_model is None and _has_request_openai_overrides(config))
 
@@ -2075,7 +2076,11 @@ def _apply_client_to_agent(agent: Agent, client: AsyncOpenAI | None, config: Cli
         if openrouter_model_name is not None:
             if client is None:
                 return
-            agent.model = build_openrouter_chat_model(openrouter_model_name, openai_client=client)
+            agent.model = build_openrouter_chat_model(
+                openrouter_model_name,
+                openai_client=client,
+                should_replay_reasoning_content=getattr(model, "should_replay_reasoning_content", None),
+            )
             return
         if _is_litellm_model(model.model):
             if has_litellm_overrides:
