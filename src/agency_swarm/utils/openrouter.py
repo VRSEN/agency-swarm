@@ -152,6 +152,7 @@ def _should_replay_openrouter_reasoning(context: ReasoningContentReplayContext) 
     origin = context.reasoning.origin_model
     return (
         OPENROUTER_REASONING_DETAILS_KEY in context.reasoning.provider_data
+        and context.base_url == OPENROUTER_BASE_URL
         and origin is not None
         and _model_family(origin) == _model_family(context.model)
     )
