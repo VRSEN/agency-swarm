@@ -163,6 +163,9 @@ class _OpenRouterCompletionsProxy:
 
 
 def _normalize_openrouter_reasoning(response: ChatCompletion) -> list[list[dict[str, object]]]:
+    if len(response.choices) > 1 and any(_has_openrouter_reasoning(choice.message) for choice in response.choices):
+        raise ValueError("OpenRouter reasoning is only supported for single-choice chat completions")
+
     output_details: list[dict[str, object]] = []
     for index, choice in enumerate(response.choices):
         message = choice.message
@@ -188,6 +191,8 @@ async def _normalize_openrouter_reasoning_stream(
     output = _OPENROUTER_OUTPUT_DETAILS.get()
     async for chunk in stream:
         if isinstance(chunk, ChatCompletionChunk):
+            if len(chunk.choices) > 1 and any(_has_openrouter_reasoning(choice.delta) for choice in chunk.choices):
+                raise ValueError("OpenRouter reasoning is only supported for single-choice chat completions")
             primary = chunk.choices[0].index if chunk.choices else None
             _normalize_openrouter_reasoning_chunk(chunk, states)
             state = states.get(primary) if primary is not None else None
@@ -230,6 +235,15 @@ def _normalize_openrouter_reasoning_chunk(
             dynamic.thinking_blocks = [{"signature": "\n".join(state.signatures)}]
 
         state.has_reasoning = state.has_reasoning or bool(summary or text)
+
+
+def _has_openrouter_reasoning(value: Any) -> bool:
+    return bool(
+        _field(value, "reasoning")
+        or _field(value, "reasoning_content")
+        or _field(value, "reasoning_details")
+        or _field(value, "thinking_blocks")
+    )
 
 
 def _openrouter_reasoning_summary(value: Any) -> str:

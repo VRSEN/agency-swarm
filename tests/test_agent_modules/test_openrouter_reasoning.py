@@ -403,7 +403,7 @@ async def test_openrouter_replays_reasoning_details_on_next_request() -> None:
 
 @pytest.mark.asyncio
 async def test_openrouter_details_from_second_choice_do_not_attach_to_first_choice() -> None:
-    """Runner converts the first chat choice, so provider details must follow that choice."""
+    """OpenRouter reasoning does not silently drop later chat choices."""
     set_tracing_disabled(True)
     model = build_openrouter_chat_model(
         "openrouter/anthropic/claude-sonnet-4.5",
@@ -411,11 +411,8 @@ async def test_openrouter_details_from_second_choice_do_not_attach_to_first_choi
     )
     agent = Agent(name="OpenRouterAgent", instructions="Reply briefly.", model=model)
 
-    result = await Runner.run(agent, "hello")
-
-    reasoning = result.raw_responses[0].output[0]
-    assert reasoning.summary[0].text == "first summary"
-    assert "openrouter_reasoning_details" not in reasoning.provider_data
+    with pytest.raises(ValueError, match="single-choice"):
+        await Runner.run(agent, "hello")
 
 
 @pytest.mark.asyncio
@@ -458,19 +455,11 @@ def test_openrouter_replay_fallback_drops_redaction_placeholder() -> None:
 
 @pytest.mark.asyncio
 async def test_openrouter_streamed_reasoning_details_stay_separate_by_choice() -> None:
-    """Multi-choice streams should not mix reasoning metadata across choices."""
+    """Multi-choice streams should not silently mix reasoning metadata across choices."""
     stream = _normalize_openrouter_reasoning_stream(_multi_choice_stream_chunks())
 
-    chunks = [chunk async for chunk in stream]
-
-    first = chunks[0].choices[0].delta
-    second = chunks[0].choices[1].delta
-    assert first.reasoning_content == "choice zero"
-    assert first.reasoning == "zero text"
-    assert first.thinking_blocks == [{"signature": "zero-signature"}]
-    assert second.reasoning_content == "choice one"
-    assert second.reasoning == "one text"
-    assert second.thinking_blocks == [{"signature": "one-signature"}]
+    with pytest.raises(ValueError, match="single-choice"):
+        _ = [chunk async for chunk in stream]
 
 
 @pytest.mark.asyncio
