@@ -37,7 +37,7 @@ dependencies = [
     "aiofiles>=23.2.1",
     "filetype>=1.2.0",
     "httpx>=0.28.0",
-    "griffe>=1.15.0,<2",
+    "griffe>=1.15.0,<3",
 ]
 classifiers = [
     "Typing :: Typed",
