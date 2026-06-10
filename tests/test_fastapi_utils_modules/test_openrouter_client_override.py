@@ -63,3 +63,33 @@ def test_model_only_openrouter_override_does_not_reuse_custom_gateway_client(
     assert agent.model._client is not client
     assert agent.model._client.api_key == "sk-openrouter-env"
     assert str(agent.model._client.base_url).startswith("https://openrouter.ai/api/v1")
+
+
+def test_model_only_openrouter_override_strips_source_auth_headers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Copied official clients must not send stale OpenAI auth to OpenRouter."""
+    pytest.importorskip("agents")
+
+    from agents import OpenAIChatCompletionsModel
+    from openai import AsyncOpenAI
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-openrouter-env")
+    client = AsyncOpenAI(
+        api_key="sk-source-openai",
+        base_url="https://api.openai.com/v1",
+        default_headers={"x-source": "kept"},
+    )
+    source = OpenAIChatCompletionsModel(model="gpt-4o-mini", openai_client=client)
+    agent = Agent(name="A", instructions="x", model=source)
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(agency, ClientConfig(model="openrouter/anthropic/claude-sonnet-4.5"))
+
+    headers = dict(agent.model._client.default_headers)
+    assert headers["x-source"] == "kept"
+    assert headers.get("Authorization") != "Bearer sk-source-openai"

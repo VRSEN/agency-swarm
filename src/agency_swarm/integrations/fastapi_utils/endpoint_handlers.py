@@ -213,7 +213,7 @@ def _apply_request_model_override(agent: Agent, model_name: str, config: ClientC
             elif source_client is not None and _should_copy_source_openai_client_for_openrouter(source_client):
                 openrouter_client = _copy_source_openai_client_for_openrouter(source_client, config)
             elif source_client is not None and _should_preserve_source_openai_headers(source_client):
-                source_default_headers = cast(dict[str, str], dict(source_client.default_headers or {})) or None
+                source_default_headers = _copyable_source_openai_headers(source_client)
         agent.model = build_openrouter_chat_model(
             model_name,
             api_key=None if openrouter_client is not None or config is None else config.api_key,
@@ -301,7 +301,7 @@ def _should_preserve_source_openai_headers(client: AsyncOpenAI | None) -> bool:
     base_url = str(client.base_url).rstrip("/")
     if base_url != "https://api.openai.com/v1":
         return False
-    return bool(client.default_headers)
+    return bool(_copyable_source_openai_headers(client))
 
 
 def _should_copy_source_openai_client_for_openrouter(
@@ -325,10 +325,20 @@ def _copy_source_openai_client_for_openrouter(
     return client.copy(
         api_key=(None if config is None else config.api_key) or os.getenv(OPENROUTER_API_KEY_ENV),
         base_url=(None if config is None else config.base_url) or OPENROUTER_BASE_URL,
-        default_headers=(None if config is None else config.default_headers)
-        or cast(dict[str, str], dict(client.default_headers or {}))
-        or None,
+        default_headers=(None if config is None else config.default_headers) or _copyable_source_openai_headers(client),
     )
+
+
+_OPENAI_CREDENTIAL_HEADER_NAMES = frozenset({"authorization", "openai-organization", "openai-project"})
+
+
+def _copyable_source_openai_headers(client: AsyncOpenAI) -> dict[str, str] | None:
+    headers = {
+        key: value
+        for key, value in cast(dict[str, str], dict(client.default_headers or {})).items()
+        if key.lower() not in _OPENAI_CREDENTIAL_HEADER_NAMES
+    }
+    return headers or None
 
 
 def _openrouter_override_default_headers(
