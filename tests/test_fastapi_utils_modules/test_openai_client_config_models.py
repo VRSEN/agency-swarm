@@ -100,6 +100,27 @@ def test_tui_bridge_stream_config_ignores_default_model_sentinel() -> None:
     assert resolved.default_headers == {"x-test": "1"}
 
 
+def test_tui_bridge_stream_config_strips_default_model_bridge_base_url() -> None:
+    """The default sentinel should not point local LiteLLM agency models back at the bridge."""
+    request = SimpleNamespace(
+        app=SimpleNamespace(state=SimpleNamespace(agency_swarm_tui_bridge=True)),
+        base_url="http://127.0.0.1:54321/",
+    )
+    config = ClientConfig(
+        model="agency-swarm/default",
+        api_key="sk-test",
+        base_url="http://127.0.0.1:54321",
+    )
+
+    resolved = endpoint_handlers._resolve_stream_client_config(request, config)
+
+    assert resolved is not None
+    assert resolved.model is None
+    assert resolved.base_url is None
+    assert resolved.api_key == "sk-test"
+    assert config.base_url == "http://127.0.0.1:54321"
+
+
 def test_tui_bridge_stream_config_keeps_explicit_openai_model() -> None:
     """TUI-selected OpenAI models should replace the agency's configured model."""
     request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(agency_swarm_tui_bridge=True)))
@@ -122,6 +143,28 @@ def test_regular_stream_config_keeps_request_model() -> None:
     assert resolved.model == "gpt-5.4"
 
 
+def test_regular_stream_config_keeps_default_model_sentinel_without_app() -> None:
+    """Non-TUI stream request doubles without ``.app`` should keep the sentinel."""
+    request = SimpleNamespace()
+    config = ClientConfig(model="agency-swarm/default", api_key="sk-test")
+
+    resolved = endpoint_handlers._resolve_stream_client_config(request, config)
+
+    assert resolved is config
+    assert resolved.model == "agency-swarm/default"
+
+
+def test_regular_stream_config_keeps_default_model_sentinel_without_tui_bridge() -> None:
+    """Only the TUI bridge should strip the default-model sentinel."""
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+    config = ClientConfig(model="agency-swarm/default", api_key="sk-test")
+
+    resolved = endpoint_handlers._resolve_stream_client_config(request, config)
+
+    assert resolved is config
+    assert resolved.model == "agency-swarm/default"
+
+
 def test_tui_bridge_stream_config_keeps_explicit_litellm_model() -> None:
     """TUI-selected LiteLLM models should replace the agency's configured model."""
     request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(agency_swarm_tui_bridge=True)))
@@ -131,6 +174,46 @@ def test_tui_bridge_stream_config_keeps_explicit_litellm_model() -> None:
 
     assert resolved is config
     assert resolved.model == "litellm/ollama_chat/gemma4:e4b"
+
+
+def test_tui_bridge_stream_config_strips_local_litellm_gateway_base_url() -> None:
+    """TUI-selected local LiteLLM models should not inherit the bridge server URL."""
+    request = SimpleNamespace(
+        app=SimpleNamespace(state=SimpleNamespace(agency_swarm_tui_bridge=True)),
+        base_url="http://127.0.0.1:54321/",
+    )
+    config = ClientConfig(
+        model="litellm/ollama_chat/gemma4:e4b",
+        api_key="sk-openai-gateway",
+        base_url="http://127.0.0.1:54321",
+    )
+
+    resolved = endpoint_handlers._resolve_stream_client_config(request, config)
+
+    assert resolved is not None
+    assert resolved is not config
+    assert resolved.model == "litellm/ollama_chat/gemma4:e4b"
+    assert resolved.base_url is None
+    assert resolved.api_key == "sk-openai-gateway"
+    assert config.base_url == "http://127.0.0.1:54321"
+
+
+def test_tui_bridge_stream_config_preserves_explicit_local_litellm_base_url() -> None:
+    """Remote Ollama/LM Studio base URLs must survive the TUI bridge rewrite."""
+    request = SimpleNamespace(
+        app=SimpleNamespace(state=SimpleNamespace(agency_swarm_tui_bridge=True)),
+        base_url="http://127.0.0.1:54321/",
+    )
+    config = ClientConfig(
+        model="litellm/ollama_chat/gemma4:e4b",
+        api_key="sk-openai-gateway",
+        base_url="http://remote-ollama.test",
+    )
+
+    resolved = endpoint_handlers._resolve_stream_client_config(request, config)
+
+    assert resolved is config
+    assert resolved.base_url == "http://remote-ollama.test"
 
 
 def test_request_api_key_allows_client_build_without_env(monkeypatch) -> None:
@@ -333,8 +416,8 @@ def test_litellm_google_wrapper_uses_gemini_request_proxy_base_url() -> None:
     assert agent.model.base_url == "http://litellm-proxy.local"
 
 
-def test_litellm_ollama_does_not_use_request_base_url_fallback() -> None:
-    """Request gateway base_url must not override Ollama's provider-native endpoint."""
+def test_litellm_ollama_uses_explicit_request_base_url() -> None:
+    """Non-TUI callers may route local LiteLLM providers to a remote Ollama endpoint."""
     pytest.importorskip("agents")
     pytest.importorskip("agents.extensions.models.litellm_model")
 
@@ -352,16 +435,16 @@ def test_litellm_ollama_does_not_use_request_base_url_fallback() -> None:
     agent = Agent(name="A", instructions="x", model=original_model)
     agency = _Agency(agent)
 
-    apply_openai_client_config(agency, ClientConfig(api_key="sk-openai-gateway", base_url="http://127.0.0.1:54321"))
+    apply_openai_client_config(agency, ClientConfig(api_key="sk-openai-gateway", base_url="http://remote-ollama.test"))
 
     assert isinstance(agent.model, LitellmModel)
     assert agent.model.model == "ollama_chat/gemma4:e4b"
-    assert agent.model.base_url is None
+    assert agent.model.base_url == "http://remote-ollama.test"
     assert agent.model.api_key is None
 
 
-def test_agency_swarm_default_model_does_not_override_litellm_agent_model() -> None:
-    """The TUI sentinel model should preserve the agency's configured model."""
+def test_agency_swarm_default_model_override_reaches_litellm_agent_model() -> None:
+    """Outside the TUI stream bridge, the sentinel remains a normal model override."""
     pytest.importorskip("agents")
     pytest.importorskip("agents.extensions.models.litellm_model")
 
@@ -381,8 +464,9 @@ def test_agency_swarm_default_model_does_not_override_litellm_agent_model() -> N
 
     apply_openai_client_config(agency, ClientConfig(model="agency-swarm/default"))
 
-    assert agent.model is original_model
-    assert agent.model.model == "ollama_chat/gemma4:e4b"
+    assert isinstance(agent.model, LitellmModel)
+    assert agent.model is not original_model
+    assert agent.model.model == "agency-swarm/default"
     assert agent.model.base_url == "http://localhost:11434/"
 
 

@@ -193,9 +193,6 @@ def _apply_request_model_override(agent: Agent, model_name: str, config: ClientC
     Returns ``True`` when the OpenAI gateway client has already been applied
     during the swap so the caller can skip the downstream client-apply step.
     """
-    if model_name == _AGENCY_SWARM_DEFAULT_MODEL:
-        return False
-
     model = agent.model
 
     if is_openrouter_model_name(model_name):
@@ -490,7 +487,7 @@ def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
     # Apply to all agents in the agency
     for agent in agency.agents.values():
         gateway_applied = False
-        if config.model is not None and config.model != _AGENCY_SWARM_DEFAULT_MODEL:
+        if config.model is not None:
             gateway_applied = _apply_request_model_override(agent, config.model, config)
             _refresh_framework_defaults_after_model_swap(agent)
         _apply_request_model_settings_extra_args(agent, config)
@@ -540,9 +537,27 @@ def _resolve_stream_client_config(http_request: Request, config: ClientConfig | 
     app_state = getattr(getattr(http_request, "app", None), "state", None)
     if not bool(getattr(app_state, "agency_swarm_tui_bridge", False)):
         return config
+    if config.model is not None and _is_litellm_model(config.model):
+        provider = _get_litellm_provider(config.model)
+        if (
+            config.base_url is not None
+            and _is_local_litellm_provider(provider)
+            and _is_request_base_url(http_request, config.base_url)
+        ):
+            return config.model_copy(update={"base_url": None})
     if config.model != _AGENCY_SWARM_DEFAULT_MODEL:
         return config
-    return config.model_copy(update={"model": None})
+    update: dict[str, str | None] = {"model": None}
+    if config.base_url is not None and _is_request_base_url(http_request, config.base_url):
+        update["base_url"] = None
+    return config.model_copy(update=update)
+
+
+def _is_request_base_url(http_request: Request, base_url: str) -> bool:
+    request_base_url = getattr(http_request, "base_url", None)
+    if request_base_url is None:
+        return False
+    return str(request_base_url).rstrip("/") == base_url.rstrip("/")
 
 
 @dataclass
@@ -2309,11 +2324,6 @@ def _resolve_litellm_base_url(
     provider = _get_litellm_provider(model_name)
 
     if config.base_url is None:
-        return existing_base_url
-
-    # Local providers resolve their own endpoint from LiteLLM/env configuration.
-    # Inheriting the Agent Swarm bridge URL here points those models at the wrong server.
-    if _is_local_litellm_provider(provider):
         return existing_base_url
 
     # Preserve main's Codex browser-auth guard for non-OpenAI providers, while
