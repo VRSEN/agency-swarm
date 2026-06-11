@@ -122,6 +122,28 @@ def test_regular_stream_config_keeps_request_model() -> None:
     assert resolved.model == "gpt-5.4"
 
 
+def test_regular_stream_config_keeps_default_model_sentinel_without_app() -> None:
+    """Non-TUI stream request doubles without ``.app`` should keep the sentinel."""
+    request = SimpleNamespace()
+    config = ClientConfig(model="agency-swarm/default", api_key="sk-test")
+
+    resolved = endpoint_handlers._resolve_stream_client_config(request, config)
+
+    assert resolved is config
+    assert resolved.model == "agency-swarm/default"
+
+
+def test_regular_stream_config_keeps_default_model_sentinel_without_tui_bridge() -> None:
+    """Only the TUI bridge should strip the default-model sentinel."""
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+    config = ClientConfig(model="agency-swarm/default", api_key="sk-test")
+
+    resolved = endpoint_handlers._resolve_stream_client_config(request, config)
+
+    assert resolved is config
+    assert resolved.model == "agency-swarm/default"
+
+
 def test_tui_bridge_stream_config_keeps_explicit_litellm_model() -> None:
     """TUI-selected LiteLLM models should replace the agency's configured model."""
     request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(agency_swarm_tui_bridge=True)))
@@ -360,8 +382,8 @@ def test_litellm_ollama_does_not_use_request_base_url_fallback() -> None:
     assert agent.model.api_key is None
 
 
-def test_agency_swarm_default_model_does_not_override_litellm_agent_model() -> None:
-    """The TUI sentinel model should preserve the agency's configured model."""
+def test_agency_swarm_default_model_override_reaches_litellm_agent_model() -> None:
+    """Outside the TUI stream bridge, the sentinel remains a normal model override."""
     pytest.importorskip("agents")
     pytest.importorskip("agents.extensions.models.litellm_model")
 
@@ -381,8 +403,9 @@ def test_agency_swarm_default_model_does_not_override_litellm_agent_model() -> N
 
     apply_openai_client_config(agency, ClientConfig(model="agency-swarm/default"))
 
-    assert agent.model is original_model
-    assert agent.model.model == "ollama_chat/gemma4:e4b"
+    assert isinstance(agent.model, LitellmModel)
+    assert agent.model is not original_model
+    assert agent.model.model == "agency-swarm/default"
     assert agent.model.base_url == "http://localhost:11434/"
 
 

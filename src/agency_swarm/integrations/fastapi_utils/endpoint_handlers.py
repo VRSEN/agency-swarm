@@ -193,9 +193,6 @@ def _apply_request_model_override(agent: Agent, model_name: str, config: ClientC
     Returns ``True`` when the OpenAI gateway client has already been applied
     during the swap so the caller can skip the downstream client-apply step.
     """
-    if model_name == _AGENCY_SWARM_DEFAULT_MODEL:
-        return False
-
     model = agent.model
 
     if is_openrouter_model_name(model_name):
@@ -490,7 +487,7 @@ def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
     # Apply to all agents in the agency
     for agent in agency.agents.values():
         gateway_applied = False
-        if config.model is not None and config.model != _AGENCY_SWARM_DEFAULT_MODEL:
+        if config.model is not None:
             gateway_applied = _apply_request_model_override(agent, config.model, config)
             _refresh_framework_defaults_after_model_swap(agent)
         _apply_request_model_settings_extra_args(agent, config)
@@ -537,7 +534,7 @@ def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
 def _resolve_stream_client_config(http_request: Request, config: ClientConfig | None) -> ClientConfig | None:
     if config is None:
         return None
-    app_state = getattr(http_request.app, "state", None)
+    app_state = getattr(getattr(http_request, "app", None), "state", None)
     if not bool(getattr(app_state, "agency_swarm_tui_bridge", False)):
         return config
     if config.model != _AGENCY_SWARM_DEFAULT_MODEL:
