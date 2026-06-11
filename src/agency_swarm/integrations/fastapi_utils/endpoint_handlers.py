@@ -539,11 +539,22 @@ def _resolve_stream_client_config(http_request: Request, config: ClientConfig | 
         return config
     if config.model is not None and _is_litellm_model(config.model):
         provider = _get_litellm_provider(config.model)
-        if config.base_url is not None and _is_local_litellm_provider(provider):
+        if (
+            config.base_url is not None
+            and _is_local_litellm_provider(provider)
+            and _is_request_base_url(http_request, config.base_url)
+        ):
             return config.model_copy(update={"base_url": None})
     if config.model != _AGENCY_SWARM_DEFAULT_MODEL:
         return config
     return config.model_copy(update={"model": None})
+
+
+def _is_request_base_url(http_request: Request, base_url: str) -> bool:
+    request_base_url = getattr(http_request, "base_url", None)
+    if request_base_url is None:
+        return False
+    return str(request_base_url).rstrip("/") == base_url.rstrip("/")
 
 
 @dataclass

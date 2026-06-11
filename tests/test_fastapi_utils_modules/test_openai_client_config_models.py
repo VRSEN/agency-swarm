@@ -157,7 +157,10 @@ def test_tui_bridge_stream_config_keeps_explicit_litellm_model() -> None:
 
 def test_tui_bridge_stream_config_strips_local_litellm_gateway_base_url() -> None:
     """TUI-selected local LiteLLM models should not inherit the bridge server URL."""
-    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(agency_swarm_tui_bridge=True)))
+    request = SimpleNamespace(
+        app=SimpleNamespace(state=SimpleNamespace(agency_swarm_tui_bridge=True)),
+        base_url="http://127.0.0.1:54321/",
+    )
     config = ClientConfig(
         model="litellm/ollama_chat/gemma4:e4b",
         api_key="sk-openai-gateway",
@@ -172,6 +175,24 @@ def test_tui_bridge_stream_config_strips_local_litellm_gateway_base_url() -> Non
     assert resolved.base_url is None
     assert resolved.api_key == "sk-openai-gateway"
     assert config.base_url == "http://127.0.0.1:54321"
+
+
+def test_tui_bridge_stream_config_preserves_explicit_local_litellm_base_url() -> None:
+    """Remote Ollama/LM Studio base URLs must survive the TUI bridge rewrite."""
+    request = SimpleNamespace(
+        app=SimpleNamespace(state=SimpleNamespace(agency_swarm_tui_bridge=True)),
+        base_url="http://127.0.0.1:54321/",
+    )
+    config = ClientConfig(
+        model="litellm/ollama_chat/gemma4:e4b",
+        api_key="sk-openai-gateway",
+        base_url="http://remote-ollama.test",
+    )
+
+    resolved = endpoint_handlers._resolve_stream_client_config(request, config)
+
+    assert resolved is config
+    assert resolved.base_url == "http://remote-ollama.test"
 
 
 def test_request_api_key_allows_client_build_without_env(monkeypatch) -> None:
