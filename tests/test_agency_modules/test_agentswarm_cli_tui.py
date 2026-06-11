@@ -57,7 +57,7 @@ def test_agentswarm_cli_tui_launches_agent_swarm_cli(monkeypatch):
     assert config["model"] == agentswarm_cli_demo._MODEL
     assert config["provider"]["agency-swarm"]["options"]["baseURL"] == "http://127.0.0.1:43121"
     assert config["provider"]["agency-swarm"]["options"]["agency"] == "My_Agency"
-    assert config["provider"]["ollama"]["name"] == "Ollama"
+    assert "ollama" not in config["provider"]
     assert server.stopped is True
 
 

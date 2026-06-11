@@ -154,10 +154,7 @@ def _env(port: int, agency_id: str) -> dict[str, str]:
                         "agency": agency_id,
                         "discoveryTimeoutMs": 2000,
                     },
-                },
-                "ollama": {
-                    "name": "Ollama",
-                },
+                }
             },
         }
     )
