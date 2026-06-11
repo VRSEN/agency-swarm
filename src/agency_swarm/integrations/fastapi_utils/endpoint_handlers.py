@@ -547,7 +547,10 @@ def _resolve_stream_client_config(http_request: Request, config: ClientConfig | 
             return config.model_copy(update={"base_url": None})
     if config.model != _AGENCY_SWARM_DEFAULT_MODEL:
         return config
-    return config.model_copy(update={"model": None})
+    update: dict[str, str | None] = {"model": None}
+    if config.base_url is not None and _is_request_base_url(http_request, config.base_url):
+        update["base_url"] = None
+    return config.model_copy(update=update)
 
 
 def _is_request_base_url(http_request: Request, base_url: str) -> bool:

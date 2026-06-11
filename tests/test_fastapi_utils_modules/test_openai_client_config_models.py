@@ -100,6 +100,27 @@ def test_tui_bridge_stream_config_ignores_default_model_sentinel() -> None:
     assert resolved.default_headers == {"x-test": "1"}
 
 
+def test_tui_bridge_stream_config_strips_default_model_bridge_base_url() -> None:
+    """The default sentinel should not point local LiteLLM agency models back at the bridge."""
+    request = SimpleNamespace(
+        app=SimpleNamespace(state=SimpleNamespace(agency_swarm_tui_bridge=True)),
+        base_url="http://127.0.0.1:54321/",
+    )
+    config = ClientConfig(
+        model="agency-swarm/default",
+        api_key="sk-test",
+        base_url="http://127.0.0.1:54321",
+    )
+
+    resolved = endpoint_handlers._resolve_stream_client_config(request, config)
+
+    assert resolved is not None
+    assert resolved.model is None
+    assert resolved.base_url is None
+    assert resolved.api_key == "sk-test"
+    assert config.base_url == "http://127.0.0.1:54321"
+
+
 def test_tui_bridge_stream_config_keeps_explicit_openai_model() -> None:
     """TUI-selected OpenAI models should replace the agency's configured model."""
     request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(agency_swarm_tui_bridge=True)))
