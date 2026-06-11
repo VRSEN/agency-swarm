@@ -27,8 +27,7 @@ _warned_deprecated_send_message_handoff = False
 def _validate_communication_tool_class(tool_class: type) -> None:
     if not issubclass(tool_class, SendMessage | Handoff):
         raise TypeError(
-            f"Invalid communication tool class: {tool_class.__name__}. "
-            "Expected a SendMessage or Handoff subclass."
+            f"Invalid communication tool class: {tool_class.__name__}. Expected a SendMessage or Handoff subclass."
         )
 
 
