@@ -537,7 +537,7 @@ def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
 def _resolve_stream_client_config(http_request: Request, config: ClientConfig | None) -> ClientConfig | None:
     if config is None:
         return None
-    app_state = getattr(http_request.app, "state", None)
+    app_state = getattr(getattr(http_request, "app", None), "state", None)
     if not bool(getattr(app_state, "agency_swarm_tui_bridge", False)):
         return config
     if config.model != _AGENCY_SWARM_DEFAULT_MODEL:
