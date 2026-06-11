@@ -107,6 +107,7 @@ ReasoningEffortValue = Literal["none", "minimal", "low", "medium", "high", "xhig
 ReasoningSummaryValue = Literal["auto", "concise", "detailed"]
 
 logger = logging.getLogger(__name__)
+_AGENCY_SWARM_DEFAULT_MODEL = "agency-swarm/default"
 
 type _AgencyStateSnapshot = dict[
     str,
@@ -192,6 +193,9 @@ def _apply_request_model_override(agent: Agent, model_name: str, config: ClientC
     Returns ``True`` when the OpenAI gateway client has already been applied
     during the swap so the caller can skip the downstream client-apply step.
     """
+    if model_name == _AGENCY_SWARM_DEFAULT_MODEL:
+        return False
+
     model = agent.model
 
     if is_openrouter_model_name(model_name):
@@ -486,7 +490,7 @@ def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
     # Apply to all agents in the agency
     for agent in agency.agents.values():
         gateway_applied = False
-        if config.model is not None:
+        if config.model is not None and config.model != _AGENCY_SWARM_DEFAULT_MODEL:
             gateway_applied = _apply_request_model_override(agent, config.model, config)
             _refresh_framework_defaults_after_model_swap(agent)
         _apply_request_model_settings_extra_args(agent, config)
@@ -528,6 +532,17 @@ def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
                 _apply_default_headers_to_agent_model_settings(agent, config.default_headers)
             continue
         _apply_client_to_agent(agent, client, config)
+
+
+def _resolve_stream_client_config(http_request: Request, config: ClientConfig | None) -> ClientConfig | None:
+    if config is None:
+        return None
+    app_state = getattr(getattr(http_request, "app", None), "state", None)
+    if not bool(getattr(app_state, "agency_swarm_tui_bridge", False)):
+        return config
+    if config.model != _AGENCY_SWARM_DEFAULT_MODEL:
+        return config
+    return config.model_copy(update={"model": None})
 
 
 @dataclass
@@ -929,7 +944,8 @@ def make_stream_endpoint(
                 return []
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
-        override_policy = RequestOverridePolicy(request.client_config)
+        client_config = _resolve_stream_client_config(http_request, request.client_config)
+        override_policy = RequestOverridePolicy(client_config)
         override_session = _RequestOverrideSession(agency=agency_instance, policy=override_policy)
         request_upload_client: AsyncOpenAI | None = None
 
@@ -945,7 +961,7 @@ def make_stream_endpoint(
 
             request_upload_client = _build_file_upload_client(
                 agency_instance,
-                request.client_config,
+                client_config,
                 recipient_agent=request.recipient_agent,
             )
             if request.file_urls is not None:
@@ -2254,6 +2270,10 @@ def _is_openai_based_litellm_provider(provider: str | None) -> bool:
     return provider in {None, "openai", "azure", "azure_ai", "openai_compatible"}
 
 
+def _is_local_litellm_provider(provider: str | None) -> bool:
+    return provider in {"ollama", "ollama_chat", "lm_studio"}
+
+
 def _resolve_litellm_api_key(
     model_name: str,
     config: ClientConfig,
@@ -2291,8 +2311,13 @@ def _resolve_litellm_base_url(
     if config.base_url is None:
         return existing_base_url
 
-    # Preserve generic LiteLLM proxy support, but never leak the Codex browser-auth
-    # endpoint into non-OpenAI-compatible providers like Anthropic or Gemini.
+    # Local providers resolve their own endpoint from LiteLLM/env configuration.
+    # Inheriting the Agent Swarm bridge URL here points those models at the wrong server.
+    if _is_local_litellm_provider(provider):
+        return existing_base_url
+
+    # Preserve main's Codex browser-auth guard for non-OpenAI providers, while
+    # still allowing explicit LiteLLM proxy base URLs such as Anthropic/Gemini gateways.
     if _is_codex_base_url(config.base_url) and not _is_openai_based_litellm_provider(provider):
         return existing_base_url
 

@@ -9,6 +9,8 @@ from agency_swarm import Agency, Agent
 from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
 from agency_swarm.utils.openrouter import get_openrouter_model_name, is_openrouter_model_name
 
+_AGENCY_SWARM_DEFAULT_MODEL = "agency-swarm/default"
+
 
 def get_allowed_dirs_for_metadata(allowed_local_dirs: Sequence[str | Path]) -> list[str]:
     """Return all configured allowlist entries as resolved absolute paths."""
@@ -28,7 +30,10 @@ class RequestOverridePolicy:
             or self.config.api_key is not None
             or self.config.default_headers is not None
             or self.config.litellm_keys is not None
-            or getattr(self.config, "model", None) is not None
+            or (
+                getattr(self.config, "model", None) is not None
+                and getattr(self.config, "model", None) != _AGENCY_SWARM_DEFAULT_MODEL
+            )
             or getattr(self.config, "model_settings_extra_args", None) is not None
         )
 
