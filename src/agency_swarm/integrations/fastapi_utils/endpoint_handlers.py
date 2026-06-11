@@ -537,6 +537,10 @@ def _resolve_stream_client_config(http_request: Request, config: ClientConfig | 
     app_state = getattr(getattr(http_request, "app", None), "state", None)
     if not bool(getattr(app_state, "agency_swarm_tui_bridge", False)):
         return config
+    if config.model is not None and _is_litellm_model(config.model):
+        provider = _get_litellm_provider(config.model)
+        if config.base_url is not None and _is_local_litellm_provider(provider):
+            return config.model_copy(update={"base_url": None})
     if config.model != _AGENCY_SWARM_DEFAULT_MODEL:
         return config
     return config.model_copy(update={"model": None})
@@ -2306,11 +2310,6 @@ def _resolve_litellm_base_url(
     provider = _get_litellm_provider(model_name)
 
     if config.base_url is None:
-        return existing_base_url
-
-    # Local providers resolve their own endpoint from LiteLLM/env configuration.
-    # Inheriting the Agent Swarm bridge URL here points those models at the wrong server.
-    if _is_local_litellm_provider(provider):
         return existing_base_url
 
     # Preserve main's Codex browser-auth guard for non-OpenAI providers, while
