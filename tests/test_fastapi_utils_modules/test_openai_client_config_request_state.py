@@ -93,6 +93,69 @@ async def test_make_response_endpoint_builds_upload_client_after_lease(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_make_response_endpoint_strips_and_restores_hosted_tools_for_non_openai_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Request-scoped non-OpenAI model overrides should not leak OpenAI hosted tools."""
+    pytest.importorskip("agents")
+
+    from agents import ToolSearchTool, WebSearchTool, function_tool
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils import endpoint_handlers
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import make_response_endpoint
+    from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest, ClientConfig
+
+    @function_tool
+    def local_lookup() -> str:
+        return "ok"
+
+    hosted = WebSearchTool()
+    tool_search = ToolSearchTool()
+    agent = Agent(name="A", instructions="x", model="gpt-4o-mini", tools=[hosted, tool_search, local_lookup])
+
+    class _ThreadManager:
+        def get_all_messages(self):
+            return []
+
+    class _Response:
+        final_output = "ok"
+
+    class _Agency:
+        def __init__(self) -> None:
+            self.agents = {"A": agent}
+            self.thread_manager = _ThreadManager()
+
+        async def get_response(self, **_kwargs):
+            tools = self.agents["A"].tools
+            assert hosted not in tools
+            assert tool_search not in tools
+            assert any(getattr(tool, "name", "") == "local_lookup" for tool in tools)
+            assert self.agents["A"].model_settings.response_include is None
+            return _Response()
+
+    async def _attach_noop(_agency):
+        return None
+
+    monkeypatch.setattr(endpoint_handlers, "attach_persistent_mcp_servers", _attach_noop)
+
+    agency = _Agency()
+    handler = make_response_endpoint(BaseRequest, lambda **_: agency, verify_token=lambda: None)
+    response = await handler(
+        BaseRequest(
+            message="hello",
+            client_config=ClientConfig(model="litellm/ollama_chat/gemma4:e4b"),
+        ),
+        token=None,
+    )
+
+    assert response["response"] == "ok"
+    assert hosted in agent.tools
+    assert tool_search in agent.tools
+    assert agent.model_settings.response_include == ["web_search_call.action.sources"]
+
+
+@pytest.mark.asyncio
 async def test_make_response_endpoint_forwards_structured_message_without_file_upload(monkeypatch) -> None:
     """Structured message attachments should use the core message contract, not file_urls upload."""
     pytest.importorskip("agents")

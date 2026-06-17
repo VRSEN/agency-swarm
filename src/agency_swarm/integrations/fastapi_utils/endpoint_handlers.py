@@ -33,11 +33,22 @@ from ag_ui.core import (
 )
 from ag_ui.encoder import EventEncoder
 from agents import (
+    ApplyPatchTool,
+    CodeInterpreterTool,
+    ComputerTool,
+    FileSearchTool,
+    HostedMCPTool,
+    ImageGenerationTool,
+    LocalShellTool,
     Model,
     ModelSettings,
     OpenAIChatCompletionsModel,
     OpenAIResponsesModel,
+    ShellTool,
+    Tool,
+    ToolSearchTool,
     TResponseInputItem,
+    WebSearchTool,
     output_guardrail,
 )
 from agents.exceptions import OutputGuardrailTripwireTriggered
@@ -109,10 +120,14 @@ ReasoningSummaryValue = Literal["auto", "concise", "detailed"]
 logger = logging.getLogger(__name__)
 _AGENCY_SWARM_DEFAULT_MODEL = "agency-swarm/default"
 
-type _AgencyStateSnapshot = dict[
-    str,
-    tuple[str | Model | None, ModelSettings | None, AsyncOpenAI | None, OpenAI | None],
+type _AgentStateSnapshot = tuple[
+    str | Model | None,
+    ModelSettings | None,
+    AsyncOpenAI | None,
+    OpenAI | None,
+    list[Tool] | None,
 ]
+type _AgencyStateSnapshot = dict[str, _AgentStateSnapshot]
 
 
 @dataclass
@@ -414,6 +429,19 @@ def _client_base_url(client: AsyncOpenAI) -> str:
 # in lockstep with that SDK helper — refreshing any other fields would drop
 # caller-explicit generation tuning on a per-request model swap.
 _MODEL_FAMILY_DEFAULT_FIELDS: tuple[str, ...] = ("reasoning", "verbosity")
+_OPENAI_HOSTED_TOOL_TYPES = (
+    FileSearchTool,
+    WebSearchTool,
+    ComputerTool,
+    HostedMCPTool,
+    ShellTool,
+    ApplyPatchTool,
+    LocalShellTool,
+    ImageGenerationTool,
+    CodeInterpreterTool,
+    ToolSearchTool,
+)
+_OPENAI_HOSTED_RESPONSE_INCLUDES = frozenset({"web_search_call.action.sources"})
 
 
 def _refresh_framework_defaults_after_model_swap(agent: Agent) -> None:
@@ -491,6 +519,8 @@ def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
             gateway_applied = _apply_request_model_override(agent, config.model, config)
             _refresh_framework_defaults_after_model_swap(agent)
         _apply_request_model_settings_extra_args(agent, config)
+        if config.model is not None:
+            _strip_openai_hosted_tools_for_unsupported_model(agent)
 
         # File attachment handling uses agent.client / agent.client_sync directly.
         # Keep those clients request-scoped too, so file_ids work without server env keys.
@@ -1782,6 +1812,31 @@ def _request_model_name(agent: Agent) -> str:
     return name if isinstance(name, str) else ""
 
 
+def _strip_openai_hosted_tools_for_unsupported_model(agent: Agent) -> None:
+    """Remove OpenAI hosted tool instances when the active model cannot use them."""
+    if _agent_supports_openai_hosted_tools(agent):
+        return
+
+    agent.tools = [tool for tool in agent.tools if not isinstance(tool, _OPENAI_HOSTED_TOOL_TYPES)]
+    _strip_openai_hosted_response_includes(agent)
+
+
+def _agent_supports_openai_hosted_tools(agent: Agent) -> bool:
+    if _agent_uses_litellm(agent):
+        return False
+    model_name = _request_model_name(agent)
+    return bool(model_name) and _is_openai_model_name(model_name)
+
+
+def _strip_openai_hosted_response_includes(agent: Agent) -> None:
+    settings = getattr(agent, "model_settings", None)
+    if settings is None or settings.response_include is None:
+        return
+    includes = [item for item in settings.response_include if item not in _OPENAI_HOSTED_RESPONSE_INCLUDES]
+    settings.response_include = includes or None
+    agent.model_settings = settings
+
+
 def _is_gateway_provider_variant(uses_litellm: bool, model_name: str) -> bool:
     if uses_litellm or "/" not in model_name:
         return False
@@ -2367,6 +2422,7 @@ def _snapshot_agency_state(
             copy.deepcopy(model_settings) if model_settings is not None else None,
             getattr(agent, "_openai_client", None),
             getattr(agent, "_openai_client_sync", None),
+            list(agent.tools) if hasattr(agent, "tools") else None,
         )
     return snapshot
 
@@ -2376,7 +2432,7 @@ def _restore_agency_state(
     snapshot: _AgencyStateSnapshot,
 ) -> None:
     """Restore agent model/model_settings/OpenAI clients after a request override."""
-    for name, (model, model_settings, openai_client, openai_client_sync) in snapshot.items():
+    for name, (model, model_settings, openai_client, openai_client_sync, tools) in snapshot.items():
         agent = agency.agents.get(name)
         if agent is None:
             continue
@@ -2387,6 +2443,8 @@ def _restore_agency_state(
             agent.model_settings = model_settings
         agent._openai_client = openai_client
         agent._openai_client_sync = openai_client_sync
+        if tools is not None:
+            agent.tools = tools
 
 
 async def _get_agency_request_state(agency: Agency) -> _AgencyRequestState:
