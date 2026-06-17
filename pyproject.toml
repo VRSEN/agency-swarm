@@ -16,7 +16,7 @@ authors = [{ name = "Vrsen AI Solutions", email = "me@vrsen.ai" }]
 dependencies = [
     "openai>=2.2,<3",
     "openai-agents==0.14.8",
-    "datamodel-code-generator>=0.56.0,<0.62.0",
+    "datamodel-code-generator>=0.56.0,<0.65.0",
     "docstring-parser>=0.16,<1.0.0",
     "fastmcp>=3.2.0",
     "jsonref>=1.1.0,<2.0.0",
