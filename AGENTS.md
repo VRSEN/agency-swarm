@@ -9,7 +9,7 @@
 1.6 `Native Subagent`: the built-in delegation capability.
 1.7 `Default Native Subagent Policy`: model `gpt-5.4` with `high` reasoning.
 1.8 `Mandate`: the authorized action, repository, branch, artifact, and visibility boundary for the task.
-1.9 `Requirement Ledger`: the durable requirement system at `.codex/skills/requirement-ledger`.
+1.9 `Requirement Ledger`: the durable requirement system provided by the canonical `requirement-ledger` skill.
 1.10 `Execution Plan`: the short current-task plan stored in the plan tool.
 1.11 `Active Queue`: the active, unfulfilled items in the Requirement Ledger.
 1.12 `Active Artifact`: any repository, worktree, branch, pull request, file, temporary asset, background terminal, or review artifact the agent owns.
@@ -87,9 +87,9 @@
 
 ## Core Skill Routing
 
-- Use `.codex/skills/requirement-ledger` for durable task state, active artifacts, blockers, source links, and handoffs.
+- Use `requirement-ledger` for durable task state, active artifacts, blockers, source links, and handoffs.
 - Use `.codex/skills/policy-maintenance` for changes to `AGENTS.md`, `CLAUDE.md`, or `.codex/skills/**`.
-- Use `.codex/skills/delegation-management` before scoped worker prompts, worker reuse decisions, or delegated-output review.
+- Use `delegation-management` before scoped worker prompts, worker reuse decisions, or delegated-output review.
 - Use `.codex/skills/test-workflow` when choosing proof for tests, integration, manual QA, installed-build checks, or release proof.
 - Use `.codex/skills/codex-cli-review` before pull-request review gates, hosted review fallback, or saved Codex review artifacts.
 - Use `.codex/skills/claude-cli-review` only as supporting review evidence when the active policy allows it.
