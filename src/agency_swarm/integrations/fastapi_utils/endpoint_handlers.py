@@ -519,8 +519,7 @@ def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
             gateway_applied = _apply_request_model_override(agent, config.model, config)
             _refresh_framework_defaults_after_model_swap(agent)
         _apply_request_model_settings_extra_args(agent, config)
-        if config.model is not None:
-            _strip_openai_hosted_tools_for_unsupported_model(agent)
+        _strip_openai_hosted_tools_for_unsupported_model(agent)
 
         # File attachment handling uses agent.client / agent.client_sync directly.
         # Keep those clients request-scoped too, so file_ids work without server env keys.
@@ -1822,6 +1821,8 @@ def _strip_openai_hosted_tools_for_unsupported_model(agent: Agent) -> None:
 
 
 def _agent_supports_openai_hosted_tools(agent: Agent) -> bool:
+    if get_openrouter_model_name(agent.model) is not None:
+        return False
     if _agent_uses_litellm(agent):
         return False
     model_name = _request_model_name(agent)

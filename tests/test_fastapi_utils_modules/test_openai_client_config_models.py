@@ -571,7 +571,15 @@ def test_model_override_applies_to_all_agents() -> None:
     assert a2.model == "gpt-4.1"
 
 
-@pytest.mark.parametrize("model", ["litellm/ollama_chat/gemma4:e4b", "anthropic/claude-sonnet-4-6"])
+@pytest.mark.parametrize(
+    "model",
+    [
+        "litellm/ollama_chat/gemma4:e4b",
+        "anthropic/claude-sonnet-4-6",
+        "openrouter/anthropic/claude-sonnet-4.5",
+        "openrouter/openai/gpt-5",
+    ],
+)
 def test_non_openai_model_override_strips_openai_hosted_tools(model: str) -> None:
     """Non-OpenAI request model overrides must not send OpenAI hosted tools."""
     pytest.importorskip("agents")
@@ -591,7 +599,51 @@ def test_non_openai_model_override_strips_openai_hosted_tools(model: str) -> Non
     agent = Agent(name="A", instructions="x", model="gpt-4o-mini", tools=[hosted, tool_search, local_lookup])
     agency = type("Agency", (), {"agents": {"A": agent}})()
 
-    apply_openai_client_config(agency, ClientConfig(model=model))
+    config = (
+        ClientConfig(model=model, api_key="sk-openrouter")
+        if model.startswith("openrouter/")
+        else ClientConfig(model=model)
+    )
+    apply_openai_client_config(agency, config)
+
+    assert hosted not in agent.tools
+    assert tool_search not in agent.tools
+    assert any(getattr(tool, "name", "") == "local_lookup" for tool in agent.tools)
+    assert "web_search_call.action.sources" not in (agent.model_settings.response_include or [])
+
+
+def test_configured_openrouter_request_without_model_override_strips_openai_hosted_tools(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Configured OpenRouter agents should strip hosted tools for request-scoped gateway routes."""
+    pytest.importorskip("agents")
+
+    from agents import ToolSearchTool, WebSearchTool, function_tool
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    @function_tool
+    def local_lookup() -> str:
+        return "ok"
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-original")
+
+    hosted = WebSearchTool()
+    tool_search = ToolSearchTool()
+    agent = Agent(
+        name="A",
+        instructions="x",
+        model="openrouter/anthropic/claude-sonnet-4.5",
+        tools=[hosted, tool_search, local_lookup],
+    )
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(api_key="sk-openrouter", base_url="https://openrouter-proxy.test/v1"),
+    )
 
     assert hosted not in agent.tools
     assert tool_search not in agent.tools
