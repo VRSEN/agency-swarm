@@ -67,7 +67,6 @@ from agency_swarm import (
 )
 from agency_swarm.agent.execution_stream_response import StreamingRunResponse
 from agency_swarm.agent.initialization import apply_framework_defaults
-from agency_swarm.integrations.fastapi_utils import hosted_tool_compat
 from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_urls
 from agency_swarm.integrations.fastapi_utils.logging_middleware import get_logs_endpoint_impl
 from agency_swarm.integrations.fastapi_utils.override_policy import (
@@ -90,6 +89,7 @@ from agency_swarm.messages.response_input_sanitizer import (
 from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
 from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
 from agency_swarm.ui.core.agui_adapter import AguiAdapter
+from agency_swarm.utils import hosted_tool_compat
 from agency_swarm.utils.dry_run import force_dry_run
 from agency_swarm.utils.openrouter import (
     OPENROUTER_API_KEY_ENV,
@@ -112,7 +112,12 @@ _AGENCY_SWARM_DEFAULT_MODEL = "agency-swarm/default"
 
 type _SnapshotModel = str | Model | None
 type _AgentStateSnapshot = tuple[
-    _SnapshotModel, ModelSettings | None, AsyncOpenAI | None, OpenAI | None, hosted_tool_compat.ToolSnapshot
+    _SnapshotModel,
+    ModelSettings | None,
+    AsyncOpenAI | None,
+    OpenAI | None,
+    hosted_tool_compat.ToolSnapshot,
+    hosted_tool_compat.AttachmentCompatibilitySnapshot,
 ]
 type _AgencyStateSnapshot = dict[str, _AgentStateSnapshot]
 
@@ -152,6 +157,8 @@ class _RequestOverrideSession:
         if self.policy.has_client_overrides and self.policy.config is not None:
             self.restore_snapshot = _snapshot_agency_state(self.agency)
             apply_openai_client_config(self.agency, self.policy.config)
+            for agent in self.agency.agents.values():
+                hosted_tool_compat.enable_attachment_compatibility(agent)
 
     async def cleanup(self) -> None:
         if self._is_cleaned:
@@ -491,7 +498,6 @@ def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
             gateway_applied = _apply_request_model_override(agent, config.model, config)
             _refresh_framework_defaults_after_model_swap(agent)
         _apply_request_model_settings_extra_args(agent, config)
-        hosted_tool_compat.apply_openai_hosted_tool_compatibility(agent)
 
         # File attachment handling uses agent.client / agent.client_sync directly.
         # Keep those clients request-scoped too, so file_ids work without server env keys.
@@ -504,32 +510,26 @@ def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
         if _agent_uses_litellm(agent):
             if config.default_headers is not None:
                 _apply_default_headers_to_agent_model_settings(agent, config.default_headers)
-            if not litellm_overrides_present:
-                continue
-            _apply_client_to_agent(agent, None, config)
-            continue
+            if litellm_overrides_present:
+                _apply_client_to_agent(agent, None, config)
+        elif openai_overrides_present:
+            if gateway_applied:
+                # Gateway client was already routed through the freshly rebuilt model.
+                if config.default_headers is not None:
+                    _apply_default_headers_to_agent_model_settings(agent, config.default_headers)
+                if _is_codex_base_url(config.base_url):
+                    _apply_codex_compatibility_model_settings(agent)
+            elif not _agent_supports_openai_client_override(agent):
+                _log_unsupported_client_override(agent)
+            else:
+                client = _build_openai_client_for_agent(agent, config)
+                if client is None:
+                    if config.default_headers is not None:
+                        _apply_default_headers_to_agent_model_settings(agent, config.default_headers)
+                else:
+                    _apply_client_to_agent(agent, client, config)
 
-        if not openai_overrides_present:
-            continue
-
-        if gateway_applied:
-            # Gateway client was already routed through the freshly rebuilt model.
-            if config.default_headers is not None:
-                _apply_default_headers_to_agent_model_settings(agent, config.default_headers)
-            if _is_codex_base_url(config.base_url):
-                _apply_codex_compatibility_model_settings(agent)
-            continue
-
-        if not _agent_supports_openai_client_override(agent):
-            _log_unsupported_client_override(agent)
-            continue
-
-        client = _build_openai_client_for_agent(agent, config)
-        if client is None:
-            if config.default_headers is not None:
-                _apply_default_headers_to_agent_model_settings(agent, config.default_headers)
-            continue
-        _apply_client_to_agent(agent, client, config)
+        hosted_tool_compat.apply_openai_hosted_tool_compatibility(agent)
 
 
 def _resolve_stream_client_config(http_request: Request, config: ClientConfig | None) -> ClientConfig | None:
@@ -2369,6 +2369,7 @@ def _snapshot_agency_state(
             getattr(agent, "_openai_client", None),
             getattr(agent, "_openai_client_sync", None),
             list(agent.tools) if hasattr(agent, "tools") else None,
+            hosted_tool_compat.snapshot_attachment_compatibility(agent),
         )
     return snapshot
 
@@ -2378,7 +2379,14 @@ def _restore_agency_state(
     snapshot: _AgencyStateSnapshot,
 ) -> None:
     """Restore agent model/model_settings/OpenAI clients after a request override."""
-    for name, (model, model_settings, openai_client, openai_client_sync, tools) in snapshot.items():
+    for name, (
+        model,
+        model_settings,
+        openai_client,
+        openai_client_sync,
+        tools,
+        attachment_compatibility,
+    ) in snapshot.items():
         agent = agency.agents.get(name)
         if agent is None:
             continue
@@ -2387,6 +2395,7 @@ def _restore_agency_state(
         agent._openai_client = openai_client
         agent._openai_client_sync = openai_client_sync
         hosted_tool_compat.restore_tool_snapshot(agent, tools)
+        hosted_tool_compat.restore_attachment_compatibility(agent, attachment_compatibility)
 
 
 async def _get_agency_request_state(agency: Agency) -> _AgencyRequestState:
