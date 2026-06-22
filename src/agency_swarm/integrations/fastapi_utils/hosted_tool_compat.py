@@ -87,6 +87,8 @@ def _supports_openai_hosted_tools(agent: Agent) -> bool:
         return False
     if _uses_litellm(agent):
         return False
+    if isinstance(agent.model, OpenAIChatCompletionsModel):
+        return False
     name = _request_model_name(agent)
     return bool(name) and _is_openai_model_name(name)
 

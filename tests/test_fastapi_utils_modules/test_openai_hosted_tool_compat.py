@@ -143,6 +143,38 @@ def test_openai_model_override_keeps_openai_hosted_tools(model: str) -> None:
     assert "web_search_call.action.sources" in (agent.model_settings.response_include or [])
 
 
+def test_openai_chat_completions_model_stubs_openai_hosted_tools() -> None:
+    """OpenAI Chat Completions wrappers should not keep Responses-only hosted tools."""
+    pytest.importorskip("agents")
+
+    from agents import FunctionTool, OpenAIChatCompletionsModel, WebSearchTool
+    from openai import AsyncOpenAI
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    hosted = WebSearchTool()
+    client = AsyncOpenAI(api_key="sk-openai")
+    agent = Agent(
+        name="A",
+        instructions="x",
+        model=OpenAIChatCompletionsModel(model="gpt-4o-mini", openai_client=client),
+        tools=[hosted],
+    )
+    agent.model_settings.response_include = [
+        "web_search_call.action.sources",
+        "message.output_text.logprobs",
+    ]
+
+    apply_openai_client_config(_agency(agent), ClientConfig(model="gpt-4o-mini"))
+
+    assert hosted not in agent.tools
+    stubs = {tool.name: tool for tool in agent.tools if isinstance(tool, FunctionTool)}
+    assert {"web_search"} <= set(stubs)
+    assert agent.model_settings.response_include == ["message.output_text.logprobs"]
+
+
 def test_snapshot_restore_preserves_tools_after_non_openai_model_override() -> None:
     """Request cleanup should restore hosted tools stubbed from non-OpenAI runs."""
     pytest.importorskip("agents")
