@@ -37,6 +37,7 @@ from agents import (
     CodeInterpreterTool,
     ComputerTool,
     FileSearchTool,
+    FunctionTool,
     HostedMCPTool,
     ImageGenerationTool,
     LocalShellTool,
@@ -441,7 +442,15 @@ _OPENAI_HOSTED_TOOL_TYPES = (
     CodeInterpreterTool,
     ToolSearchTool,
 )
-_OPENAI_HOSTED_RESPONSE_INCLUDES = frozenset({"web_search_call.action.sources"})
+_OPENAI_HOSTED_RESPONSE_INCLUDES = frozenset(
+    {
+        "file_search_call.results",
+        "web_search_call.results",
+        "web_search_call.action.sources",
+        "computer_call_output.output.image_url",
+        "code_interpreter_call.outputs",
+    }
+)
 
 
 def _refresh_framework_defaults_after_model_swap(agent: Agent) -> None:
@@ -1812,11 +1821,29 @@ def _request_model_name(agent: Agent) -> str:
 
 
 def _strip_openai_hosted_tools_for_unsupported_model(agent: Agent) -> None:
-    """Remove OpenAI hosted tool instances when the active model cannot use them."""
+    """Replace OpenAI hosted tools with no-op stubs when the active model cannot use them."""
     if _agent_supports_openai_hosted_tools(agent):
         return
 
-    agent.tools = [tool for tool in agent.tools if not isinstance(tool, _OPENAI_HOSTED_TOOL_TYPES)]
+    local_names = {
+        name
+        for tool in agent.tools
+        if not isinstance(tool, _OPENAI_HOSTED_TOOL_TYPES)
+        for name in [_tool_name(tool)]
+        if name
+    }
+    stubbed: set[str] = set()
+    tools: list[Tool] = []
+    for tool in agent.tools:
+        if not isinstance(tool, _OPENAI_HOSTED_TOOL_TYPES):
+            tools.append(tool)
+            continue
+        name = _tool_name(tool)
+        if not name or name in local_names or name in stubbed:
+            continue
+        tools.append(_build_unsupported_openai_hosted_tool_stub(name))
+        stubbed.add(name)
+    agent.tools = tools
     _strip_openai_hosted_response_includes(agent)
 
 
@@ -1836,6 +1863,28 @@ def _strip_openai_hosted_response_includes(agent: Agent) -> None:
     includes = [item for item in settings.response_include if item not in _OPENAI_HOSTED_RESPONSE_INCLUDES]
     settings.response_include = includes or None
     agent.model_settings = settings
+
+
+def _tool_name(tool: Tool) -> str:
+    name = getattr(tool, "name", "")
+    return name if isinstance(name, str) else ""
+
+
+def _build_unsupported_openai_hosted_tool_stub(name: str) -> FunctionTool:
+    async def _invoke_stub(_ctx: object, _input: str) -> str:
+        return f"The {name} hosted tool is unavailable because this request uses a non-OpenAI backend."
+
+    return FunctionTool(
+        name=name,
+        description=f"Unavailable hosted tool stub for non-OpenAI backends: {name}.",
+        params_json_schema={
+            "type": "object",
+            "properties": {},
+            "additionalProperties": True,
+        },
+        on_invoke_tool=_invoke_stub,
+        strict_json_schema=False,
+    )
 
 
 def _is_gateway_provider_variant(uses_litellm: bool, model_name: str) -> bool:

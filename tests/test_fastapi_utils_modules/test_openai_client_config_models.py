@@ -3,6 +3,7 @@
 The end-to-end behavior is covered in integration tests under `tests/integration/fastapi/`.
 """
 
+import asyncio
 import logging
 from types import SimpleNamespace
 
@@ -580,11 +581,11 @@ def test_model_override_applies_to_all_agents() -> None:
         "openrouter/openai/gpt-5",
     ],
 )
-def test_non_openai_model_override_strips_openai_hosted_tools(model: str) -> None:
+def test_non_openai_model_override_stubs_openai_hosted_tools(model: str) -> None:
     """Non-OpenAI request model overrides must not send OpenAI hosted tools."""
     pytest.importorskip("agents")
 
-    from agents import ToolSearchTool, WebSearchTool, function_tool
+    from agents import FunctionTool, ToolSearchTool, WebSearchTool, function_tool
 
     from agency_swarm import Agent
     from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
@@ -597,6 +598,12 @@ def test_non_openai_model_override_strips_openai_hosted_tools(model: str) -> Non
     hosted = WebSearchTool()
     tool_search = ToolSearchTool()
     agent = Agent(name="A", instructions="x", model="gpt-4o-mini", tools=[hosted, tool_search, local_lookup])
+    agent.model_settings.response_include = [
+        "web_search_call.action.sources",
+        "file_search_call.results",
+        "code_interpreter_call.outputs",
+        "message.output_text.logprobs",
+    ]
     agency = type("Agency", (), {"agents": {"A": agent}})()
 
     config = (
@@ -608,17 +615,20 @@ def test_non_openai_model_override_strips_openai_hosted_tools(model: str) -> Non
 
     assert hosted not in agent.tools
     assert tool_search not in agent.tools
+    stubs = {tool.name: tool for tool in agent.tools if isinstance(tool, FunctionTool)}
+    assert {"web_search", "tool_search"} <= set(stubs)
+    assert "non-OpenAI backend" in asyncio.run(stubs["web_search"].on_invoke_tool(None, "{}"))
     assert any(getattr(tool, "name", "") == "local_lookup" for tool in agent.tools)
-    assert "web_search_call.action.sources" not in (agent.model_settings.response_include or [])
+    assert agent.model_settings.response_include == ["message.output_text.logprobs"]
 
 
-def test_configured_openrouter_request_without_model_override_strips_openai_hosted_tools(
+def test_configured_openrouter_request_without_model_override_stubs_openai_hosted_tools(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Configured OpenRouter agents should strip hosted tools for request-scoped gateway routes."""
+    """Configured OpenRouter agents should stub hosted tools for request-scoped gateway routes."""
     pytest.importorskip("agents")
 
-    from agents import ToolSearchTool, WebSearchTool, function_tool
+    from agents import FunctionTool, ToolSearchTool, WebSearchTool, function_tool
 
     from agency_swarm import Agent
     from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
@@ -647,8 +657,36 @@ def test_configured_openrouter_request_without_model_override_strips_openai_host
 
     assert hosted not in agent.tools
     assert tool_search not in agent.tools
+    stubs = {tool.name: tool for tool in agent.tools if isinstance(tool, FunctionTool)}
+    assert {"web_search", "tool_search"} <= set(stubs)
     assert any(getattr(tool, "name", "") == "local_lookup" for tool in agent.tools)
     assert "web_search_call.action.sources" not in (agent.model_settings.response_include or [])
+
+
+def test_non_openai_model_override_keeps_same_name_hosted_tool_replacement() -> None:
+    """A local replacement should prevent adding a duplicate hosted-tool stub."""
+    pytest.importorskip("agents")
+
+    from agents import FunctionTool, WebSearchTool, function_tool
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    @function_tool(name_override="web_search")
+    def replacement_search() -> str:
+        return "replacement"
+
+    hosted = WebSearchTool()
+    agent = Agent(name="A", instructions="x", model="gpt-4o-mini", tools=[hosted, replacement_search])
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(agency, ClientConfig(model="anthropic/claude-sonnet-4-6"))
+
+    assert hosted not in agent.tools
+    web_search_tools = [tool for tool in agent.tools if isinstance(tool, FunctionTool) and tool.name == "web_search"]
+    assert len(web_search_tools) == 1
+    assert "Unavailable hosted tool stub" not in web_search_tools[0].description
 
 
 @pytest.mark.parametrize("model", ["gpt-5", "openai/gpt-4o-mini"])
@@ -675,10 +713,10 @@ def test_openai_model_override_keeps_openai_hosted_tools(model: str) -> None:
 
 
 def test_snapshot_restore_preserves_tools_after_non_openai_model_override() -> None:
-    """Request cleanup should restore hosted tools stripped from non-OpenAI runs."""
+    """Request cleanup should restore hosted tools stubbed from non-OpenAI runs."""
     pytest.importorskip("agents")
 
-    from agents import ToolSearchTool, WebSearchTool, function_tool
+    from agents import FunctionTool, ToolSearchTool, WebSearchTool, function_tool
 
     from agency_swarm import Agent
     from agency_swarm.integrations.fastapi_utils.endpoint_handlers import (
@@ -702,6 +740,7 @@ def test_snapshot_restore_preserves_tools_after_non_openai_model_override() -> N
     apply_openai_client_config(agency, ClientConfig(model="litellm/ollama_chat/gemma4:e4b"))
     assert hosted not in agent.tools
     assert tool_search not in agent.tools
+    assert {"web_search", "tool_search"} <= {tool.name for tool in agent.tools if isinstance(tool, FunctionTool)}
     assert agent.model_settings.response_include is None
 
     _restore_agency_state(agency, snapshot)
