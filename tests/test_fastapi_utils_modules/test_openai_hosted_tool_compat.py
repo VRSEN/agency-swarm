@@ -96,8 +96,8 @@ def test_configured_openrouter_request_without_model_override_stubs_openai_hoste
     assert "web_search_call.action.sources" not in (agent.model_settings.response_include or [])
 
 
-def test_non_openai_model_override_keeps_same_name_hosted_tool_replacement() -> None:
-    """A local replacement should prevent adding a duplicate hosted-tool stub."""
+def test_non_openai_model_override_keeps_compatible_same_name_hosted_tool_replacement() -> None:
+    """A compatible local replacement should prevent adding a duplicate hosted-tool stub."""
     pytest.importorskip("agents")
 
     from agents import FunctionTool, WebSearchTool, function_tool
@@ -119,6 +119,62 @@ def test_non_openai_model_override_keeps_same_name_hosted_tool_replacement() -> 
     web_search_tools = [tool for tool in agent.tools if isinstance(tool, FunctionTool) and tool.name == "web_search"]
     assert len(web_search_tools) == 1
     assert "Unavailable hosted tool stub" not in web_search_tools[0].description
+
+
+@pytest.mark.parametrize("replacement", ["deferred", "namespaced", "custom"])
+def test_non_openai_model_override_stubs_incompatible_same_name_hosted_tool_replacements(
+    replacement: str,
+) -> None:
+    """Responses-only same-name local replacements should be replaced by a backend-safe stub."""
+    pytest.importorskip("agents")
+
+    from agents import CustomTool, FunctionTool, WebSearchTool, function_tool, tool_namespace
+    from agents.models.chatcmpl_converter import Converter
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    async def invoke_replacement(_ctx: object, _input: str) -> str:
+        return "replacement"
+
+    if replacement == "deferred":
+
+        @function_tool(name_override="web_search", defer_loading=True)
+        def replacement_search() -> str:
+            return "replacement"
+
+        local_replacement = replacement_search
+    elif replacement == "namespaced":
+
+        @function_tool(name_override="web_search")
+        def replacement_search() -> str:
+            return "replacement"
+
+        local_replacement = tool_namespace(
+            name="search_namespace",
+            description="Search namespace",
+            tools=[replacement_search],
+        )[0]
+    else:
+        local_replacement = CustomTool(
+            name="web_search",
+            description="Replacement custom search",
+            on_invoke_tool=invoke_replacement,
+        )
+
+    hosted = WebSearchTool()
+    agent = Agent(name="A", instructions="x", model="gpt-4o-mini", tools=[local_replacement, hosted])
+
+    apply_openai_client_config(_agency(agent), ClientConfig(model="anthropic/claude-sonnet-4-6"))
+
+    assert hosted not in agent.tools
+    assert local_replacement not in agent.tools
+    web_search_tools = [tool for tool in agent.tools if isinstance(tool, FunctionTool) and tool.name == "web_search"]
+    assert len(web_search_tools) == 1
+    assert "Unavailable hosted tool stub" in web_search_tools[0].description
+    assert "non-OpenAI backend" in asyncio.run(web_search_tools[0].on_invoke_tool(None, "{}"))
+    assert [Converter.tool_to_openai(tool)["function"]["name"] for tool in agent.tools] == ["web_search"]
 
 
 @pytest.mark.parametrize("model", ["gpt-5", "openai/gpt-4o-mini"])

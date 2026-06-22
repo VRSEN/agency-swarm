@@ -15,6 +15,7 @@ from agents import (
     ToolSearchTool,
     WebSearchTool,
 )
+from agents.tool import get_function_tool_responses_only_features
 
 from agency_swarm.agent.core import Agent
 from agency_swarm.utils.openrouter import get_openrouter_model_name
@@ -60,10 +61,17 @@ def apply_openai_hosted_tool_compatibility(agent: Agent) -> None:
     if _supports_openai_hosted_tools(agent):
         return
 
+    hosted_names = {
+        name
+        for tool in agent.tools
+        if isinstance(tool, _OPENAI_HOSTED_TOOL_TYPES)
+        for name in [_tool_name(tool)]
+        if name
+    }
     local_names = {
         name
         for tool in agent.tools
-        if not isinstance(tool, _OPENAI_HOSTED_TOOL_TYPES)
+        if not isinstance(tool, _OPENAI_HOSTED_TOOL_TYPES) and _is_non_responses_tool_compatible(tool)
         for name in [_tool_name(tool)]
         if name
     }
@@ -71,6 +79,8 @@ def apply_openai_hosted_tool_compatibility(agent: Agent) -> None:
     tools: list[Tool] = []
     for tool in agent.tools:
         if not isinstance(tool, _OPENAI_HOSTED_TOOL_TYPES):
+            if _tool_name(tool) in hosted_names and not _is_non_responses_tool_compatible(tool):
+                continue
             tools.append(tool)
             continue
         name = _tool_name(tool)
@@ -145,6 +155,10 @@ def _strip_openai_hosted_response_includes(agent: Agent) -> None:
 def _tool_name(tool: Tool) -> str:
     name = getattr(tool, "name", "")
     return name if isinstance(name, str) else ""
+
+
+def _is_non_responses_tool_compatible(tool: Tool) -> bool:
+    return isinstance(tool, FunctionTool) and not get_function_tool_responses_only_features(tool)
 
 
 def _build_unsupported_openai_hosted_tool_stub(name: str) -> FunctionTool:
