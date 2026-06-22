@@ -93,13 +93,13 @@ async def test_make_response_endpoint_builds_upload_client_after_lease(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_make_response_endpoint_strips_and_restores_hosted_tools_for_non_openai_model(
+async def test_make_response_endpoint_stubs_and_restores_hosted_tools_for_non_openai_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Request-scoped non-OpenAI model overrides should not leak OpenAI hosted tools."""
     pytest.importorskip("agents")
 
-    from agents import ToolSearchTool, WebSearchTool, function_tool
+    from agents import FunctionTool, ToolSearchTool, WebSearchTool, function_tool
 
     from agency_swarm import Agent
     from agency_swarm.integrations.fastapi_utils import endpoint_handlers
@@ -130,6 +130,7 @@ async def test_make_response_endpoint_strips_and_restores_hosted_tools_for_non_o
             tools = self.agents["A"].tools
             assert hosted not in tools
             assert tool_search not in tools
+            assert {"web_search", "tool_search"} <= {tool.name for tool in tools if isinstance(tool, FunctionTool)}
             assert any(getattr(tool, "name", "") == "local_lookup" for tool in tools)
             assert self.agents["A"].model_settings.response_include is None
             return _Response()
