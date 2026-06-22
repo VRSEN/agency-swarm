@@ -97,6 +97,53 @@ def test_configured_openrouter_request_without_model_override_stubs_openai_hoste
     assert "web_search_call.action.sources" not in (agent.model_settings.response_include or [])
 
 
+def test_custom_base_url_request_stubs_openai_hosted_tools() -> None:
+    """Custom OpenAI-compatible gateways should not receive OpenAI hosted tools."""
+    pytest.importorskip("agents")
+
+    from agents import FunctionTool, WebSearchTool
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    hosted = WebSearchTool()
+    agent = Agent(name="A", instructions="x", model="gpt-4o-mini", tools=[hosted])
+    agent.model_settings.response_include = ["web_search_call.action.sources", "message.output_text.logprobs"]
+
+    apply_openai_client_config(
+        _agency(agent),
+        ClientConfig(base_url="https://gateway.test/v1", api_key="sk-gateway"),
+    )
+
+    assert hosted not in agent.tools
+    stubs = {tool.name: tool for tool in agent.tools if isinstance(tool, FunctionTool)}
+    assert {"web_search"} <= set(stubs)
+    assert agent.model_settings.response_include == ["message.output_text.logprobs"]
+
+
+def test_codex_base_url_request_keeps_openai_hosted_tools() -> None:
+    """Codex browser-auth requests should keep hosted Responses tools available."""
+    pytest.importorskip("agents")
+
+    from agents import ToolSearchTool
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+    from agency_swarm.messages.codex_input import CODEX_BASE_URL
+
+    hosted = ToolSearchTool()
+    agent = Agent(name="A", instructions="x", model="gpt-5", tools=[hosted])
+
+    apply_openai_client_config(
+        _agency(agent),
+        ClientConfig(base_url=CODEX_BASE_URL, api_key="sk-codex"),
+    )
+
+    assert hosted in agent.tools
+
+
 def test_non_openai_model_override_keeps_compatible_same_name_hosted_tool_replacement() -> None:
     """A compatible local replacement should prevent adding a duplicate hosted-tool stub."""
     pytest.importorskip("agents")
@@ -266,6 +313,41 @@ def test_snapshot_restore_preserves_tools_after_non_openai_model_override() -> N
 
     assert agent.tools == original_tools
     assert agent.model_settings.response_include == ["web_search_call.action.sources"]
+
+
+def test_attachment_code_interpreter_tool_added_after_override_is_stubbed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Attachment-added CodeInterpreterTool should be stubbed before non-OpenAI runs."""
+    pytest.importorskip("agents")
+
+    from agents import CodeInterpreterTool, FunctionTool
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import (
+        _restore_agency_state,
+        _snapshot_agency_state,
+        apply_openai_client_config,
+    )
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+    from agency_swarm.utils import hosted_tool_compat
+
+    agent = Agent(name="A", instructions="x", model="gpt-4o-mini")
+    assert agent.attachment_manager is not None
+    monkeypatch.setattr(agent.attachment_manager, "_get_filename_by_id", lambda _file_id: "data.csv")
+
+    snapshot = _snapshot_agency_state(_agency(agent))
+    apply_openai_client_config(_agency(agent), ClientConfig(model="litellm/ollama_chat/gemma4:e4b"))
+    hosted_tool_compat.enable_attachment_compatibility(agent)
+    asyncio.run(agent.attachment_manager.process_message_and_files("hello", ["file-abc"], {}, "get_response"))
+
+    assert not any(isinstance(tool, CodeInterpreterTool) for tool in agent.tools)
+    stubs = {tool.name: tool for tool in agent.tools if isinstance(tool, FunctionTool)}
+    assert {"code_interpreter"} <= set(stubs)
+    assert "non-OpenAI backend" in asyncio.run(stubs["code_interpreter"].on_invoke_tool(None, "{}"))
+
+    agent.attachment_manager.attachments_cleanup()
+    _restore_agency_state(_agency(agent), snapshot)
+
+    assert agent.tools == []
 
 
 @pytest.mark.asyncio

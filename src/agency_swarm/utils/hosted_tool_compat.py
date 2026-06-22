@@ -1,3 +1,5 @@
+from typing import Protocol
+
 from agents import (
     ApplyPatchTool,
     CodeInterpreterTool,
@@ -8,6 +10,7 @@ from agents import (
     ImageGenerationTool,
     LocalShellTool,
     Model,
+    ModelSettings,
     OpenAIChatCompletionsModel,
     OpenAIResponsesModel,
     ShellTool,
@@ -16,8 +19,9 @@ from agents import (
     WebSearchTool,
 )
 from agents.tool import get_function_tool_responses_only_features
+from httpx import URL
 
-from agency_swarm.agent.core import Agent
+from agency_swarm.messages.codex_input import is_codex_base_url
 from agency_swarm.utils.openrouter import get_openrouter_model_name
 
 try:
@@ -74,15 +78,46 @@ _OPENAI_MODEL_NAME_PREFIXES = (
     "tts-",
     "whisper-",
 )
+_OPENAI_API_BASE_URL = "https://api.openai.com/v1"
+_ATTACHMENT_COMPATIBILITY_ATTR = "_agency_swarm_apply_openai_hosted_tool_compatibility_after_attachments"
 type ToolSnapshot = list[Tool] | None
+type AttachmentCompatibilitySnapshot = bool | None
 
 
-def restore_tool_snapshot(agent: Agent, tools: ToolSnapshot) -> None:
+class ToolOwner(Protocol):
+    model: str | Model | None
+    tools: list[Tool]
+    model_settings: ModelSettings
+
+
+def restore_tool_snapshot(agent: ToolOwner, tools: ToolSnapshot) -> None:
     if tools is not None:
         agent.tools = tools
 
 
-def apply_openai_hosted_tool_compatibility(agent: Agent) -> None:
+def snapshot_attachment_compatibility(agent: object) -> AttachmentCompatibilitySnapshot:
+    enabled = getattr(agent, _ATTACHMENT_COMPATIBILITY_ATTR, None)
+    return enabled if isinstance(enabled, bool) else None
+
+
+def enable_attachment_compatibility(agent: object) -> None:
+    setattr(agent, _ATTACHMENT_COMPATIBILITY_ATTR, True)
+
+
+def restore_attachment_compatibility(agent: object, enabled: AttachmentCompatibilitySnapshot) -> None:
+    if enabled is None:
+        if hasattr(agent, _ATTACHMENT_COMPATIBILITY_ATTR):
+            delattr(agent, _ATTACHMENT_COMPATIBILITY_ATTR)
+        return
+    setattr(agent, _ATTACHMENT_COMPATIBILITY_ATTR, enabled)
+
+
+def apply_openai_hosted_tool_compatibility_after_attachment(agent: ToolOwner) -> None:
+    if bool(getattr(agent, _ATTACHMENT_COMPATIBILITY_ATTR, False)):
+        apply_openai_hosted_tool_compatibility(agent)
+
+
+def apply_openai_hosted_tool_compatibility(agent: ToolOwner) -> None:
     if _supports_openai_hosted_tools(agent):
         return
 
@@ -117,18 +152,20 @@ def apply_openai_hosted_tool_compatibility(agent: Agent) -> None:
     _strip_openai_hosted_response_includes(agent)
 
 
-def _supports_openai_hosted_tools(agent: Agent) -> bool:
+def _supports_openai_hosted_tools(agent: ToolOwner) -> bool:
     if get_openrouter_model_name(agent.model) is not None:
         return False
     if _uses_litellm(agent):
         return False
     if isinstance(agent.model, OpenAIChatCompletionsModel):
         return False
+    if _uses_custom_openai_base_url(agent):
+        return False
     name = _request_model_name(agent)
     return bool(name) and _is_openai_model_name(name)
 
 
-def _request_model_name(agent: Agent) -> str:
+def _request_model_name(agent: ToolOwner) -> str:
     model = agent.model
     if isinstance(model, str):
         name = model
@@ -143,7 +180,7 @@ def _request_model_name(agent: Agent) -> str:
     return name if isinstance(name, str) else ""
 
 
-def _uses_litellm(agent: Agent) -> bool:
+def _uses_litellm(agent: ToolOwner) -> bool:
     model = agent.model
     if isinstance(model, str):
         return _is_litellm_model(model)
@@ -168,7 +205,18 @@ def _is_openai_model_name(name: str) -> bool:
     return prefix == "openai"
 
 
-def _strip_openai_hosted_response_includes(agent: Agent) -> None:
+def _uses_custom_openai_base_url(agent: ToolOwner) -> bool:
+    model = agent.model
+    if not isinstance(model, OpenAIResponsesModel | OpenAIChatCompletionsModel):
+        return False
+    client = getattr(model, "_client", None)
+    base_url = getattr(client, "base_url", None)
+    if base_url is None or is_codex_base_url(str(base_url)):
+        return False
+    return str(URL(str(base_url))).rstrip("/") != _OPENAI_API_BASE_URL
+
+
+def _strip_openai_hosted_response_includes(agent: ToolOwner) -> None:
     settings = getattr(agent, "model_settings", None)
     if settings is None or settings.response_include is None:
         return
