@@ -24,14 +24,6 @@ from httpx import URL
 from agency_swarm.messages.codex_input import is_codex_base_url
 from agency_swarm.utils.openrouter import get_openrouter_model_name
 
-try:
-    from agents.extensions.models.litellm_model import LitellmModel
-
-    _LITELLM_AVAILABLE = True
-except ImportError:
-    _LITELLM_AVAILABLE = False
-    LitellmModel = None  # type: ignore[misc, assignment]
-
 _OPENAI_HOSTED_TOOL_TYPES = (
     FileSearchTool,
     WebSearchTool,
@@ -113,7 +105,7 @@ def restore_attachment_compatibility(agent: object, enabled: AttachmentCompatibi
 
 
 def apply_openai_hosted_tool_compatibility_after_attachment(agent: ToolOwner) -> None:
-    if bool(getattr(agent, _ATTACHMENT_COMPATIBILITY_ATTR, False)):
+    if getattr(agent, _ATTACHMENT_COMPATIBILITY_ATTR, False) is True:
         apply_openai_hosted_tool_compatibility(agent)
 
 
@@ -171,8 +163,8 @@ def _request_model_name(agent: ToolOwner) -> str:
         name = model
     elif isinstance(model, OpenAIResponsesModel | OpenAIChatCompletionsModel):
         name = model.model
-    elif _LITELLM_AVAILABLE and LitellmModel is not None and isinstance(model, LitellmModel):
-        name = model.model
+    elif _is_litellm_model_instance(model):
+        name = getattr(model, "model", "")
     elif isinstance(model, Model):
         name = getattr(model, "model", "")
     else:
@@ -186,7 +178,7 @@ def _uses_litellm(agent: ToolOwner) -> bool:
         return _is_litellm_model(model)
     if isinstance(model, OpenAIResponsesModel | OpenAIChatCompletionsModel):
         return _is_litellm_model(model.model)
-    if _LITELLM_AVAILABLE and LitellmModel is not None and isinstance(model, LitellmModel):
+    if _is_litellm_model_instance(model):
         return True
     if isinstance(model, Model):
         name = getattr(model, "model", None)
@@ -196,6 +188,13 @@ def _uses_litellm(agent: ToolOwner) -> bool:
 
 def _is_litellm_model(name: str) -> bool:
     return name.startswith("litellm/")
+
+
+def _is_litellm_model_instance(model: object) -> bool:
+    return any(
+        cls.__module__ == "agents.extensions.models.litellm_model" and cls.__name__ == "LitellmModel"
+        for cls in type(model).__mro__
+    )
 
 
 def _is_openai_model_name(name: str) -> bool:
