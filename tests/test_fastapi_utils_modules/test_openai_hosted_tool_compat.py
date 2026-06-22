@@ -15,6 +15,7 @@ def _agency(agent: object) -> SimpleNamespace:
         "anthropic/claude-sonnet-4-6",
         "openrouter/anthropic/claude-sonnet-4.5",
         "openrouter/openai/gpt-5",
+        "openclaw:main",
     ],
 )
 def test_non_openai_model_override_stubs_openai_hosted_tools(model: str) -> None:

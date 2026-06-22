@@ -49,6 +49,31 @@ _OPENAI_HOSTED_RESPONSE_INCLUDES = frozenset(
         "code_interpreter_call.outputs",
     }
 )
+_OPENAI_MODEL_NAME_PREFIXES = (
+    "babbage-",
+    "chatgpt-",
+    "codex-",
+    "computer-use-",
+    "dall-e-",
+    "davinci-",
+    "ft:babbage-",
+    "ft:chatgpt-",
+    "ft:davinci-",
+    "ft:gpt-",
+    "ft:o1",
+    "ft:o3",
+    "ft:o4",
+    "ft:o5",
+    "gpt-",
+    "o1",
+    "o3",
+    "o4",
+    "o5",
+    "omni-",
+    "text-",
+    "tts-",
+    "whisper-",
+)
 type ToolSnapshot = list[Tool] | None
 
 
@@ -138,7 +163,7 @@ def _is_litellm_model(name: str) -> bool:
 
 def _is_openai_model_name(name: str) -> bool:
     if "/" not in name:
-        return True
+        return name.startswith(_OPENAI_MODEL_NAME_PREFIXES)
     prefix, _rest = name.split("/", 1)
     return prefix == "openai"
 
