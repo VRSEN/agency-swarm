@@ -18,6 +18,7 @@ from agents import (
     ToolSearchTool,
     WebSearchTool,
 )
+from agents.model_settings import MCPToolChoice
 from agents.tool import get_function_tool_responses_only_features
 from httpx import URL
 
@@ -141,6 +142,7 @@ def apply_openai_hosted_tool_compatibility(agent: ToolOwner) -> None:
         tools.append(_build_unsupported_openai_hosted_tool_stub(name))
         stubbed.add(name)
     agent.tools = tools
+    _strip_openai_hosted_tool_choice(agent)
     _strip_openai_hosted_response_includes(agent)
 
 
@@ -213,6 +215,14 @@ def _uses_custom_openai_base_url(agent: ToolOwner) -> bool:
     if base_url is None or is_codex_base_url(str(base_url)):
         return False
     return str(URL(str(base_url))).rstrip("/") != _OPENAI_API_BASE_URL
+
+
+def _strip_openai_hosted_tool_choice(agent: ToolOwner) -> None:
+    settings = getattr(agent, "model_settings", None)
+    if settings is None or not isinstance(settings.tool_choice, MCPToolChoice):
+        return
+    settings.tool_choice = None
+    agent.model_settings = settings
 
 
 def _strip_openai_hosted_response_includes(agent: ToolOwner) -> None:
