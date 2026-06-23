@@ -225,6 +225,39 @@ def test_non_openai_model_override_stubs_incompatible_same_name_hosted_tool_repl
     assert [Converter.tool_to_openai(tool)["function"]["name"] for tool in agent.tools] == ["web_search"]
 
 
+def test_non_openai_model_override_clears_hosted_mcp_tool_choice() -> None:
+    """Hosted MCP tool choices should not reach Chat Completions after stubbing."""
+    pytest.importorskip("agents")
+
+    from agents import FunctionTool, HostedMCPTool, ModelSettings
+    from agents.model_settings import MCPToolChoice
+    from agents.models.chatcmpl_converter import Converter
+    from agents.tool import Mcp
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    hosted = HostedMCPTool(
+        tool_config=Mcp(type="mcp", server_label="docs", server_url="https://example.com"),
+    )
+    agent = Agent(
+        name="A",
+        instructions="x",
+        model="gpt-4o-mini",
+        tools=[hosted],
+        model_settings=ModelSettings(tool_choice=MCPToolChoice(server_label="docs", name="lookup")),
+    )
+
+    apply_openai_client_config(_agency(agent), ClientConfig(model="litellm/ollama_chat/gemma4:e4b"))
+
+    assert hosted not in agent.tools
+    stubs = {tool.name: tool for tool in agent.tools if isinstance(tool, FunctionTool)}
+    assert {"hosted_mcp"} <= set(stubs)
+    assert agent.model_settings.tool_choice is None
+    Converter.convert_tool_choice(agent.model_settings.tool_choice)
+
+
 @pytest.mark.parametrize("model", ["gpt-5", "openai/gpt-4o-mini"])
 def test_openai_model_override_keeps_openai_hosted_tools(model: str) -> None:
     """OpenAI request model overrides should keep OpenAI hosted tools available."""
