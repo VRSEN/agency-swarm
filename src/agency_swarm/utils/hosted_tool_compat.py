@@ -18,11 +18,13 @@ from agents import (
     ToolSearchTool,
     WebSearchTool,
 )
+from agents.mcp.server import MCPServer
 from agents.model_settings import MCPToolChoice
 from agents.tool import get_function_tool_responses_only_features
 from httpx import URL
 
 from agency_swarm.messages.codex_input import is_codex_base_url
+from agency_swarm.utils import hosted_tool_replacements
 from agency_swarm.utils.openrouter import get_openrouter_model_name
 
 _OPENAI_HOSTED_TOOL_TYPES = (
@@ -75,17 +77,32 @@ _OPENAI_API_BASE_URL = "https://api.openai.com/v1"
 _ATTACHMENT_COMPATIBILITY_ATTR = "_agency_swarm_apply_openai_hosted_tool_compatibility_after_attachments"
 type ToolSnapshot = list[Tool] | None
 type AttachmentCompatibilitySnapshot = bool | None
+type McpServersSnapshot = list[MCPServer] | None
 
 
 class ToolOwner(Protocol):
     model: str | Model | None
     tools: list[Tool]
     model_settings: ModelSettings
+    mcp_servers: list[MCPServer]
 
 
 def restore_tool_snapshot(agent: ToolOwner, tools: ToolSnapshot) -> None:
     if tools is not None:
         agent.tools = tools
+
+
+def snapshot_mcp_servers(agent: ToolOwner) -> McpServersSnapshot:
+    servers = agent.mcp_servers
+    if not isinstance(servers, list):
+        return None
+    return list(servers)
+
+
+def restore_mcp_servers(agent: ToolOwner, servers: McpServersSnapshot) -> None:
+    if servers is None:
+        return
+    agent.mcp_servers = list(servers)
 
 
 def snapshot_attachment_compatibility(agent: object) -> AttachmentCompatibilitySnapshot:
@@ -139,7 +156,13 @@ def apply_openai_hosted_tool_compatibility(agent: ToolOwner) -> None:
         name = _tool_name(tool)
         if not name or name in local_names or name in stubbed:
             continue
-        tools.append(_build_unsupported_openai_hosted_tool_stub(name))
+        replacement = hosted_tool_replacements.resolve_hosted_tool_replacement(agent, name)
+        if replacement is not None:
+            tools.append(replacement)
+        elif hosted_tool_replacements.has_builtin_hosted_tool_replacement(name):
+            pass
+        else:
+            tools.append(_build_unsupported_openai_hosted_tool_stub(name))
         stubbed.add(name)
     agent.tools = tools
     _strip_openai_hosted_tool_choice(agent)

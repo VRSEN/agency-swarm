@@ -118,6 +118,7 @@ type _AgentStateSnapshot = tuple[
     OpenAI | None,
     hosted_tool_compat.ToolSnapshot,
     hosted_tool_compat.AttachmentCompatibilitySnapshot,
+    hosted_tool_compat.McpServersSnapshot,
 ]
 type _AgencyStateSnapshot = dict[str, _AgentStateSnapshot]
 
@@ -2370,6 +2371,7 @@ def _snapshot_agency_state(
             getattr(agent, "_openai_client_sync", None),
             list(agent.tools) if hasattr(agent, "tools") else None,
             hosted_tool_compat.snapshot_attachment_compatibility(agent),
+            hosted_tool_compat.snapshot_mcp_servers(agent),
         )
     return snapshot
 
@@ -2386,6 +2388,7 @@ def _restore_agency_state(
         openai_client_sync,
         tools,
         attachment_compatibility,
+        mcp_servers,
     ) in snapshot.items():
         agent = agency.agents.get(name)
         if agent is None:
@@ -2396,6 +2399,7 @@ def _restore_agency_state(
         agent._openai_client_sync = openai_client_sync
         hosted_tool_compat.restore_tool_snapshot(agent, tools)
         hosted_tool_compat.restore_attachment_compatibility(agent, attachment_compatibility)
+        hosted_tool_compat.restore_mcp_servers(agent, mcp_servers)
 
 
 async def _get_agency_request_state(agency: Agency) -> _AgencyRequestState:
