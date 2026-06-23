@@ -46,6 +46,7 @@ _OPENAI_HOSTED_RESPONSE_INCLUDES = frozenset(
         "code_interpreter_call.outputs",
     }
 )
+_TOOL_CHOICE_MODES = frozenset({"auto", "required", "none"})
 _OPENAI_MODEL_NAME_PREFIXES = (
     "babbage-",
     "chatgpt-",
@@ -114,13 +115,6 @@ def apply_openai_hosted_tool_compatibility(agent: ToolOwner) -> None:
     if _supports_openai_hosted_tools(agent):
         return
 
-    hosted_names = {
-        name
-        for tool in agent.tools
-        if isinstance(tool, _OPENAI_HOSTED_TOOL_TYPES)
-        for name in [_tool_name(tool)]
-        if name
-    }
     local_names = {
         name
         for tool in agent.tools
@@ -132,9 +126,8 @@ def apply_openai_hosted_tool_compatibility(agent: ToolOwner) -> None:
     tools: list[Tool] = []
     for tool in agent.tools:
         if not isinstance(tool, _OPENAI_HOSTED_TOOL_TYPES):
-            if _tool_name(tool) in hosted_names and not _is_non_responses_tool_compatible(tool):
-                continue
-            tools.append(tool)
+            if _is_non_responses_tool_compatible(tool):
+                tools.append(tool)
             continue
         name = _tool_name(tool)
         if not name or name in local_names or name in stubbed:
@@ -219,10 +212,17 @@ def _uses_custom_openai_base_url(agent: ToolOwner) -> bool:
 
 def _strip_openai_hosted_tool_choice(agent: ToolOwner) -> None:
     settings = getattr(agent, "model_settings", None)
-    if settings is None or not isinstance(settings.tool_choice, MCPToolChoice):
+    if settings is None:
         return
-    settings.tool_choice = None
-    agent.model_settings = settings
+    if isinstance(settings.tool_choice, MCPToolChoice):
+        settings.tool_choice = None
+        agent.model_settings = settings
+        return
+    if isinstance(settings.tool_choice, str) and settings.tool_choice not in _TOOL_CHOICE_MODES:
+        tool_names = {name for tool in agent.tools for name in [_tool_name(tool)] if name}
+        if settings.tool_choice not in tool_names:
+            settings.tool_choice = None
+            agent.model_settings = settings
 
 
 def _strip_openai_hosted_response_includes(agent: ToolOwner) -> None:
