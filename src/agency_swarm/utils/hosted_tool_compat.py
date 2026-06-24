@@ -156,10 +156,13 @@ def apply_openai_hosted_tool_compatibility(agent: ToolOwner) -> None:
         name = _tool_name(tool)
         if not name or name in local_names or name in stubbed:
             continue
-        replacement = hosted_tool_replacements.resolve_hosted_tool_replacement(agent, name)
+        replacement = hosted_tool_replacements.resolve_hosted_tool_replacement(
+            agent, name, hosted_tool=tool
+        )
         if replacement is not None:
             tools.append(replacement)
-        elif hosted_tool_replacements.has_builtin_hosted_tool_replacement(name):
+        elif name == "web_search":
+            # Exa MCP server is the replacement; no FunctionTool is appended.
             pass
         else:
             tools.append(_build_unsupported_openai_hosted_tool_stub(name))

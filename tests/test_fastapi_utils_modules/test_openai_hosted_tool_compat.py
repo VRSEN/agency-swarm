@@ -463,19 +463,20 @@ async def test_response_endpoint_stubs_and_restores_hosted_tools_for_non_openai_
     assert agent.model_settings.response_include == ["web_search_call.action.sources"]
 
 
-def test_non_openai_model_override_replaces_local_shell_with_persistent_shell_tool() -> None:
-    """LocalShellTool should be replaced with PersistentShellTool on incompatible backends."""
+def test_non_openai_model_override_wraps_local_shell_executor() -> None:
+    """LocalShellTool should be replaced with a FunctionTool that preserves the executor."""
     pytest.importorskip("agents")
 
     from unittest.mock import MagicMock
 
-    from agents import FunctionTool, LocalShellTool
+    from agents import FunctionTool, LocalShellCommandRequest, LocalShellTool
 
     from agency_swarm import Agent
     from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
     from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
 
-    hosted = LocalShellTool(executor=MagicMock())
+    executor = MagicMock(return_value="executor-output")
+    hosted = LocalShellTool(executor=executor)
     agent = Agent(name="A", instructions="x", model="gpt-4o-mini", tools=[hosted])
 
     apply_openai_client_config(_agency(agent), ClientConfig(model="anthropic/claude-sonnet-4-6"))
@@ -483,7 +484,135 @@ def test_non_openai_model_override_replaces_local_shell_with_persistent_shell_to
     assert hosted not in agent.tools
     replacements = [tool for tool in agent.tools if isinstance(tool, FunctionTool) and tool.name == "local_shell"]
     assert len(replacements) == 1
-    assert "shell command" in replacements[0].description.lower()
+    replacement = replacements[0]
+    assert "configured local shell executor" in replacement.description.lower()
+
+    output = asyncio.run(
+        replacement.on_invoke_tool(None, '{"command": ["echo", "hello"]}')
+    )
+    assert output == "executor-output"
+    executor.assert_called_once()
+    request = executor.call_args.args[0]
+    assert isinstance(request, LocalShellCommandRequest)
+    assert request.data.action.command == ["echo", "hello"]
+
+
+def test_non_openai_model_override_local_shell_executor_can_read_commands() -> None:
+    """Executors written for shell-style action.commands should work on local_shell replacement."""
+    pytest.importorskip("agents")
+
+    from typing import Any, cast
+
+    from agents import FunctionTool, LocalShellCommandRequest, LocalShellTool
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    def executor(request: LocalShellCommandRequest) -> str:
+        action = cast(Any, request.data.action)
+        return f"commands={action.commands}"
+
+    hosted = LocalShellTool(executor=executor)
+    agent = Agent(name="A", instructions="x", model="gpt-4o-mini", tools=[hosted])
+
+    apply_openai_client_config(_agency(agent), ClientConfig(model="anthropic/claude-sonnet-4-6"))
+
+    replacement = next(
+        tool for tool in agent.tools if isinstance(tool, FunctionTool) and tool.name == "local_shell"
+    )
+    output = asyncio.run(replacement.on_invoke_tool(None, '{"commands": ["echo hello"]}'))
+    assert output == "commands=['echo hello']"
+
+
+def test_non_openai_model_override_wraps_async_local_shell_executor() -> None:
+    """Async local shell executors should be awaited by the replacement FunctionTool."""
+    pytest.importorskip("agents")
+
+    from agents import FunctionTool, LocalShellTool
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    async def executor(_request: object) -> str:
+        return "async-output"
+
+    hosted = LocalShellTool(executor=executor)
+    agent = Agent(name="A", instructions="x", model="gpt-4o-mini", tools=[hosted])
+
+    apply_openai_client_config(_agency(agent), ClientConfig(model="anthropic/claude-sonnet-4-6"))
+
+    replacement = next(
+        tool for tool in agent.tools if isinstance(tool, FunctionTool) and tool.name == "local_shell"
+    )
+    output = asyncio.run(replacement.on_invoke_tool(None, '{"command": "echo hello"}'))
+    assert output == "async-output"
+
+
+def test_local_shell_replacement_falls_back_to_persistent_shell_without_executor() -> None:
+    """When no executor is available, local_shell should fall back to PersistentShellTool."""
+    pytest.importorskip("agents")
+
+    from agency_swarm.utils.hosted_tool_replacements import _build_local_shell_replacement
+
+    replacement = _build_local_shell_replacement(None)
+    assert replacement.name == "local_shell"
+    assert "shell command" in replacement.description.lower()
+
+
+def test_non_openai_model_override_wraps_shell_executor() -> None:
+    """ShellTool should be replaced with a FunctionTool that preserves the executor."""
+    pytest.importorskip("agents")
+
+    from unittest.mock import MagicMock
+
+    from agents import FunctionTool, ShellCommandRequest, ShellTool
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    executor = MagicMock(return_value="shell-output")
+    hosted = ShellTool(executor=executor)
+    agent = Agent(name="A", instructions="x", model="gpt-4o-mini", tools=[hosted])
+
+    apply_openai_client_config(_agency(agent), ClientConfig(model="anthropic/claude-sonnet-4-6"))
+
+    assert hosted not in agent.tools
+    replacements = [tool for tool in agent.tools if isinstance(tool, FunctionTool) and tool.name == "shell"]
+    assert len(replacements) == 1
+    replacement = replacements[0]
+    assert "configured shell executor" in replacement.description.lower()
+
+    output = asyncio.run(replacement.on_invoke_tool(None, '{"commands": ["echo hello"]}'))
+    assert output == "shell-output"
+    executor.assert_called_once()
+    request = executor.call_args.args[0]
+    assert isinstance(request, ShellCommandRequest)
+    assert request.data.action.commands == ["echo hello"]
+
+
+def test_non_openai_model_override_replaces_shell_without_executor_with_persistent_shell() -> None:
+    """Hosted ShellTool without a local executor should fall back to PersistentShellTool."""
+    pytest.importorskip("agents")
+
+    from agents import FunctionTool, ShellTool
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    hosted = ShellTool(environment={"type": "container_auto"})
+    agent = Agent(name="A", instructions="x", model="gpt-4o-mini", tools=[hosted])
+
+    apply_openai_client_config(_agency(agent), ClientConfig(model="anthropic/claude-sonnet-4-6"))
+
+    assert hosted not in agent.tools
+    replacement = next(
+        tool for tool in agent.tools if isinstance(tool, FunctionTool) and tool.name == "shell"
+    )
+    assert "shell command" in replacement.description.lower()
 
 
 def test_non_openai_model_override_stubs_file_search() -> None:
@@ -505,3 +634,29 @@ def test_non_openai_model_override_stubs_file_search() -> None:
     stubs = {tool.name: tool for tool in agent.tools if isinstance(tool, FunctionTool)}
     assert "file_search" in stubs
     assert "Unavailable hosted tool stub" in stubs["file_search"].description
+
+
+def test_non_openai_model_override_stubs_code_interpreter_without_jupyter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CodeInterpreterTool should stub when the Jupyter replacement is unavailable."""
+    pytest.importorskip("agents")
+
+    from agents import CodeInterpreterTool, FunctionTool
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+    from agency_swarm.utils import hosted_tool_replacements
+
+    monkeypatch.setattr(hosted_tool_replacements, "_build_code_interpreter_replacement", lambda: None)
+
+    hosted = CodeInterpreterTool(tool_config={"type": "code_interpreter"})
+    agent = Agent(name="A", instructions="x", model="gpt-4o-mini", tools=[hosted])
+
+    apply_openai_client_config(_agency(agent), ClientConfig(model="anthropic/claude-sonnet-4-6"))
+
+    assert hosted not in agent.tools
+    stubs = {tool.name: tool for tool in agent.tools if isinstance(tool, FunctionTool)}
+    assert "code_interpreter" in stubs
+    assert "Unavailable hosted tool stub" in stubs["code_interpreter"].description
