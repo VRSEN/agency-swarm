@@ -93,14 +93,14 @@ def restore_tool_snapshot(agent: ToolOwner, tools: ToolSnapshot) -> None:
 
 
 def snapshot_mcp_servers(agent: ToolOwner) -> McpServersSnapshot:
-    servers = agent.mcp_servers
+    servers = getattr(agent, "mcp_servers", None)
     if not isinstance(servers, list):
         return None
     return list(servers)
 
 
 def restore_mcp_servers(agent: ToolOwner, servers: McpServersSnapshot) -> None:
-    if servers is None:
+    if servers is None or not hasattr(agent, "mcp_servers"):
         return
     agent.mcp_servers = list(servers)
 
