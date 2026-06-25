@@ -6,6 +6,8 @@ from agents import CodeInterpreterTool, TResponseInputItem
 from agents.exceptions import AgentsException
 from agents.items import ItemHelpers
 
+from agency_swarm.utils import hosted_tool_compat
+
 if TYPE_CHECKING:
     from agency_swarm import Agent
 
@@ -186,6 +188,7 @@ class AttachmentManager:
                         content_list = []
 
                     file_content_items = await self.sort_file_attachments(files_to_attach)
+                    hosted_tool_compat.apply_openai_hosted_tool_compatibility_after_attachment(self.agent)
                     content_list.extend(file_content_items)
 
                     # Update the message content

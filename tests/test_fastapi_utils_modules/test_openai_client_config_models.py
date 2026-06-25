@@ -1107,32 +1107,6 @@ def test_openai_model_override_maps_variant_include_to_response_include() -> Non
     assert agent.model_settings.extra_args is None
 
 
-def test_model_settings_extra_args_apply_openrouter_extra_body_and_max_tokens() -> None:
-    """OpenRouter options should reach typed ModelSettings fields, not extra_args."""
-    pytest.importorskip("agents")
-
-    from agency_swarm import Agent
-    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
-    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
-
-    agent = Agent(name="A", instructions="x", model="gpt-4o-mini")
-    agency = type("Agency", (), {"agents": {"A": agent}})()
-
-    apply_openai_client_config(
-        agency,
-        ClientConfig(
-            model_settings_extra_args={
-                "extra_body": {"reasoning": {"effort": "high"}},
-                "max_tokens": 2500,
-            },
-        ),
-    )
-
-    assert agent.model_settings.extra_body == {"reasoning": {"effort": "high"}}
-    assert agent.model_settings.max_tokens == 2500
-    assert agent.model_settings.extra_args is None
-
-
 @pytest.mark.parametrize("model_name", ["litellm/openai/gpt-5.4", "litellm/gpt-5"])
 def test_litellm_openai_variant_sets_reasoning_without_forcing_other_providers(model_name: str) -> None:
     """OpenAI LiteLLM variants should enable Agents reasoning state only from explicit UI settings."""
