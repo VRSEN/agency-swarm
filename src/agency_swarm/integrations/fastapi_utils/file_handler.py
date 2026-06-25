@@ -195,9 +195,16 @@ def get_extension_from_filetype(file_path: Path) -> str | None:
     return f".{kind.extension}" if kind else None
 
 
+def _validate_download_name(name: str) -> str:
+    if "/" in name or "\\" in name:
+        raise ValueError("Remote filename must not contain path separators")
+    return name
+
+
 async def download_file(url: str, name: str, save_dir: str) -> str:
-    ext = get_extension_from_name(name) or get_extension_from_url(url)
-    base = os.path.splitext(name)[0]
+    validated_name = _validate_download_name(name)
+    ext = get_extension_from_name(validated_name) or get_extension_from_url(url)
+    base = os.path.splitext(validated_name)[0]
 
     # Truncate prefix to avoid exceeding the 255-byte filename limit on most
     # filesystems (mkstemp appends a random suffix + ".tmp" on top of the prefix).
