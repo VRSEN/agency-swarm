@@ -110,9 +110,8 @@ ReasoningSummaryValue = Literal["auto", "concise", "detailed"]
 logger = logging.getLogger(__name__)
 _AGENCY_SWARM_DEFAULT_MODEL = "agency-swarm/default"
 
-type _SnapshotModel = str | Model | None
 type _AgentStateSnapshot = tuple[
-    _SnapshotModel,
+    str | Model | None,
     ModelSettings | None,
     AsyncOpenAI | None,
     OpenAI | None,
@@ -2377,15 +2376,8 @@ def _restore_agency_state(
     agency: Agency,
     snapshot: _AgencyStateSnapshot,
 ) -> None:
-    """Restore agent model/model_settings/OpenAI clients after a request override."""
-    for name, (
-        model,
-        model_settings,
-        openai_client,
-        openai_client_sync,
-        tools,
-        attachment_compatibility,
-    ) in snapshot.items():
+    for name, state in snapshot.items():
+        model, model_settings, openai_client, openai_client_sync, tools, attachment_compatibility = state
         agent = agency.agents.get(name)
         if agent is None:
             continue
