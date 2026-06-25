@@ -66,7 +66,8 @@ def _fd_points_to_dir(fd: int, directory: str) -> bool:
 
 
 @pytest.mark.asyncio
-async def test_download_file_rejects_traversal_names(tmp_path: Path) -> None:
+@pytest.mark.parametrize("name", ["../escape/proof.txt", r"..\escape\proof.txt", "D:proof.txt"])
+async def test_download_file_rejects_traversal_names(name: str, tmp_path: Path) -> None:
     """Remote download filenames should not be allowed to escape the save directory."""
     import agency_swarm.integrations.fastapi_utils.file_handler as fh
 
@@ -95,8 +96,8 @@ async def test_download_file_rejects_traversal_names(tmp_path: Path) -> None:
     try:
         url = f"http://127.0.0.1:{server.server_port}/payload.txt"
 
-        with pytest.raises(ValueError, match="path separators"):
-            await fh.download_file(url, "../escape/proof.txt", str(save_dir))
+        with pytest.raises(ValueError, match="path components"):
+            await fh.download_file(url, name, str(save_dir))
 
         assert not list(save_dir.iterdir())
         assert not list(escape_dir.iterdir())

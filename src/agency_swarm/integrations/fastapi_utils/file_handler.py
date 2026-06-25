@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import ntpath
 import os
 import shutil
 import sys
@@ -196,8 +197,8 @@ def get_extension_from_filetype(file_path: Path) -> str | None:
 
 
 def _validate_download_name(name: str) -> str:
-    if "/" in name or "\\" in name:
-        raise ValueError("Remote filename must not contain path separators")
+    if "/" in name or "\\" in name or ntpath.splitdrive(name)[0]:
+        raise ValueError("Remote filename must not contain path components")
     return name
 
 
