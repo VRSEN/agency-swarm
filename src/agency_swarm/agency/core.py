@@ -5,7 +5,7 @@ import logging
 import os
 import threading
 import warnings
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from agents import RunConfig, RunHooks, RunResult, Tool, TResponseInputItem
 
@@ -33,6 +33,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+ParseAgentFlowsResult = tuple[
+    list[tuple[Agent, Agent]],
+    dict[tuple[str, str], list[type]],
+    set[tuple[str, str]],
+]
+
 CommunicationFlowEntry = (
     tuple[Agent, Agent]  # Basic (sender, receiver) pair
     | tuple[AgentFlow, type]  # Agent flow with tool class
@@ -40,6 +46,33 @@ CommunicationFlowEntry = (
     | tuple[Agent, Agent, list[type] | tuple[type, ...]]  # Individual pair with multiple tool classes
     | AgentFlow  # Standalone agent flow (uses default tool)
 )
+
+
+def _normalize_parse_agent_flows_result(result: object) -> ParseAgentFlowsResult:
+    """Accept legacy local patches that still return the old two-value shape."""
+    if not isinstance(result, tuple):
+        raise TypeError("parse_agent_flows must return a tuple.")
+
+    if len(result) == 3:
+        flows, mapping, defaults = result
+        return (
+            cast(list[tuple[Agent, Agent]], flows),
+            cast(dict[tuple[str, str], list[type]], mapping),
+            cast(set[tuple[str, str]], defaults),
+        )
+
+    if len(result) == 2:
+        flows, raw_mapping = result
+        normalized: dict[tuple[str, str], list[type]] = {}
+        legacy_mapping = cast(
+            dict[tuple[str, str], type | list[type] | tuple[type, ...]],
+            raw_mapping,
+        )
+        for pair, tool_classes in legacy_mapping.items():
+            normalized[pair] = list(tool_classes) if isinstance(tool_classes, (list, tuple)) else [tool_classes]
+        return cast(list[tuple[Agent, Agent]], flows), normalized, set()
+
+    raise ValueError("parse_agent_flows must return 2 or 3 values.")
 
 
 class Agency:
@@ -146,7 +179,7 @@ class Agency:
                 _derived_communication_flows,
                 _communication_tool_classes,
                 _default_communication_tool_pairs,
-            ) = parse_agent_flows(self, communication_flows or [])
+            ) = _normalize_parse_agent_flows_result(parse_agent_flows(self, communication_flows or []))
         else:
             raise ValueError(
                 "Agency structure not defined. Provide entry point agents as positional arguments and/or "
