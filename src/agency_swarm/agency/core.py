@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any
 
 from agents import RunConfig, RunHooks, RunResult, Tool, TResponseInputItem
 
-from agency_swarm.agent.agent_flow import AgentFlow
 from agency_swarm.agent.core import AgencyContext, Agent
 from agency_swarm.agent.execution_streaming import StreamingRunResponse
 from agency_swarm.hooks import PersistenceHooks
@@ -19,6 +18,10 @@ from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers, defaul
 from agency_swarm.utils.files import get_external_caller_directory
 from agency_swarm.utils.thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
 
+from .flow_compat import (
+    CommunicationFlowEntry,
+    normalize_parse_agent_flows_result as _normalize_parse_agent_flows_result,
+)
 from .helpers import read_instructions, run_fastapi as run_fastapi_helper
 from .setup import (
     apply_shared_resources,
@@ -32,14 +35,6 @@ if TYPE_CHECKING:
     from agency_swarm.agent.context_types import AgentRuntimeState
 
 logger = logging.getLogger(__name__)
-
-CommunicationFlowEntry = (
-    tuple[Agent, Agent]  # Basic (sender, receiver) pair
-    | tuple[AgentFlow, type]  # Agent flow with tool class
-    | tuple[Agent, Agent, type]  # Individual (sender, receiver, tool_class)
-    | tuple[Agent, Agent, list[type] | tuple[type, ...]]  # Individual pair with multiple tool classes
-    | AgentFlow  # Standalone agent flow (uses default tool)
-)
 
 
 class Agency:
@@ -146,7 +141,7 @@ class Agency:
                 _derived_communication_flows,
                 _communication_tool_classes,
                 _default_communication_tool_pairs,
-            ) = parse_agent_flows(self, communication_flows or [])
+            ) = _normalize_parse_agent_flows_result(parse_agent_flows(self, communication_flows or []))
         else:
             raise ValueError(
                 "Agency structure not defined. Provide entry point agents as positional arguments and/or "

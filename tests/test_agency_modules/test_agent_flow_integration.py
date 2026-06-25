@@ -134,6 +134,25 @@ def test_agent_pair_can_use_send_message_and_handoff():
     assert "transfer_to_Agent2" in handoff_names
 
 
+@pytest.mark.parametrize("tool_mapping", ([Handoff], Handoff))
+def test_legacy_two_value_flow_parser_patch_still_initializes_agency(monkeypatch, tool_mapping):
+    """Test compatibility with OpenSwarm projects that patch parse_agent_flows."""
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
+
+    def parse_agent_flows_legacy(_agency: Agency, _flows: list[Any]):
+        return [(agent1, agent2)], {("Agent1", "Agent2"): tool_mapping}
+
+    monkeypatch.setattr("agency_swarm.agency.core.parse_agent_flows", parse_agent_flows_legacy)
+
+    agency = Agency(agent1, communication_flows=[(agent1 > agent2, Handoff)])
+
+    assert agency._communication_tool_classes[("Agent1", "Agent2")] == [Handoff]
+    assert agency._default_communication_tool_pairs == set()
+    handoff_names = [handoff.tool_name for handoff in agency.get_agent_runtime_state("Agent1").handoffs]
+    assert handoff_names == ["transfer_to_Agent2"]
+
+
 def test_runtime_registration_keeps_multiple_send_message_tool_classes() -> None:
     """Test runtime registration creates each requested SendMessage class for one recipient."""
     agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
