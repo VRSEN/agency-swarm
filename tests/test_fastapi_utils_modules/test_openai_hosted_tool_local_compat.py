@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -90,3 +91,77 @@ def test_non_openai_model_override_clears_tool_choice_for_dropped_responses_only
 
     assert custom_tool not in agent.tools
     assert agent.model_settings.tool_choice is None
+
+
+def test_non_openai_model_override_stubs_local_shell_tool_instead_of_wrapping_executor() -> None:
+    """LocalShellTool should not become a local FunctionTool replacement on non-OpenAI routes."""
+    pytest.importorskip("agents")
+
+    from unittest.mock import MagicMock
+
+    from agents import FunctionTool, LocalShellTool
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    executor = MagicMock(return_value="executor-output")
+    hosted = LocalShellTool(executor=executor)
+    agent = Agent(name="A", instructions="x", model="gpt-4o-mini", tools=[hosted])
+
+    apply_openai_client_config(_agency(agent), ClientConfig(model="anthropic/claude-sonnet-4-6"))
+
+    assert hosted not in agent.tools
+    stubs = {tool.name: tool for tool in agent.tools if isinstance(tool, FunctionTool)}
+    assert "local_shell" in stubs
+    assert "Unavailable hosted tool stub" in stubs["local_shell"].description
+    assert "non-OpenAI backend" in asyncio.run(stubs["local_shell"].on_invoke_tool(None, "{}"))
+    executor.assert_not_called()
+
+
+def test_non_openai_model_override_stubs_shell_tool_instead_of_bypassing_approval() -> None:
+    """ShellTool approval semantics should not be bypassed by wrapping the executor."""
+    pytest.importorskip("agents")
+
+    from unittest.mock import MagicMock
+
+    from agents import FunctionTool, ShellTool
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    executor = MagicMock(return_value="executor-output")
+    hosted = ShellTool(executor=executor, needs_approval=True)
+    agent = Agent(name="A", instructions="x", model="gpt-4o-mini", tools=[hosted])
+
+    apply_openai_client_config(_agency(agent), ClientConfig(model="anthropic/claude-sonnet-4-6"))
+
+    assert hosted not in agent.tools
+    stubs = {tool.name: tool for tool in agent.tools if isinstance(tool, FunctionTool)}
+    assert "shell" in stubs
+    assert "Unavailable hosted tool stub" in stubs["shell"].description
+    assert "non-OpenAI backend" in asyncio.run(stubs["shell"].on_invoke_tool(None, "{}"))
+    executor.assert_not_called()
+
+
+def test_non_openai_model_override_stubs_hosted_container_shell_tool() -> None:
+    """Hosted/container ShellTool should not be converted into local host shell execution."""
+    pytest.importorskip("agents")
+
+    from agents import FunctionTool, ShellTool
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    hosted = ShellTool(environment={"type": "container"})
+    agent = Agent(name="A", instructions="x", model="gpt-4o-mini", tools=[hosted])
+
+    apply_openai_client_config(_agency(agent), ClientConfig(model="anthropic/claude-sonnet-4-6"))
+
+    assert hosted not in agent.tools
+    stubs = {tool.name: tool for tool in agent.tools if isinstance(tool, FunctionTool)}
+    assert "shell" in stubs
+    assert "Unavailable hosted tool stub" in stubs["shell"].description
+    assert "non-OpenAI backend" in asyncio.run(stubs["shell"].on_invoke_tool(None, "{}"))

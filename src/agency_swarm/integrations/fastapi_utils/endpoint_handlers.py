@@ -1746,20 +1746,19 @@ def _apply_request_model_settings_extra_args(agent: Agent, config: ClientConfig)
         _move_gateway_variant_extra_args(extra_args)
 
     extra_body = extra_args.pop("extra_body", None)
-    if isinstance(extra_body, dict):
-        current_body = current.extra_body if isinstance(current.extra_body, dict) else {}
-        current.extra_body = {
-            **current_body,
-            **extra_body,
-        }
-
-    extra_body = extra_args.pop("extra_body", None)
-    if isinstance(extra_body, dict):
-        current_extra_body = current.extra_body if isinstance(current.extra_body, dict) else {}
-        current.extra_body = {
-            **current_extra_body,
-            **extra_body,
-        }
+    if isinstance(extra_body, dict) or isinstance(current.extra_body, dict):
+        current_body = dict(current.extra_body) if isinstance(current.extra_body, dict) else {}
+        if isinstance(extra_body, dict):
+            current_body.update(extra_body)
+        body_reasoning = current_body.pop("reasoning", None) if not uses_litellm else None
+        if isinstance(body_reasoning, dict):
+            normalized_effort = _reasoning_effort_value(body_reasoning.get("effort"))
+            normalized_summary = _reasoning_summary_value(body_reasoning.get("summary"))
+            if normalized_effort is not None or normalized_summary is not None:
+                current.reasoning = Reasoning(effort=normalized_effort, summary=normalized_summary)
+                extra_args.pop("reasoning_effort", None)
+                extra_args.pop("reasoning_summary", None)
+        current.extra_body = current_body or None
     max_tokens = extra_args.pop("max_tokens", None)
     if isinstance(max_tokens, int):
         current.max_tokens = max_tokens
@@ -2141,12 +2140,16 @@ def _log_unsupported_client_override(agent: Agent) -> None:
     )
 
 
-def _apply_client_to_agent(agent: Agent, client: AsyncOpenAI | None, config: ClientConfig) -> None:
-    """Apply a custom OpenAI client to an agent's model.
+def _build_openai_model_for_client(model_name: str, client: AsyncOpenAI, *, chat: bool = False) -> Model:
+    if _should_reuse_source_openai_client(client):
+        return build_openrouter_chat_model(model_name, openai_client=client)
+    if chat:
+        return OpenAIChatCompletionsModel(model=model_name, openai_client=client)
+    return OpenAIResponsesModel(model=model_name, openai_client=client)
 
-    For OpenAI models, wraps them in OpenAIResponsesModel with the custom client.
-    For LiteLLM models, creates a new LitellmModel with base_url and api_key from config.
-    """
+
+def _apply_client_to_agent(agent: Agent, client: AsyncOpenAI | None, config: ClientConfig) -> None:
+    """Apply a custom OpenAI client to an agent's model."""
     model = agent.model
     has_litellm_overrides = config.base_url is not None or config.api_key is not None or config.litellm_keys is not None
 
@@ -2162,10 +2165,9 @@ def _apply_client_to_agent(agent: Agent, client: AsyncOpenAI | None, config: Cli
                 model,
             )
         else:
-            # String model name - wrap in OpenAIResponsesModel with custom client
             if client is None:
                 return
-            agent.model = OpenAIResponsesModel(model=model, openai_client=client)
+            agent.model = _build_openai_model_for_client(model, client)
             if _is_codex_base_url(str(client.base_url)):
                 _apply_codex_compatibility_model_settings(agent)
     elif isinstance(model, OpenAIResponsesModel):
@@ -2180,10 +2182,9 @@ def _apply_client_to_agent(agent: Agent, client: AsyncOpenAI | None, config: Cli
                 model.model,
             )
         else:
-            # Create new model instance with custom client, preserving model name
             if client is None:
                 return
-            agent.model = OpenAIResponsesModel(model=model.model, openai_client=client)
+            agent.model = _build_openai_model_for_client(model.model, client)
             if _is_codex_base_url(str(client.base_url)):
                 _apply_codex_compatibility_model_settings(agent)
     elif isinstance(model, OpenAIChatCompletionsModel):
@@ -2208,10 +2209,9 @@ def _apply_client_to_agent(agent: Agent, client: AsyncOpenAI | None, config: Cli
                 model.model,
             )
         else:
-            # Create new model instance with custom client, preserving model name
             if client is None:
                 return
-            agent.model = OpenAIChatCompletionsModel(model=model.model, openai_client=client)
+            agent.model = _build_openai_model_for_client(model.model, client, chat=True)
     elif _LITELLM_AVAILABLE and LitellmModel is not None and isinstance(model, LitellmModel):
         if has_litellm_overrides:
             # Preserve existing settings unless explicitly overridden.
@@ -2220,7 +2220,6 @@ def _apply_client_to_agent(agent: Agent, client: AsyncOpenAI | None, config: Cli
             api_key = _resolve_litellm_api_key(resolved_model, config, existing_api_key=model.api_key)
             agent.model = LitellmModel(model=model.model, base_url=base_url, api_key=api_key)
     elif isinstance(model, Model):
-        # For other Model types, try to extract and wrap with OpenAIResponsesModel
         model_name = getattr(model, "model", None)
         if isinstance(model_name, str):
             if _is_litellm_model(model_name):
@@ -2236,7 +2235,7 @@ def _apply_client_to_agent(agent: Agent, client: AsyncOpenAI | None, config: Cli
             else:
                 if client is None:
                     return
-                agent.model = OpenAIResponsesModel(model=model_name, openai_client=client)
+                agent.model = _build_openai_model_for_client(model_name, client)
                 if _is_codex_base_url(str(client.base_url)):
                     _apply_codex_compatibility_model_settings(agent)
         else:

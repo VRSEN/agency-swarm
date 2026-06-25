@@ -23,6 +23,7 @@ from agents.tool import get_function_tool_responses_only_features
 from httpx import URL
 
 from agency_swarm.messages.codex_input import is_codex_base_url
+from agency_swarm.utils import hosted_tool_replacements
 from agency_swarm.utils.openrouter import get_openrouter_model_name
 
 _OPENAI_HOSTED_TOOL_TYPES = (
@@ -132,7 +133,8 @@ def apply_openai_hosted_tool_compatibility(agent: ToolOwner) -> None:
         name = _tool_name(tool)
         if not name or name in local_names or name in stubbed:
             continue
-        tools.append(_build_unsupported_openai_hosted_tool_stub(name))
+        replacement = hosted_tool_replacements.resolve_hosted_tool_replacement(name)
+        tools.append(replacement if replacement is not None else _build_unsupported_openai_hosted_tool_stub(name))
         stubbed.add(name)
     agent.tools = tools
     _strip_openai_hosted_tool_choice(agent)

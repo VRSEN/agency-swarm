@@ -348,9 +348,10 @@ def test_snapshot_restore_preserves_tools_after_non_openai_model_override() -> N
     assert agent.model_settings.response_include == ["web_search_call.action.sources"]
 
 
-def test_attachment_code_interpreter_tool_added_after_override_is_stubbed(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Attachment-added CodeInterpreterTool should be stubbed before non-OpenAI runs."""
+def test_attachment_code_interpreter_tool_added_after_override_is_replaced(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Attachment-added CodeInterpreterTool should use the existing IPython replacement before non-OpenAI runs."""
     pytest.importorskip("agents")
+    pytest.importorskip("jupyter_client")
 
     from agents import CodeInterpreterTool, FunctionTool
 
@@ -373,14 +374,40 @@ def test_attachment_code_interpreter_tool_added_after_override_is_stubbed(monkey
     asyncio.run(agent.attachment_manager.process_message_and_files("hello", ["file-abc"], {}, "get_response"))
 
     assert not any(isinstance(tool, CodeInterpreterTool) for tool in agent.tools)
-    stubs = {tool.name: tool for tool in agent.tools if isinstance(tool, FunctionTool)}
-    assert {"code_interpreter"} <= set(stubs)
-    assert "non-OpenAI backend" in asyncio.run(stubs["code_interpreter"].on_invoke_tool(None, "{}"))
+    replacements = {tool.name: tool for tool in agent.tools if isinstance(tool, FunctionTool)}
+    assert {"code_interpreter"} <= set(replacements)
+    assert "Unavailable hosted tool stub" not in replacements["code_interpreter"].description
 
     agent.attachment_manager.attachments_cleanup()
     _restore_agency_state(_agency(agent), snapshot)
 
     assert agent.tools == []
+
+
+def test_non_openai_model_override_stubs_code_interpreter_without_jupyter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CodeInterpreterTool should stay unavailable when the existing IPython utility cannot load."""
+    pytest.importorskip("agents")
+
+    from agents import CodeInterpreterTool, FunctionTool
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+    from agency_swarm.utils import hosted_tool_replacements
+
+    monkeypatch.setattr(hosted_tool_replacements, "_build_code_interpreter_replacement", lambda: None)
+
+    hosted = CodeInterpreterTool(tool_config={"type": "code_interpreter"})
+    agent = Agent(name="A", instructions="x", model="gpt-4o-mini", tools=[hosted])
+
+    apply_openai_client_config(_agency(agent), ClientConfig(model="anthropic/claude-sonnet-4-6"))
+
+    assert hosted not in agent.tools
+    stubs = {tool.name: tool for tool in agent.tools if isinstance(tool, FunctionTool)}
+    assert "code_interpreter" in stubs
+    assert "Unavailable hosted tool stub" in stubs["code_interpreter"].description
 
 
 @pytest.mark.asyncio

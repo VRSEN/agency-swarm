@@ -93,3 +93,78 @@ def test_model_only_openrouter_override_strips_source_auth_headers(
     headers = dict(agent.model._client.default_headers)
     assert headers["x-source"] == "kept"
     assert headers.get("Authorization") != "Bearer sk-source-openai"
+
+
+@pytest.mark.parametrize("source_kind", ["string", "responses"])
+def test_openai_model_with_openrouter_base_url_uses_openrouter_chat_model(source_kind: str) -> None:
+    """Exact OpenRouter gateway routes should use the framework OpenRouter chat wrapper."""
+    pytest.importorskip("agents")
+
+    from agents import OpenAIChatCompletionsModel, OpenAIResponsesModel
+    from openai import AsyncOpenAI
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+    from agency_swarm.utils.openrouter import OPENROUTER_BASE_URL, get_openrouter_model_name
+
+    source_model = (
+        "gpt-4o-mini"
+        if source_kind == "string"
+        else OpenAIResponsesModel(
+            model="gpt-4o-mini",
+            openai_client=AsyncOpenAI(api_key="sk-source"),
+        )
+    )
+    agent = Agent(name="A", instructions="x", model=source_model)
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(
+            api_key="sk-openrouter",
+            base_url=OPENROUTER_BASE_URL,
+        ),
+    )
+
+    assert isinstance(agent.model, OpenAIChatCompletionsModel)
+    assert agent.model.model == "gpt-4o-mini"
+    assert get_openrouter_model_name(agent.model) == "openrouter/gpt-4o-mini"
+    assert str(agent.model._client.base_url).rstrip("/") == OPENROUTER_BASE_URL
+
+
+def test_model_settings_extra_args_lift_openrouter_extra_body_reasoning() -> None:
+    """OpenRouter reasoning options should reach typed ModelSettings fields."""
+    pytest.importorskip("agents")
+
+    from agents import ModelSettings
+    from openai.types.shared.reasoning import Reasoning
+
+    from agency_swarm import Agent
+    from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
+    from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    agent = Agent(
+        name="A",
+        instructions="x",
+        model="gpt-4o-mini",
+        model_settings=ModelSettings(reasoning=Reasoning(effort="low")),
+    )
+    agency = type("Agency", (), {"agents": {"A": agent}})()
+
+    apply_openai_client_config(
+        agency,
+        ClientConfig(
+            model_settings_extra_args={
+                "reasoning_effort": "medium",
+                "extra_body": {"reasoning": {"effort": "high"}},
+                "max_tokens": 2500,
+            },
+        ),
+    )
+
+    assert agent.model_settings.reasoning is not None
+    assert agent.model_settings.reasoning.effort == "high"
+    assert agent.model_settings.extra_body is None
+    assert agent.model_settings.max_tokens == 2500
+    assert agent.model_settings.extra_args is None
