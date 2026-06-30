@@ -103,6 +103,7 @@ def compute_starter_cache_fingerprint(
         "model": model_name,
         "usage_model": usage_model_name,
         "model_settings": _serialize_value(agent.model_settings),
+        "system_reminders": _serialize_value(getattr(agent, "system_reminders", [])),
         "input_guardrails": _serialize_value(agent.input_guardrails),
         "output_guardrails": _serialize_value(agent.output_guardrails),
         "tools": tools,

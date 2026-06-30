@@ -43,6 +43,57 @@ agent = Agent(
 With `include_web_search_sources=True` (default), `WebSearchTool` calls include source URLs.
 Set `include_web_search_sources=False` to skip this.
 
+### System Reminders
+
+Use `system_reminders` when you want the agent to see a short reminder before model calls, without writing hooks.
+
+```python
+from agency_swarm import Agent
+
+agent = Agent(
+    name="SupportAgent",
+    instructions="Answer clearly and keep the user moving forward.",
+    system_reminders="Before replying, end with one clear next step.",
+)
+```
+
+This reminder is added only to the model input. It is **not saved** in the thread history.
+
+For tool-heavy agents, add a checkpoint reminder:
+
+```python
+from agency_swarm import Agent, EveryNToolCalls
+
+agent = Agent(
+    name="SupportAgent",
+    instructions="Answer clearly and keep the user moving forward.",
+    system_reminders=[
+        "Before replying, end with one clear next step.",
+        EveryNToolCalls(15, "Pause and summarize progress before using more tools."),
+    ],
+)
+```
+
+If the reminder needs agency context, pass a callable:
+
+```python
+from agency_swarm import Agent, MasterContext, RunContextWrapper
+
+def build_reminder(ctx: RunContextWrapper[MasterContext], _agent: Agent) -> str:
+    customer_name = ctx.context.user_context.get("customer_name", "the user")
+    return f"Greet {customer_name} by name and end with one next step."
+
+agent = Agent(
+    name="SupportAgent",
+    instructions="Answer clearly and keep the user moving forward.",
+    system_reminders=build_reminder,
+)
+```
+
+<Note>
+Use `system_reminders` for normal reminders. Use `hooks` only when you need custom lifecycle behavior beyond these built-in triggers.
+</Note>
+
 ### Conversation starters cache
 
 Conversation starters are the suggested prompts you see in the chat UI.
