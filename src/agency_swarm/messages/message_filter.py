@@ -215,14 +215,21 @@ class MessageFilter:
 
         # Pattern 3: reasoning items must be followed by their original next item,
         # AND items following a reasoning must have that reasoning present.
-        # First pass: identify which reasoning items to remove (missing follower)
+        # First pass: identify which reasoning items to remove (missing follower).
+        # Process in reverse so that removing a reasoning item's follower (which may
+        # itself be a reasoning item) cascades to the preceding reasoning item.
         kept_index_set = {idx for idx, _ in kept_entries}
         removed_reasoning_indices: set[int] = set()
 
-        for idx, msg in kept_entries:
+        for idx, msg in sorted(kept_entries, key=lambda entry: entry[0], reverse=True):
             if msg.get("type") == "reasoning":
                 required_idx = idx + 1
-                if required_idx >= len(messages) or required_idx not in kept_index_set:
+                follower_dropped = (
+                    required_idx >= len(messages)
+                    or required_idx not in kept_index_set
+                    or required_idx in removed_reasoning_indices
+                )
+                if follower_dropped:
                     logger.info(
                         "Removing reasoning item %s because its required following item was dropped",
                         msg.get("id"),
