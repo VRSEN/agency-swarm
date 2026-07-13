@@ -36,16 +36,16 @@ def _build_agency() -> Agency:
             "task details in your message. "
             "When delegating, only relay the exact task text and never include unrelated user information."
         ),
-        model_settings=ModelSettings(temperature=0.0),
-        model=LitellmModel(model="anthropic/claude-sonnet-4-5-20250929"),
+        model_settings=ModelSettings(),
+        model=LitellmModel(model="anthropic/claude-sonnet-5"),
         tools=[get_user_id],
     )
 
     worker_agent = Agent(
         name="Worker",
         instructions="You perform tasks.",
-        model_settings=ModelSettings(temperature=0.0),
-        model=LitellmModel(model="anthropic/claude-sonnet-4-5-20250929"),
+        model_settings=ModelSettings(),
+        model=LitellmModel(model="anthropic/claude-sonnet-5"),
     )
 
     data_agent = Agent(
@@ -53,8 +53,8 @@ def _build_agency() -> Agency:
         instructions="You are a DataAgent that provides information about the user. \
         User name is John Doe. User age is 30.",
         description="Has information about the user.",
-        model_settings=ModelSettings(temperature=0.0),
-        model=LitellmModel(model="anthropic/claude-sonnet-4-5-20250929"),
+        model_settings=ModelSettings(),
+        model=LitellmModel(model="anthropic/claude-sonnet-5"),
     )
 
     return Agency(

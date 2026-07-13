@@ -50,16 +50,16 @@ def litellm_anthropic_agency():
     coordinator = Agent(
         name="Coordinator",
         instructions="You are a coordinator agent.",
-        model_settings=ModelSettings(temperature=0.0),
-        model=LitellmModel(model="anthropic/claude-sonnet-4-5-20250929"),
+        model_settings=ModelSettings(),
+        model=LitellmModel(model="anthropic/claude-sonnet-5"),
         tools=[get_user_id],
     )
 
     worker = Agent(
         name="Worker",
         instructions="You perform tasks.",
-        model_settings=ModelSettings(temperature=0.0),
-        model=LitellmModel(model="anthropic/claude-sonnet-4-5-20250929"),
+        model_settings=ModelSettings(),
+        model=LitellmModel(model="anthropic/claude-sonnet-5"),
     )
 
     return Agency(

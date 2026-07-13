@@ -108,7 +108,7 @@ EXPECTED_FLOW_DEFAULT: list[tuple[str, str, str | None]] = [
     ("message_output_item", "MainAgent", None),
 ]
 
-ANTHROPIC_MODEL_NAME = "anthropic/claude-sonnet-4-5-20250929"
+ANTHROPIC_MODEL_NAME = "anthropic/claude-sonnet-5"
 
 EXPECTED_FLOW_ANTHROPIC: list[tuple[str, str, str | None]] = [
     ("tool_call_item", "MainAgent", "get_market_data"),
