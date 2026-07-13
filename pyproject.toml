@@ -14,7 +14,7 @@ requires-python = ">=3.12"
 license = "MIT"
 authors = [{ name = "Vrsen AI Solutions", email = "me@vrsen.ai" }]
 dependencies = [
-    "openai>=2.2,<3",
+    "openai>=2.2,<2.45",
     "openai-agents==0.14.8",
     "datamodel-code-generator>=0.56.0,<0.67.0",
     "docstring-parser>=0.16,<1.0.0",
