@@ -8,8 +8,9 @@ import time
 from pathlib import Path
 
 import pytest
-from agents import ModelSettings, ToolCallItem
+from agents import ModelSettings, RunConfig, ToolCallItem
 from openai import AsyncOpenAI, NotFoundError
+from openai.types.responses import ResponseCodeInterpreterToolCall
 
 from agency_swarm import Agency, Agent
 
@@ -432,25 +433,32 @@ async def test_code_interpreter_tool(real_openai_client: AsyncOpenAI, tmp_path: 
 
         # Initialize agency for the agent
         agency = Agency(code_interpreter_agent, user_context=None)
-
-        # Test the simple usage of the code interpreter tool (answer is always 37)
-        # Use a deterministic script to avoid RNG differences across environments
-        question = """
-        Use CodeInterpreter tool to execute this script and tell me the results:
-        ```print(sum([10, 20, 7]))```
-        """
-
-        response_result = await agency.get_response(question)
-
-        # Verify response
-        assert response_result is not None
-        assert "37" in response_result.final_output.lower()
+        code_interpreter_run_config = RunConfig(model_settings=ModelSettings(tool_choice="code_interpreter"))
 
         # Execute python script (answer is always 14910)
-        query = "Run test-python script, return me its results and tell me exactly what you did to get them."
-        response_result = await agency.get_response(query)
+        query = """
+        Use CodeInterpreter to execute the uploaded Python file without reading or rewriting its source.
+        Run exactly this loader and return only its stdout:
+        ```python
+        from pathlib import Path
+        import runpy
+        runpy.run_path(next(Path("/mnt/data").glob("*test-python.py")), run_name="__main__")
+        ```
+        """
+        response_result = await agency.get_response(query, run_config=code_interpreter_run_config)
 
         assert response_result is not None
+        executions = [
+            item.raw_item
+            for item in response_result.new_items
+            if isinstance(item, ToolCallItem)
+            and isinstance(item.raw_item, ResponseCodeInterpreterToolCall)
+            and item.raw_item.code is not None
+            and "runpy.run_path" in item.raw_item.code
+        ]
+        assert any(call.status == "completed" and "14910" not in (call.code or "") for call in executions), (
+            f"Expected CodeInterpreter to execute the uploaded file with runpy. Calls: {executions}"
+        )
         # Handle various number formatting (with/without commas, LaTeX formatting, etc.)
         response_text = response_result.final_output.lower()
         # Remove LaTeX formatting and common separators to find the core number
