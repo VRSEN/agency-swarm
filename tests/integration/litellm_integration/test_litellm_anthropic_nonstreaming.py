@@ -51,7 +51,7 @@ def litellm_anthropic_agency():
         name="Coordinator",
         instructions="You are a coordinator agent.",
         model_settings=ModelSettings(temperature=0.0),
-        model=LitellmModel(model="anthropic/claude-sonnet-4-20250514"),
+        model=LitellmModel(model="anthropic/claude-sonnet-4-5-20250929"),
         tools=[get_user_id],
     )
 
@@ -59,7 +59,7 @@ def litellm_anthropic_agency():
         name="Worker",
         instructions="You perform tasks.",
         model_settings=ModelSettings(temperature=0.0),
-        model=LitellmModel(model="anthropic/claude-sonnet-4-20250514"),
+        model=LitellmModel(model="anthropic/claude-sonnet-4-5-20250929"),
     )
 
     return Agency(

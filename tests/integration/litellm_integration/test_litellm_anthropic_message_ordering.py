@@ -41,6 +41,7 @@ def _assert_valid_tool_call_pairs(messages: list[dict[str, object]]) -> None:
     function_calls = [msg for msg in messages if msg.get("type") == "function_call"]
     function_outputs = [msg for msg in messages if msg.get("type") == "function_call_output"]
 
+    assert function_calls, "Expected at least one function call in Anthropic/LiteLLM history"
     call_ids = [msg.get("call_id") for msg in function_calls]
     assert all(isinstance(call_id, str) and call_id for call_id in call_ids)
     assert len(call_ids) == len(set(call_ids))
@@ -59,7 +60,7 @@ def litellm_anthropic_agency():
         name="Coordinator",
         instructions="You are a coordinator agent.",
         model_settings=ModelSettings(temperature=0.0),
-        model=LitellmModel(model="anthropic/claude-sonnet-4-20250514"),
+        model=LitellmModel(model="anthropic/claude-sonnet-4-5-20250929"),
         tools=[get_user_id],
     )
 
@@ -67,7 +68,7 @@ def litellm_anthropic_agency():
         name="Worker",
         instructions="You perform tasks.",
         model_settings=ModelSettings(temperature=0.0),
-        model=LitellmModel(model="anthropic/claude-sonnet-4-20250514"),
+        model=LitellmModel(model="anthropic/claude-sonnet-4-5-20250929"),
     )
 
     return Agency(
@@ -86,8 +87,8 @@ class TestLitellmAnthropicMessageOrdering:
         """Verify tool usage with streaming followed by second turn."""
         litellm.modify_params = True
 
-        async for _ in litellm_anthropic_agency.get_response_stream(message="get my id"):
-            pass
+        first_events = [event async for event in litellm_anthropic_agency.get_response_stream(message="get my id")]
+        assert first_events, "Expected Anthropic/LiteLLM to emit stream events for tool usage"
 
         # Verify message structure
         messages = litellm_anthropic_agency.thread_manager.get_all_messages()
@@ -117,8 +118,8 @@ class TestLitellmAnthropicMessageOrdering:
                 )
 
         # Second turn should succeed
-        async for _ in litellm_anthropic_agency.get_response_stream(message="hi"):
-            pass
+        second_events = [event async for event in litellm_anthropic_agency.get_response_stream(message="hi")]
+        assert second_events, "Expected Anthropic/LiteLLM to emit stream events for the follow-up turn"
 
     @pytest.mark.asyncio
     async def test_handoff_no_intermediate_messages(self, litellm_anthropic_agency: Agency):
@@ -126,10 +127,13 @@ class TestLitellmAnthropicMessageOrdering:
         litellm.modify_params = True
 
         # First turn with handoff
-        async for _ in litellm_anthropic_agency.get_response_stream(
-            message="transfer to worker", recipient_agent="Coordinator"
-        ):
-            pass
+        first_events = [
+            event
+            async for event in litellm_anthropic_agency.get_response_stream(
+                message="transfer to worker", recipient_agent="Coordinator"
+            )
+        ]
+        assert first_events, "Expected Anthropic/LiteLLM to emit stream events for handoff"
 
         # Verify no intermediate assistant messages between tool calls and outputs
         messages = litellm_anthropic_agency.thread_manager.get_all_messages()
@@ -166,5 +170,5 @@ class TestLitellmAnthropicMessageOrdering:
                     )
 
         # Second turn should succeed
-        async for _ in litellm_anthropic_agency.get_response_stream(message="hi"):
-            pass
+        second_events = [event async for event in litellm_anthropic_agency.get_response_stream(message="hi")]
+        assert second_events, "Expected Anthropic/LiteLLM to emit stream events for the follow-up turn"
