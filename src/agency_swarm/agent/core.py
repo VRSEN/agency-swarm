@@ -42,7 +42,7 @@ from agency_swarm.agent.conversation_starters_cache import (
 )
 from agency_swarm.agent.execution_streaming import StreamingRunResponse
 from agency_swarm.agent.file_manager import AgentFileManager
-from agency_swarm.agent.system_reminders import prepare_agent_hooks, validate_system_reminders
+from agency_swarm.agent.system_reminders import normalize_system_reminders, prepare_agent_hooks
 from agency_swarm.agent.tools import _attach_one_call_guard
 from agency_swarm.context import MasterContext
 from agency_swarm.reminders import SystemReminder
@@ -138,8 +138,9 @@ class Agent(BaseAgent[MasterContext]):
             validation_attempts (int): Number of retries when an output guardrail trips. Defaults to 1.
             raise_input_guardrail_error (bool): Whether to raise input guardrail errors as exceptions.
                 Defaults to False.
-            system_reminders (list[SystemReminder] | None): Transient reminder configs injected before model calls.
-                Supports reminders after each new user message and after every N tool calls.
+            system_reminders (str | Callable | SystemReminder | list[str | Callable | SystemReminder] | None):
+                Transient system reminders injected before model calls. Plain strings and callables run after each
+                top-level user message.
             handoff_reminder (str | None): Custom reminder for handoffs.
                 Defaults to `Transfer completed. You are {recipient_agent_name}. Please continue the task.`
 
@@ -196,9 +197,8 @@ class Agent(BaseAgent[MasterContext]):
 
         # Remove description from base_agent_params if it was added for Swarm Agent
         base_agent_params.pop("description", None)
-        system_reminders = validate_system_reminders(current_agent_params.get("system_reminders"))
-        user_hooks = base_agent_params.get("hooks")
-        prepared_hooks = prepare_agent_hooks(user_hooks, system_reminders)
+        system_reminders = normalize_system_reminders(current_agent_params.get("system_reminders"))
+        prepared_hooks = prepare_agent_hooks(base_agent_params.get("hooks"), system_reminders)
         if prepared_hooks is None:
             base_agent_params.pop("hooks", None)
         else:
