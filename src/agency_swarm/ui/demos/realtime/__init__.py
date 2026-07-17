@@ -14,7 +14,7 @@ class RealtimeDemoLauncher:
         host: str = "0.0.0.0",
         port: int = 8000,
         provider: str = "openai",
-        model: str = "gpt-realtime-1.5",
+        model: str = "gpt-realtime-2",
         voice: str | None = "alloy",
         turn_detection: dict[str, Any] | None = None,
         input_audio_format: str | None = None,

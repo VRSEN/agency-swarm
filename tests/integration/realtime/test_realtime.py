@@ -217,6 +217,7 @@ def test_run_realtime_defaults_voice_to_entry_agent(monkeypatch: pytest.MonkeyPa
 
     def capture_init(self, realtime_agency, base_model_settings, **kwargs):  # type: ignore[no-untyped-def]
         captured["voice"] = base_model_settings.get("voice")
+        captured["model_name"] = base_model_settings.get("model_name")
         original_init(self, realtime_agency, base_model_settings, **kwargs)
 
     monkeypatch.setattr(realtime_module.RealtimeSessionFactory, "__init__", capture_init)
@@ -226,6 +227,7 @@ def test_run_realtime_defaults_voice_to_entry_agent(monkeypatch: pytest.MonkeyPa
         pytest.skip("FastAPI extras not installed")
 
     assert captured.get("voice") == "marin"
+    assert captured.get("model_name") == "gpt-realtime-2"
 
 
 def test_realtime_agent_handles_missing_mcp_config() -> None:
