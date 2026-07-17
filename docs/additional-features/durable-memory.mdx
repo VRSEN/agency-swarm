@@ -11,17 +11,17 @@ Durable memory gives Agency Swarm agents a long-term memory layer that stays sep
 - Start with simple, configurable markdown files.
 - Keep the storage location under your control.
 - Use `/mnt/...` in containers when you want persistence across restarts.
-- Support multiple providers behind one abstraction.
+- Support multiple providers behind one interface.
 - Split memory into two types: `system` and `agentic`.
 - Scope memory to `user`, `agent`, or `agency`.
 
 <Note>
-Agency Swarm does not force a built-in agency vector database on you. Markdown, Mem0, and OpenAI file search fit behind the same memory abstraction, and you stay in control of which backend is the source of truth.
+Agency Swarm does not force a built-in vector database on you. Markdown, Mem0, and OpenAI file search all work behind the same interface, and you choose which backend holds the main copy of your data.
 </Note>
 
 ## Start Simple
 
-Start with markdown first. It is the easiest setup, it is human-readable, and it matches the original design goal for this feature.
+Start with markdown. It is the easiest setup, and you can open and edit the files yourself.
 
 ```python
 from agency_swarm import Agency, Agent
@@ -66,7 +66,7 @@ result = await agency.get_response(
 - `user` memory is scoped to one `user_id`.
 
 <Note>
-If you enable `user` scope, pass a `user_id` on every run. The framework fails fast when that ID is missing.
+If you enable `user` scope, pass a `user_id` on every run. The run stops with a clear error if that ID is missing.
 </Note>
 
 ## Pick the Right Provider
@@ -95,7 +95,7 @@ agency = Agency(
 - The files stay readable and editable by humans.
 
 <Note>
-Markdown `search_memory(...)` uses simple text matching over titles and content. Use Mem0 or OpenAI file search when you need semantic retrieval.
+Markdown `search_memory(...)` uses simple text matching over titles and content. Use Mem0 or OpenAI file search when you need meaning-based search.
 </Note>
 
 ### Mem0
@@ -122,7 +122,7 @@ agency = Agency(
 
 ### OpenAI File Search
 
-Use OpenAI file search when you already have vector stores and want retrieval, not canonical storage.
+Use OpenAI file search when you already have vector stores and want to search them, not store new memories in them.
 
 ```python
 from agency_swarm import Memory, MemoryScope
@@ -146,11 +146,11 @@ agency = Agency(
 If you use `scope=MemoryScope.USER`, set `owner_attribute_key` and make sure your vector-store files include that attribute. Agency Swarm uses that attribute filter to prevent cross-user retrieval from shared vector stores.
 </Note>
 
-## Advanced Composition
+## Combine Providers
 
-Use the raw `providers=[...]` form only when you want to combine multiple backends in one config.
+Use the raw `providers=[...]` form only when you want more than one backend in one config.
 
-This is the main example where the low-level constructor is justified: markdown stays the source of truth, while OpenAI file search acts as an extra retrieval index.
+In this example, markdown stays the main store, and OpenAI file search adds an extra search index.
 
 ```python
 from agency_swarm import (
@@ -184,14 +184,14 @@ When an agent opts into memory with `memory=True` or `memory=AgentMemoryConfig(.
 - `search_memory(query, scopes?, providers?, limit?)`
 - `request_memory_write(operation, content, rationale, scope, memory_type, providers?)`
 
-`request_memory_write` does not write directly. It queues a background job, runs the internal memory writer pipeline, and then applies the validated write to the configured provider.
+`request_memory_write` does not write directly. It queues a background job. A background writer then cleans up the request and saves it to the configured provider, so the live conversation never waits on a memory write.
 
 <Note>
 The durable-memory writer queue is process-local in v1. If you run multiple FastAPI workers, do not point them at the same memory journal path.
 </Note>
 
 <Note>
-Replay after a crash intentionally drops the raw queued thread snapshot from the durable journal for privacy. Replayed writes still keep the requested content and rationale, but normalization can be lower fidelity than the original in-memory write path.
+For privacy, the on-disk journal never stores the raw chat snapshot. If a write replays after a crash, it still has the saved content and reason, but the cleanup step has less context to work with.
 </Note>
 
 ## Permission and Consent
@@ -216,7 +216,7 @@ memory = Memory.markdown(permission_resolver=allow_user_system_memories)
 This is the place to enforce your consent or approval rules.
 
 <Note>
-If you override `writer_model`, keep it inside the same trust boundary as your main model. The normalizer receives the requested memory content plus a bounded recent context snapshot so it can clean and deduplicate writes.
+If you override `writer_model`, give it the same level of trust as your main model. The memory writer sees the requested memory content plus a few recent messages so it can clean up and merge writes.
 </Note>
 
 <Note>
@@ -225,12 +225,12 @@ You can replace the default LLM-based normalizer by passing `normalizer=...` in 
 
 ## FastAPI Requests
 
-When you use [FastAPI Integration](/additional-features/fastapi-integration), bind durable-memory identity on the server for untrusted clients.
+When you use [FastAPI Integration](/additional-features/fastapi-integration), set the durable-memory identity on the server when clients are untrusted.
 
 <Warning>
 `run_fastapi()` blocks raw client-supplied durable-memory identity by default.
 
-- Use `memory_identity_resolver` to bind trusted identity from your auth layer.
+- Use `memory_identity_resolver` to take the identity from your own auth layer.
 - Use `allow_client_memory_identity=True` only for trusted callers.
 </Warning>
 
@@ -255,8 +255,8 @@ Use `memory_identity` only when you need the advanced override.
   - System memory is injected into runtime instructions only. It is not added back into saved chat history.
   - `memory_identity` is the advanced override. It stays separate from `user_context`.
   - OpenAI file search is agentic retrieval only in v1.
-  - Writes go through the internal memory writer pipeline and a durable background queue.
-  - Every write-capable provider must support deletion by record ID for future revocation flows.
+  - Writes go through a durable background queue, so they never block the live conversation.
+  - Every write-capable provider must support deleting a record by ID so memories can be removed later.
 </Accordion>
 
 ## Implementation Reference
