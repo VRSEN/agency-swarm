@@ -240,6 +240,58 @@ def test_markdown_file_lock_cache_keeps_borrowed_lock_entries(tmp_path: Path) ->
             markdown_provider._FILE_LOCKS.clear()
 
 
+@pytest.mark.asyncio
+async def test_memory_queue_replays_journaled_jobs_after_crash(tmp_path: Path) -> None:
+    """Queued jobs left in the journal by a crashed process replay into the markdown files on restart."""
+    journal_path = tmp_path / "jobs.json"
+    journal_path.write_text(
+        json.dumps(
+            [
+                {
+                    "job_id": "memjob_crashed",
+                    "request": {
+                        "operation": "save",
+                        "content": "User prefers weekly summaries",
+                        "rationale": "Stable reporting preference",
+                        "scope": "user",
+                        "memory_type": "system",
+                        "source_agent": "Support",
+                        "memory_identity": {
+                            "user_id": "user-1",
+                            "agency_id": "agency-1",
+                            "session_id": None,
+                        },
+                        "context_snapshot": [],
+                        "requested_providers": None,
+                        "record_id": "mem_crashed",
+                        "title": None,
+                    },
+                    "provider_names": ["markdown"],
+                    "status": "queued",
+                    "attempts": 0,
+                    "error": None,
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    config = MemoryConfig.markdown(
+        folder=tmp_path / "memory",
+        journal_path=journal_path,
+        normalizer=StaticMemoryNormalizer(),
+        permission_resolver=_allow_all,
+    )
+
+    manager = MemoryManager(config)
+    try:
+        record_path = tmp_path / "memory" / "user" / "system" / "user-1.md"
+        await _wait_for_file(record_path, "User prefers weekly summaries")
+    finally:
+        manager.close()
+
+    assert json.loads(journal_path.read_text(encoding="utf-8")) == []
+
+
 def test_memory_queue_prunes_completed_jobs_from_journal(tmp_path: Path) -> None:
     class SuccessfulManager:
         async def process_job(self, job: MemoryWriteJob) -> None:
@@ -315,7 +367,9 @@ def test_memory_queue_does_not_persist_context_snapshot_in_journal(tmp_path: Pat
         queue.close()
 
 
-def test_memory_queue_dead_letters_terminal_failures(tmp_path: Path) -> None:
+def test_memory_queue_dead_letters_terminal_failures(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level("ERROR", logger="agency_swarm.memory.queue")
+
     class FailingManager:
         async def process_job(self, job: MemoryWriteJob) -> None:
             raise RuntimeError("boom")
@@ -350,5 +404,7 @@ def test_memory_queue_dead_letters_terminal_failures(tmp_path: Path) -> None:
             time.sleep(0.05)
         else:
             pytest.fail("terminal memory queue failures were not marked dead_letter")
+
+        assert any("permanently failed" in message for message in caplog.messages)
     finally:
         queue.close()

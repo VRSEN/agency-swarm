@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, cast
 
 from agents import FunctionTool, RunContextWrapper
@@ -8,6 +9,8 @@ from agents import FunctionTool, RunContextWrapper
 from agency_swarm.context import MasterContext
 
 from .types import MemoryOperation, MemoryScope, MemoryType, MemoryWriteRequest
+
+logger = logging.getLogger(__name__)
 
 
 def build_search_memory_tool() -> FunctionTool:
@@ -69,6 +72,11 @@ def build_request_memory_write_tool() -> FunctionTool:
                     context.current_sender_name,
                 )
             except Exception:
+                logger.warning(
+                    "Could not load conversation history for memory write context; "
+                    "the write continues without a context snapshot.",
+                    exc_info=True,
+                )
                 history = []
         request = MemoryWriteRequest(
             operation=MemoryOperation(args["operation"]),

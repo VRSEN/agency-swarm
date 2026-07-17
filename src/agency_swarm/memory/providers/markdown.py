@@ -9,9 +9,9 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 from urllib.parse import quote
 
+from agency_swarm.memory.process_lock import acquire_process_lock
 from agency_swarm.memory.provider import MemoryProvider
 from agency_swarm.memory.types import (
     CanonicalMemoryWrite,
@@ -23,12 +23,6 @@ from agency_swarm.memory.types import (
 )
 
 logger = logging.getLogger(__name__)
-
-fcntl_module: Any | None
-try:
-    import fcntl as fcntl_module
-except ImportError:  # pragma: no cover - Windows fallback
-    fcntl_module = None
 
 _DOCUMENT_HEADER = "# Durable Memory\n\n<!-- agency-swarm-memory-v1 -->\n"
 _RECORD_START_MARKER = "<!-- memory-record-start -->"
@@ -112,7 +106,7 @@ class MarkdownMemoryProvider(MemoryProvider):
         owner_id = memory_identity.resolve_scope_owner(write.scope, agent_name=agent_name)
         file_path = self._resolve_path(write.scope.value, write.memory_type.value, owner_id)
         file_path.parent.mkdir(parents=True, exist_ok=True)
-        with _acquire_file_lock(file_path), _acquire_process_lock(_lock_path_for(file_path)):
+        with _acquire_file_lock(file_path), acquire_process_lock(_lock_path_for(file_path)):
             records = self._read_records(file_path)
 
             new_record = MemoryRecord(
@@ -146,7 +140,7 @@ class MarkdownMemoryProvider(MemoryProvider):
                 except ValueError:
                     continue
                 file_path = self._resolve_path(scope.value, memory_type.value, owner_id)
-                with _acquire_file_lock(file_path), _acquire_process_lock(_lock_path_for(file_path)):
+                with _acquire_file_lock(file_path), acquire_process_lock(_lock_path_for(file_path)):
                     records = self._read_records(file_path)
                     filtered = [record for record in records if record.record_id != record_id]
                     if len(filtered) == len(records):
@@ -289,21 +283,6 @@ def _acquire_file_lock(path: Path) -> Iterator[None]:
 
 def _sanitize_path_component(value: str) -> str:
     return quote(value, safe="")
-
-
-@contextmanager
-def _acquire_process_lock(lock_path: Path) -> Iterator[None]:
-    if fcntl_module is None:
-        yield
-        return
-
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    with lock_path.open("a+", encoding="utf-8") as handle:
-        fcntl_module.flock(handle.fileno(), fcntl_module.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl_module.flock(handle.fileno(), fcntl_module.LOCK_UN)
 
 
 def _escape_record_content(content: str) -> str:

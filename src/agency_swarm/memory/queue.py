@@ -2,24 +2,21 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import threading
 import time
 import uuid
-from contextlib import contextmanager
 from dataclasses import asdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
+from .process_lock import acquire_process_lock
 from .types import MemoryWriteJob
-
-fcntl_module: Any | None
-try:
-    import fcntl as fcntl_module
-except ImportError:  # pragma: no cover - Windows fallback
-    fcntl_module = None
 
 if TYPE_CHECKING:
     from .manager import MemoryManager
+
+logger = logging.getLogger(__name__)
 
 
 _JOURNAL_LOCKS: dict[Path, threading.Lock] = {}
@@ -58,6 +55,12 @@ class DurableMemoryQueue:
             future = asyncio.run_coroutine_threadsafe(self._drain_and_stop(), self._loop)
             future.result(timeout=5)
         except Exception:
+            logger.error(
+                "Durable memory queue did not drain cleanly on close; unfinished jobs stay in the journal "
+                "at %s and replay on the next start.",
+                self._journal_path,
+                exc_info=True,
+            )
             self._loop.call_soon_threadsafe(self._queue.put_nowait, None)  # type: ignore[arg-type]
         self._thread.join(timeout=5)
 
@@ -103,8 +106,24 @@ class DurableMemoryQueue:
                 self._upsert_job(job)
                 if job.attempts >= _MAX_JOB_ATTEMPTS:
                     job.status = "dead_letter"
+                    logger.error(
+                        "Durable memory write job %s permanently failed after %d attempts; "
+                        "it is kept as dead_letter in the journal at %s: %s",
+                        job.job_id,
+                        job.attempts,
+                        self._journal_path,
+                        exc,
+                        exc_info=True,
+                    )
                     self._upsert_job(job)
                     continue
+                logger.warning(
+                    "Durable memory write job %s failed (attempt %d of %d), retrying: %s",
+                    job.job_id,
+                    job.attempts,
+                    _MAX_JOB_ATTEMPTS,
+                    exc,
+                )
                 await asyncio.sleep(min(2**job.attempts, 30))
                 job.status = "queued"
                 self._upsert_job(job)
@@ -136,7 +155,7 @@ class DurableMemoryQueue:
 
     def _upsert_job(self, job: MemoryWriteJob) -> None:
         with self._lock:
-            with _acquire_process_lock(self._process_lock_path):
+            with acquire_process_lock(self._process_lock_path):
                 jobs = self._load_jobs()
                 serialized = _serialize_job(job)
                 jobs = [payload for payload in jobs if payload.get("status") not in {"done"}]
@@ -200,18 +219,3 @@ def _deserialize_job(payload: dict) -> MemoryWriteJob:
         attempts=int(payload.get("attempts", 0)),
         error=payload.get("error"),
     )
-
-
-@contextmanager
-def _acquire_process_lock(lock_path: Path):
-    if fcntl_module is None:
-        yield
-        return
-
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    with lock_path.open("a+", encoding="utf-8") as handle:
-        fcntl_module.flock(handle.fileno(), fcntl_module.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl_module.flock(handle.fileno(), fcntl_module.LOCK_UN)
