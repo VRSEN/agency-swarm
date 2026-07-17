@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from agency_swarm import Agency, Agent
+from agency_swarm.agency import setup as agency_setup
 from agency_swarm.agent.context_types import AgentRuntimeState
 from agency_swarm.agent.execution_helpers import cleanup_execution, prepare_master_context, setup_execution
 from agency_swarm.tools.send_message import Handoff, SendMessage, SendMessageHandoff
@@ -347,9 +348,10 @@ def test_agent_flow_with_handoff_tool():
     assert not agency.get_agent_runtime_state("Agent3").handoffs
 
 
-def test_send_message_handoff_name_is_deprecated() -> None:
+def test_send_message_handoff_name_is_deprecated(monkeypatch: pytest.MonkeyPatch) -> None:
     agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
     agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
+    monkeypatch.setattr(agency_setup, "_warned_deprecated_send_message_handoff", False)
 
     with pytest.deprecated_call(match=r"SendMessageHandoff is deprecated; use Handoff instead\."):
         Agency(

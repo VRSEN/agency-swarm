@@ -46,6 +46,8 @@ agency.run_fastapi()
 | `enable_logging` | boolean | `false` | Track requests and expose `/get_logs` at the server root. |
 | `logs_dir` | string | `"activity-logs"` | Folder for request logs when logging is enabled. |
 | `allowed_local_file_dirs` | list | `None` | Allowlist for local `file_urls`; paths outside the list are rejected. |
+| `enable_realtime` | boolean | `false` | Mount `/<agency_name>/realtime` websocket route(s) in addition to REST endpoints. |
+| `realtime_options` | object | `{}` | Realtime session overrides (for example `provider`, `model`, `voice`, `turn_detection`). |
 
 </Accordion>
 
@@ -56,6 +58,7 @@ agency.run_fastapi()
   - `/your_agency_name/get_response_stream` (POST, streaming responses)
   - `/your_agency_name/cancel_response_stream` (POST; not registered when `enable_agui=True`)
   - `/your_agency_name/get_metadata` (GET)
+  - `/your_agency_name/realtime` (WebSocket; when `enable_realtime=True`)
   - `/get_logs` (GET; when `enable_logging=True`)
 - Tools registered via `tools=[...]` are available at `/tool/ToolClassName` (BaseTools) or `/tool/function_name` (function tools).
 - OpenAPI and interactive docs: `/openapi.json`, `/docs`, `/redoc`.
@@ -247,6 +250,8 @@ run_fastapi(
         "test_agency_2": create_agency_2,
     },
     tools=[example_tool, test_tool],
+    enable_realtime=True,
+    realtime_options={"provider": "openai", "model": "gpt-realtime-mini"},
 )
 ```
 
