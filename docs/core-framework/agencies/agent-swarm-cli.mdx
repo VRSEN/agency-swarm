@@ -16,7 +16,7 @@ For most users, the right way to start is:
 npx @vrsen/agentswarm
 ```
 
-This is the main launch path. It handles first-run setup, then connects the terminal UI to your Agency Swarm server.
+This is the main launch path. It handles first-run setup, helps you choose or create an agency, and then opens the terminal UI.
 
 Run it from your project root. If you are starting fresh, run it in a new empty folder.
 
@@ -28,7 +28,7 @@ You do not need to install the TUI globally first.
 
 Make sure you have:
 
-- Node.js installed so `npx` is available
+- Node.js 20 or newer so `npx` is available
 - Python 3.12 or newer available for Agency Swarm projects
 - a model provider credential if you want to send prompts right away, or you can add it later with `/auth`
 - an existing agency project, or a starting point from [From Scratch](/welcome/getting-started/from-scratch) or the [Starter Template](/welcome/getting-started/starter-template)
@@ -41,14 +41,14 @@ On first launch, you will usually see this flow:
   <Step title="Start the launcher">
     Start with `npx @vrsen/agentswarm`.
   </Step>
-  <Step title="Point the launcher at an agency">
+  <Step title="Choose or create an agency">
     The launcher can reuse the current Agency Swarm project, create a starter project, or connect to an agency that is already running.
   </Step>
   <Step title="Set up the project environment">
     The launcher checks for a project `.venv`. If it needs to create one, it asks first and then installs the project dependencies before opening the TUI.
   </Step>
   <Step title="Open the TUI and add auth if needed">
-    The TUI opens connected to your agency. If you do not already have a usable model provider configured, use `/auth`.
+    The TUI opens for the agency you selected during onboarding. If you do not already have a usable model provider configured, use `/auth`.
   </Step>
 </Steps>
 
@@ -59,27 +59,36 @@ This is the path we recommend for onboarding, videos, and first-time users.
 Once the TUI is running, you get:
 
 - a keyboard-first terminal workflow
-- session history, export, undo, redo, and `/compact`
-- `/agents` to switch between top-level agents
+- session history, export, and `/compact`
+- `/agents` to switch between Plan, Build, and Run, and to pick which swarm or agent gets your next prompt
 - `@AgentName` mentions to route a prompt to a specific top-level agent
-- `@` file and resource references to attach local or MCP context in the same prompt flow
+- `@` file and resource references when you start from a local project
 - `Tab` autocomplete for both agent mentions and file and resource references
-- direct access to local project files for prompt context
 
 ![Agent Swarm TUI agent picker](/images/agent-swarm-cli-agent-selection.png)
+
+### Plan, Build, and Run
+
+`/agents` switches between three modes:
+
+- **Plan** designs changes to your agency with the Agent Builder before any files change.
+- **Build** implements those changes in your project files with the Agent Builder. Plan and Build work without a running Agency Swarm server.
+- **Run** sends your prompts to your live agency through the Agency Swarm server.
+
+Press `Tab` to toggle between Plan and Build, or to cycle through swarm targets while in Run.
+
+Returning to Run after a Build session restarts the local server from your current project files and refreshes dependencies from your manifest, without upgrading packages that already satisfy it. If the agency fails to start, the full error stays visible in `/agents` so you can fix it in Build and retry.
 
 ## Optional Paths
 
 If this is your first run, you can ignore everything below.
 
 <Accordion title="Connect to a running agency (optional)" defaultOpen={false}>
-Use the same `npx @vrsen/agentswarm` command, then choose **Connect to a running agency** during onboarding.
-
-This is the optional `/connect` path.
+Use the same `npx @vrsen/agentswarm` command, then choose **Connect to a running Agent Swarm** during onboarding. Inside the TUI, the same flow is available as `/connect`.
 
 The launcher asks for:
 
-1. the Agency Swarm base URL
+1. the Agency Swarm server URL
 2. whether the server needs a bearer token
 3. the agency id, if automatic discovery does not already find it
 
