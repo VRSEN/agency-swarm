@@ -20,7 +20,7 @@ agency = Agency(voice_agent)
 run_realtime(
     agency=agency,
     provider="openai",
-    model="gpt-realtime-1.5",
+    model="gpt-realtime-2",
     host="0.0.0.0",
     port=8000,
     turn_detection={"type": "server_vad"},
@@ -46,7 +46,7 @@ run_fastapi(
     agencies={"support": create_agency},
     enable_realtime=True,
     realtime_options={
-        "model": "gpt-realtime-1.5",
+        "model": "gpt-realtime-2",
         "turn_detection": {"type": "server_vad", "interrupt_response": True},
     },
     enable_logging=True,
@@ -74,7 +74,7 @@ A ready-made WebAudio frontend ships with the library. Launch it with your own a
 ```python
 from agency_swarm.ui.demos.realtime import RealtimeDemoLauncher
 
-RealtimeDemoLauncher.start(agency, model="gpt-realtime-1.5", voice="marin")
+RealtimeDemoLauncher.start(agency, model="gpt-realtime-2", voice="marin")
 ```
 
 This mounts the frontend and websocket bridge under the same process—ideal for internal demos or QA. For a runnable script, see [`examples/interactive/realtime/demo.py`](https://github.com/VRSEN/agency-swarm/blob/main/examples/interactive/realtime/demo.py).
@@ -86,7 +86,7 @@ Pass a Twilio number to `run_realtime` to expose a media-stream bridge. The help
 ```python
 run_realtime(
     agency=agency,
-    model="gpt-realtime-1.5",
+    model="gpt-realtime-2",
     twilio_number="+15551234567",
     twilio_audio_format="g711_ulaw",
     twilio_greeting="Connecting you to the assistant.",

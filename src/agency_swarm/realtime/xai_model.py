@@ -23,10 +23,16 @@ class XAIRealtimeWebSocketModel(OpenAIRealtimeWebSocketModel):
     def __init__(self) -> None:
         super().__init__()
         self._xai_content_parts: dict[tuple[str, int], dict[str, object]] = {}
+        self._xai_output_index_by_call_id: dict[str, int] = {}
+        self._xai_output_index_by_item_id: dict[str, int] = {}
+        self._requested_interrupt_response: bool | None = None
 
     async def connect(self, options: RealtimeModelConfig) -> None:
         # Use a safe default before connect; negotiated session codec may override it.
         self._set_audio_format("pcm16")
+        model_settings = options.get("initial_model_settings")
+        if isinstance(model_settings, Mapping):
+            self._remember_requested_interrupt_response(model_settings)
         await super().connect(options)
 
     async def _handle_ws_event(self, event: dict[str, Any]):
@@ -36,11 +42,32 @@ class XAIRealtimeWebSocketModel(OpenAIRealtimeWebSocketModel):
             return
 
         normalized = self._normalize_event(event)
+        if event_type in {
+            "conversation.item.input_audio_transcription.completed",
+            "conversation.item.truncated",
+        }:
+            # openai-agents emits conversation.item.retrieve for these events to
+            # refresh current history item state. xAI rejects that event type.
+            # Temporarily clearing current-item tracking preserves downstream
+            # event handling while preventing unsupported retrieve sends.
+            had_current_item_id = hasattr(self, "_current_item_id")
+            current_item_id = getattr(self, "_current_item_id", None)
+            if had_current_item_id:
+                self._current_item_id = None
+            try:
+                await super()._handle_ws_event(normalized)
+            finally:
+                if had_current_item_id:
+                    self._current_item_id = current_item_id
+            return
         await super()._handle_ws_event(normalized)
 
     async def _send_raw_message(self, event: object) -> None:  # type: ignore[override]
+        self._remember_requested_interrupt_response_from_event(event)
         event_type = self._event_type_from_payload(event)
         if event_type in _XAI_UNSUPPORTED_CLIENT_EVENT_TYPES:
+            # xAI rejects these OpenAI-specific events. Skipping them prevents
+            # avoidable upstream session termination during voice turns.
             logger.debug("Dropping unsupported xAI realtime client event: %s", event_type)
             return
         await super()._send_raw_message(event)  # type: ignore[arg-type]
@@ -70,6 +97,7 @@ class XAIRealtimeWebSocketModel(OpenAIRealtimeWebSocketModel):
                 tool_choice = normalized_session.get("tool_choice")
                 if isinstance(tool_choice, str) and tool_choice == "not implemented":
                     normalized_session.pop("tool_choice", None)
+                self._restore_interrupt_response(normalized_session)
                 normalized["session"] = normalized_session
                 self._set_audio_format_from_session(normalized_session)
 
@@ -101,21 +129,169 @@ class XAIRealtimeWebSocketModel(OpenAIRealtimeWebSocketModel):
                 if event_type == "response.done":
                     output = normalized_response.get("output")
                     if isinstance(output, list):
-                        normalized_response["output"] = [self._normalize_response_output_item(item) for item in output]
+                        normalized_output: list[object] = []
+                        for output_index, item in enumerate(output):
+                            normalized_item = self._normalize_response_output_item(item)
+                            normalized_output.append(normalized_item)
+                            self._remember_output_item_index(output_index, normalized_item)
+                        normalized_response["output"] = normalized_output
+                    # Argument-delta fallbacks are response-scoped; drop stale mappings
+                    # once the response is finalized to avoid unbounded cache growth.
+                    self._xai_output_index_by_call_id.clear()
+                    self._xai_output_index_by_item_id.clear()
                 normalized["response"] = normalized_response
 
+        if event_type in {"response.output_item.added", "response.output_item.done"}:
+            item_index = self._coerce_int(normalized.get("output_index"))
+            if item_index is not None:
+                self._remember_output_item_index(item_index, normalized.get("item"))
+
         if event_type in {"response.function_call_arguments.delta", "response.function_call_arguments.done"}:
-            output_index = self._coerce_int(normalized.get("output_index"))
-            if output_index is None:
-                output_index = self._coerce_int(normalized.get("output_item_index"))
-            normalized["output_index"] = output_index if output_index is not None else 0
+            resolved_index = self._coerce_int(normalized.get("output_index"))
+            if resolved_index is None:
+                resolved_index = self._coerce_int(normalized.get("output_item_index"))
+            if resolved_index is None:
+                call_id = normalized.get("call_id")
+                if isinstance(call_id, str) and call_id.strip():
+                    resolved_index = self._xai_output_index_by_call_id.get(call_id.strip())
+            if resolved_index is None:
+                item_id = normalized.get("item_id")
+                if isinstance(item_id, str) and item_id.strip():
+                    resolved_index = self._xai_output_index_by_item_id.get(item_id.strip())
+            normalized["output_index"] = resolved_index if resolved_index is not None else 0
 
         if event_type == "conversation.item.input_audio_transcription.completed":
-            usage = normalized.get("usage")
-            if not isinstance(usage, Mapping):
-                normalized["usage"] = {"type": "duration", "seconds": 0.0}
+            normalized["usage"] = self._normalize_transcription_usage(normalized.get("usage"))
 
         return normalized
+
+    def _remember_requested_interrupt_response(self, model_settings: Mapping[str, object]) -> None:
+        turn_detection = model_settings.get("turn_detection")
+        if not isinstance(turn_detection, Mapping):
+            return
+        interrupt_response = turn_detection.get("interrupt_response")
+        if isinstance(interrupt_response, bool):
+            self._requested_interrupt_response = interrupt_response
+
+    def _remember_requested_interrupt_response_from_event(self, event: object) -> None:
+        event_type = self._event_type_from_payload(event)
+        session = self._read_field(event, "session")
+        if event_type != "session.update" or session is None:
+            return
+
+        audio = self._read_field(session, "audio")
+        audio_input = self._read_field(audio, "input")
+        turn_detection = self._read_field(audio_input, "turn_detection")
+        interrupt_response = self._read_field(turn_detection, "interrupt_response")
+        if isinstance(interrupt_response, bool):
+            self._requested_interrupt_response = interrupt_response
+            return
+
+        top_level_turn_detection = self._read_field(session, "turn_detection")
+        interrupt_response = self._read_field(top_level_turn_detection, "interrupt_response")
+        if isinstance(interrupt_response, bool):
+            self._requested_interrupt_response = interrupt_response
+
+    def _restore_interrupt_response(self, session: dict[str, Any]) -> None:
+        """Re-add the requested interrupt_response flag that xAI drops from session events."""
+        if self._requested_interrupt_response is None:
+            return
+
+        top_level_turn_detection = session.get("turn_detection")
+        normalized_top_level_turn_detection: dict[str, Any] | None = None
+        if isinstance(top_level_turn_detection, Mapping):
+            normalized_top_level_turn_detection = dict(top_level_turn_detection)
+            normalized_top_level_turn_detection.setdefault("interrupt_response", self._requested_interrupt_response)
+            session["turn_detection"] = normalized_top_level_turn_detection
+
+        audio = session.get("audio")
+        normalized_audio = dict(audio) if isinstance(audio, Mapping) else {}
+        audio_input = normalized_audio.get("input")
+        normalized_input = dict(audio_input) if isinstance(audio_input, Mapping) else {}
+
+        nested_turn_detection = normalized_input.get("turn_detection")
+        if isinstance(nested_turn_detection, Mapping):
+            normalized_nested_turn_detection = dict(nested_turn_detection)
+        elif normalized_top_level_turn_detection is not None:
+            normalized_nested_turn_detection = dict(normalized_top_level_turn_detection)
+        else:
+            return
+
+        normalized_nested_turn_detection.setdefault("interrupt_response", self._requested_interrupt_response)
+        normalized_input["turn_detection"] = normalized_nested_turn_detection
+        normalized_audio["input"] = normalized_input
+        session["audio"] = normalized_audio
+
+    @staticmethod
+    def _read_field(value: object, field: str) -> object | None:
+        if isinstance(value, Mapping):
+            return value.get(field)
+        return getattr(value, field, None)
+
+    def _remember_output_item_index(self, output_index: int, item: object) -> None:
+        if not isinstance(item, Mapping):
+            return
+
+        item_id = item.get("id")
+        if isinstance(item_id, str) and item_id.strip():
+            self._xai_output_index_by_item_id[item_id.strip()] = output_index
+
+        call_id = item.get("call_id")
+        if isinstance(call_id, str) and call_id.strip():
+            self._xai_output_index_by_call_id[call_id.strip()] = output_index
+
+    @staticmethod
+    def _normalize_transcription_usage(usage: object) -> dict[str, object]:
+        """Coerce partial or malformed xAI transcription usage into a valid payload."""
+
+        def _coerce_non_negative_int(value: object, *, default: int = 0) -> int:
+            if isinstance(value, bool):
+                return default
+            if isinstance(value, int | float):
+                return max(0, int(value))
+            return default
+
+        if not isinstance(usage, Mapping):
+            return {"type": "tokens", "input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+
+        usage_data = dict(usage)
+        raw_type = usage_data.get("type")
+        usage_type = raw_type.strip().lower() if isinstance(raw_type, str) else ""
+        if usage_type not in {"tokens", "duration"}:
+            usage_type = "duration" if isinstance(usage_data.get("seconds"), int | float) else "tokens"
+
+        if usage_type == "duration":
+            seconds_raw = usage_data.get("seconds")
+            seconds = float(seconds_raw) if isinstance(seconds_raw, int | float) and seconds_raw >= 0 else 0.0
+            return {"type": "duration", "seconds": seconds}
+
+        input_tokens = _coerce_non_negative_int(usage_data.get("input_tokens"))
+        output_tokens = _coerce_non_negative_int(usage_data.get("output_tokens"))
+        total_tokens_raw = usage_data.get("total_tokens")
+        total_tokens = (
+            _coerce_non_negative_int(total_tokens_raw)
+            if isinstance(total_tokens_raw, int | float) and not isinstance(total_tokens_raw, bool)
+            else input_tokens + output_tokens
+        )
+
+        normalized_usage: dict[str, object] = {
+            "type": "tokens",
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "total_tokens": total_tokens,
+        }
+        input_token_details = usage_data.get("input_token_details")
+        if isinstance(input_token_details, Mapping):
+            normalized_details: dict[str, int] = {}
+            for key in ("audio_tokens", "text_tokens"):
+                value = input_token_details.get(key)
+                if isinstance(value, bool):
+                    continue
+                if isinstance(value, int | float):
+                    normalized_details[key] = max(0, int(value))
+            if normalized_details:
+                normalized_usage["input_token_details"] = normalized_details
+        return normalized_usage
 
     @staticmethod
     def _event_type_from_payload(payload: object) -> str | None:
@@ -152,6 +328,7 @@ class XAIRealtimeWebSocketModel(OpenAIRealtimeWebSocketModel):
         role = normalized_item.get("role")
         content = normalized_item.get("content")
         if not isinstance(content, list):
+            normalized_item["content"] = self._fallback_message_content_for_role(role)
             return normalized_item
 
         normalized_content: list[object] = []
@@ -175,6 +352,12 @@ class XAIRealtimeWebSocketModel(OpenAIRealtimeWebSocketModel):
 
         normalized_item["content"] = normalized_content
         return normalized_item
+
+    @staticmethod
+    def _fallback_message_content_for_role(role: object) -> list[dict[str, str]]:
+        if role in {"user", "system"}:
+            return [{"type": "input_text", "text": ""}]
+        return [{"type": "output_text", "text": ""}]
 
     def _set_audio_format_from_session(self, session: Mapping[str, object]) -> None:
         audio = session.get("audio")

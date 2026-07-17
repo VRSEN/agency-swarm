@@ -266,7 +266,7 @@ def _resolve_model_name(model: str | None, provider: Literal["openai", "xai"]) -
         return model
     if provider == "xai":
         return XAI_DEFAULT_REALTIME_MODEL
-    return "gpt-realtime-1.5"
+    return "gpt-realtime-2"
 
 
 def build_model_settings(
