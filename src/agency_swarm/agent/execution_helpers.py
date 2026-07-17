@@ -379,21 +379,33 @@ def setup_execution(
             if combined is not None:
                 agent.instructions = combined
 
-    # Align handoffs with runtime state for this execution
-    runtime_state = None
-    if agency_context is not None and hasattr(agency_context, "runtime_state"):
-        runtime_state = agency_context.runtime_state
+    # Align handoffs with runtime state for this execution. The SDK run loop can
+    # switch to any agency agent mid-run via chained handoffs without re-entering
+    # setup_execution, so every agency agent needs its runtime handoffs attached
+    # before Runner.run starts.
+    agents_to_align: list[tuple[Agent, AgentRuntimeState | None]] = []
+    agency_instance = agency_context.agency_instance if agency_context is not None else None
+    if agency_instance is not None and getattr(agency_instance, "agents", None):
+        runtime_states = getattr(agency_instance, "_agent_runtime_state", {})
+        for agent_name, agency_agent in agency_instance.agents.items():
+            agents_to_align.append((agency_agent, runtime_states.get(agent_name)))
+    if all(aligned_agent is not agent for aligned_agent, _ in agents_to_align):
+        starting_runtime_state = getattr(agency_context, "runtime_state", None) if agency_context is not None else None
+        agents_to_align.append((agent, starting_runtime_state))
 
-    original_handoffs = list(agent.handoffs)
+    restore_entries: list[tuple[Agent, list[Any]]] = []
+    for target_agent, runtime_state in agents_to_align:
+        original_handoffs = list(target_agent.handoffs)
+        restore_entries.append((target_agent, original_handoffs))
+        if runtime_state and getattr(runtime_state, "handoffs", None):
+            existing = {_handoff_identity(h) for h in original_handoffs}
+            additional = [h for h in runtime_state.handoffs if _handoff_identity(h) not in existing]
+            target_agent.handoffs = original_handoffs + additional
+
     if agency_context is not None:
-        agency_context._handoffs_restore = original_handoffs  # type: ignore[attr-defined]
+        agency_context._handoffs_restore = restore_entries  # type: ignore[attr-defined]
     else:
-        agent._handoffs_restore = original_handoffs  # type: ignore[attr-defined]
-
-    if runtime_state and getattr(runtime_state, "handoffs", None):
-        existing = {_handoff_identity(h) for h in original_handoffs}
-        additional = [h for h in runtime_state.handoffs if _handoff_identity(h) not in existing]
-        agent.handoffs = original_handoffs + additional
+        agent._handoffs_restore = restore_entries  # type: ignore[attr-defined]
 
     # Log the conversation context
     logger.info(f"Agent '{agent.name}' handling {method_name} from sender: {sender_name}")
@@ -443,23 +455,24 @@ def cleanup_execution(
     # Always restore original instructions
     agent.instructions = original_instructions
 
-    restore_handoffs: list[Any] | None = None
+    restore_entries: list[tuple[Any, list[Any]]] | None = None
     if agency_context is not None:
         try:
-            restore_handoffs = agency_context._handoffs_restore  # type: ignore[attr-defined]
+            restore_entries = agency_context._handoffs_restore  # type: ignore[attr-defined]
             del agency_context._handoffs_restore  # type: ignore[attr-defined]
         except AttributeError:
-            restore_handoffs = None
+            restore_entries = None
     else:
         try:
-            restore_handoffs = agent._handoffs_restore  # type: ignore[attr-defined]
+            restore_entries = agent._handoffs_restore  # type: ignore[attr-defined]
             del agent._handoffs_restore  # type: ignore[attr-defined]
         except AttributeError:
-            restore_handoffs = None
+            restore_entries = None
 
-    if restore_handoffs is not None:
-        agent.handoffs.clear()
-        agent.handoffs.extend(restore_handoffs)
+    if restore_entries is not None:
+        for target_agent, original_handoffs in restore_entries:
+            target_agent.handoffs.clear()
+            target_agent.handoffs.extend(original_handoffs)
 
 
 def get_run_trace_id(run_config: RunConfig | None, agency_context: "AgencyContext | None" = None) -> str:
