@@ -5,6 +5,9 @@ from typing import TYPE_CHECKING, Any, cast
 
 from agents import Agent as SDKAgent, AgentHookContext, AgentHooks, RunContextWrapper, TResponseInputItem
 from agents.items import ModelResponse
+from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionWebSearch
+from openai.types.responses.response_code_interpreter_tool_call import ResponseCodeInterpreterToolCall
+from openai.types.responses.response_output_item import ImageGenerationCall, McpCall
 
 from agency_swarm.context import MasterContext
 from agency_swarm.reminders import AfterEveryUserMessage, EveryNToolCalls, SystemReminder
@@ -13,6 +16,16 @@ if TYPE_CHECKING:
     from agents.tool import Tool
 
     from agency_swarm.agent.core import Agent
+
+# Hosted tools run inside the model provider, so they never trigger the local
+# on_tool_start/on_tool_end hooks; their calls only appear as model output items.
+_HOSTED_TOOL_CALL_TYPES = (
+    ImageGenerationCall,
+    McpCall,
+    ResponseCodeInterpreterToolCall,
+    ResponseFileSearchToolCall,
+    ResponseFunctionWebSearch,
+)
 
 
 class CompositeAgentHooks(AgentHooks[MasterContext]):
@@ -108,13 +121,30 @@ class SystemReminderHooks(AgentHooks[MasterContext]):
         tool: Tool,
         result: str,
     ) -> None:
-        if not self._tool_call_reminders:
+        self._advance_tool_call_counters(context, agent, 1)
+
+    async def on_llm_end(
+        self,
+        context: RunContextWrapper[MasterContext],
+        agent: SDKAgent[MasterContext],
+        response: ModelResponse,
+    ) -> None:
+        hosted_calls = sum(1 for item in response.output if isinstance(item, _HOSTED_TOOL_CALL_TYPES))
+        self._advance_tool_call_counters(context, agent, hosted_calls)
+
+    def _advance_tool_call_counters(
+        self,
+        context: RunContextWrapper[MasterContext],
+        agent: SDKAgent[Any],
+        tool_calls: int,
+    ) -> None:
+        if tool_calls <= 0 or not self._tool_call_reminders:
             return
 
         state = self._get_state(context)
         swarm_agent = cast("Agent", agent)
         for index, reminder in enumerate(self._tool_call_reminders):
-            current_count = state.tool_call_counts.get(index, 0) + 1
+            current_count = state.tool_call_counts.get(index, 0) + tool_calls
             if current_count >= reminder.tool_calls:
                 state.pending_messages.append(reminder.render(context, swarm_agent))
                 state.tool_call_counts[index] = 0

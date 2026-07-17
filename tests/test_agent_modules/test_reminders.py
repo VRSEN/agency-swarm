@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import uuid
 from collections.abc import AsyncIterator
 
 import pytest
@@ -11,12 +12,16 @@ from agents import (
     RunContextWrapper,
     Tool,
     TResponseInputItem,
+    WebSearchTool,
     function_tool,
 )
 from agents.agent_output import AgentOutputSchemaBase
 from agents.handoffs import Handoff as RawSDKHandoff
 from agents.items import ModelResponse, TResponseStreamEvent
 from agents.models.interface import Model, ModelTracing
+from agents.usage import Usage
+from openai.types.responses import ResponseFunctionWebSearch
+from openai.types.responses.response_function_web_search import ActionSearch
 from openai.types.responses.response_prompt_param import ResponsePromptParam
 
 from agency_swarm import AfterEveryUserMessage, Agency, Agent, EveryNToolCalls, MasterContext
@@ -108,6 +113,58 @@ class _TwoToolCallsModel(Model):
                 tool_outputs += 1
         if tool_outputs < 2:
             return _build_tool_call_response(tools[0].name, {})
+        return _build_message_response("done", self.model)
+
+    def stream_response(
+        self,
+        system_instructions: str | None,
+        input: str | list[TResponseInputItem],
+        model_settings: ModelSettings,
+        tools: list[Tool],
+        output_schema: AgentOutputSchemaBase | None,
+        handoffs: list[RawSDKHandoff],
+        tracing: ModelTracing,
+        *,
+        previous_response_id: str | None,
+        conversation_id: str | None,
+        prompt: ResponsePromptParam | None,
+    ) -> AsyncIterator[TResponseStreamEvent]:
+        return _stream_text_events("done", self.model)
+
+
+class _WebSearchThenAnswerModel(Model):
+    """Emit one hosted web_search_call first, then a final message."""
+
+    def __init__(self) -> None:
+        self.model = "test-web-search"
+        self.recorded_inputs: list[list[TResponseInputItem]] = []
+
+    async def get_response(
+        self,
+        system_instructions: str | None,
+        input: str | list[TResponseInputItem],
+        model_settings: ModelSettings,
+        tools: list[Tool],
+        output_schema: AgentOutputSchemaBase | None,
+        handoffs: list[RawSDKHandoff],
+        tracing: ModelTracing,
+        *,
+        previous_response_id: str | None,
+        conversation_id: str | None,
+        prompt: ResponsePromptParam | None,
+    ) -> ModelResponse:
+        if not isinstance(input, list):
+            raise TypeError("This test model expects structured input items.")
+
+        self.recorded_inputs.append(copy.deepcopy(input))
+        if len(self.recorded_inputs) == 1:
+            web_search_call = ResponseFunctionWebSearch(
+                id=f"ws_{uuid.uuid4().hex}",
+                action=ActionSearch(query="open follow-ups", type="search"),
+                status="completed",
+                type="web_search_call",
+            )
+            return ModelResponse(output=[web_search_call], usage=Usage(), response_id=f"resp_{uuid.uuid4().hex}")
         return _build_message_response("done", self.model)
 
     def stream_response(
@@ -223,6 +280,26 @@ async def test_every_n_tool_calls_injects_on_next_llm_call_and_resets() -> None:
     assert not _contains_text(model.recorded_inputs[3], "Checkpoint reminder")
     assert not _contains_text(model.recorded_inputs[4], "Checkpoint reminder")
     assert _contains_text(model.recorded_inputs[5], "Checkpoint reminder")
+
+
+@pytest.mark.asyncio
+async def test_every_n_tool_calls_counts_hosted_tool_calls() -> None:
+    model = _WebSearchThenAnswerModel()
+    agent = Agent(
+        name="ReminderAgent",
+        instructions="Search the web, then answer.",
+        model=model,
+        model_settings=ModelSettings(temperature=0.0),
+        tools=[WebSearchTool()],
+        system_reminders=[EveryNToolCalls(1, "Checkpoint reminder")],
+    )
+    agency = Agency(agent)
+
+    await agency.get_response("Handle task-1")
+
+    assert len(model.recorded_inputs) == 2
+    assert not _contains_text(model.recorded_inputs[0], "Checkpoint reminder")
+    assert _contains_text(model.recorded_inputs[1], "Checkpoint reminder")
 
 
 @pytest.mark.asyncio
