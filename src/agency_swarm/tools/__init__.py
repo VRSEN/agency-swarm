@@ -36,6 +36,7 @@ from .base_tool import BaseTool
 from .built_in import LoadFileAttachment, PersistentShellTool, PresentFiles
 from .concurrency import ToolConcurrencyManager
 from .function_tool_compat import function_tool
+from .hosted_mcp_oauth import enable_hosted_mcp_tool_oauth
 from .send_message import Handoff, SendMessage, SendMessageHandoff
 from .tool_factory import ToolFactory
 from .utils import (
@@ -54,6 +55,7 @@ __all__ = [
     "SendMessage",
     "Handoff",
     "SendMessageHandoff",
+    "enable_hosted_mcp_tool_oauth",
     "validate_openapi_spec",
     "tool_output_image_from_path",
     "tool_output_image_from_file_id",

@@ -17,12 +17,13 @@ def _make_agent(name: str, response_text: str = "Test response") -> Agent:
 
 
 class CapturingAgent(Agent):
-    def __init__(self, name: str, response_text: str = "Test response") -> None:
+    def __init__(self, name: str, response_text: str = "Test response", **kwargs: Any) -> None:
         super().__init__(
             name=name,
             instructions="You are a test agent.",
             model=DeterministicModel(default_response=response_text),
             model_settings=ModelSettings(temperature=0.0),
+            **kwargs,
         )
         self.last_context_override: dict[str, Any] | None = None
         self.last_hooks_override: RunHooks | None = None
