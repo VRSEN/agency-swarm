@@ -1,6 +1,7 @@
 """MCP server to tool conversion utilities."""
 
 import asyncio
+import contextvars
 import functools
 import logging
 import threading
@@ -13,7 +14,14 @@ from agents.mcp.util import MCPUtil
 from agents.run_context import RunContextWrapper
 from agents.tool import ToolContext
 
-from agency_swarm.tools.mcp_manager import LoopAffineAsyncProxy, default_mcp_manager
+from agency_swarm.tools.mcp_manager import (
+    LoopAffineAsyncProxy,
+    _build_persistence_key,
+    _clone_oauth_candidate,
+    _get_oauth_user_id,
+    _sync_oauth_client_handlers,
+    default_mcp_manager,
+)
 
 if TYPE_CHECKING:
     from agency_swarm.agent.core import Agent as AgencyAgent
@@ -43,13 +51,13 @@ def _with_error_handling(tool: FunctionTool) -> FunctionTool:
 
 def _run_coroutine_from_factory(factory: Callable[[], Awaitable[Any]]) -> Any:
     """Execute an async coroutine factory from synchronous code."""
+    caller_context = contextvars.copy_context()
     result: dict[str, Any] = {}
     error: list[BaseException] = []
 
     def _runner() -> None:
         try:
-            coro = factory()
-            result["value"] = asyncio.run(coro)  # type: ignore[arg-type]
+            result["value"] = caller_context.run(lambda: asyncio.run(factory()))  # type: ignore[arg-type]
         except BaseException as exc:  # noqa: BLE001
             error.append(exc)
 
@@ -95,11 +103,18 @@ def from_mcp(
 
     # Register servers
     server_names = []
+    oauth_user_id = _get_oauth_user_id() if _get_oauth_user_id is not None else None
     for i, srv in enumerate(list(servers)):
         name = getattr(srv, "name", None)
         if isinstance(name, str) and name != "" and name not in server_names:
             server_names.append(name)
-            persistent = default_mcp_manager.get(name) or default_mcp_manager.register(srv)
+            candidate = _clone_oauth_candidate(srv)
+            key = _build_persistence_key(candidate, oauth_user_id)
+            persistent = default_mcp_manager.get(key)
+            if persistent is None:
+                persistent = default_mcp_manager.register(candidate, key=key)
+            else:
+                _sync_oauth_client_handlers(persistent, candidate)
             if persistent is not servers[i]:
                 servers[i] = persistent
         elif name in server_names:

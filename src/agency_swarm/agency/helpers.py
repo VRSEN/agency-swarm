@@ -137,6 +137,7 @@ def build_fastapi_agencies(agency: "Agency") -> dict[str, Callable[..., "Agency"
             user_context=deepcopy(agency.user_context),
             randomize_agent_voices=bool(getattr(agency, "_randomize_agent_voices", False)),
             voice_random_seed=getattr(agency, "_voice_random_seed", None),
+            oauth_token_path=agency.oauth_token_path,
         )
 
     return {agency.name or "agency": agency_factory}
