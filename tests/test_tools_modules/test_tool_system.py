@@ -317,6 +317,19 @@ def test_tools_folder_edge_cases(tmp_path):
     (tools_dir / "readme.txt").write_text("Not a Python file")
     (tools_dir / "invalid_tool.py").write_text("invalid python syntax !")
 
+    # Pytest and hidden files must not be imported as tool modules
+    ignored_tool_template = """
+from agents import function_tool
+
+@function_tool
+def {name}() -> str:
+    return "should not load"
+"""
+    (tools_dir / "test_valid_tool.py").write_text(ignored_tool_template.format(name="tool_from_test_prefix"))
+    (tools_dir / "valid_tool_test.py").write_text(ignored_tool_template.format(name="tool_from_test_suffix"))
+    (tools_dir / "conftest.py").write_text(ignored_tool_template.format(name="tool_from_conftest"))
+    (tools_dir / ".hidden_tool.py").write_text(ignored_tool_template.format(name="tool_from_hidden_file"))
+
     # Create valid tool
     (tools_dir / "valid_tool.py").write_text("""
 from agents import function_tool
