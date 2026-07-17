@@ -291,6 +291,7 @@ class Agent(BaseAgent[MasterContext]):
             include_web_search_sources (bool): Include source URLs for WebSearchTool output (default True)
             validation_attempts (int): Number of retries when output guardrails trigger (default 1)
             raise_input_guardrail_error (bool): Controls input guardrail behavior—False enables non-strict mode (guidance as assistant message), True enables strict mode (raises exceptions). Default: False
+            system_reminders (list[SystemReminder] | None): Transient reminder configs injected before model calls
             handoff_reminder (str | None): Custom reminder text when handing off to another agent
             model (str | Model | None): Model identifier; defaults to agents SDK configuration
             model_settings (ModelSettings | None): Model configuration overrides
@@ -318,6 +319,7 @@ class Agent(BaseAgent[MasterContext]):
 - **`include_web_search_sources`** (bool): Whether WebSearchTool responses include source URLs
 - **`validation_attempts`** (int): Retry count for output guardrail enforcement
 - **`raise_input_guardrail_error`** (bool): Controls input guardrail mode—False for non-strict (guidance as assistant), True for strict (raises exceptions).
+- **`system_reminders`** (list[SystemReminder]): Transient reminder configs for per-user-message and per-tool-call reminders
 - **`handoff_reminder`** (str | None): Custom reminder appended to handoff prompts
 - **`tool_concurrency_manager`** (ToolConcurrencyManager): Coordinates concurrent tool execution
 
