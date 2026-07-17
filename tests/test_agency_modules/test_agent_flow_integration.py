@@ -168,7 +168,7 @@ def test_runtime_registration_keeps_multiple_send_message_tool_classes() -> None
     assert isinstance(runtime_state.send_message_tools["OtherCustomSendMessage"], OtherCustomSendMessage)
 
 
-def test_runtime_handoff_variant_is_preserved_with_static_handoff() -> None:
+async def test_runtime_handoff_variant_is_preserved_with_static_handoff() -> None:
     """Test runtime handoff variants are not dropped when a static handoff targets the same agent."""
     agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
     agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
@@ -183,7 +183,7 @@ def test_runtime_handoff_variant_is_preserved_with_static_handoff() -> None:
 
     context = agency.get_agent_context("Agent1")
     master_context = prepare_master_context(agent1, None, context)
-    original_instructions = setup_execution(agent1, None, context, None)
+    original_instructions = await setup_execution(agent1, None, context, None)
 
     try:
         handoff_names = [handoff.tool_name for handoff in agent1.handoffs]
@@ -192,7 +192,7 @@ def test_runtime_handoff_variant_is_preserved_with_static_handoff() -> None:
         cleanup_execution(agent1, original_instructions, None, context, master_context)
 
 
-def test_same_name_handoff_variants_are_preserved_with_static_handoff() -> None:
+async def test_same_name_handoff_variants_are_preserved_with_static_handoff() -> None:
     """Test distinct handoff classes are preserved even when they share one tool name."""
     agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
     agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
@@ -207,7 +207,7 @@ def test_same_name_handoff_variants_are_preserved_with_static_handoff() -> None:
 
     context = agency.get_agent_context("Agent1")
     master_context = prepare_master_context(agent1, None, context)
-    original_instructions = setup_execution(agent1, None, context, None)
+    original_instructions = await setup_execution(agent1, None, context, None)
 
     try:
         handoff_names = [handoff.tool_name for handoff in agent1.handoffs]
@@ -216,7 +216,7 @@ def test_same_name_handoff_variants_are_preserved_with_static_handoff() -> None:
         cleanup_execution(agent1, original_instructions, None, context, master_context)
 
 
-def test_same_base_handoff_is_deduplicated_with_static_handoff() -> None:
+async def test_same_base_handoff_is_deduplicated_with_static_handoff() -> None:
     """Test the same base handoff is not duplicated when static and runtime sources overlap."""
     agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
     agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
@@ -231,7 +231,7 @@ def test_same_base_handoff_is_deduplicated_with_static_handoff() -> None:
 
     context = agency.get_agent_context("Agent1")
     master_context = prepare_master_context(agent1, None, context)
-    original_instructions = setup_execution(agent1, None, context, None)
+    original_instructions = await setup_execution(agent1, None, context, None)
 
     try:
         handoff_names = [handoff.tool_name for handoff in agent1.handoffs]

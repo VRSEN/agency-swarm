@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
     from .agent.context_types import AgentRuntimeState
     from .agent.core import Agent
+    from .memory import MemoryIdentity, MemoryManager
     from .streaming.utils import StreamingContext
     from .utils.thread import ThreadManager
 
@@ -34,7 +35,10 @@ class MasterContext:
     user_context: dict[str, Any] = field(default_factory=dict)
     agent_runtime_state: dict[str, "AgentRuntimeState"] = field(default_factory=dict)
     current_agent_name: str | None = None  # Name of the agent currently executing
+    current_sender_name: str | None = None  # Name of the current sender for delegated runs
     shared_instructions: str | None = None  # Shared instructions from the agency
+    memory_identity: "MemoryIdentity | None" = None
+    memory_manager: "MemoryManager | None" = None
     _current_agent_run_id: str | None = None  # Current agent run ID for tracking
     _parent_run_id: str | None = None  # Parent run ID for nested agent calls
     _is_streaming: bool = False  # Flag to indicate if we're in streaming mode

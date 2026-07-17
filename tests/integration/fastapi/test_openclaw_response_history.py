@@ -27,11 +27,11 @@ async def test_response_endpoint_replays_returned_history_without_hidden_respons
     model = TrackingResponsesModel()
     handler = make_response_endpoint(BaseRequest, build_agency_factory(model), lambda: None)
 
-    first = await handler(BaseRequest(message="hi"), token=None)
+    first = await handler(http_request=None, request=BaseRequest(message="hi"), token=None)
     history = copy.deepcopy(first["new_messages"])
     assert_messages_have_no_response_ids(history)
 
-    await handler(BaseRequest(message="again", chat_history=history), token=None)
+    await handler(http_request=None, request=BaseRequest(message="again", chat_history=history), token=None)
 
     assert model.seen_previous_response_ids == [None, None]
     assert_history_input_has_no_response_ids(model.seen_inputs[1])

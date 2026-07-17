@@ -39,7 +39,11 @@ async def test_response_endpoint_store_false_requests_and_preserves_encrypted_re
     model = TrackingResponsesModel()
     handler = make_response_endpoint(BaseRequest, build_store_false_agency_factory(model), lambda: None)
 
-    await handler(BaseRequest(message="again", chat_history=history_with_encrypted_reasoning()), token=None)
+    await handler(
+        http_request=None,
+        request=BaseRequest(message="again", chat_history=history_with_encrypted_reasoning()),
+        token=None,
+    )
 
     assert_store_false_requests_encrypted_reasoning(model.seen_model_settings[0])
     assert_store_false_input_preserves_stateless_reasoning(model.seen_inputs[0])

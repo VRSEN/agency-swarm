@@ -461,7 +461,8 @@ async def test_response_endpoint_stubs_and_restores_hosted_tools_for_non_openai_
     agency = _Agency()
     handler = make_response_endpoint(BaseRequest, lambda **_: agency, verify_token=lambda: None)
     response = await handler(
-        BaseRequest(
+        http_request=None,
+        request=BaseRequest(
             message="hello",
             client_config=ClientConfig(model="litellm/ollama_chat/gemma4:e4b"),
         ),

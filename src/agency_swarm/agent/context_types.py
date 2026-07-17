@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from agency_swarm.tools.send_message import SendMessage
     from agency_swarm.utils.thread import ThreadManager
 
+    from ..memory import MemoryIdentity, MemoryManager
     from .core import Agent
 
 
@@ -45,6 +46,8 @@ class AgencyContext:
         load_threads_callback: Callable[..., Any] | None = None,
         save_threads_callback: Callable[..., Any] | None = None,
         shared_instructions: str | None = None,
+        memory_identity: "MemoryIdentity | None" = None,
+        memory_manager: "MemoryManager | None" = None,
     ) -> None:
         self.agency_instance = agency_instance
         self.thread_manager = thread_manager
@@ -52,6 +55,8 @@ class AgencyContext:
         self.load_threads_callback = load_threads_callback
         self.save_threads_callback = save_threads_callback
         self.shared_instructions = shared_instructions
+        self.memory_identity = memory_identity
+        self.memory_manager = memory_manager
 
         if subagents:
             for agent in subagents.values():

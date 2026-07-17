@@ -60,3 +60,13 @@ def test_cors_explicit_origins_keeps_credentials(dummy_agency):
     assert response.headers.get("access-control-allow-origin") == origin
     # Credentials should be present for specific origins
     assert response.headers.get("access-control-allow-credentials") == "true"
+
+
+def test_run_fastapi_warns_when_durable_memory_is_enabled(caplog):
+    agent = Agent(name="TestAgent", model="gpt-5.4-mini", memory=True)
+    agencies = {"test": lambda **kwargs: Agency(agent, memory_folder="/tmp/agency-memory")}
+
+    caplog.set_level("WARNING")
+    run_fastapi(agencies=agencies, return_app=True)
+
+    assert "Durable memory queues are process-local in v1." in caplog.text

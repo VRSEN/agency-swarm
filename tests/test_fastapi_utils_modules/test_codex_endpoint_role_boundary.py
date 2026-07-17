@@ -66,7 +66,8 @@ async def test_response_endpoint_keeps_runner_input_and_filters_model_call_bound
     replayed = _history()
     handler = make_response_endpoint(BaseRequest, _agency_factory, verify_token=lambda: None)
     response = await handler(
-        BaseRequest(
+        http_request=None,
+        request=BaseRequest(
             message="next",
             chat_history=replayed,
             client_config=ClientConfig(api_key="sk-test", base_url=base_url),
@@ -122,7 +123,8 @@ async def test_response_endpoint_keeps_system_replay_for_custom_model_with_codex
     replayed = _history()
     handler = make_response_endpoint(BaseRequest, _custom_model_agency_factory, verify_token=lambda: None)
     response = await handler(
-        BaseRequest(
+        http_request=None,
+        request=BaseRequest(
             message="next",
             chat_history=replayed,
             client_config=ClientConfig(api_key="sk-test", base_url=CODEX_BASE_URL),
@@ -212,7 +214,7 @@ async def test_response_endpoint_rewrites_codex_system_replay_for_default_openai
 
     replayed = _history()
     handler = make_response_endpoint(BaseRequest, _agency_factory, verify_token=lambda: None)
-    response = await handler(BaseRequest(message="next", chat_history=replayed), token=None)
+    response = await handler(http_request=None, request=BaseRequest(message="next", chat_history=replayed), token=None)
 
     assert response["response"] == "ok"
     assert _roles(captured["input"]) == ["system", "system", "system", "user"]
@@ -244,7 +246,8 @@ async def test_agui_endpoint_keeps_runner_input_and_filters_model_call_boundary(
     replayed = _history()
     handler = make_agui_chat_endpoint(RunAgentInputCustom, _agency_factory, verify_token=lambda: None)
     response = await handler(
-        RunAgentInputCustom(
+        http_request=None,
+        request=RunAgentInputCustom(
             thread_id="thread-1",
             run_id="run-1",
             state=None,
