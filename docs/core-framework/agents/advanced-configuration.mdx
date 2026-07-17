@@ -45,33 +45,30 @@ Set `include_web_search_sources=False` to skip this.
 
 ### System Reminders
 
-Use `system_reminders` when you want reminder system messages without writing custom lifecycle hooks.
-Start with one short reminder string.
+Use `system_reminders` when you want the agent to see a short reminder before model calls, without writing hooks.
 
 ```python
-from agency_swarm import Agent, AfterEveryUserMessage
+from agency_swarm import Agent
 
 agent = Agent(
     name="SupportAgent",
     instructions="Answer clearly and keep the user moving forward.",
-    system_reminders=[
-        AfterEveryUserMessage("Before replying, end with one clear next step."),
-    ],
+    system_reminders="Before replying, end with one clear next step.",
 )
 ```
 
-This reminder is injected into the model input before each new user message. It is not saved into the main thread history.
+This reminder is added only to the model input. It is **not saved** in the thread history.
 
 For tool-heavy agents, add a checkpoint reminder:
 
 ```python
-from agency_swarm import Agent, AfterEveryUserMessage, EveryNToolCalls
+from agency_swarm import Agent, EveryNToolCalls
 
 agent = Agent(
     name="SupportAgent",
     instructions="Answer clearly and keep the user moving forward.",
     system_reminders=[
-        AfterEveryUserMessage("Before replying, end with one clear next step."),
+        "Before replying, end with one clear next step.",
         EveryNToolCalls(15, "Pause and summarize progress before using more tools."),
     ],
 )
@@ -79,10 +76,10 @@ agent = Agent(
 
 `EveryNToolCalls` counts local function tools and hosted tools (such as `WebSearchTool` and `FileSearchTool`) toward the same threshold.
 
-Reminder text can also be dynamic:
+If the reminder needs agency context, pass a callable:
 
 ```python
-from agency_swarm import Agent, AfterEveryUserMessage, MasterContext, RunContextWrapper
+from agency_swarm import Agent, MasterContext, RunContextWrapper
 
 def build_reminder(ctx: RunContextWrapper[MasterContext], _agent: Agent) -> str:
     customer_name = ctx.context.user_context.get("customer_name", "the user")
@@ -91,12 +88,12 @@ def build_reminder(ctx: RunContextWrapper[MasterContext], _agent: Agent) -> str:
 agent = Agent(
     name="SupportAgent",
     instructions="Answer clearly and keep the user moving forward.",
-    system_reminders=[AfterEveryUserMessage(build_reminder)],
+    system_reminders=build_reminder,
 )
 ```
 
 <Note>
-Use `system_reminders` for the common reminder cases. Keep `hooks` for advanced lifecycle behavior that falls outside the built-in reminder triggers.
+Use `system_reminders` for normal reminders. Use `hooks` only when you need custom lifecycle behavior beyond these built-in triggers.
 </Note>
 
 ### Conversation starters cache

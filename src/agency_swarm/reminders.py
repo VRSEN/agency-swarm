@@ -15,31 +15,35 @@ type ReminderMessage = str | Callable[[RunContextWrapper[MasterContext], "Agent"
 
 
 class SystemReminder:
-    """Base reminder configuration shared by public reminder triggers."""
+    """Base class for system reminder triggers."""
 
     message: ReminderMessage
 
     def _validate_message(self) -> None:
         if isinstance(self.message, str):
+            if not self.message.strip():
+                raise ValueError("system reminder message must be a non-empty string.")
             return
         if callable(self.message):
             return
-        raise TypeError("system_reminders message must be a string or callable.")
+        raise TypeError("system reminder message must be a string or callable.")
 
     def render(self, context: RunContextWrapper[MasterContext], agent: Agent) -> str:
-        """Render the reminder message for the current run context."""
+        """Render the reminder text for the current run."""
         if isinstance(self.message, str):
             return self.message
 
         rendered = self.message(context, agent)
         if not isinstance(rendered, str):
-            raise TypeError("system_reminders message callables must return a string.")
+            raise TypeError("system reminder message callables must return a string.")
+        if not rendered.strip():
+            raise ValueError("system reminder message callables must return a non-empty string.")
         return rendered
 
 
 @dataclass(frozen=True, slots=True)
 class AfterEveryUserMessage(SystemReminder):
-    """Inject a transient reminder before the first LLM call of a user turn."""
+    """Inject a transient reminder before the first model call of each top-level user turn."""
 
     message: ReminderMessage
 
@@ -49,14 +53,14 @@ class AfterEveryUserMessage(SystemReminder):
 
 @dataclass(frozen=True, slots=True)
 class EveryNToolCalls(SystemReminder):
-    """Inject a transient reminder after every N tool calls on the next LLM call."""
+    """Inject a transient reminder on the next model call after every N tool calls."""
 
-    tool_calls: int
+    n: int
     message: ReminderMessage
 
     def __post_init__(self) -> None:
         self._validate_message()
-        if not isinstance(self.tool_calls, int):
-            raise TypeError("EveryNToolCalls.tool_calls must be an integer.")
-        if self.tool_calls <= 0:
-            raise ValueError("EveryNToolCalls.tool_calls must be greater than 0.")
+        if type(self.n) is not int:
+            raise TypeError("EveryNToolCalls.n must be an integer.")
+        if self.n <= 0:
+            raise ValueError("EveryNToolCalls.n must be greater than 0.")

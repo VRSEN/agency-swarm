@@ -14,7 +14,7 @@ import sys
 # Path setup for standalone examples
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
-from agency_swarm import AfterEveryUserMessage, Agency, Agent  # noqa: E402
+from agency_swarm import Agency, Agent  # noqa: E402
 
 REMINDER_TEXT = "Before replying, end with one clear next step."
 
@@ -23,7 +23,7 @@ def create_demo_agency() -> Agency:
     reminder_agent = Agent(
         name="ReminderAgent",
         instructions="You are a helpful assistant. Keep replies short, friendly, and practical.",
-        system_reminders=[AfterEveryUserMessage(REMINDER_TEXT)],
+        system_reminders=REMINDER_TEXT,
     )
     return Agency(reminder_agent)
 
@@ -32,7 +32,7 @@ def show_setup() -> None:
     print("System Reminders Demo")
     print("=" * 40)
     print("This example adds one reminder before every user message:")
-    print(f"- {REMINDER_TEXT}")
+    print(f'Agent(system_reminders="{REMINDER_TEXT}")')
     print("\nSet OPENAI_API_KEY to run the live demo.")
 
 
