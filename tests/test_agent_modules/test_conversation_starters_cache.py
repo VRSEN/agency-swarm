@@ -30,7 +30,16 @@ from openai import AsyncOpenAI
 from openai.types.responses.response_prompt_param import ResponsePromptParam
 from pydantic import BaseModel
 
-from agency_swarm import Agency, Agent, GuardrailFunctionOutput, RunContextWrapper, input_guardrail, output_guardrail
+from agency_swarm import (
+    AfterEveryUserMessage,
+    Agency,
+    Agent,
+    EveryNToolCalls,
+    GuardrailFunctionOutput,
+    RunContextWrapper,
+    input_guardrail,
+    output_guardrail,
+)
 from agency_swarm.agent.context_types import AgencyContext, AgentRuntimeState
 from agency_swarm.agent.conversation_starters_cache import (
     build_run_items_from_cached,
@@ -444,6 +453,32 @@ def test_starter_cache_fingerprint_preserves_same_name_handoff_classes() -> None
     assert second_fingerprint == duplicate_fingerprint
 
 
+def test_starter_cache_fingerprint_changes_when_system_reminders_change() -> None:
+    """Changing system_reminders must invalidate cached starter replies."""
+
+    def build_agent(reminders: list[AfterEveryUserMessage | EveryNToolCalls]) -> Agent:
+        return Agent(
+            name="ReminderFingerprintAgent",
+            instructions="You are helpful.",
+            model="gpt-5.4-mini",
+            system_reminders=list(reminders),
+        )
+
+    baseline = build_agent([])
+    with_reminder = build_agent([AfterEveryUserMessage("End with one next step.")])
+    with_changed_reminder = build_agent([AfterEveryUserMessage("Summarize open follow-ups.")])
+    with_extra_reminder = build_agent(
+        [AfterEveryUserMessage("End with one next step."), EveryNToolCalls(3, "Checkpoint progress.")]
+    )
+
+    assert compute_starter_cache_fingerprint(baseline) != compute_starter_cache_fingerprint(with_reminder)
+    assert compute_starter_cache_fingerprint(with_reminder) != compute_starter_cache_fingerprint(with_changed_reminder)
+    assert compute_starter_cache_fingerprint(with_reminder) != compute_starter_cache_fingerprint(with_extra_reminder)
+    assert compute_starter_cache_fingerprint(with_reminder) == compute_starter_cache_fingerprint(
+        build_agent([AfterEveryUserMessage("End with one next step.")])
+    )
+
+
 class _StructuredOutput(BaseModel):
     answer: str
 
@@ -595,6 +630,7 @@ def _make_fingerprint_agent(*, tools: list[object], mcp_config: object, output_t
         mcp_config=mcp_config,
         handoffs=[],
         output_type=output_type,
+        system_reminders=[],
     )
 
 

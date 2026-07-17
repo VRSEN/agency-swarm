@@ -38,6 +38,7 @@ from agency_swarm.utils.model_utils import get_model_name, get_usage_tracking_mo
 if TYPE_CHECKING:
     from agency_swarm.agent.context_types import AgentRuntimeState
     from agency_swarm.agent.core import Agent
+    from agency_swarm.reminders import SystemReminder
 
 _CACHE_DIR_NAME = "starter_cache"
 _SENSITIVE_KEYS = ("key", "secret", "token", "authorization", "password")
@@ -112,6 +113,7 @@ def compute_starter_cache_fingerprint(
         "mcp_config": sanitized_mcp_config,
         "handoffs": handoffs,
         "output_type": _output_type_signature(agent.output_type),
+        "system_reminders": _reminder_signatures(agent.system_reminders),
     }
     digest = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return _hash_string(digest)
@@ -528,6 +530,10 @@ def _handoff_signature(handoff: SDKHandoff) -> dict[str, Any]:
     if tool_class is not None:
         signature["tool_class"] = _serialize_value(tool_class)
     return signature
+
+
+def _reminder_signatures(reminders: list[SystemReminder]) -> list[dict[str, Any]]:
+    return [{"type": type(reminder).__name__, "config": _serialize_value(reminder)} for reminder in reminders]
 
 
 def _handoff_signatures(agent: Agent, runtime_state: AgentRuntimeState | None) -> list[dict[str, Any]]:
