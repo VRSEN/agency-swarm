@@ -104,7 +104,7 @@ requires-dist = [
     { name = "ag-ui-protocol", marker = "extra == 'fastapi'", specifier = ">=0.1.18" },
     { name = "aiofiles", specifier = ">=23.2.1" },
     { name = "aiofiles", marker = "extra == 'fastapi'", specifier = ">=23.2.1" },
-    { name = "datamodel-code-generator", specifier = ">=0.56.0,<0.67.0" },
+    { name = "datamodel-code-generator", specifier = ">=0.56.0,<0.69.0" },
     { name = "docstring-parser", specifier = ">=0.16,<1.0.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "fastapi", marker = "extra == 'fastapi'", specifier = ">=0.115.0" },
@@ -813,7 +813,7 @@ wheels = [
 
 [[package]]
 name = "datamodel-code-generator"
-version = "0.66.1"
+version = "0.68.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "argcomplete" },
@@ -825,9 +825,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/94/0c/c48083e601cd75f7c19d6c8ff41c1bfab7c9a17d6e0e696b7cc22ce1f73f/datamodel_code_generator-0.66.1.tar.gz", hash = "sha256:a177bb66e168c8b64469cbb00f9aa2bb4628801e456be075dcfcc4b5f661d2ec", size = 1439044, upload-time = "2026-06-30T17:27:26.746Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8c/9d/9746c36d7b597235dae8806696fc158fa41a3f78912499f6cfebeb2b7833/datamodel_code_generator-0.68.1.tar.gz", hash = "sha256:3a9f0c501670b35d6ea1764b3ff6c552f1f594c7ee3ed9cab5b3b72f75ff092d", size = 1577260, upload-time = "2026-07-08T00:47:56.697Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/40/dd/2c1f8874529f8800e2ebc63a652fbf624d87c77c00830e0f7303a59c5099/datamodel_code_generator-0.66.1-py3-none-any.whl", hash = "sha256:3bf7618e2695e6859993ccb94da7f1dd47971b8eb97ab1b95a094db85abb90a9", size = 416313, upload-time = "2026-06-30T17:27:24.662Z" },
+    { url = "https://files.pythonhosted.org/packages/f7/ed/03aab13a7b425a816f61c580fc9fb7ad8902fb4839a205dfb2e69a43fdd7/datamodel_code_generator-0.68.1-py3-none-any.whl", hash = "sha256:2784ad944f25579be874d40e7f28ee5e7ab2d4457a08612393c7fd02ea7b7f21", size = 425059, upload-time = "2026-07-08T00:47:54.903Z" },
 ]
 
 [[package]]
