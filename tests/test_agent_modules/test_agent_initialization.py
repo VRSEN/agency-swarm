@@ -33,6 +33,19 @@ def test_agent_initialization_with_stop_at_tools_variants():
         assert agent.tool_use_behavior == behavior
 
 
+def test_agent_initialization_with_voice_variants() -> None:
+    openai_voice_agent = Agent(name="VoiceOpenAI", instructions="Talk", voice="ash")
+    assert openai_voice_agent.voice == "ash"
+
+    xai_voice_agent = Agent(name="VoiceXAI", instructions="Talk", voice="rex")
+    assert xai_voice_agent.voice == "rex"
+
+
+def test_agent_initialization_invalid_voice() -> None:
+    with pytest.raises(ValueError, match="Invalid voice 'invalid'"):
+        Agent(name="VoiceInvalid", instructions="Talk", voice="invalid")
+
+
 def test_agent_initialization_core_configuration_variants():
     """Core initialization should preserve baseline defaults and explicit tool/model/output settings."""
     minimal = Agent(name="Agent1", instructions="Be helpful")
