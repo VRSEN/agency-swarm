@@ -15,6 +15,7 @@ from agents import RunConfig, RunHooks, RunResult, TResponseInputItem
 
 from agency_swarm.agent.core import Agent
 from agency_swarm.agent.execution_streaming import StreamingRunResponse
+from agency_swarm.hooks import CompositeRunHooks
 from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
 
 from .helpers import get_agent_context, resolve_agent
@@ -133,6 +134,40 @@ def _build_user_message_with_recipient_reminder(
     return [reminder, cast(TResponseInputItem, {"role": "user", "content": message})]
 
 
+_NO_OAUTH_CONTEXT = object()
+
+
+def _set_attach_oauth_user_context(agency: "Agency", context_override: dict[str, Any] | None) -> str | None | object:
+    """Set OAuth user context before persistent MCP attachment and return the previous value."""
+    try:
+        from agency_swarm.mcp.oauth import get_oauth_user_id, set_oauth_user_id
+    except ImportError:
+        return _NO_OAUTH_CONTEXT
+
+    base_user_context = getattr(agency, "user_context", {})
+    if isinstance(base_user_context, dict):
+        merged_user_context = {**base_user_context, **context_override} if context_override else base_user_context
+        user_id = merged_user_context.get("user_id")
+    else:
+        user_id = None
+
+    previous_user_id = get_oauth_user_id()
+    set_oauth_user_id(user_id if isinstance(user_id, str) else None)
+    return previous_user_id
+
+
+def _resolve_effective_hooks(agency: "Agency", hooks_override: RunHooks | None) -> RunHooks | None:
+    """Return caller hooks while preserving required internal OAuth hooks."""
+    if hooks_override is None:
+        return agency.default_run_hooks
+
+    oauth_hook = getattr(agency, "_oauth_storage_hook", None)
+    if oauth_hook is None or hooks_override is oauth_hook:
+        return hooks_override
+
+    return CompositeRunHooks([cast(RunHooks, oauth_hook), hooks_override])
+
+
 async def get_response(
     agency: "Agency",
     message: str | list[TResponseInputItem],
@@ -190,13 +225,20 @@ async def get_response(
 
     target_agent = resolve_agent(agency, target_recipient)
 
-    effective_hooks = hooks_override or agency.persistence_hooks
+    effective_hooks = _resolve_effective_hooks(agency, hooks_override)
 
     # Get agency context for the target agent (stateless context passing)
     agency_context = agency_context_override or get_agent_context(agency, target_agent.name)
 
     # On handoffs all servers need to be initialized to be used
-    await attach_persistent_mcp_servers(agency)
+    previous_oauth_user_id = _set_attach_oauth_user_context(agency, context_override)
+    try:
+        await attach_persistent_mcp_servers(agency)
+    finally:
+        if previous_oauth_user_id is not _NO_OAUTH_CONTEXT:
+            from agency_swarm.mcp.oauth import set_oauth_user_id
+
+            set_oauth_user_id(cast("str | None", previous_oauth_user_id))
 
     message_for_call: str | list[TResponseInputItem] = message
     if _should_add_recipient_switch_reminder(agency_context=agency_context, target_agent_name=target_agent.name):
@@ -326,7 +368,7 @@ def get_response_stream(
 
         target_agent = resolve_agent(agency, target_recipient)
 
-        effective_hooks = hooks_override or agency.persistence_hooks
+        effective_hooks = _resolve_effective_hooks(agency, hooks_override)
 
         try:
             async with agency.event_stream_merger.create_streaming_context() as streaming_context:
@@ -335,7 +377,14 @@ def get_response_stream(
 
                 agency_context = agency_context_override or get_agent_context(agency, target_agent.name)
 
-                await attach_persistent_mcp_servers(agency)
+                previous_oauth_user_id = _set_attach_oauth_user_context(agency, enhanced_context)
+                try:
+                    await attach_persistent_mcp_servers(agency)
+                finally:
+                    if previous_oauth_user_id is not _NO_OAUTH_CONTEXT:
+                        from agency_swarm.mcp.oauth import set_oauth_user_id
+
+                        set_oauth_user_id(cast("str | None", previous_oauth_user_id))
 
                 message_for_call: str | list[TResponseInputItem] = message
                 if isinstance(message, str) and not message.strip():
