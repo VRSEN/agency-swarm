@@ -25,8 +25,8 @@
 1.22 `Codex Review`: a clean independent Codex review, required only when this contract, risk, or the User Request requires it.
 1.23 `Codex Channel`: a native Codex subagent or the `codex` CLI.
 1.24 `General Review Command`: `codex review --base origin/main -c model_reasoning_effort="high"`.
-1.25 `Policy Review Command`: `codex -m gpt-5.5 review --base origin/main -c model_reasoning_effort="xhigh"`.
-1.26 `Pre-Release Review Command`: `codex -m gpt-5.5 review --base origin/main -c model_reasoning_effort="xhigh"`.
+1.25 `Policy Review Command`: `codex review --base origin/main -c model_reasoning_effort="xhigh"`.
+1.26 `Pre-Release Review Command`: `codex review --base origin/main -c model_reasoning_effort="xhigh"`.
 1.27 `Fallback Review Command`: an equivalent `codex exec` diff review using the same base and reasoning class.
 1.28 `Primary Review Artifact`: `/tmp/codex_review_<short_sha>.txt`.
 1.29 `Pre-PR Gate`: the risk-based local verification before pull-request mutation, ranging from focused checks to the Full Suite.
@@ -440,7 +440,7 @@
 17.2 General non-policy, non-release review may use the General Review Command when risk or the User Request requires independent review.
 17.3 Pull-request mutation, review-thread work, and merge-readiness review shall use the `codex-cli-review` skill when risk, unresolved threads, or the User Request requires independent review.
 17.4 Broad, public, high-risk, or low-confidence Policy Edits shall use the Policy Review Command through a separate isolated Codex Channel worker when available.
-17.5 When Policy Review is required, it requires GPT-5.5 or an approved substitute with `xhigh` reasoning; `high` is not enough.
+17.5 When Policy Review is required, it requires `gpt-5.6-sol` (the Codex CLI default) or an approved substitute with `xhigh` reasoning; `high` is not enough.
 17.6 Release and safety claims shall use the Pre-Release Review Command against the exact release commit.
 17.7 If the active model or review path is below the required floor for the task class, stop before relying on it and Escalate.
 17.8 Claude output and duplicate weaker runs may support high-reliability decisions but never replace the required Codex review path.
