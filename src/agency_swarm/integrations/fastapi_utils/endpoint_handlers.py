@@ -1496,7 +1496,7 @@ Rules:
             response = cast(
                 Any,
                 await client.responses.create(
-                    model="gpt-5.4-mini",
+                    model="gpt-5.6-luna",
                     instructions=title_instructions + retry_suffix,
                     input=codex_input,
                     include=[REASONING_ENCRYPTED_CONTENT_INCLUDE],
@@ -1520,7 +1520,7 @@ Rules:
             )
         raise ValueError("Generated chat name must contain between 2 and 6 words")
 
-    model = OpenAIResponsesModel(model="gpt-5.4-mini", openai_client=client)
+    model = OpenAIResponsesModel(model="gpt-5.6-luna", openai_client=client)
 
     name_agent = Agent(
         name="NameGenerator",

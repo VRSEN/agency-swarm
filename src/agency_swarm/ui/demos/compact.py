@@ -87,7 +87,7 @@ def _resolve_model_name(agency_instance: Agency) -> str:
                 return value
     except Exception:
         pass
-    return "gpt-5.4-mini"
+    return "gpt-5.6-luna"
 
 
 async def compact_thread(agency_instance: Agency, args: list[str]) -> TResponseInputItem:

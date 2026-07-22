@@ -38,7 +38,7 @@ def test_agent_initialization_core_configuration_variants():
     minimal = Agent(name="Agent1", instructions="Be helpful")
     assert minimal.name == "Agent1"
     assert minimal.instructions == "Be helpful"
-    assert minimal.model == "gpt-5.4-mini"
+    assert minimal.model == "gpt-5.6-luna"
     assert minimal.tools == []
     assert minimal.files_folder is None
     assert not hasattr(minimal, "response_validator")
