@@ -1502,6 +1502,7 @@ Rules:
                     include=[REASONING_ENCRYPTED_CONTENT_INCLUDE],
                     store=False,
                     stream=True,
+                    reasoning={"effort": "none"},
                 ),
             )
             text_parts: list[str] = []
@@ -1525,7 +1526,7 @@ Rules:
     name_agent = Agent(
         name="NameGenerator",
         model=model,
-        model_settings=ModelSettings(store=False),
+        model_settings=ModelSettings(store=False, reasoning=Reasoning(effort="none")),
         instructions=title_instructions,
         output_type=ResponseFormat,
         validation_attempts=3,
