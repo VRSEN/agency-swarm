@@ -7,6 +7,7 @@ for both OpenAI and LiteLLM models.
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
@@ -24,6 +25,13 @@ PricingData = dict[str, dict[str, float]]
 
 _PRICING_DATA_CACHE: PricingData | None = None
 _PRICING_DATA_LOCK = Lock()
+_BASE_PRICING_KEYS = (
+    "input_cost_per_token",
+    "output_cost_per_token",
+    "cache_read_input_token_cost",
+    "output_cost_per_reasoning_token",
+)
+_TIERED_PRICING_KEY = re.compile(r"^(?P<base_key>.+)_above_(?P<threshold>\d+)k_tokens$")
 
 
 class UsageStatsDict(TypedDict):
@@ -130,59 +138,38 @@ def load_pricing_data() -> PricingData:
         for model_name, model_pricing in raw.items():
             if not isinstance(model_name, str) or not isinstance(model_pricing, dict):
                 continue
-            pricing_data[model_name] = {
-                "input_cost_per_token": _coerce_price(model_pricing.get("input_cost_per_token")),
-                "output_cost_per_token": _coerce_price(model_pricing.get("output_cost_per_token")),
-                "cache_read_input_token_cost": _coerce_price(model_pricing.get("cache_read_input_token_cost")),
-                "output_cost_per_reasoning_token": _coerce_price(model_pricing.get("output_cost_per_reasoning_token")),
-            }
+            prices = {key: _coerce_price(model_pricing.get(key)) for key in _BASE_PRICING_KEYS}
+            prices.update(
+                {
+                    key: _coerce_price(value)
+                    for key, value in model_pricing.items()
+                    if isinstance(key, str) and _TIERED_PRICING_KEY.fullmatch(key)
+                }
+            )
+            pricing_data[model_name] = prices
 
         _PRICING_DATA_CACHE = pricing_data
         return _PRICING_DATA_CACHE
 
 
 def get_model_pricing(model_name: str, pricing_data: PricingData | None = None) -> dict[str, float] | None:
-    """Get pricing information for a specific model.
-
-    Handles model name variations and provider prefixes:
-    - Exact match first (e.g., "azure/gpt-4o", "gpt-4o", "gpt-5")
-    - Models without prefixes (e.g., "gpt-5") are matched directly via exact match
-    - For provider-prefixed models (e.g., "azure/gpt-4o"), tries base name as fallback
-    - For versioned models, tries base name (e.g., "gpt-4o-2024-05-13" -> "gpt-4o")
-
-    This ensures correct pricing for:
-    - Models without provider prefixes (e.g., "gpt-5", "gpt-4o") - matched directly
-    - Provider-specific models (e.g., "azure/gpt-4o") - matched with prefix, falls back to base
-    - Versioned models - matched with version, falls back to base model
-    """
+    """Resolve exact, provider-prefixed, or versioned model pricing."""
     if pricing_data is None:
         pricing_data = load_pricing_data()
 
-    # Try exact match first (handles both "azure/gpt-4o" and "gpt-4o")
     if model_name in pricing_data:
         return pricing_data[model_name]
 
-    # Handle provider prefixes (e.g., "azure/gpt-4o", "openai/gpt-4o")
-    # If provider prefix is present, try exact match first, then fall back to base name
     if "/" in model_name:
         parts = model_name.split("/")
         base_name = parts[-1]
-
-        # If exact match with provider prefix exists, use it
-        # Otherwise, fall back to base name (e.g., "azure/gpt-4o" not found -> try "gpt-4o")
         if base_name in pricing_data:
             return pricing_data[base_name]
-
-        # Continue with base_name for version/date handling below
         model_name = base_name
 
-    # For versioned models, try base name (e.g., "gpt-4o-2024-05-13" -> "gpt-4o")
-    # Split on date pattern (YYYY-MM-DD) or just take first part before last dash
     if "-" in model_name:
-        # Try removing date suffix (format: model-YYYY-MM-DD)
         parts = model_name.split("-")
         if len(parts) >= 4:
-            # Check if last 3 parts look like a date (YYYY-MM-DD)
             try:
                 year, month, day = parts[-3], parts[-2], parts[-1]
                 if len(year) == 4 and year.isdigit() and month.isdigit() and day.isdigit():
@@ -192,13 +179,30 @@ def get_model_pricing(model_name: str, pricing_data: PricingData | None = None) 
             except (ValueError, IndexError):
                 pass
 
-        # Fallback: try just the base model name (everything before last dash)
-        # This handles cases like "gpt-4o-mini" -> try "gpt-4o" if "gpt-4o-mini" not found
         base_name = "-".join(parts[:-1])
         if base_name in pricing_data:
             return pricing_data[base_name]
 
     return None
+
+
+def _get_token_price(
+    model_pricing: dict[str, float],
+    price_key: str,
+    input_tokens: int,
+    default: float = 0.0,
+) -> float:
+    selected_threshold = 0
+    selected_price = model_pricing.get(price_key, default)
+    for tier_key, tier_price in model_pricing.items():
+        match = _TIERED_PRICING_KEY.fullmatch(tier_key)
+        if match is None or match.group("base_key") != price_key:
+            continue
+        threshold = int(match.group("threshold")) * 1000
+        if selected_threshold < threshold < input_tokens:
+            selected_threshold = threshold
+            selected_price = tier_price
+    return selected_price
 
 
 def calculate_openai_cost(
@@ -209,29 +213,7 @@ def calculate_openai_cost(
     reasoning_tokens: int | None = None,
     pricing_data: PricingData | None = None,
 ) -> float:
-    """Calculate cost for any model based on token usage.
-
-    Uses the LiteLLM pricing JSON format which stores costs per token for all models
-    (OpenAI, LiteLLM, Azure, Anthropic, etc.):
-    - input_cost_per_token: cost per input token
-    - output_cost_per_token: cost per output token
-    - cache_read_input_token_cost: cost per cached input token
-    - output_cost_per_reasoning_token: cost per reasoning token (if available)
-
-    Note: Despite the function name "calculate_openai_cost", this works for all models
-    in the pricing JSON file, not just OpenAI models.
-
-    Args:
-        model_name: The model name (e.g., 'gpt-4o', 'gpt-4-turbo', 'anthropic/claude-sonnet-4')
-        input_tokens: Number of input tokens
-        output_tokens: Number of output tokens
-        cached_tokens: Number of cached tokens (if any)
-        reasoning_tokens: Number of reasoning tokens (for o1 models)
-        pricing_data: Optional pre-loaded pricing data
-
-    Returns:
-        Total cost in USD
-    """
+    """Calculate per-token cost, selecting declared tiers by total input size."""
     if pricing_data is None:
         pricing_data = load_pricing_data()
 
@@ -240,33 +222,30 @@ def calculate_openai_cost(
         logger.debug(f"No pricing data found for model {model_name}")
         return 0.0
 
-    cost = 0.0
-
-    # Get per-token costs from JSON (LiteLLM format uses per-token costs)
-    input_cost_per_token = model_pricing.get("input_cost_per_token", 0.0)
-    output_cost_per_token = model_pricing.get("output_cost_per_token", 0.0)
-
-    # Calculate cost for non-cached input tokens
+    input_cost_per_token = _get_token_price(model_pricing, "input_cost_per_token", input_tokens)
+    output_cost_per_token = _get_token_price(model_pricing, "output_cost_per_token", input_tokens)
     non_cached_input = max(0, input_tokens - cached_tokens)
-    cost += non_cached_input * input_cost_per_token
+    cost = non_cached_input * input_cost_per_token
 
-    # Cached tokens typically have a different (lower) price
-    # Use cache_read_input_token_cost if available, otherwise fall back to input_cost_per_token
-    cache_read_cost_per_token = model_pricing.get("cache_read_input_token_cost", input_cost_per_token)
+    cache_read_cost_per_token = _get_token_price(
+        model_pricing,
+        "cache_read_input_token_cost",
+        input_tokens,
+        input_cost_per_token,
+    )
     if cached_tokens > 0:
         cost += cached_tokens * cache_read_cost_per_token
 
-    # Output tokens
     cost += output_tokens * output_cost_per_token
 
-    # Handle reasoning tokens (for o1 models)
-    # Note: reasoning tokens might be charged differently - check for output_cost_per_reasoning_token
     if reasoning_tokens is not None and reasoning_tokens > 0:
-        reasoning_cost_per_token = model_pricing.get("output_cost_per_reasoning_token", 0.0)
+        reasoning_cost_per_token = _get_token_price(
+            model_pricing,
+            "output_cost_per_reasoning_token",
+            input_tokens,
+        )
         if reasoning_cost_per_token > 0:
             cost += reasoning_tokens * reasoning_cost_per_token
-        # If no specific reasoning token cost, they might be included in output_cost_per_token
-        # In that case, we don't double-count them
 
     return cost
 
