@@ -5,6 +5,30 @@ from openai.types.shared.reasoning import Reasoning
 from agency_swarm import Agent
 from agency_swarm.agent.constants import FRAMEWORK_DEFAULT_MODEL
 from agency_swarm.utils.usage_tracking import calculate_openai_cost, get_model_pricing, load_pricing_data
+from tests.deterministic_model import DeterministicModel
+
+
+class _NamelessModel(DeterministicModel):
+    def __init__(self) -> None:
+        pass
+
+
+def test_model_settings_defaults_distinguish_nameless_model_objects_from_luna() -> None:
+    custom_model_agent = Agent(name="CustomModel", instructions="Test", model=_NamelessModel())
+    assert custom_model_agent.model_settings.reasoning is None
+    assert custom_model_agent.model_settings.verbosity is None
+
+    default_agent = Agent(name="DefaultModel", instructions="Test")
+    explicit_luna_agent = Agent(name="ExplicitLuna", instructions="Test", model="gpt-5.6-luna")
+    none_model_agent = Agent(name="NoneModel", instructions="Test", model=None)
+
+    for agent in (default_agent, explicit_luna_agent, none_model_agent):
+        assert agent.model_settings.reasoning is not None
+        assert agent.model_settings.reasoning.effort == "none"
+
+    assert default_agent.model == FRAMEWORK_DEFAULT_MODEL
+    assert explicit_luna_agent.model == "gpt-5.6-luna"
+    assert none_model_agent.model == FRAMEWORK_DEFAULT_MODEL
 
 
 def test_framework_default_model_normalizes_none_without_overriding_explicit_configuration() -> None:

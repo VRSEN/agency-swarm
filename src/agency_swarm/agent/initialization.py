@@ -56,7 +56,7 @@ def _is_litellm_model(model: Any) -> bool:
 
 def _get_framework_default_model_settings(model: str | None = None) -> ModelSettings:
     """Get SDK defaults for a model and layer Agency Swarm defaults on top."""
-    base = get_sdk_default_model_settings(model)
+    base = ModelSettings() if model is None else get_sdk_default_model_settings(model)
     updates = {
         field.name: getattr(_FRAMEWORK_DEFAULT_MODEL_SETTINGS, field.name)
         for field in dataclasses.fields(ModelSettings)
