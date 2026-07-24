@@ -17,7 +17,7 @@ def test_dependency_constraints_exclude_incompatible_releases() -> None:
 
     assert Version("2.44.0") in openai.specifier
     assert Version("2.45.0") not in openai.specifier
-    assert agents.specifier == SpecifierSet("==0.14.8")
+    assert agents.specifier == SpecifierSet("==0.18.1")
     assert Version("1.83.0") in litellm.specifier
     assert Version("1.91.0") in litellm.specifier
     assert Version("1.92.0") not in litellm.specifier

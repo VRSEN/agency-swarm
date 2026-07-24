@@ -21,6 +21,7 @@ async def test_litellm_thinking_blocks_emit_reasoning_events() -> None:
             usage=None,
             choices=[
                 SimpleNamespace(
+                    index=0,
                     logprobs=None,
                     delta=SimpleNamespace(
                         content=None,
@@ -75,6 +76,7 @@ async def test_litellm_model_extra_reasoning_content_emits_reasoning_events() ->
             usage=None,
             choices=[
                 SimpleNamespace(
+                    index=0,
                     logprobs=None,
                     delta=SimpleNamespace(
                         content=None,
@@ -129,6 +131,7 @@ async def test_litellm_reasoning_field_emits_reasoning_events() -> None:
             usage=None,
             choices=[
                 SimpleNamespace(
+                    index=0,
                     logprobs=None,
                     delta=SimpleNamespace(
                         content=None,

@@ -94,17 +94,17 @@ async def test_compact_uses_entry_agent_client_sync_and_model_passthrough():
 
 
 @pytest.mark.asyncio
-async def test_compact_omits_reasoning_param_for_openai_model():
-    """Compact omits reasoning even for OpenAI models (simpler, safe default)."""
+async def test_compact_disables_reasoning_for_openai_model():
+    """Compact should avoid implicit billed reasoning for OpenAI models."""
     fake_client = _FakeClient()
-    agent = _real_agent_with_client(name="Coordinator", model="gpt-5.4-mini", client=fake_client)
+    agent = _real_agent_with_client(name="Coordinator", model="gpt-5.6-luna", client=fake_client)
     agency = _Agency(agent)
 
     await TerminalDemoLauncher.compact_thread(agency, [])
 
     last = fake_client.calls[-1]
-    assert last["model"] == "gpt-5.4-mini"
-    assert last["reasoning"] is None
+    assert last["model"] == "gpt-5.6-luna"
+    assert last["reasoning"] == {"effort": "none"}
 
 
 @pytest.mark.asyncio

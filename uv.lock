@@ -124,7 +124,7 @@ requires-dist = [
     { name = "nest-asyncio", marker = "extra == 'jupyter'", specifier = ">=1.6.0,<2.0.0" },
     { name = "numpy", marker = "python_full_version >= '3.10' and extra == 'voice'", specifier = ">=2.2.0,<3" },
     { name = "openai", specifier = ">=2.2,<2.45" },
-    { name = "openai-agents", specifier = "==0.14.8" },
+    { name = "openai-agents", specifier = "==0.18.1" },
     { name = "prompt-toolkit", specifier = ">=3.0.0,<4.0.0" },
     { name = "pydantic", specifier = ">=2.11,<3" },
     { name = "python-dotenv", specifier = ">=1.1.1,<2.0.0" },
@@ -2379,7 +2379,7 @@ wheels = [
 
 [[package]]
 name = "openai-agents"
-version = "0.14.8"
+version = "0.18.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "griffelib" },
@@ -2387,13 +2387,12 @@ dependencies = [
     { name = "openai" },
     { name = "pydantic" },
     { name = "requests" },
-    { name = "types-requests" },
     { name = "typing-extensions" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d5/8a/d36ab647f05e790ec97dda9e4c0eb39d8840269d6a5194887b5dec92bd0d/openai_agents-0.14.8.tar.gz", hash = "sha256:fe1cb58b4150a07292a94f15d8fd5217ee9195bd6bcd8a6a46fdb1d9b08a70b7", size = 5314520, upload-time = "2026-04-29T03:40:07.6Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d7/b0/4ee0eda742e395fa48f625a96ef0713c53b49f397f9c5fadcef417d021b3/openai_agents-0.18.1.tar.gz", hash = "sha256:689ad88c8f64435413dde707ca45fb42d55217ff6ef63aab3d638c33f78e04bf", size = 5521444, upload-time = "2026-07-09T23:39:18.907Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/af/6e/1e9adcedcde7b163579b88a68f765a4915be4ead0713270386d9432cfd2f/openai_agents-0.14.8-py3-none-any.whl", hash = "sha256:2937ef582ccaa45d59e89839ed8948cb2a6d808bc9940f0881793c21f37f7776", size = 817332, upload-time = "2026-04-29T03:40:05.68Z" },
+    { url = "https://files.pythonhosted.org/packages/e5/5d/7f6a9a87279761091f864b3f39a872b5c1653f7a14468e530c10685cc0ee/openai_agents-0.18.1-py3-none-any.whl", hash = "sha256:d78b868911de3a202996dce1a333732c6f89e4dd11f83b7f2a7a62b9723dc360", size = 862813, upload-time = "2026-07-09T23:39:16.744Z" },
 ]
 
 [[package]]

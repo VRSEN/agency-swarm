@@ -41,9 +41,10 @@ async def test_generate_chat_name_uses_codex_direct_client_stream() -> None:
     )
 
     assert result == "Friendly Greeting"
-    assert captured["model"] == "gpt-5.4-mini"
+    assert captured["model"] == "gpt-5.6-luna"
     assert captured["store"] is False
     assert captured["stream"] is True
+    assert captured["reasoning"] == {"effort": "none"}
     assert captured["include"] == ["reasoning.encrypted_content"]
     assert captured["input"] == [{"role": "user", "content": "hello"}]
     assert "generates a human-friendly title" in str(captured["instructions"])

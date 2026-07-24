@@ -56,7 +56,7 @@ def _is_litellm_model(model: Any) -> bool:
 
 def _get_framework_default_model_settings(model: str | None = None) -> ModelSettings:
     """Get SDK defaults for a model and layer Agency Swarm defaults on top."""
-    base = get_sdk_default_model_settings(model)
+    base = ModelSettings() if model is None else get_sdk_default_model_settings(model)
     updates = {
         field.name: getattr(_FRAMEWORK_DEFAULT_MODEL_SETTINGS, field.name)
         for field in dataclasses.fields(ModelSettings)
@@ -161,6 +161,9 @@ def apply_framework_defaults(kwargs: dict[str, Any]) -> None:
         kwargs: The initialization keyword arguments (modified in place)
     """
     model_arg = kwargs.get("model")
+    if model_arg is None:
+        model_arg = FRAMEWORK_DEFAULT_MODEL
+        kwargs["model"] = model_arg
     _patch_litellm_thinking_blocks_for_model(model_arg)
     model_name = get_default_settings_model_name(model_arg)
     base_defaults = _get_framework_default_model_settings(model_name)

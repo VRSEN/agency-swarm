@@ -19,7 +19,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-from agents import ModelSettings
+from agents import ModelSettings, ToolOriginType
+from agents.items import ToolCallItem, ToolCallOutputItem
 from agents.mcp.server import (
     MCPServerStdio,
     MCPServerStdioParams,
@@ -27,6 +28,7 @@ from agents.mcp.server import (
     MCPServerStreamableHttpParams,
 )
 from fastmcp import FastMCP
+from openai.types.responses.response_function_tool_call import ResponseFunctionToolCall
 
 from agency_swarm import Agency, Agent, run_mcp
 from tests.data.tools.sample_tool import sample_tool
@@ -124,7 +126,32 @@ async def test_mcp_http_invoke_sample_tool(mcp_http_server):
     """Verify the agent can invoke a local MCP tool over HTTP."""
     agency = _make_agency_with_local_mcp(mcp_http_server)
     res = await agency.get_response("Use sample_tool to echo 'hello mcp'.")
-    assert "echo" in str(res.final_output).lower()
+    mcp_call_item = next(
+        (
+            item
+            for item in res.new_items
+            if isinstance(item, ToolCallItem)
+            and item.tool_origin.type is ToolOriginType.MCP
+            and isinstance(item.raw_item, ResponseFunctionToolCall)
+            and item.raw_item.name == "sample_tool"
+        ),
+        None,
+    )
+    assert mcp_call_item is not None
+    assert mcp_call_item.raw_item.status == "completed"
+
+    mcp_output_item = next(
+        (
+            item
+            for item in res.new_items
+            if isinstance(item, ToolCallOutputItem)
+            and item.tool_origin.type is ToolOriginType.MCP
+            and item.raw_item["call_id"] == mcp_call_item.raw_item.call_id
+        ),
+        None,
+    )
+    assert mcp_output_item is not None
+    assert mcp_output_item.output == {"type": "text", "text": "Echo: hello mcp"}
 
 
 @pytest.mark.asyncio

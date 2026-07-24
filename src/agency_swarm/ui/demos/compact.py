@@ -87,7 +87,7 @@ def _resolve_model_name(agency_instance: Agency) -> str:
                 return value
     except Exception:
         pass
-    return "gpt-5.4-mini"
+    return "gpt-5.6-luna"
 
 
 async def compact_thread(agency_instance: Agency, args: list[str]) -> TResponseInputItem:
@@ -105,7 +105,10 @@ async def compact_thread(agency_instance: Agency, args: list[str]) -> TResponseI
     client = entry_agent.client_sync
 
     model_name = _resolve_model_name(agency_instance)
-    response: Response = client.responses.create(model=model_name, input=final_prompt)
+    if model_name.startswith("gpt-5.6-"):
+        response: Response = client.responses.create(model=model_name, input=final_prompt, reasoning={"effort": "none"})
+    else:
+        response = client.responses.create(model=model_name, input=final_prompt)
 
     summary_text = response.output_text
     prefixed = "System summary (generated via /compact to keep context comprehensive and focused).\n\n" + summary_text
