@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from pathlib import Path
-from typing import Annotated, Any, TypeVar
+from typing import Annotated, Any, TypeVar, cast
 
 from agents import (
     Agent as BaseAgent,
@@ -42,7 +42,11 @@ from agency_swarm.agent.conversation_starters_cache import (
 )
 from agency_swarm.agent.execution_streaming import StreamingRunResponse
 from agency_swarm.agent.file_manager import AgentFileManager
-from agency_swarm.agent.system_reminders import normalize_system_reminders, prepare_agent_hooks
+from agency_swarm.agent.system_reminders import (
+    normalize_system_reminders,
+    prepare_agent_hooks,
+    without_system_reminder_hooks,
+)
 from agency_swarm.agent.tools import _attach_one_call_guard
 from agency_swarm.context import MasterContext
 from agency_swarm.reminders import SystemReminder
@@ -54,13 +58,7 @@ from .context_types import AgencyContext as AgencyContext, AgentRuntimeState
 
 logger = logging.getLogger(__name__)
 _WEB_SEARCH_SOURCES_INCLUDE = "web_search_call.action.sources"
-
-"""Constants moved to agency_swarm.agent.constants (no behavior change)."""
-
 T = TypeVar("T", bound="Agent")
-
-
-"""AgencyContext moved to agency_swarm.agent.context_types (no behavior change)."""
 
 
 class Agent(BaseAgent[MasterContext]):
@@ -78,7 +76,6 @@ class Agent(BaseAgent[MasterContext]):
     :class:`AgencyContext` from the owning :class:`Agency`.
     """
 
-    # --- Agency Swarm Specific Parameters ---
     files_folder: str | Path | None
     tools_folder: str | Path | None  # Directory path for automatic tool discovery and loading
     description: str | None
@@ -94,7 +91,6 @@ class Agent(BaseAgent[MasterContext]):
     supports_framework_tool_wiring: bool = True
     system_reminders: list[SystemReminder]
 
-    # --- Internal State ---
     _associated_vector_store_id: str | None = None
     files_folder_path: Path | None = None
     _openai_client: AsyncOpenAI | None = None
@@ -105,9 +101,6 @@ class Agent(BaseAgent[MasterContext]):
     _conversation_starters_cache: dict[str, Any]
     _conversation_starters_fingerprint: str | None
     _conversation_starters_warmup_started: bool
-
-    # --- SDK Agent Compatibility ---
-    # Re-declare attributes from BaseAgent for clarity and potential overrides
 
     def __init__(self, **kwargs: Any):
         """
@@ -287,10 +280,8 @@ class Agent(BaseAgent[MasterContext]):
         # Refresh after MCP conversion so fingerprint includes MCP-converted tools
         self.refresh_conversation_starters_cache()
 
-    # --- Properties ---
     def __repr__(self) -> str:
         """Return a string representation of the Agent instance."""
-        # Get model information - try model_settings.model first, then fall back to model attribute
         model_info = "unknown"
         if hasattr(self, "model_settings") and self.model_settings and hasattr(self.model_settings, "model"):
             model_info = self.model_settings.model
@@ -298,6 +289,12 @@ class Agent(BaseAgent[MasterContext]):
             model_info = str(self.model)
 
         return f"<Agent name={self.name!r} desc={self.description!r} model={model_info!r}>"
+
+    def clone(self: T, **kwargs: Any) -> T:
+        """Clone the agent while rebuilding Agency Swarm's internal reminder hook."""
+        kwargs.setdefault("system_reminders", self.system_reminders)
+        kwargs["hooks"] = without_system_reminder_hooks(kwargs.get("hooks", self.hooks))
+        return cast(T, super().clone(**kwargs))
 
     @property
     def client(self) -> AsyncOpenAI:
@@ -348,7 +345,6 @@ class Agent(BaseAgent[MasterContext]):
                 base_tools.append(tool)
         return base_tools
 
-    # --- Tool Management ---
     def add_tool(self, tool: Tool) -> None:
         """
         Adds a `Tool` instance to the agent's list of tools.
@@ -380,14 +376,11 @@ class Agent(BaseAgent[MasterContext]):
         """Parse OpenAPI schemas from the schemas folder and create tools."""
         parse_schemas(self)
 
-    # --- File Handling ---
     def upload_file(self, file_path: str, include_in_vector_store: bool = True) -> str:
         """Upload a file using the agent's file manager."""
         if self.file_manager:
             return self.file_manager.upload_file(file_path, include_in_vector_store)
         raise RuntimeError(f"Agent {self.name} has no file manager configured")
-
-        # --- Core Execution Methods ---
 
     async def get_response(
         self,
@@ -494,6 +487,7 @@ class Agent(BaseAgent[MasterContext]):
         cacheable_starters = merge_cacheable_starters(
             self.conversation_starters if self.cache_conversation_starters else None,
             self.quick_replies,
+            self.system_reminders,
         )
         if not cacheable_starters:
             return
@@ -518,6 +512,7 @@ class Agent(BaseAgent[MasterContext]):
         cacheable_starters = merge_cacheable_starters(
             self.conversation_starters if self.cache_conversation_starters else None,
             self.quick_replies,
+            self.system_reminders,
         )
         if not cacheable_starters:
             return
