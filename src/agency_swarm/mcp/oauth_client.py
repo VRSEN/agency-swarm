@@ -22,6 +22,7 @@ from mcp.types import (
     GetPromptResult,
     ListPromptsResult,
     ListResourcesResult,
+    ListResourceTemplatesResult,
     ReadResourceResult,
     Tool as MCPTool,
 )
@@ -305,6 +306,15 @@ class MCPServerOAuthClient(MCPServer):
 
         logger.debug(f"Listing resources from OAuth MCP server: {self.name}")
         return await self.session.list_resources(cursor=cursor)
+
+    async def list_resource_templates(self, cursor: str | None = None) -> ListResourceTemplatesResult:
+        """List available resource templates from OAuth MCP server."""
+        if not self.session:
+            await self.connect()
+        assert self.session is not None
+
+        logger.debug(f"Listing resource templates from OAuth MCP server: {self.name}")
+        return await self.session.list_resource_templates(cursor=cursor)
 
     async def read_resource(self, uri: str | AnyUrl) -> ReadResourceResult:
         """Read a resource from OAuth MCP server.

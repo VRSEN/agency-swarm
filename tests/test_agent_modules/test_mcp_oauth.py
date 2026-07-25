@@ -920,6 +920,35 @@ class TestMCPServerOAuthClientAuthOnly:
         mock_connect.assert_awaited_once()
         mock_session.list_tools.assert_awaited_once()
 
+    async def test_list_resource_templates_authenticates_and_forwards_cursor(self, tmp_path: Path) -> None:
+        """list_resource_templates should authenticate and preserve pagination."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from agency_swarm.mcp.oauth_client import MCPServerOAuthClient
+
+        config = MCPServerOAuth(
+            url=TEST_SERVER_URL,
+            name="test-server",
+            client_id="test-id",
+            client_secret="test-secret",
+            cache_dir=tmp_path,
+        )
+        client = MCPServerOAuthClient(config)
+
+        mock_session = MagicMock()
+        mock_result = MagicMock()
+        mock_session.list_resource_templates = AsyncMock(return_value=mock_result)
+
+        with patch.object(client, "connect", new_callable=AsyncMock) as mock_connect:
+            mock_connect.side_effect = lambda: (
+                setattr(client, "session", mock_session) or setattr(client, "_authenticated", True)
+            )
+            result = await client.list_resource_templates(cursor="next-page")
+
+        assert result is mock_result
+        mock_connect.assert_awaited_once()
+        mock_session.list_resource_templates.assert_awaited_once_with(cursor="next-page")
+
     async def test_call_tool_authenticates_before_call(self, tmp_path: Path) -> None:
         """call_tool should always ensure OAuth before executing."""
         from unittest.mock import AsyncMock, MagicMock, patch

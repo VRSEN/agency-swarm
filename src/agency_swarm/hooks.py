@@ -44,7 +44,7 @@ class CompositeRunHooks(RunHooks):
         context: RunContextWrapper[MasterContext],
         agent: Agent,
         tool: Tool,
-        result: str,
+        result: object,
     ) -> None:
         for hook in self._hooks:
             await hook.on_tool_end(context, agent, tool, result)
