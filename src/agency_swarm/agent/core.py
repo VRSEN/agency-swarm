@@ -50,7 +50,7 @@ from agency_swarm.agent.tools import _attach_one_call_guard
 from agency_swarm.context import MasterContext
 from agency_swarm.tools.concurrency import ToolConcurrencyManager
 from agency_swarm.tools.function_tool_compat import normalize_function_tool
-from agency_swarm.tools.mcp_manager import convert_mcp_servers_to_tools
+from agency_swarm.tools.mcp_manager import convert_mcp_servers_to_tools, get_active_oauth_user_id
 from agency_swarm.utils.dry_run import is_dry_run
 
 from .context_types import AgencyContext as AgencyContext, AgentRuntimeState
@@ -59,6 +59,23 @@ logger = logging.getLogger(__name__)
 _WEB_SEARCH_SOURCES_INCLUDE = "web_search_call.action.sources"
 _MCP_AUTHENTICATION_TOOL_ATTR = "_agency_swarm_mcp_authentication_tool"
 _MCP_SERVER_TOOL_ATTR = "_agency_swarm_mcp_server_name"
+
+
+def _resolve_oauth_owner_id(master_context: MasterContext | None) -> str | None:
+    """Identify the user whose OAuth credentials the current run is allowed to use.
+
+    The contextvar set by ``set_oauth_user_id`` decides which token bucket MCP OAuth
+    reads, so it is the authoritative owner. ``user_context["user_id"]`` is the
+    documented fallback for runs that only pass the user through the agency context.
+    """
+    active_user_id = get_active_oauth_user_id()
+    if active_user_id is not None:
+        return active_user_id
+    if master_context is None:
+        return None
+    context_user_id = master_context.user_context.get("user_id")
+    return context_user_id if isinstance(context_user_id, str) else None
+
 
 """Constants moved to agency_swarm.agent.constants (no behavior change)."""
 
@@ -355,7 +372,8 @@ class Agent(BaseAgent[MasterContext]):
             if runtime_state:
                 base_tools = [tool for tool in base_tools if getattr(tool, _MCP_SERVER_TOOL_ATTR, None) is None]
                 runtime_tools = list(runtime_state.send_message_tools.values())
-                for server_tools in runtime_state.oauth_mcp_tools.values():
+                owner_id = _resolve_oauth_owner_id(master_context)
+                for server_tools in runtime_state.scoped_oauth_mcp_tools(owner_id).values():
                     runtime_tools.extend(server_tools)
 
         if not runtime_tools:
@@ -525,6 +543,7 @@ class Agent(BaseAgent[MasterContext]):
 
         def _store_mcp_server_tools(
             runtime_state: AgentRuntimeState | None,
+            owner_id: str | None,
             server_name: str,
             converted_tools: list[FunctionTool],
         ) -> None:
@@ -537,8 +556,9 @@ class Agent(BaseAgent[MasterContext]):
                 self._ensure_web_search_sources_include()
                 return
 
+            owned_oauth_tools = runtime_state.scoped_oauth_mcp_tools(owner_id)
             retained_runtime_tools: list[Tool] = list(runtime_state.send_message_tools.values())
-            for retained_server_name, server_tools in runtime_state.oauth_mcp_tools.items():
+            for retained_server_name, server_tools in owned_oauth_tools.items():
                 if retained_server_name != server_name:
                     retained_runtime_tools.extend(server_tools)
             replacement_tools = _prepare_mcp_server_tools(
@@ -546,7 +566,7 @@ class Agent(BaseAgent[MasterContext]):
                 converted_tools,
                 [*retained_static_tools, *retained_runtime_tools],
             )
-            runtime_state.oauth_mcp_tools[server_name] = replacement_tools
+            owned_oauth_tools[server_name] = replacement_tools
 
         async def _activate_mcp_server(ctx: RunContextWrapper[MasterContext], server_name: str) -> str:
             selected = self._oauth_mcp_servers.get(server_name)
@@ -583,7 +603,9 @@ class Agent(BaseAgent[MasterContext]):
                     except Exception:
                         pass
                     raise cancellation
-                _store_mcp_server_tools(runtime_state, server_name, conversion_task.result())
+                _store_mcp_server_tools(
+                    runtime_state, _resolve_oauth_owner_id(ctx.context), server_name, conversion_task.result()
+                )
             except Exception as exc:
                 self.mcp_servers = original_servers
                 return f"Failed to authenticate MCP server '{server_name}': {exc}"

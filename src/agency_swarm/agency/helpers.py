@@ -71,6 +71,7 @@ def run_fastapi(
     enable_realtime: bool = False,
     realtime_options: dict[str, Any] | None = None,
     oauth_user_id_dependency: "OAuthUserIdDependency | None" = None,
+    verify_oauth_callback_user: bool = False,
 ) -> None:
     """Serve this agency via the FastAPI integration.
 
@@ -84,6 +85,9 @@ def run_fastapi(
     oauth_user_id_dependency : OAuthUserIdDependency | None
         Trusted authentication dependency required when the agency uses
         OAuth-enabled MCP servers or hosted MCP tools.
+    verify_oauth_callback_user : bool
+        Reject an OAuth callback whose pending flow belongs to a different user.
+        Requires browser-carried authentication; see :func:`run_fastapi`.
     """
     from agency_swarm.integrations.fastapi import run_fastapi as run_fastapi_server
 
@@ -97,6 +101,7 @@ def run_fastapi(
         enable_realtime=enable_realtime,
         realtime_options=realtime_options,
         oauth_user_id_dependency=oauth_user_id_dependency,
+        verify_oauth_callback_user=verify_oauth_callback_user,
     )
 
 

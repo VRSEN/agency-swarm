@@ -498,6 +498,7 @@ class Agency:
         enable_realtime: bool = False,
         realtime_options: dict[str, Any] | None = None,
         oauth_user_id_dependency: "OAuthUserIdDependency | None" = None,
+        verify_oauth_callback_user: bool = False,
     ):
         """Serve this agency via the FastAPI integration.
 
@@ -511,6 +512,9 @@ class Agency:
         oauth_user_id_dependency : OAuthUserIdDependency | None
             Trusted authentication dependency required when this agency uses
             OAuth-enabled MCP servers or hosted MCP tools.
+        verify_oauth_callback_user : bool
+            Reject an OAuth callback whose pending flow belongs to a different
+            user. Requires browser-carried authentication; see :func:`run_fastapi`.
         """
         return run_fastapi_helper(
             self,
@@ -522,6 +526,7 @@ class Agency:
             enable_realtime,
             realtime_options,
             oauth_user_id_dependency,
+            verify_oauth_callback_user,
         )
 
     def get_agency_graph(self, include_tools: bool = True) -> dict[str, Any]:

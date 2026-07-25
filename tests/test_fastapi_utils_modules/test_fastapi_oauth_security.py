@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 from agents import HostedMCPTool
-from fastapi import Depends, HTTPException
+from fastapi import Cookie, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.testclient import TestClient
 from openai.types.responses.tool_param import Mcp
@@ -187,6 +187,58 @@ def test_oauth_callback_uses_state_and_status_requires_owner() -> None:
     assert owner_status.status_code == 200
     assert owner_status.json()["status"] == "authorized"
     assert other_status.status_code == 404
+
+
+def _cookie_session_user_id(session_user: str | None = Cookie(default=None)) -> str:
+    """Resolve the browser's user from a session cookie the provider redirect carries."""
+    if not session_user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return session_user
+
+
+def _run_verified_callback(session_user: str | None) -> tuple[int, dict[str, Any]]:
+    registry = OAuthStateRegistry()
+    asyncio.run(
+        registry.record_redirect(
+            state="owned-state",
+            auth_url="https://idp.example.com/authorize?state=owned-state",
+            server_name="oauth-demo",
+            user_id="owner-user",
+        )
+    )
+    app = run_fastapi(
+        agencies={"test_agency": _oauth_agency},
+        return_app=True,
+        app_token_env="",
+        oauth_registry=registry,
+        oauth_user_id_dependency=_cookie_session_user_id,
+        verify_oauth_callback_user=True,
+    )
+    assert app is not None
+    cookies = {"session_user": session_user} if session_user else {}
+    response = TestClient(app, cookies=cookies).get("/auth/callback?state=owned-state&code=code-123")
+    return response.status_code, response.json()
+
+
+def test_verified_oauth_callback_rejects_code_for_another_users_flow() -> None:
+    """A browser signed in as someone else must not complete the owner's pending flow."""
+    status_code, body = _run_verified_callback("attacker-user")
+
+    assert status_code == 400
+    assert body["detail"] == "OAuth callback failed: user_mismatch"
+
+
+def test_verified_oauth_callback_accepts_code_from_the_flow_owner() -> None:
+    status_code, body = _run_verified_callback("owner-user")
+
+    assert status_code == 200
+    assert body["status"] == "ok"
+
+
+def test_verified_oauth_callback_requires_an_authenticated_browser() -> None:
+    status_code, _ = _run_verified_callback(None)
+
+    assert status_code == 401
 
 
 def test_oauth_callback_rejects_late_code_for_terminal_flow() -> None:

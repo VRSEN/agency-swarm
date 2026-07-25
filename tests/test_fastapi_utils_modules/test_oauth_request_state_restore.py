@@ -19,6 +19,7 @@ class _Agent:
 class _RuntimeState:
     def __init__(self) -> None:
         self.oauth_mcp_tools: dict[str, list[FunctionTool]] = {}
+        self.oauth_mcp_tools_user_id: str | None = None
 
 
 class _Agency:

@@ -136,7 +136,17 @@ type _AgentStateSnapshot = tuple[
 type _AgencyStateSnapshot = dict[str, _AgentStateSnapshot]
 type _OAuthAgentStateSnapshot = dict[
     str,
-    tuple[list[Any] | None, list[Any] | None, dict[str, Any], bool, bool, Any, Any, dict[str, list[Any]] | None],
+    tuple[
+        list[Any] | None,
+        list[Any] | None,
+        dict[str, Any],
+        bool,
+        bool,
+        Any,
+        Any,
+        dict[str, list[Any]] | None,
+        str | None,
+    ],
 ]
 _ATTR_MISSING = object()
 
@@ -3000,6 +3010,7 @@ def _snapshot_oauth_agent_state(agency: Agency) -> _OAuthAgentStateSnapshot:
                 if runtime_state is not None
                 else None
             ),
+            runtime_state.oauth_mcp_tools_user_id if runtime_state is not None else None,
         )
     return snapshot
 
@@ -3018,6 +3029,7 @@ def _restore_oauth_agent_state(agency: Agency, snapshot: _OAuthAgentStateSnapsho
             handler_factory,
             hosted_mcp_oauth_enabled,
             oauth_mcp_tools,
+            oauth_mcp_tools_user_id,
         ),
     ) in snapshot.items():
         agent = agency.agents.get(name)
@@ -3043,7 +3055,10 @@ def _restore_oauth_agent_state(agency: Agency, snapshot: _OAuthAgentStateSnapsho
             dynamic_agent._hosted_mcp_oauth_enabled = hosted_mcp_oauth_enabled
         runtime_state = runtime_states.get(name)
         if runtime_state is not None and oauth_mcp_tools is not None:
+            # Restore the owning user with the tools so a later request for a different
+            # user can still detect the mismatch and drop them.
             runtime_state.oauth_mcp_tools = oauth_mcp_tools
+            runtime_state.oauth_mcp_tools_user_id = oauth_mcp_tools_user_id
 
 
 def _restore_agency_state(

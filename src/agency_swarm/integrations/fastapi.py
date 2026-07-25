@@ -41,6 +41,7 @@ def run_fastapi(
     realtime_options: dict[str, Any] | None = None,
     oauth_registry: OAuthStateRegistry | None = None,
     oauth_user_id_dependency: OAuthUserIdDependency | None = None,
+    verify_oauth_callback_user: bool = False,
 ):
     """Launch a FastAPI server exposing endpoints for multiple agencies and tools.
 
@@ -80,6 +81,14 @@ def run_fastapi(
     oauth_user_id_dependency :
         Required for OAuth-enabled agencies. A trusted FastAPI dependency that
         authenticates the request and returns a stable, non-secret user ID.
+    verify_oauth_callback_user : bool
+        Apply `oauth_user_id_dependency` to `/auth/callback` and reject an
+        authorization code whose pending flow belongs to a different user.
+        Defaults to False because the provider redirect reaches the callback as a
+        plain browser navigation, which carries no bearer token; with it off, the
+        pending flow is bound to the redirect by state entropy alone. Enable it
+        when the deployment authenticates browsers by cookie or session so the
+        dependency can resolve a user on that redirect.
     """
     if (agencies is None or len(agencies) == 0) and (tools is None or len(tools) == 0):
         logger.warning("No endpoints to deploy. Please provide at least one agency or tool.")
@@ -412,11 +421,21 @@ def run_fastapi(
                 "Provide a trusted authentication dependency that returns a stable, non-secret user ID."
             )
 
+        async def unauthenticated_callback_user_id() -> str | None:
+            """Skip callback user binding when the browser redirect carries no app session."""
+            return None
+
+        # With verification off, the flow is bound to the redirect by state entropy alone.
+        callback_user_id_dependency = (
+            oauth_user_id_dependency if verify_oauth_callback_user else unauthenticated_callback_user_id
+        )
+
         async def oauth_callback(
             state: str,
             code: str | None = None,
             error: str | None = None,
             error_description: str | None = None,
+            callback_user_id: str | None = Depends(callback_user_id_dependency),
         ):
             # Handle OAuth provider error responses (e.g., user denied authorization)
             if error:
@@ -429,8 +448,10 @@ def run_fastapi(
                 raise HTTPException(status_code=400, detail=f"OAuth error: {flow.error}")
             if not code:
                 raise HTTPException(status_code=400, detail="OAuth callback missing authorization code")
+            if verify_oauth_callback_user and (not isinstance(callback_user_id, str) or callback_user_id.strip() == ""):
+                raise HTTPException(status_code=401, detail="OAuth callback did not resolve a user ID")
             try:
-                flow = await shared_oauth_registry.set_code(state=state, code=code, user_id=None)
+                flow = await shared_oauth_registry.set_code(state=state, code=code, user_id=callback_user_id)
             except OAuthFlowError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
             if flow.error:

@@ -1,5 +1,6 @@
 import asyncio
 import threading
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -9,7 +10,7 @@ from agents import FunctionTool
 from agents.tool_context import ToolContext
 
 from agency_swarm import Agency, Agent
-from agency_swarm.mcp.oauth import MCPServerOAuth
+from agency_swarm.mcp.oauth import MCPServerOAuth, get_oauth_user_id, set_oauth_user_id
 
 
 class _FakeNonOAuthServer:
@@ -26,9 +27,15 @@ def _make_oauth_agent(*servers: object) -> Agent:
     )
 
 
-def _activation_context(agent_runtime_state: dict[str, Any] | None = None) -> ToolContext[Any]:
+def _activation_context(
+    agent_runtime_state: dict[str, Any] | None = None,
+    user_context: dict[str, Any] | None = None,
+) -> ToolContext[Any]:
     return ToolContext(
-        context=SimpleNamespace(agent_runtime_state=agent_runtime_state or {}),
+        context=SimpleNamespace(
+            agent_runtime_state=agent_runtime_state or {},
+            user_context=user_context or {},
+        ),
         tool_name="authenticate_mcp_server",
         tool_call_id="call-1",
         tool_arguments="{}",
@@ -392,6 +399,90 @@ async def test_agency_runtime_hides_static_oauth_mcp_fallback_until_activation(
     direct_tools_after = await agent.get_all_tools(_activation_context())
     assert direct_bound_tool in direct_tools_after
     assert direct_bound_tool is not agency_bound_tool
+
+
+def _user_bound_tool_converter(observed_user_id: Callable[[], str | None]) -> Callable[..., list[FunctionTool]]:
+    """Build a converter whose tool closure captures the user it authenticated as."""
+
+    def _convert_bound_tool(agent: Agent, *, add_to_agent: bool = True) -> list[FunctionTool]:
+        bound_user_id = observed_user_id()
+
+        async def _invoke(_ctx: ToolContext[Any], _input_json: str) -> str:
+            return f"session-of:{bound_user_id}"
+
+        converted_tool = FunctionTool(
+            name="github_tool",
+            description="Return the user whose authenticated MCP session this tool holds.",
+            params_json_schema={"type": "object", "properties": {}},
+            on_invoke_tool=_invoke,
+            strict_json_schema=False,
+        )
+        if add_to_agent:
+            agent.add_tool(converted_tool)
+        agent.mcp_servers.clear()
+        return [converted_tool]
+
+    return _convert_bound_tool
+
+
+@pytest.mark.asyncio
+async def test_shared_agency_hides_activated_oauth_tools_from_the_next_oauth_user(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """One shared Agency must not expose user A's authenticated MCP session to user B."""
+    monkeypatch.setattr(
+        "agency_swarm.agent.core.convert_mcp_servers_to_tools",
+        _user_bound_tool_converter(get_oauth_user_id),
+    )
+    agent = _make_oauth_agent(MCPServerOAuth(url="https://example.com/github", name="github"))
+    agency = Agency(agent, oauth_token_path=str(tmp_path / "tokens"))
+    runtime_state = agency._agent_runtime_state
+    activation_tool = next(tool for tool in agent.tools if getattr(tool, "name", "") == "authenticate_mcp_server")
+
+    set_oauth_user_id("user-a")
+    try:
+        activation = await activation_tool.on_invoke_tool(
+            _activation_context(runtime_state), '{"server_name":"github"}'
+        )
+        assert "authenticated and its tools are enabled" in activation
+        user_a_tools = await agent.get_all_tools(_activation_context(runtime_state))
+        user_a_bound_tool = next(tool for tool in user_a_tools if getattr(tool, "name", "") == "github_tool")
+        assert await user_a_bound_tool.on_invoke_tool(_activation_context(), "{}") == "session-of:user-a"
+
+        set_oauth_user_id("user-b")
+        user_b_tools = await agent.get_all_tools(_activation_context(runtime_state))
+    finally:
+        set_oauth_user_id(None)
+
+    assert not any(getattr(tool, "name", "") == "github_tool" for tool in user_b_tools)
+    assert not any(getattr(tool, "name", "") == "github_tool" for tool in agent.tools)
+    assert runtime_state["OAuthAgent"].oauth_mcp_tools == {}
+
+
+@pytest.mark.asyncio
+async def test_shared_agency_scopes_activated_oauth_tools_by_run_user_context(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Runs that identify the user through user_context must get the same isolation."""
+    run_user_ids: list[str | None] = []
+    monkeypatch.setattr(
+        "agency_swarm.agent.core.convert_mcp_servers_to_tools",
+        _user_bound_tool_converter(lambda: run_user_ids[-1]),
+    )
+    agent = _make_oauth_agent(MCPServerOAuth(url="https://example.com/github", name="github"))
+    agency = Agency(agent, oauth_token_path=str(tmp_path / "tokens"))
+    runtime_state = agency._agent_runtime_state
+    activation_tool = next(tool for tool in agent.tools if getattr(tool, "name", "") == "authenticate_mcp_server")
+
+    run_user_ids.append("user-a")
+    await activation_tool.on_invoke_tool(
+        _activation_context(runtime_state, {"user_id": "user-a"}), '{"server_name":"github"}'
+    )
+    user_a_tools = await agent.get_all_tools(_activation_context(runtime_state, {"user_id": "user-a"}))
+    user_b_tools = await agent.get_all_tools(_activation_context(runtime_state, {"user_id": "user-b"}))
+
+    assert any(getattr(tool, "name", "") == "github_tool" for tool in user_a_tools)
+    assert not any(getattr(tool, "name", "") == "github_tool" for tool in user_b_tools)
 
 
 def test_ensure_mcp_tools_keeps_non_oauth_servers_eager(monkeypatch: pytest.MonkeyPatch) -> None:

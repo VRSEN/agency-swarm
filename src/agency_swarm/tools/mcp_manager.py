@@ -77,6 +77,13 @@ _HOSTED_MCP_OAUTH_ACTIVATION_HANDLER_ATTR = "_agency_swarm_hosted_mcp_oauth_acti
 _MANAGED_OAUTH_CACHE_DIR_ATTR = "_agency_swarm_managed_oauth_cache_dir"
 
 
+def get_active_oauth_user_id() -> str | None:
+    """Return the OAuth user whose token bucket the current context is bound to."""
+    if _get_oauth_user_id is None:
+        return None
+    return _get_oauth_user_id()
+
+
 def _sanitize_oauth_registry_user_id(user_id: str) -> str:
     return build_oauth_user_segment(user_id, max_prefix_length=96)
 

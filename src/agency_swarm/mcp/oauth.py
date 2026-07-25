@@ -11,6 +11,7 @@ import logging
 import os
 import select
 import sys
+import tempfile
 import uuid
 import webbrowser
 from collections.abc import Awaitable, Callable, Coroutine
@@ -123,6 +124,31 @@ def get_default_cache_dir() -> Path:
     return Path.home() / ".agency-swarm" / "mcp-tokens"
 
 
+def _ensure_private_dir(directory: Path) -> Path:
+    """Create ``directory`` and enforce owner-only permissions on it."""
+    directory.mkdir(parents=True, exist_ok=True)
+    directory.chmod(0o700)
+    return directory
+
+
+def _write_private_file(path: Path, content: str) -> None:
+    """Write ``content`` to ``path`` so the file is never readable by other users.
+
+    The payload is written to an owner-only temporary file in the same directory and
+    then renamed over the target, so no reader can observe a world-readable window.
+    """
+    handle_fd, temp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    temp_path = Path(temp_name)
+    try:
+        with os.fdopen(handle_fd, "w") as handle:
+            handle.write(content)
+        os.replace(temp_path, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            temp_path.unlink()
+        raise
+
+
 class FileTokenStorage:
     """File-based token storage for MCP OAuth with per-user isolation."""
 
@@ -175,12 +201,12 @@ class FileTokenStorage:
         user_dir = (base_dir / self._get_user_cache_segment()).resolve()
         try:
             user_dir.relative_to(base_dir)
-        except ValueError:
-            logger.warning("OAuth user_id resolved outside cache dir; falling back to default bucket.")
-            user_dir = base_dir / "default"
+        except ValueError as exc:
+            # Never share a bucket on containment failure: that would mix users' credentials.
+            raise ValueError(f"OAuth user bucket resolved outside the cache directory: {user_dir}") from exc
 
-        user_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
-        return user_dir
+        _ensure_private_dir(base_dir)
+        return _ensure_private_dir(user_dir)
 
     def _get_server_cache_dir(self) -> Path:
         """Get cache directory for current server under the current user."""
@@ -188,11 +214,10 @@ class FileTokenStorage:
         server_dir = (user_dir / self.server_cache_segment).resolve()
         try:
             server_dir.relative_to(user_dir.resolve())
-        except ValueError:
-            logger.warning("OAuth server name resolved outside user cache dir; falling back to default server bucket.")
-            server_dir = user_dir / "default"
-        server_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
-        return server_dir
+        except ValueError as exc:
+            # Never share a bucket on containment failure: that would mix servers' credentials.
+            raise ValueError(f"OAuth server bucket resolved outside the user cache directory: {server_dir}") from exc
+        return _ensure_private_dir(server_dir)
 
     def _legacy_token_file(self) -> Path | None:
         """Return legacy flat token file path for migration."""
@@ -280,8 +305,7 @@ class FileTokenStorage:
             try:
                 data = cast("TokenPayload", json.loads(legacy_file.read_text()))
                 tokens = OAuthToken(**data)
-                token_file.write_text(tokens.model_dump_json(indent=2))
-                token_file.chmod(0o600)
+                _write_private_file(token_file, tokens.model_dump_json(indent=2))
                 with contextlib.suppress(FileNotFoundError):
                     legacy_file.unlink()
                 logger.info("Migrated legacy OAuth tokens to server-specific directory")
@@ -298,28 +322,25 @@ class FileTokenStorage:
             return None
 
     async def set_tokens(self, tokens: OAuthToken) -> None:
-        """Store tokens for current user."""
+        """Store tokens for current user.
+
+        Persistence failures propagate: a silently dropped token makes the run look
+        authenticated while the next request re-runs the whole OAuth flow.
+        """
         server_dir = self._get_server_cache_dir()
         token_file = server_dir / "tokens.json"
 
-        try:
-            token_file.write_text(tokens.model_dump_json(indent=2))
-            token_file.chmod(0o600)  # Secure permissions
-            logger.info(f"Tokens saved to {token_file}")
-            # Clean up legacy flat file if it exists
-            legacy_file = self._legacy_token_file()
-            if legacy_file is not None:
-                with contextlib.suppress(FileNotFoundError):
-                    legacy_file.unlink()
-        except Exception:
-            logger.exception(f"Failed to save tokens to {token_file}")
+        _write_private_file(token_file, tokens.model_dump_json(indent=2))
+        logger.info(f"Tokens saved to {token_file}")
+        # Clean up legacy flat file if it exists
+        legacy_file = self._legacy_token_file()
+        if legacy_file is not None:
+            with contextlib.suppress(FileNotFoundError):
+                legacy_file.unlink()
         if self._token_callbacks and self._token_callbacks.save_callback:
-            try:
-                payload = cast("TokenPayload", tokens.model_dump())
-                callback_key = self._get_token_callback_key()
-                self._token_callbacks.save_callback(callback_key, payload)
-            except Exception:
-                logger.exception("OAuth save_tokens_callback failed")
+            payload = cast("TokenPayload", tokens.model_dump())
+            callback_key = self._get_token_callback_key()
+            self._token_callbacks.save_callback(callback_key, payload)
 
     async def get_client_info(self) -> OAuthClientInformationFull | None:
         """Get stored client information for current user."""
@@ -333,8 +354,7 @@ class FileTokenStorage:
             try:
                 data = json.loads(legacy_file.read_text())
                 client_info = OAuthClientInformationFull(**data)
-                client_file.write_text(client_info.model_dump_json(indent=2))
-                client_file.chmod(0o600)
+                _write_private_file(client_file, client_info.model_dump_json(indent=2))
                 with contextlib.suppress(FileNotFoundError):
                     legacy_file.unlink()
                 logger.info("Migrated legacy OAuth client info to server-specific directory")
@@ -351,20 +371,19 @@ class FileTokenStorage:
             return None
 
     async def set_client_info(self, client_info: OAuthClientInformationFull) -> None:
-        """Store client information for current user."""
+        """Store client information for current user.
+
+        Persistence failures propagate for the same reason as :meth:`set_tokens`.
+        """
         server_dir = self._get_server_cache_dir()
         client_file = server_dir / "client.json"
 
-        try:
-            client_file.write_text(client_info.model_dump_json(indent=2))
-            client_file.chmod(0o600)  # Secure permissions
-            logger.info(f"Client info saved to {client_file}")
-            legacy_file = self._legacy_client_file()
-            if legacy_file is not None:
-                with contextlib.suppress(FileNotFoundError):
-                    legacy_file.unlink()
-        except Exception:
-            logger.exception(f"Failed to save client info to {client_file}")
+        _write_private_file(client_file, client_info.model_dump_json(indent=2))
+        logger.info(f"Client info saved to {client_file}")
+        legacy_file = self._legacy_client_file()
+        if legacy_file is not None:
+            with contextlib.suppress(FileNotFoundError):
+                legacy_file.unlink()
 
 
 class OAuthStorageHooks(RunHooks):  # type: ignore[type-arg]

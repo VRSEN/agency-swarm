@@ -49,6 +49,7 @@ agency.run_fastapi()
 | `enable_realtime` | boolean | `false` | Mount `/<agency_name>/realtime` websocket route(s) in addition to REST endpoints. |
 | `realtime_options` | object | `{}` | Realtime session overrides (for example `provider`, `model`, `voice`, `turn_detection`). |
 | `oauth_user_id_dependency` | FastAPI dependency | `None` | Trusted authentication dependency required for OAuth-enabled agencies. It must return a stable, non-secret user ID. |
+| `verify_oauth_callback_user` | boolean | `false` | Apply `oauth_user_id_dependency` to `/auth/callback` and reject a code whose pending flow belongs to another user. Requires browsers to carry authentication (cookie or session). |
 
 </Accordion>
 
@@ -412,6 +413,12 @@ If any agent uses `MCPServerOAuth`, `run_fastapi` automatically:
 - Applies a 10-minute OAuth wait timeout per request. On timeout, the stream emits `oauth_status` = `timeout` and closes cleanly.
 
 `oauth_user_id_dependency` is required for OAuth-enabled agencies. Do not trust a user ID read directly from a request header or body. FastAPI wiring remains request-scoped and carries the OAuth prompts automatically.
+
+### Binding the callback to a user
+
+The provider redirects the browser to `/auth/callback` as a plain navigation, so it carries no bearer token. By default the callback therefore matches the authorization code to its pending flow by the `state` parameter alone. `state` is 32 bytes of URL-safe randomness, and `/auth/status/{state}` is already restricted to the user who owns the flow.
+
+If your deployment authenticates browsers with a cookie or session, set `verify_oauth_callback_user=True` and make `oauth_user_id_dependency` resolve that session. The callback then rejects a code whose pending flow belongs to a different user, which closes the remaining session-fixation gap for anyone who learns a victim's pending `state`. Leave it off when the dependency only reads a bearer token: the redirect would fail authentication and every OAuth flow would break.
 
 For `HostedMCPTool`, FastAPI cannot infer whether a remote MCP server is public or OAuth-protected. To enable hosted OAuth, wrap only the protected tool with `enable_hosted_mcp_tool_oauth(...)` and leave `tool_config.authorization` empty. The tool is withheld until the model invokes `authenticate_mcp_server(server_name)`, so unrelated messages do not start OAuth. `run_fastapi(...)` creates an in-memory callback-state registry by default. For multiple workers, an external `oauth_registry` shares callback state only; configure each Agency with an `oauth_token_path` on shared persistent storage as well. Otherwise, use sticky routing or a single worker. Public hosted MCP servers should stay unwrapped.
 
