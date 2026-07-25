@@ -43,15 +43,6 @@ from agency_swarm.mcp.oauth import FileTokenStorage, MCPServerOAuth, _listen_for
 SERVER_URL = os.getenv("MCP_SERVER_URL", "http://localhost:8001")
 CACHE_DIR = Path(os.getenv("MCP_TOKEN_CACHE_DIR", "./data/oauth-tokens")).expanduser()
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
-SERVER_CACHE_DIR = CACHE_DIR / "default" / FileTokenStorage.build_server_cache_segment("github", f"{SERVER_URL}/mcp")
-
-print("=" * 80)
-print("Agency Swarm - OAuth MCP Example")
-print("=" * 80)
-print(f"\nMCP Server URL: {SERVER_URL}")
-print("Client ID: (auto-assigned per run)")
-print(f"\nTokens will be stored in: {SERVER_CACHE_DIR / 'tokens.json'}")
-print("=" * 80)
 
 
 # Dedicated callback handler that only uses the local HTTP listener.
@@ -73,6 +64,24 @@ oauth_server = MCPServerOAuth(
     use_env_credentials=False,  # Use DCR, don't read GitHub creds from env
     callback_handler=local_callback_handler,
 )
+
+SERVER_CACHE_DIR = (
+    oauth_server.get_cache_dir()
+    / "default"
+    / FileTokenStorage.build_server_cache_segment(
+        oauth_server.name,
+        oauth_server.url,
+        oauth_server.get_client_identity(),
+    )
+)
+
+print("=" * 80)
+print("Agency Swarm - OAuth MCP Example")
+print("=" * 80)
+print(f"\nMCP Server URL: {SERVER_URL}")
+print("Client ID: (auto-assigned per run)")
+print(f"\nTokens will be stored in: {SERVER_CACHE_DIR / 'tokens.json'}")
+print("=" * 80)
 
 
 # Create Agent with OAuth MCP Server

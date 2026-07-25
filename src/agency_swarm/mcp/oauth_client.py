@@ -183,13 +183,13 @@ class MCPServerOAuthClient(MCPServer):
         except asyncio.CancelledError:
             logger.info("OAuth MCP client connect cancelled: %s", self.name)
             # Ensure we close any partially-opened async context managers even when cancelled.
-            await asyncio.shield(self.cleanup())
+            await self.cleanup()
             raise
         except Exception:
             logger.exception(f"Failed to connect to OAuth MCP server: {self.name}")
             # Cleanup should not clobber the original error.
             with contextlib.suppress(Exception):
-                await asyncio.shield(self.cleanup())
+                await self.cleanup()
             raise
 
     async def list_tools(

@@ -16,6 +16,7 @@ import webbrowser
 from collections.abc import Awaitable, Callable, Coroutine
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from html import escape
 from pathlib import Path
 from typing import Any, ClassVar, Literal, TypedDict, cast
 from urllib.parse import parse_qs, urlparse, urlsplit
@@ -486,7 +487,7 @@ class MCPServerOAuth:
     def build_client_metadata(self) -> OAuthClientMetadata:
         """Build effective OAuth client metadata from config."""
         if self.client_metadata:
-            metadata = self.client_metadata
+            metadata = self.client_metadata.model_copy(deep=True)
         else:
             metadata = OAuthClientMetadata(
                 client_name=f"Agency Swarm - {self.name}",
@@ -750,10 +751,12 @@ async def _listen_for_callback_once(redirect_uri: str, timeout: float = 300.0) -
                 error = params["error"][0]
                 error_description = params.get("error_description", ["Unknown error"])[0]
                 status_line = "HTTP/1.1 400 Bad Request\r\n"
-                body = f"<html><body><h1>OAuth Error</h1><p>{error}: {error_description}</p></body></html>"
-                writer.write(
-                    f"{status_line}Content-Type: text/html\r\nContent-Length: {len(body)}\r\n\r\n{body}".encode()
+                body = (
+                    f"<html><body><h1>OAuth Error</h1><p>{escape(error)}: {escape(error_description)}</p></body></html>"
                 )
+                body_bytes = body.encode()
+                headers = f"{status_line}Content-Type: text/html\r\nContent-Length: {len(body_bytes)}\r\n\r\n".encode()
+                writer.write(headers + body_bytes)
                 await writer.drain()
                 writer.close()
                 await writer.wait_closed()

@@ -446,6 +446,29 @@ class TestMCPServerOAuth:
         assert client_info is not None
         assert client_info.token_endpoint_auth_method == "client_secret_post"
 
+    def test_custom_client_metadata_is_copied_before_sdk_use(self) -> None:
+        """SDK metadata mutations must not change config state or client identity."""
+        metadata = OAuthClientMetadata(
+            redirect_uris=[AnyUrl("http://localhost:8000/auth/callback")],
+            scope="initial",
+        )
+        config = MCPServerOAuth(
+            url=TEST_SERVER_URL,
+            name="test-server",
+            client_metadata=metadata,
+            use_env_credentials=False,
+        )
+        original_identity = config.get_client_identity()
+
+        effective_metadata = config.build_client_metadata()
+        effective_metadata.scope = "sdk-mutated"
+        effective_metadata.redirect_uris.append(AnyUrl("http://localhost:9000/other/callback"))
+
+        assert effective_metadata is not metadata
+        assert metadata.scope == "initial"
+        assert metadata.redirect_uris == [AnyUrl("http://localhost:8000/auth/callback")]
+        assert config.get_client_identity() == original_identity
+
     def test_client_identity_covers_effective_oauth_configuration(self) -> None:
         """Client identity changes with client ID, redirect URI, and auth server."""
         base = MCPServerOAuth(url=TEST_SERVER_URL, name="test-server", client_id="client-a")
@@ -726,29 +749,39 @@ class TestOAuthHandlers:
 
         assert (code, state) == ("manual_code", "manual_state")
 
-    async def test_listen_for_callback_once_handles_oauth_error(self) -> None:
-        """_listen_for_callback_once raises ValueError for OAuth provider errors."""
+    async def test_listen_for_callback_once_escapes_oauth_error_html(self) -> None:
+        """Provider errors are escaped and use the encoded response length."""
         import aiohttp
 
         port = 18765  # Use a high port unlikely to be in use
         redirect_uri = f"http://localhost:{port}/auth/callback"
+        malicious_error = "<script>alert('x')</script>"
+        malicious_description = "café <img src=x onerror=alert(1)>"
 
         async def send_error_callback() -> None:
             await asyncio.sleep(0.05)  # Give server time to start
             async with aiohttp.ClientSession() as session:
-                url = f"{redirect_uri}?error=access_denied&error_description=User+denied+access&state=test-state"
-                async with session.get(url) as resp:
-                    # Server should return 400 with error message
+                params = {
+                    "error": malicious_error,
+                    "error_description": malicious_description,
+                    "state": "test-state",
+                }
+                async with session.get(redirect_uri, params=params) as resp:
                     assert resp.status == 400
-                    body = await resp.text()
-                    assert "access_denied" in body
+                    body_bytes = await resp.read()
+                    body = body_bytes.decode()
+                    assert int(resp.headers["Content-Length"]) == len(body_bytes)
+                    assert "&lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;" in body
+                    assert "café &lt;img src=x onerror=alert(1)&gt;" in body
+                    assert "<script>" not in body
+                    assert "<img" not in body
 
         # Start listener and error callback concurrently
         listener_task = asyncio.create_task(_listen_for_callback_once(redirect_uri, timeout=2.0))
         callback_task = asyncio.create_task(send_error_callback())
 
         await callback_task
-        with pytest.raises(ValueError, match="OAuth error.*access_denied"):
+        with pytest.raises(ValueError, match="OAuth error"):
             await listener_task
 
 
