@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -14,6 +15,26 @@ if TYPE_CHECKING:
 type ReminderMessage = str | Callable[[RunContextWrapper[MasterContext], "Agent"], str]
 
 
+def _validate_message_callable(message: Callable[..., object]) -> None:
+    """Reject callables that cannot be invoked as ``message(context, agent)``."""
+    if isinstance(message, type):
+        raise TypeError(
+            "system reminder message must be a string or a callable taking (context, agent), but the "
+            f"{message.__name__} class itself was passed. Add the missing parentheses, e.g. {message.__name__}(...)."
+        )
+    try:
+        signature = inspect.signature(message)
+    except (TypeError, ValueError):  # builtins without an introspectable signature
+        return
+    try:
+        signature.bind(None, None)
+    except TypeError as error:
+        name = getattr(message, "__qualname__", None) or repr(message)
+        raise TypeError(
+            f"system reminder message callables must accept (context, agent), but {name}{signature} does not."
+        ) from error
+
+
 class SystemReminder:
     """Base class for system reminder triggers."""
 
@@ -25,6 +46,7 @@ class SystemReminder:
                 raise ValueError("system reminder message must be a non-empty string.")
             return
         if callable(self.message):
+            _validate_message_callable(self.message)
             return
         raise TypeError("system reminder message must be a string or callable.")
 

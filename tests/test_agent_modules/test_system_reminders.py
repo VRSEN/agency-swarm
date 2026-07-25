@@ -232,6 +232,15 @@ def test_system_reminders_validate_config() -> None:
         Agent(name="BadReminder", instructions="Answer briefly.", system_reminders=[object()])
 
 
+def test_system_reminders_reject_uncallable_signatures() -> None:
+    """Misuse must fail at construction, not with an opaque TypeError mid-run."""
+    with pytest.raises(TypeError, match="AfterEveryUserMessage class itself was passed"):
+        Agent(name="BadReminder", instructions="Answer briefly.", system_reminders=AfterEveryUserMessage)
+
+    with pytest.raises(TypeError, match="must accept \\(context, agent\\)"):
+        Agent(name="BadReminder", instructions="Answer briefly.", system_reminders=lambda: "x")
+
+
 def test_plain_string_system_reminder_uses_user_message_trigger() -> None:
     agent = Agent(
         name="ReminderAgent",

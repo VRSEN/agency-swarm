@@ -81,11 +81,19 @@ class _DirectReminderRun:
         self.hooks.append(hook)
 
 
+@dataclass(slots=True)
+class _AgencyReminderRun:
+    """One Agency-driven Runner invocation, pinned to the run id it started with."""
+
+    context: MasterContext
+    run_id: str
+
+
 _DIRECT_REMINDER_RUN: ContextVar[_DirectReminderRun | None] = ContextVar(
     "agency_swarm_direct_reminder_run",
     default=None,
 )
-_ACTIVE_AGENCY_RUN: ContextVar[MasterContext | None] = ContextVar(
+_ACTIVE_AGENCY_RUN: ContextVar[_AgencyReminderRun | None] = ContextVar(
     "agency_swarm_active_agency_run",
     default=None,
 )
@@ -104,17 +112,31 @@ def direct_system_reminder_run(starting_agent_name: str) -> Iterator[_DirectRemi
 
 @contextmanager
 def agency_system_reminder_run(context: MasterContext) -> Iterator[None]:
-    """Mark the live Agency execution boundary without relying on retained context metadata."""
-    token = _ACTIVE_AGENCY_RUN.set(context)
+    """Mark the live Agency execution boundary without relying on retained context metadata.
+
+    The run id is captured once, before the Runner starts. ``_current_agent_run_id`` is
+    rewritten mid-run by the streaming consumer on every agent-switch event, so reading it
+    later would move run-scoped reminder state to a key nothing else resolves.
+    """
+    run = _AgencyReminderRun(context, context._current_agent_run_id or "anonymous")
+    token = _ACTIVE_AGENCY_RUN.set(run)
     try:
         yield
     finally:
         _ACTIVE_AGENCY_RUN.reset(token)
 
 
+def active_agency_run(context: object | None) -> _AgencyReminderRun | None:
+    """Return the Agency boundary this task runs inside, when it owns ``context``."""
+    run = _ACTIVE_AGENCY_RUN.get()
+    if run is None or context is None or run.context is not context:
+        return None
+    return run
+
+
 def is_active_agency_run(context: object | None) -> bool:
     """Return whether this task is executing inside the matching Agency boundary."""
-    return context is not None and _ACTIVE_AGENCY_RUN.get() is context
+    return active_agency_run(context) is not None
 
 
 def register_agency_run_hook(context: object, hook: _ReminderHook) -> None:

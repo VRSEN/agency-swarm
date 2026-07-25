@@ -18,6 +18,7 @@ from .system_reminder_state import (
     TRANSIENT_REMINDER_MARKER,
     _DirectReminderRun,
     _RunReminderState,
+    active_agency_run,
     build_system_message,
     has_user_message,
     int_values,
@@ -311,8 +312,9 @@ class SystemReminderHooks(AgentHooks[MasterContext]):
             self._run_state.pop(run_key, None)
 
     def _resolve_run_key(self, context: RunContextWrapper[MasterContext]) -> tuple[int, str]:
-        if is_active_agency_run(context.context):
-            return id(context.context), context.context._current_agent_run_id or "anonymous"
+        agency_run = active_agency_run(context.context)
+        if agency_run is not None:
+            return id(agency_run.context), agency_run.run_id
         direct_run = _DIRECT_REMINDER_RUN.get()
         if direct_run is not None:
             return id(direct_run), "direct"
@@ -325,15 +327,16 @@ class SystemReminderHooks(AgentHooks[MasterContext]):
     ) -> bool:
         if not self._user_message_reminders:
             return False
-        if is_active_agency_run(context.context):
-            master_context = context.context
+        agency_run = active_agency_run(context.context)
+        if agency_run is not None:
+            master_context = agency_run.context
             if master_context._parent_run_id is not None:
                 return False
             if master_context.current_agent_name != agent.name:
                 return False
             if not context.turn_input:
                 return False
-            return _has_current_top_level_user_message(master_context, agent.name)
+            return _has_current_top_level_user_message(master_context, agent.name, agency_run.run_id)
 
         direct_run = _DIRECT_REMINDER_RUN.get()
         if direct_run is not None:
@@ -466,11 +469,7 @@ def restore_serialized_direct_run(direct_run: _DirectReminderRun, run_state: Run
         direct_run.restore_state(hook, hook._state_from_payload(payload))
 
 
-def _has_current_top_level_user_message(context: MasterContext, agent_name: str) -> bool:
-    run_id = context._current_agent_run_id
-    if not isinstance(run_id, str) or not run_id:
-        return False
-
+def _has_current_top_level_user_message(context: MasterContext, agent_name: str, run_id: str) -> bool:
     for message in reversed(context.thread_manager.get_all_messages()):
         if not isinstance(message, dict):
             continue
