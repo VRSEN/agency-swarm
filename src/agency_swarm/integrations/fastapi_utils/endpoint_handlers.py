@@ -136,7 +136,7 @@ type _AgentStateSnapshot = tuple[
 type _AgencyStateSnapshot = dict[str, _AgentStateSnapshot]
 type _OAuthAgentStateSnapshot = dict[
     str,
-    tuple[list[Any] | None, list[Any] | None, dict[str, Any], bool, bool, Any, Any],
+    tuple[list[Any] | None, list[Any] | None, dict[str, Any], bool, bool, Any, Any, dict[str, list[Any]] | None],
 ]
 _ATTR_MISSING = object()
 
@@ -252,7 +252,7 @@ class _RequestOverrideSession:
 
 type _RequestStateEntry = tuple[ReferenceType[object], dict[asyncio.AbstractEventLoop, _AgencyRequestState]]
 _AGENT_REQUEST_STATES: dict[int, _RequestStateEntry] = {}
-_AGENCY_REQUEST_STATES_GUARD = threading.Lock()
+_AGENCY_REQUEST_STATES_GUARD = threading.RLock()
 
 
 async def _no_oauth_user_id() -> None:
@@ -2981,10 +2981,12 @@ def _snapshot_agency_state(
 def _snapshot_oauth_agent_state(agency: Agency) -> _OAuthAgentStateSnapshot:
     """Capture agent tool/deferred-OAuth state mutated during one OAuth request."""
     snapshot: _OAuthAgentStateSnapshot = {}
+    runtime_states = getattr(agency, "_agent_runtime_state", {})
     for name, agent in agency.agents.items():
         tools = getattr(agent, "tools", None)
         mcp_servers = getattr(agent, "mcp_servers", None)
         deferred_servers = getattr(agent, "_deferred_mcp_servers", {})
+        runtime_state = runtime_states.get(name)
         snapshot[name] = (
             list(tools) if isinstance(tools, list) else None,
             list(mcp_servers) if isinstance(mcp_servers, list) else None,
@@ -2993,12 +2995,18 @@ def _snapshot_oauth_agent_state(agency: Agency) -> _OAuthAgentStateSnapshot:
             bool(getattr(agent, "_mcp_tools_initialized", False)),
             getattr(agent, "mcp_oauth_handler_factory", _ATTR_MISSING),
             getattr(agent, "_hosted_mcp_oauth_enabled", _ATTR_MISSING),
+            (
+                {server_name: list(server_tools) for server_name, server_tools in runtime_state.oauth_mcp_tools.items()}
+                if runtime_state is not None
+                else None
+            ),
         )
     return snapshot
 
 
 def _restore_oauth_agent_state(agency: Agency, snapshot: _OAuthAgentStateSnapshot) -> None:
     """Restore agent tool/deferred-OAuth state after a FastAPI OAuth request."""
+    runtime_states = getattr(agency, "_agent_runtime_state", {})
     for (
         name,
         (
@@ -3009,6 +3017,7 @@ def _restore_oauth_agent_state(agency: Agency, snapshot: _OAuthAgentStateSnapsho
             mcp_tools_initialized,
             handler_factory,
             hosted_mcp_oauth_enabled,
+            oauth_mcp_tools,
         ),
     ) in snapshot.items():
         agent = agency.agents.get(name)
@@ -3032,6 +3041,9 @@ def _restore_oauth_agent_state(agency: Agency, snapshot: _OAuthAgentStateSnapsho
                 del dynamic_agent._hosted_mcp_oauth_enabled
         else:
             dynamic_agent._hosted_mcp_oauth_enabled = hosted_mcp_oauth_enabled
+        runtime_state = runtime_states.get(name)
+        if runtime_state is not None and oauth_mcp_tools is not None:
+            runtime_state.oauth_mcp_tools = oauth_mcp_tools
 
 
 def _restore_agency_state(

@@ -353,10 +353,7 @@ class Agent(BaseAgent[MasterContext]):
         if master_context:
             runtime_state = master_context.agent_runtime_state.get(self.name)
             if runtime_state:
-                overridden_servers = set(runtime_state.oauth_mcp_tools)
-                base_tools = [
-                    tool for tool in base_tools if getattr(tool, _MCP_SERVER_TOOL_ATTR, None) not in overridden_servers
-                ]
+                base_tools = [tool for tool in base_tools if getattr(tool, _MCP_SERVER_TOOL_ATTR, None) is None]
                 runtime_tools = list(runtime_state.send_message_tools.values())
                 for server_tools in runtime_state.oauth_mcp_tools.values():
                     runtime_tools.extend(server_tools)

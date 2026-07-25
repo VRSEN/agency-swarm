@@ -344,6 +344,56 @@ async def test_authenticate_mcp_server_scopes_tools_to_each_agency_runtime(
     assert not any(getattr(tool, "name", "") == "github_tool" for tool in agent.tools)
 
 
+@pytest.mark.asyncio
+async def test_agency_runtime_hides_static_oauth_mcp_fallback_until_activation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A fresh Agency runtime must not inherit a direct-Agent OAuth tool closure."""
+
+    def _convert_bound_tool(agent: Agent, *, add_to_agent: bool = True) -> list[FunctionTool]:
+        selected_cache_dir = agent.mcp_servers[0].cache_dir
+
+        async def _invoke(_ctx: ToolContext[Any], _input_json: str) -> str:
+            return str(selected_cache_dir)
+
+        converted_tool = FunctionTool(
+            name="github_tool",
+            description="Return the cache root captured during conversion.",
+            params_json_schema={"type": "object", "properties": {}},
+            on_invoke_tool=_invoke,
+            strict_json_schema=False,
+        )
+        if add_to_agent:
+            agent.add_tool(converted_tool)
+        agent.mcp_servers.clear()
+        return [converted_tool]
+
+    monkeypatch.setattr("agency_swarm.agent.core.convert_mcp_servers_to_tools", _convert_bound_tool)
+    agent = _make_oauth_agent(MCPServerOAuth(url="https://example.com/github", name="github"))
+    activation_tool = next(tool for tool in agent.tools if getattr(tool, "name", "") == "authenticate_mcp_server")
+
+    await activation_tool.on_invoke_tool(_activation_context(), '{"server_name":"github"}')
+    direct_tools = await agent.get_all_tools(_activation_context())
+    direct_bound_tool = next(tool for tool in direct_tools if getattr(tool, "name", "") == "github_tool")
+    assert await direct_bound_tool.on_invoke_tool(_activation_context(), "{}") == "None"
+
+    agency = Agency(agent, oauth_token_path=str(tmp_path / "agency"))
+    fresh_runtime_tools = await agent.get_all_tools(_activation_context(agency._agent_runtime_state))
+    assert not any(getattr(tool, "name", "") == "github_tool" for tool in fresh_runtime_tools)
+
+    await activation_tool.on_invoke_tool(
+        _activation_context(agency._agent_runtime_state),
+        '{"server_name":"github"}',
+    )
+    agency_tools = await agent.get_all_tools(_activation_context(agency._agent_runtime_state))
+    agency_bound_tool = next(tool for tool in agency_tools if getattr(tool, "name", "") == "github_tool")
+    assert await agency_bound_tool.on_invoke_tool(_activation_context(), "{}") == str(tmp_path / "agency")
+
+    direct_tools_after = await agent.get_all_tools(_activation_context())
+    assert direct_bound_tool in direct_tools_after
+    assert direct_bound_tool is not agency_bound_tool
+
+
 def test_ensure_mcp_tools_keeps_non_oauth_servers_eager(monkeypatch: pytest.MonkeyPatch) -> None:
     convert_calls = 0
 
