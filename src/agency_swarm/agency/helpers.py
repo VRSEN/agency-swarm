@@ -12,6 +12,7 @@ from agency_swarm.agent.constants import AgentVoice
 
 if TYPE_CHECKING:
     from agency_swarm.agent.core import AgencyContext, Agent
+    from agency_swarm.integrations.fastapi_utils.oauth_support import OAuthUserIdDependency
 
     from .core import Agency
 
@@ -69,6 +70,8 @@ def run_fastapi(
     enable_agui: bool = False,
     enable_realtime: bool = False,
     realtime_options: dict[str, Any] | None = None,
+    oauth_user_id_dependency: "OAuthUserIdDependency | None" = None,
+    verify_oauth_callback_user: bool = False,
 ) -> None:
     """Serve this agency via the FastAPI integration.
 
@@ -79,6 +82,12 @@ def run_fastapi(
     cors_origins : list[str] | None
         Optional list of allowed CORS origins passed through to
         :func:`run_fastapi`.
+    oauth_user_id_dependency : OAuthUserIdDependency | None
+        Trusted authentication dependency required when the agency uses
+        OAuth-enabled MCP servers or hosted MCP tools.
+    verify_oauth_callback_user : bool
+        Reject an OAuth callback whose pending flow belongs to a different user.
+        Requires browser-carried authentication; see :func:`run_fastapi`.
     """
     from agency_swarm.integrations.fastapi import run_fastapi as run_fastapi_server
 
@@ -91,6 +100,8 @@ def run_fastapi(
         enable_agui=enable_agui,
         enable_realtime=enable_realtime,
         realtime_options=realtime_options,
+        oauth_user_id_dependency=oauth_user_id_dependency,
+        verify_oauth_callback_user=verify_oauth_callback_user,
     )
 
 
@@ -137,6 +148,7 @@ def build_fastapi_agencies(agency: "Agency") -> dict[str, Callable[..., "Agency"
             user_context=deepcopy(agency.user_context),
             randomize_agent_voices=bool(getattr(agency, "_randomize_agent_voices", False)),
             voice_random_seed=getattr(agency, "_voice_random_seed", None),
+            oauth_token_path=agency.oauth_token_path,
         )
 
     return {agency.name or "agency": agency_factory}

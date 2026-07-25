@@ -1,19 +1,20 @@
-# FastAPI Integration Example
+# FastAPI Integration Examples
 
-> **Full Guide:** The canonical FastAPI documentation lives in `docs/additional-features/fastapi-integration.mdx`. This README only summarizes the runnable sample.
+> **Full Guide:** The canonical FastAPI documentation lives in `docs/additional-features/fastapi-integration.mdx`. This README only summarizes the runnable samples.
 
-This example demonstrates how to properly integrate Agency Swarm with FastAPI, including:
+This directory contains examples demonstrating how to integrate Agency Swarm with FastAPI, including:
 - Serving agencies via HTTP endpoints
 - Serving standalone tools via HTTP endpoints
 - Handling streaming responses with Server-Sent Events (SSE)
+- Running OAuth flows for MCP servers in SaaS-style streaming mode
 - Properly propagating `agent` and `callerAgent` fields in events
 - Managing conversation history across requests
-- Accessing OpenAPI schemas for tool integration
 
 ## Files
 
 - `server.py` - FastAPI server that exposes an agency with two communicating agents
 - `client.py` - Python client showing how to interact with the API endpoints
+- `notion_hosted_mcp_tool.py` - Notion hosted MCP via `HostedMCPTool` + FastAPI OAuth SSE flow
 
 ## Setup
 
@@ -44,6 +45,43 @@ The server will start on http://localhost:8080 with these endpoints:
 - `POST /my-agency/get_response` - Regular response endpoint
 - `POST /my-agency/get_response_stream` - SSE streaming endpoint
 - `GET /my-agency/get_metadata` - Agency structure metadata
+
+### Multi-User Support
+
+Configure `oauth_user_id_dependency` with your application's authentication dependency. It must return a stable, non-secret ID for the authenticated user:
+```python
+from fastapi import Depends
+
+from agency_swarm import run_fastapi
+from my_app.auth import User, get_current_user
+
+def get_oauth_user_id(user: User = Depends(get_current_user)) -> str:
+    return user.id
+
+run_fastapi(
+    agencies={"my-agency": create_agency},
+    oauth_user_id_dependency=get_oauth_user_id,
+)
+```
+
+### OAuth Streaming Contract (FastAPI)
+
+When OAuth is required (`MCPServerOAuth`, or `enable_hosted_mcp_tool_oauth(HostedMCPTool(...))` with no `authorization`), use only:
+- `POST /<agency>/get_response_stream`
+
+OAuth MCP discovery is deferred. The model first gets an `authenticate_mcp_server(server_name)` tool; OAuth starts when that tool is invoked.
+`server_name` is restricted to the configured authenticated MCP server names.
+
+Expected event order:
+1. `event: meta`
+2. `event: oauth_redirect` (`state`, `server`, `auth_url`)
+3. `event: oauth_status` (`status="pending"`)
+4. Keepalive comments every 15s while waiting: `: keepalive <timestamp>`
+5. `event: oauth_status` (`status="authorized"` or `error:<reason>` or `timeout`)
+6. Final `event: messages`
+7. `event: end`
+
+`POST /<agency>/get_response` returns `400` for OAuth-enabled MCP flows.
 
 ### Serving Tools
 

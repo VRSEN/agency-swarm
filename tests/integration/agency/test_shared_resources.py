@@ -209,7 +209,7 @@ class TestSharedMCPServers:
     """Tests for shared_mcp_servers parameter."""
 
     def test_shared_mcp_servers_added_to_all_agents(self, basic_agents: tuple[Agent, Agent]):
-        """Shared MCP servers should be converted into tools for all agents."""
+        """Shared MCP servers are attached at setup and converted lazily on first run."""
         agent_a, agent_b = basic_agents
 
         stdio_server_path = str(Path(__file__).parents[2] / "data" / "scripts" / "stdio_server.py")
@@ -223,12 +223,18 @@ class TestSharedMCPServers:
             client_session_timeout_seconds=15,
         )
 
-        # shared_mcp_servers are attached during Agency init and converted into tools.
+        # shared_mcp_servers are attached during Agency init.
         agency = Agency(
             agent_a,
             shared_mcp_servers=[stdio_server],
             communication_flows=[(agent_a, agent_b)],
         )
+
+        assert len(agency.agents["AgentA"].mcp_servers) == 1
+        assert len(agency.agents["AgentB"].mcp_servers) == 1
+
+        agency.agents["AgentA"].ensure_mcp_tools()
+        agency.agents["AgentB"].ensure_mcp_tools()
 
         agent_a_tool_names = [getattr(t, "name", None) for t in agency.agents["AgentA"].tools]
         agent_b_tool_names = [getattr(t, "name", None) for t in agency.agents["AgentB"].tools]

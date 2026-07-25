@@ -101,6 +101,10 @@ hosted_tool = HostedMCPTool(
 <Note>
 Server specified in the HostedMCPTool should be publicly accessible for the agent to be able to use this tool
 </Note>
+
+<Note>
+If the remote MCP server is **OAuth-protected**, pass the user's OAuth access token via `tool_config.authorization` (not via headers). See [OAuth for MCP Servers](/core-framework/tools/mcp-oauth).
+</Note>
 </Accordion>
 
 ## Connecting Agents to MCP Servers

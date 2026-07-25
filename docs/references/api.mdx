@@ -182,6 +182,8 @@ def run_fastapi(
     enable_agui: bool = False,
     enable_realtime: bool = False,
     realtime_options: dict[str, Any] | None = None,
+    oauth_user_id_dependency: OAuthUserIdDependency | None = None,
+    verify_oauth_callback_user: bool = False,
 ):
     """
     Serve this agency via the FastAPI integration.
@@ -194,6 +196,10 @@ def run_fastapi(
         enable_agui: Enable Agency UI interface
         enable_realtime: Mount `/<agency_name>/realtime` websocket routes
         realtime_options: Optional realtime overrides (for example provider/model/voice)
+        oauth_user_id_dependency: Trusted authentication dependency required for OAuth-enabled agencies.
+            It must return a stable, non-secret user ID.
+        verify_oauth_callback_user: Reject an OAuth callback whose pending flow belongs to a
+            different user. Requires browser-carried authentication (cookie or session).
     """
 ```
 
