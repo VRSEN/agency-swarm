@@ -316,7 +316,13 @@ def test_tools_folder_edge_cases(tmp_path):
     (tools_dir / "_private_tool.py").write_text("# Should be ignored")
     (tools_dir / "readme.txt").write_text("Not a Python file")
     (tools_dir / "invalid_tool.py").write_text("invalid python syntax !")
-
+    ignored_tool_template = (
+        "from agents import function_tool\n\n@function_tool\ndef {name}() -> str:\n    return 'ignored'\n"
+    )
+    (tools_dir / "test_valid_tool.py").write_text(ignored_tool_template.format(name="tool_from_test_prefix"))
+    (tools_dir / "valid_tool_test.py").write_text(ignored_tool_template.format(name="tool_from_test_suffix"))
+    (tools_dir / "conftest.py").write_text(ignored_tool_template.format(name="tool_from_conftest"))
+    (tools_dir / ".hidden_tool.py").write_text(ignored_tool_template.format(name="tool_from_hidden_file"))
     # Create valid tool
     (tools_dir / "valid_tool.py").write_text("""
 from agents import function_tool

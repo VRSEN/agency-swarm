@@ -1,0 +1,1147 @@
+"""Unit tests for MCP OAuth core functionality."""
+
+import asyncio
+import contextlib
+from pathlib import Path
+from typing import Any
+from unittest.mock import AsyncMock, patch
+
+import pytest
+from mcp.client.auth.oauth2 import OAuthContext
+from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
+from pydantic import AnyUrl
+
+from agency_swarm.mcp.oauth import (
+    FileTokenStorage,
+    MCPServerOAuth,
+    OAuthRuntimeContext,
+    TokenCallbackRegistry,
+    _listen_for_callback_once,
+    create_oauth_provider,
+    default_callback_handler,
+    default_redirect_handler,
+    get_default_cache_dir,
+    set_oauth_runtime_context,
+    set_oauth_user_id,
+)
+from agency_swarm.mcp.oauth_user import build_oauth_user_segment
+
+TEST_SERVER_URL = "http://localhost:8001/mcp"
+
+
+class TestFileTokenStorage:
+    """Test FileTokenStorage implementation."""
+
+    async def test_token_storage_saves_and_loads_tokens(self, tmp_path: Path) -> None:
+        """FileTokenStorage persists and retrieves tokens correctly."""
+        storage = FileTokenStorage(
+            cache_dir=tmp_path,
+            server_name="test-server",
+            server_url=TEST_SERVER_URL,
+        )
+
+        # Create test token
+        test_token = OAuthToken(
+            access_token="test_access_token",
+            token_type="Bearer",
+            expires_in=3600,
+            refresh_token="test_refresh_token",
+        )
+
+        # Save token
+        await storage.set_tokens(test_token)
+
+        # Verify file exists with secure permissions in default/server subdirectory
+        token_dir = tmp_path / "default" / storage.server_cache_segment
+        token_file = token_dir / "tokens.json"
+        assert token_file.exists()
+        assert token_file.stat().st_mode & 0o777 == 0o600
+        assert token_dir.stat().st_mode & 0o777 == 0o700
+
+        # Load token
+        loaded_token = await storage.get_tokens()
+        assert loaded_token is not None
+        assert loaded_token.access_token == "test_access_token"
+        assert loaded_token.refresh_token == "test_refresh_token"
+
+    async def test_token_storage_sanitizes_path_traversal_server_name(self, tmp_path: Path) -> None:
+        """Server names should never escape the configured cache directory."""
+        storage = FileTokenStorage(
+            cache_dir=tmp_path,
+            server_name="../../outside",
+            server_url=TEST_SERVER_URL,
+        )
+        token = OAuthToken(access_token="traversal-test", token_type="Bearer", expires_in=3600)
+
+        await storage.set_tokens(token)
+
+        token_files = list(tmp_path.rglob("tokens.json"))
+        assert len(token_files) == 1
+        token_files[0].resolve().relative_to(tmp_path.resolve())
+        assert ".." not in token_files[0].relative_to(tmp_path).parts
+
+    async def test_token_storage_returns_none_for_missing_file(self, tmp_path: Path) -> None:
+        """FileTokenStorage returns None when token file doesn't exist."""
+        storage = FileTokenStorage(
+            cache_dir=tmp_path,
+            server_name="nonexistent",
+            server_url=TEST_SERVER_URL,
+        )
+
+        tokens = await storage.get_tokens()
+        assert tokens is None
+
+    async def test_client_info_storage(self, tmp_path: Path) -> None:
+        """FileTokenStorage persists and retrieves client info correctly."""
+        storage = FileTokenStorage(
+            cache_dir=tmp_path,
+            server_name="test-server",
+            server_url=TEST_SERVER_URL,
+        )
+
+        # Create test client info
+        from pydantic import AnyUrl
+
+        client_info = OAuthClientInformationFull(
+            client_id="test_client_id",
+            client_secret="test_client_secret",
+            client_id_issued_at=1234567890,
+            redirect_uris=[AnyUrl("http://localhost:8000/auth/callback")],
+        )
+
+        # Save client info
+        await storage.set_client_info(client_info)
+
+        # Verify file exists in default/server subdirectory
+        client_file = tmp_path / "default" / storage.server_cache_segment / "client.json"
+        assert client_file.exists()
+
+        # Load client info
+        loaded_info = await storage.get_client_info()
+        assert loaded_info is not None
+        assert loaded_info.client_id == "test_client_id"
+
+    async def test_storage_handles_corrupted_token_file(self, tmp_path: Path) -> None:
+        """FileTokenStorage handles corrupted token files gracefully."""
+        storage = FileTokenStorage(
+            cache_dir=tmp_path,
+            server_name="test-server",
+            server_url=TEST_SERVER_URL,
+        )
+
+        # Write corrupted JSON
+        token_file = tmp_path / "default" / storage.server_cache_segment / "tokens.json"
+        token_file.parent.mkdir(parents=True, exist_ok=True)
+        token_file.write_text("invalid json {{{")
+
+        # Should return None instead of crashing
+        tokens = await storage.get_tokens()
+        assert tokens is None
+
+    async def test_token_storage_uses_callbacks(self, tmp_path: Path) -> None:
+        """FileTokenStorage triggers load/save callbacks."""
+        saved_tokens: dict[str, dict[str, str]] = {}
+
+        def load_callback(storage_key: str) -> dict[str, str] | None:
+            return saved_tokens.get(storage_key)
+
+        def save_callback(storage_key: str, data: dict[str, Any]) -> None:  # type: ignore[name-defined]
+            saved_tokens[storage_key] = data
+
+        registry = TokenCallbackRegistry(
+            load_callback=load_callback,
+            save_callback=save_callback,
+        )
+        storage = FileTokenStorage(
+            cache_dir=tmp_path,
+            server_name="callback-server",
+            server_url=TEST_SERVER_URL,
+            token_callbacks=registry,
+        )
+
+        test_token = OAuthToken(
+            access_token="cb_access",
+            token_type="Bearer",
+            expires_in=3600,
+            refresh_token="cb_refresh",
+        )
+
+        # Saving should forward to callback
+        await storage.set_tokens(test_token)
+        assert f"{storage.server_cache_segment}::{TEST_SERVER_URL}" in saved_tokens
+
+        # Loading should prefer callback data
+        loaded_token = await storage.get_tokens()
+        assert loaded_token is not None
+        assert loaded_token.access_token == "cb_access"
+
+    async def test_token_storage_scopes_callbacks_by_user_id(self, tmp_path: Path) -> None:
+        """FileTokenStorage should isolate callback-backed tokens per user."""
+        saved_tokens: dict[str, dict[str, str]] = {}
+
+        def load_callback(storage_key: str) -> dict[str, str] | None:
+            return saved_tokens.get(storage_key)
+
+        def save_callback(storage_key: str, data: dict[str, Any]) -> None:  # type: ignore[name-defined]
+            saved_tokens[storage_key] = data
+
+        registry = TokenCallbackRegistry(
+            load_callback=load_callback,
+            save_callback=save_callback,
+        )
+        storage = FileTokenStorage(
+            cache_dir=tmp_path,
+            server_name="callback-server",
+            server_url=TEST_SERVER_URL,
+            token_callbacks=registry,
+        )
+
+        try:
+            set_oauth_user_id("john@example.com")
+            await storage.set_tokens(
+                OAuthToken(access_token="token-a", token_type="Bearer", expires_in=3600, refresh_token="refresh-a")
+            )
+
+            set_oauth_user_id("john/example.com")
+            await storage.set_tokens(
+                OAuthToken(access_token="token-b", token_type="Bearer", expires_in=3600, refresh_token="refresh-b")
+            )
+
+            key_a = (
+                f"{build_oauth_user_segment('john@example.com', max_prefix_length=120)}::"
+                f"{storage.server_cache_segment}::{TEST_SERVER_URL}"
+            )
+            key_b = (
+                f"{build_oauth_user_segment('john/example.com', max_prefix_length=120)}::"
+                f"{storage.server_cache_segment}::{TEST_SERVER_URL}"
+            )
+
+            assert key_a in saved_tokens
+            assert key_b in saved_tokens
+            assert key_a != key_b
+
+            set_oauth_user_id("john@example.com")
+            loaded_a = await storage.get_tokens()
+            assert loaded_a is not None
+            assert loaded_a.access_token == "token-a"
+
+            set_oauth_user_id("john/example.com")
+            loaded_b = await storage.get_tokens()
+            assert loaded_b is not None
+            assert loaded_b.access_token == "token-b"
+        finally:
+            set_oauth_user_id(None)
+
+    async def test_token_storage_separates_same_name_different_urls(self, tmp_path: Path) -> None:
+        """File-backed tokens should not leak across endpoints sharing one display name."""
+        storage_a = FileTokenStorage(
+            cache_dir=tmp_path,
+            server_name="github",
+            server_url="https://staging.example.com/mcp",
+        )
+        storage_b = FileTokenStorage(
+            cache_dir=tmp_path,
+            server_name="github",
+            server_url="https://production.example.com/mcp",
+        )
+
+        await storage_a.set_tokens(OAuthToken(access_token="staging-token", token_type="Bearer", expires_in=3600))
+
+        assert await storage_b.get_tokens() is None
+
+        await storage_b.set_tokens(OAuthToken(access_token="production-token", token_type="Bearer", expires_in=3600))
+
+        loaded_a = await storage_a.get_tokens()
+        loaded_b = await storage_b.get_tokens()
+        assert loaded_a is not None
+        assert loaded_b is not None
+        assert loaded_a.access_token == "staging-token"
+        assert loaded_b.access_token == "production-token"
+        assert storage_a.server_cache_segment != storage_b.server_cache_segment
+
+    async def test_token_storage_separates_client_identities(self, tmp_path: Path) -> None:
+        """File-backed tokens should not leak across OAuth clients for one endpoint."""
+        server_a = MCPServerOAuth(
+            url=TEST_SERVER_URL,
+            name="github",
+            client_id="client-a",
+            client_secret="shared-secret",
+            cache_dir=tmp_path,
+        )
+        server_b = MCPServerOAuth(
+            url=TEST_SERVER_URL,
+            name="github",
+            client_id="client-b",
+            client_secret="shared-secret",
+            cache_dir=tmp_path,
+        )
+        provider_a = await create_oauth_provider(server_a)
+        provider_b = await create_oauth_provider(server_b)
+        storage_a = provider_a.context.storage
+        storage_b = provider_b.context.storage
+        assert isinstance(storage_a, FileTokenStorage)
+        assert isinstance(storage_b, FileTokenStorage)
+
+        await storage_a.set_tokens(OAuthToken(access_token="client-a-token", token_type="Bearer"))
+
+        assert await storage_b.get_tokens() is None
+        assert storage_a.server_cache_segment != storage_b.server_cache_segment
+        assert "shared-secret" not in server_a.get_client_identity()
+        assert "shared-secret" not in storage_a.server_cache_segment
+
+    async def test_token_storage_does_not_load_legacy_raw_callback_tokens(self, tmp_path: Path) -> None:
+        """Legacy server-only callback keys must not enter client-scoped buckets."""
+        saved_tokens: dict[str, dict[str, str]] = {
+            TEST_SERVER_URL: {
+                "access_token": "legacy-token",
+                "token_type": "Bearer",
+                "expires_in": 3600,
+            }
+        }
+
+        def load_callback(storage_key: str) -> dict[str, str] | None:
+            return saved_tokens.get(storage_key)
+
+        def save_callback(storage_key: str, data: dict[str, Any]) -> None:  # type: ignore[name-defined]
+            saved_tokens[storage_key] = data
+
+        registry = TokenCallbackRegistry(
+            load_callback=load_callback,
+            save_callback=save_callback,
+        )
+        storage = FileTokenStorage(
+            cache_dir=tmp_path,
+            server_name="callback-server",
+            server_url=TEST_SERVER_URL,
+            token_callbacks=registry,
+        )
+
+        try:
+            set_oauth_user_id("user-a")
+            assert await storage.get_tokens() is None
+
+            await storage.set_tokens(
+                OAuthToken(access_token="token-a", token_type="Bearer", expires_in=3600, refresh_token="refresh-a")
+            )
+
+            set_oauth_user_id("user-b")
+            assert await storage.get_tokens() is None
+        finally:
+            set_oauth_user_id(None)
+
+
+class TestMCPServerOAuth:
+    """Test MCPServerOAuth configuration class."""
+
+    def test_oauth_config_reads_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """MCPServerOAuth reads credentials from environment variables."""
+        monkeypatch.setenv("TEST_SERVER_CLIENT_ID", "env_client_id")
+        monkeypatch.setenv("TEST_SERVER_CLIENT_SECRET", "env_client_secret")
+
+        config = MCPServerOAuth(
+            url="http://localhost:8001/mcp",
+            name="test-server",
+        )
+
+        assert config.get_client_id() == "env_client_id"
+        assert config.get_client_secret() == "env_client_secret"
+
+    def test_oauth_config_prefers_explicit_credentials(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """MCPServerOAuth prefers explicit credentials over environment."""
+        monkeypatch.setenv("TEST_SERVER_CLIENT_ID", "env_client_id")
+
+        config = MCPServerOAuth(
+            url="http://localhost:8001/mcp",
+            name="test-server",
+            client_id="explicit_client_id",
+        )
+
+        assert config.get_client_id() == "explicit_client_id"
+
+    def test_oauth_config_raises_when_no_credentials(self) -> None:
+        """MCPServerOAuth raises ValueError when credentials not found."""
+        config = MCPServerOAuth(
+            url="http://localhost:8001/mcp",
+            name="nonexistent-server",
+        )
+
+        with pytest.raises(ValueError, match="No client_id provided"):
+            config.get_client_id()
+
+    def test_use_env_credentials_false_ignores_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """MCPServerOAuth ignores env vars when use_env_credentials=False."""
+        monkeypatch.setenv("TEST_SERVER_CLIENT_ID", "env_client_id")
+        monkeypatch.setenv("TEST_SERVER_CLIENT_SECRET", "env_client_secret")
+
+        config = MCPServerOAuth(
+            url="http://localhost:8001/mcp",
+            name="test-server",
+            use_env_credentials=False,
+        )
+
+        # Should return None since env is ignored and no explicit creds
+        assert config.get_client_id_optional() is None
+        assert config.get_client_secret() is None
+        assert config.build_client_information() is None
+
+    def test_oauth_config_builds_client_metadata(self) -> None:
+        """MCPServerOAuth builds correct client metadata."""
+        config = MCPServerOAuth(
+            url="http://localhost:8001/mcp",
+            name="test-server",
+            client_id="test_id",
+            scopes=["user", "repo"],
+            redirect_uri="http://localhost:8000/auth/callback",
+        )
+
+        metadata = config.build_client_metadata()
+
+        assert metadata.client_name == "Agency Swarm - test-server"
+        assert str(metadata.redirect_uris[0]) == "http://localhost:8000/auth/callback"
+        assert "authorization_code" in metadata.grant_types
+        assert "refresh_token" in metadata.grant_types
+        assert metadata.scope == "user repo"
+
+    def test_configured_client_secret_defaults_to_basic_auth(self, tmp_path: Path) -> None:
+        """Static client secrets use an auth method supported by the MCP SDK."""
+        config = MCPServerOAuth(
+            url=TEST_SERVER_URL,
+            name="test-server",
+            client_id="test-id",
+            client_secret="test-secret",
+        )
+
+        client_info = config.build_client_information()
+
+        assert client_info is not None
+        assert client_info.token_endpoint_auth_method == "client_secret_basic"
+        context = OAuthContext(
+            server_url=config.url,
+            client_metadata=config.build_client_metadata(),
+            storage=FileTokenStorage(tmp_path, config.name),
+            redirect_handler=None,
+            callback_handler=None,
+            client_info=client_info,
+        )
+        token_data, headers = context.prepare_token_auth({"client_id": "test-id"})
+        assert headers["Authorization"].startswith("Basic ")
+        assert "client_secret" not in token_data
+
+    def test_custom_client_auth_method_is_preserved(self) -> None:
+        """Explicit client metadata auth choices override the secret default."""
+        metadata = OAuthClientMetadata(
+            redirect_uris=[AnyUrl("http://localhost:8000/auth/callback")],
+            token_endpoint_auth_method="client_secret_post",
+        )
+        config = MCPServerOAuth(
+            url=TEST_SERVER_URL,
+            name="test-server",
+            client_id="test-id",
+            client_secret="test-secret",
+            client_metadata=metadata,
+        )
+
+        client_info = config.build_client_information()
+
+        assert client_info is not None
+        assert client_info.token_endpoint_auth_method == "client_secret_post"
+
+    def test_custom_client_metadata_is_copied_before_sdk_use(self) -> None:
+        """SDK metadata mutations must not change config state or client identity."""
+        metadata = OAuthClientMetadata(
+            redirect_uris=[AnyUrl("http://localhost:8000/auth/callback")],
+            scope="initial",
+        )
+        config = MCPServerOAuth(
+            url=TEST_SERVER_URL,
+            name="test-server",
+            client_metadata=metadata,
+            use_env_credentials=False,
+        )
+        original_identity = config.get_client_identity()
+
+        effective_metadata = config.build_client_metadata()
+        effective_metadata.scope = "sdk-mutated"
+        effective_metadata.redirect_uris.append(AnyUrl("http://localhost:9000/other/callback"))
+
+        assert effective_metadata is not metadata
+        assert metadata.scope == "initial"
+        assert metadata.redirect_uris == [AnyUrl("http://localhost:8000/auth/callback")]
+        assert config.get_client_identity() == original_identity
+
+    def test_client_identity_covers_effective_oauth_configuration(self) -> None:
+        """Client identity changes with client ID, redirect URI, and auth server."""
+        base = MCPServerOAuth(url=TEST_SERVER_URL, name="test-server", client_id="client-a")
+        different_client = MCPServerOAuth(url=TEST_SERVER_URL, name="test-server", client_id="client-b")
+        different_redirect = MCPServerOAuth(
+            url=TEST_SERVER_URL,
+            name="test-server",
+            client_id="client-a",
+            redirect_uri="http://localhost:9000/other/callback",
+        )
+        different_auth_server = MCPServerOAuth(
+            url=TEST_SERVER_URL,
+            name="test-server",
+            client_id="client-a",
+            auth_server_url="https://auth.example.com",
+        )
+
+        identities = {
+            base.get_client_identity(),
+            different_client.get_client_identity(),
+            different_redirect.get_client_identity(),
+            different_auth_server.get_client_identity(),
+        }
+
+        assert len(identities) == 4
+
+    def test_redirect_uri_reads_env_when_using_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Uses server-specific env redirect when config is default."""
+        monkeypatch.setenv("TEST_SERVER_REDIRECT_URI", "https://callback.example.com/auth/callback")
+        config = MCPServerOAuth(url="http://localhost:8001/mcp", name="test-server")
+
+        assert config.get_redirect_uri() == "https://callback.example.com/auth/callback"
+
+    def test_redirect_uri_reads_global_env_when_server_env_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Uses global OAUTH_CALLBACK_URL when server-specific env is missing."""
+        monkeypatch.setenv("OAUTH_CALLBACK_URL", "https://global.example.com/auth/callback")
+        config = MCPServerOAuth(url="http://localhost:8001/mcp", name="test-server")
+
+        assert config.get_redirect_uri() == "https://global.example.com/auth/callback"
+
+    def test_redirect_uri_prefers_explicit_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Explicit redirect_uri beats env override."""
+        monkeypatch.setenv("TEST_SERVER_REDIRECT_URI", "https://callback.example.com/auth/callback")
+        config = MCPServerOAuth(
+            url="http://localhost:8001/mcp",
+            name="test-server",
+            redirect_uri="https://override.local/callback",
+        )
+
+        assert config.get_redirect_uri() == "https://override.local/callback"
+
+    def test_oauth_config_uses_default_cache_dir(self) -> None:
+        """MCPServerOAuth uses default cache directory when not specified."""
+        config = MCPServerOAuth(
+            url="http://localhost:8001/mcp",
+            name="test-server",
+            client_id="test_id",
+        )
+
+        cache_dir = config.get_cache_dir()
+        default_dir = get_default_cache_dir()
+
+        assert cache_dir == default_dir
+
+    def test_oauth_config_custom_cache_dir(self, tmp_path: Path) -> None:
+        """MCPServerOAuth uses custom cache directory when specified."""
+        config = MCPServerOAuth(
+            url="http://localhost:8001/mcp",
+            name="test-server",
+            client_id="test_id",
+            cache_dir=tmp_path,
+        )
+
+        assert config.get_cache_dir() == tmp_path
+
+
+class TestOAuthHandlers:
+    """Test default OAuth handlers."""
+
+    @patch("webbrowser.open")
+    async def test_redirect_handler_formats_message(self, mock_webbrowser: Any, capsys: pytest.CaptureFixture) -> None:
+        """default_redirect_handler prints formatted message without opening browser."""
+        test_url = "https://github.com/login/oauth/authorize?client_id=test"
+
+        await default_redirect_handler(test_url)
+
+        captured = capsys.readouterr()
+        assert "OAuth Authentication Required" in captured.out
+        assert test_url in captured.out
+        mock_webbrowser.assert_called_once_with(test_url)
+
+    async def test_callback_handler_parses_valid_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """default_callback_handler extracts code and state from callback URL."""
+        callback_url = "http://localhost:8000/auth/callback?code=test_code&state=test_state"
+        monkeypatch.setattr("builtins.input", lambda _: callback_url)
+
+        code, state = await default_callback_handler("https://example.com/auth/callback")
+
+        assert code == "test_code"
+        assert state == "test_state"
+
+    async def test_callback_handler_handles_error_response(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """default_callback_handler raises ValueError for OAuth errors."""
+        callback_url = "http://localhost:8000/auth/callback?error=access_denied&error_description=User+denied+access"
+        monkeypatch.setattr("builtins.input", lambda _: callback_url)
+
+        with pytest.raises(ValueError, match="OAuth error: access_denied"):
+            await default_callback_handler("https://example.com/auth/callback")
+
+    async def test_callback_handler_handles_missing_code(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """default_callback_handler raises ValueError when code is missing."""
+        callback_url = "http://localhost:8000/auth/callback"
+        monkeypatch.setattr("builtins.input", lambda _: callback_url)
+
+        with pytest.raises(ValueError, match="No authorization code found"):
+            await default_callback_handler("https://example.com/auth/callback")
+
+    async def test_callback_handler_non_interactive_prompt_raises_runtime_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """default_callback_handler should return actionable error in non-interactive mode."""
+        monkeypatch.setattr("builtins.input", lambda _: (_ for _ in ()).throw(EOFError("stdin closed")))
+
+        with pytest.raises(RuntimeError, match="OAuth callback input is unavailable in non-interactive mode"):
+            await default_callback_handler("https://example.com/auth/callback")
+
+    @patch("agency_swarm.mcp.oauth._listen_for_callback_once")
+    async def test_callback_handler_prefers_local_server(
+        self,
+        mock_listen: Any,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """default_callback_handler should not prompt when local listener succeeds."""
+
+        async def fake_listen(_: str, timeout: float = 300.0) -> tuple[str, str | None]:
+            return "server_code", "server_state"
+
+        mock_listen.side_effect = fake_listen
+        monkeypatch.setattr("agency_swarm.mcp.oauth._can_poll_stdin_for_callback", lambda: False)
+
+        code, state = await default_callback_handler("http://localhost:8000/auth/callback")
+
+        assert (code, state) == ("server_code", "server_state")
+        assert mock_listen.await_count == 1
+
+    @patch("agency_swarm.mcp.oauth._listen_for_callback_once")
+    async def test_callback_handler_allows_manual_entry_while_listener_pending(
+        self,
+        mock_listen: Any,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """default_callback_handler should accept manual input without waiting full listener timeout."""
+
+        async def slow_listen(_: str, timeout: float = 300.0) -> tuple[str, str | None]:
+            await asyncio.sleep(1.0)
+            return "server_code", "server_state"
+
+        async def fake_poll() -> tuple[str, str | None]:
+            return "manual_code", "manual_state"
+
+        mock_listen.side_effect = slow_listen
+        monkeypatch.setattr("agency_swarm.mcp.oauth._can_poll_stdin_for_callback", lambda: True)
+        monkeypatch.setattr("agency_swarm.mcp.oauth._prompt_for_callback_url_polling", fake_poll)
+
+        code, state = await default_callback_handler("http://localhost:8000/auth/callback")
+
+        assert (code, state) == ("manual_code", "manual_state")
+        assert mock_listen.await_count == 1
+
+    @patch("agency_swarm.mcp.oauth._listen_for_callback_once")
+    async def test_callback_handler_reprompts_after_invalid_manual_input(
+        self,
+        mock_listen: Any,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        """default_callback_handler should not abort if the first manual URL is invalid."""
+
+        async def slow_listen(_: str, timeout: float = 300.0) -> tuple[str, str | None]:
+            await asyncio.sleep(1.0)
+            return "server_code", "server_state"
+
+        attempts = {"count": 0}
+
+        async def flaky_poll() -> tuple[str, str | None]:
+            attempts["count"] += 1
+            if attempts["count"] == 1:
+                raise ValueError("No authorization code found in callback URL")
+            return "manual_code", "manual_state"
+
+        mock_listen.side_effect = slow_listen
+        monkeypatch.setattr("agency_swarm.mcp.oauth._can_poll_stdin_for_callback", lambda: True)
+        monkeypatch.setattr("agency_swarm.mcp.oauth._prompt_for_callback_url_polling", flaky_poll)
+
+        code, state = await default_callback_handler("http://localhost:8000/auth/callback")
+
+        assert (code, state) == ("manual_code", "manual_state")
+        assert attempts["count"] == 2
+        assert "Invalid callback URL" in capsys.readouterr().out
+
+    @patch("agency_swarm.mcp.oauth._listen_for_callback_once")
+    async def test_callback_handler_uses_listener_when_polling_unavailable(
+        self,
+        mock_listen: Any,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """default_callback_handler should continue with listener-only flow when polling is unavailable."""
+
+        async def fake_listen(_: str, timeout: float = 300.0) -> tuple[str, str | None]:
+            return "server_code", "server_state"
+
+        mock_listen.side_effect = fake_listen
+        monkeypatch.setattr("agency_swarm.mcp.oauth._can_poll_stdin_for_callback", lambda: False)
+
+        code, state = await default_callback_handler("http://localhost:8000/auth/callback")
+
+        assert (code, state) == ("server_code", "server_state")
+        assert mock_listen.await_count == 1
+
+    async def test_prompt_for_callback_url_polling_raises_eof_when_stdin_closes(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """_prompt_for_callback_url_polling should raise EOFError instead of looping forever."""
+        from agency_swarm.mcp import oauth as oauth_module
+
+        class _DummyStdin:
+            def isatty(self) -> bool:
+                return True
+
+            def readline(self) -> str:
+                return ""
+
+        dummy_stdin = _DummyStdin()
+        monkeypatch.setattr(oauth_module.sys, "stdin", dummy_stdin)
+        monkeypatch.setattr(oauth_module.select, "select", lambda _r, _w, _x, _t: ([dummy_stdin], [], []))
+
+        with pytest.raises(EOFError, match="stdin reached EOF"):
+            await oauth_module._prompt_for_callback_url_polling(poll_interval=0.0)
+
+    @patch("agency_swarm.mcp.oauth._listen_for_callback_once")
+    async def test_callback_handler_falls_back_when_listener_unavailable(
+        self,
+        mock_listen: Any,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """default_callback_handler falls back to manual entry if listener cannot start."""
+
+        mock_listen.side_effect = OSError("port already in use")
+
+        async def fake_prompt() -> tuple[str, str | None]:
+            # Delay prompt so the listener task finishes (and fails) first.
+            await asyncio.sleep(0.05)
+            return "manual_code", "manual_state"
+
+        monkeypatch.setattr("agency_swarm.mcp.oauth._prompt_for_callback_url", fake_prompt)
+
+        code, state = await default_callback_handler("http://localhost:9999/callback")
+
+        assert (code, state) == ("manual_code", "manual_state")
+
+    @patch("agency_swarm.mcp.oauth._listen_for_callback_once")
+    async def test_callback_handler_falls_back_when_listener_times_out(
+        self,
+        mock_listen: Any,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """default_callback_handler falls back to manual entry on listener timeout."""
+
+        mock_listen.side_effect = TimeoutError()
+
+        async def fake_prompt() -> tuple[str, str | None]:
+            return "manual_code", "manual_state"
+
+        monkeypatch.setattr("agency_swarm.mcp.oauth._prompt_for_callback_url", fake_prompt)
+
+        code, state = await default_callback_handler("http://localhost:8000/auth/callback")
+
+        assert (code, state) == ("manual_code", "manual_state")
+
+    async def test_listen_for_callback_once_escapes_oauth_error_html(self) -> None:
+        """Provider errors are escaped and use the encoded response length."""
+        import aiohttp
+
+        port = 18765  # Use a high port unlikely to be in use
+        redirect_uri = f"http://localhost:{port}/auth/callback"
+        malicious_error = "<script>alert('x')</script>"
+        malicious_description = "café <img src=x onerror=alert(1)>"
+
+        async def send_error_callback() -> None:
+            await asyncio.sleep(0.05)  # Give server time to start
+            async with aiohttp.ClientSession() as session:
+                params = {
+                    "error": malicious_error,
+                    "error_description": malicious_description,
+                    "state": "test-state",
+                }
+                async with session.get(redirect_uri, params=params) as resp:
+                    assert resp.status == 400
+                    body_bytes = await resp.read()
+                    body = body_bytes.decode()
+                    assert int(resp.headers["Content-Length"]) == len(body_bytes)
+                    assert "&lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;" in body
+                    assert "café &lt;img src=x onerror=alert(1)&gt;" in body
+                    assert "<script>" not in body
+                    assert "<img" not in body
+
+        # Start listener and error callback concurrently
+        listener_task = asyncio.create_task(_listen_for_callback_once(redirect_uri, timeout=2.0))
+        callback_task = asyncio.create_task(send_error_callback())
+
+        await callback_task
+        with pytest.raises(ValueError, match="OAuth error"):
+            await listener_task
+
+
+class TestCreateOAuthProvider:
+    """Test OAuth provider handler precedence."""
+
+    async def test_uses_server_handlers_when_explicit_handlers_omitted(self, tmp_path: Path) -> None:
+        """create_oauth_provider should honor handlers configured on MCPServerOAuth."""
+
+        async def server_redirect_handler(auth_url: str) -> None:
+            _ = auth_url
+
+        async def server_callback_handler() -> tuple[str, str | None]:
+            return "server-code", "server-state"
+
+        server = MCPServerOAuth(
+            url=TEST_SERVER_URL,
+            name="provider-test-server",
+            cache_dir=tmp_path,
+            redirect_handler=server_redirect_handler,
+            callback_handler=server_callback_handler,
+            use_env_credentials=False,
+        )
+
+        provider = await create_oauth_provider(server)
+
+        assert provider.context.redirect_handler is server_redirect_handler
+        assert provider.context.callback_handler is server_callback_handler
+
+    async def test_explicit_handlers_override_server_handlers(self, tmp_path: Path) -> None:
+        """Explicit handler args must take precedence over server-level handlers."""
+
+        async def server_redirect_handler(auth_url: str) -> None:
+            _ = auth_url
+
+        async def server_callback_handler() -> tuple[str, str | None]:
+            return "server-code", "server-state"
+
+        async def explicit_redirect_handler(auth_url: str) -> None:
+            _ = auth_url
+
+        async def explicit_callback_handler() -> tuple[str, str | None]:
+            return "explicit-code", "explicit-state"
+
+        server = MCPServerOAuth(
+            url=TEST_SERVER_URL,
+            name="provider-test-explicit",
+            cache_dir=tmp_path,
+            redirect_handler=server_redirect_handler,
+            callback_handler=server_callback_handler,
+            use_env_credentials=False,
+        )
+
+        provider = await create_oauth_provider(
+            server,
+            redirect_handler=explicit_redirect_handler,
+            callback_handler=explicit_callback_handler,
+        )
+
+        assert provider.context.redirect_handler is explicit_redirect_handler
+        assert provider.context.callback_handler is explicit_callback_handler
+
+    async def test_runtime_context_handlers_override_server_handlers(self, tmp_path: Path) -> None:
+        """Request-scoped runtime handlers should override server-level handlers."""
+
+        async def server_redirect_handler(auth_url: str) -> None:
+            _ = auth_url
+
+        async def server_callback_handler() -> tuple[str, str | None]:
+            return "server-code", "server-state"
+
+        async def runtime_redirect_handler(auth_url: str) -> None:
+            _ = auth_url
+
+        async def runtime_callback_handler() -> tuple[str, str | None]:
+            return "runtime-code", "runtime-state"
+
+        server = MCPServerOAuth(
+            url=TEST_SERVER_URL,
+            name="provider-test-runtime-context",
+            cache_dir=tmp_path,
+            redirect_handler=server_redirect_handler,
+            callback_handler=server_callback_handler,
+            use_env_credentials=False,
+        )
+
+        set_oauth_runtime_context(
+            OAuthRuntimeContext(
+                mode="saas_stream",
+                user_id="user-1",
+                timeout=600.0,
+                redirect_handler_factory=lambda _server_name: runtime_redirect_handler,
+                callback_handler_factory=lambda _server_name: runtime_callback_handler,
+            )
+        )
+        try:
+            provider = await create_oauth_provider(server)
+        finally:
+            set_oauth_runtime_context(None)
+
+        assert provider.context.redirect_handler is runtime_redirect_handler
+        assert provider.context.callback_handler is runtime_callback_handler
+
+    @pytest.mark.parametrize(
+        "explicit_redirect_uri",
+        [None, "http://localhost:9999/conflicting/callback"],
+    )
+    async def test_default_callback_uses_custom_client_metadata_redirect_uri(
+        self,
+        tmp_path: Path,
+        explicit_redirect_uri: str | None,
+    ) -> None:
+        """The local callback listener must match custom OAuth client metadata."""
+        redirect_uri = "http://127.0.0.1:8765/custom/oauth/callback"
+        server = MCPServerOAuth(
+            url=TEST_SERVER_URL,
+            name="provider-test-custom-metadata",
+            cache_dir=tmp_path,
+            redirect_uri=explicit_redirect_uri,
+            client_metadata=OAuthClientMetadata(redirect_uris=[AnyUrl(redirect_uri)]),
+            use_env_credentials=False,
+        )
+
+        with patch(
+            "agency_swarm.mcp.oauth.default_callback_handler",
+            new_callable=AsyncMock,
+            return_value=("code", "state"),
+        ) as callback:
+            provider = await create_oauth_provider(server)
+            await provider.context.callback_handler()
+
+        callback.assert_awaited_once_with(redirect_uri, timeout=300.0)
+
+
+class TestOAuthClientTransportCompatibility:
+    """Test StreamableHTTP transport compatibility logic."""
+
+    def test_build_streamable_transport_prefers_modern_api(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Use streamable_http_client when available and inject auth via httpx.AsyncClient."""
+        from agency_swarm.mcp import oauth_client as oauth_client_module
+
+        calls: dict[str, object] = {}
+
+        class DummyAsyncClient:
+            def __init__(self, *, auth: object, timeout: object) -> None:
+                calls["auth"] = auth
+                calls["timeout"] = timeout
+
+            async def aclose(self) -> None:
+                return None
+
+        def fake_modern(
+            url: str, *, http_client: object, terminate_on_close: bool = True
+        ):  # pragma: no cover - execution is not needed for this unit
+            calls["modern_url"] = url
+            calls["modern_http_client"] = http_client
+            calls["modern_terminate_on_close"] = terminate_on_close
+
+            @contextlib.asynccontextmanager
+            async def _modern_context():
+                yield (object(), object(), lambda: None)
+
+            return _modern_context()
+
+        def fake_legacy(url: str, auth: object | None = None):
+            calls["legacy_url"] = url
+            calls["legacy_auth"] = auth
+
+            @contextlib.asynccontextmanager
+            async def _legacy_context():
+                yield (object(), object(), lambda: None)
+
+            return _legacy_context()
+
+        monkeypatch.setattr(oauth_client_module, "_get_modern_streamable_http_client", lambda: fake_modern)
+        monkeypatch.setattr(oauth_client_module, "_legacy_streamablehttp_client", fake_legacy)
+        monkeypatch.setattr(oauth_client_module.httpx, "AsyncClient", DummyAsyncClient)
+
+        oauth_provider = object()
+        transport, http_client = oauth_client_module._build_streamable_transport(TEST_SERVER_URL, oauth_provider)
+
+        assert transport is not None
+        assert http_client is not None
+        assert calls.get("modern_url") == TEST_SERVER_URL
+        assert calls.get("modern_http_client") is http_client
+        assert calls.get("auth") is oauth_provider
+        assert "legacy_url" not in calls
+
+    def test_build_streamable_transport_uses_modern_auth_api(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Use auth= when the modern transport exposes that API instead of http_client=."""
+        from agency_swarm.mcp import oauth_client as oauth_client_module
+
+        calls: dict[str, object] = {}
+
+        def fake_modern(
+            url: str, *, auth: object | None = None, terminate_on_close: bool = True
+        ):  # pragma: no cover - execution is not needed for this unit
+            calls["modern_url"] = url
+            calls["modern_auth"] = auth
+            calls["modern_terminate_on_close"] = terminate_on_close
+
+            @contextlib.asynccontextmanager
+            async def _modern_context():
+                yield (object(), object(), lambda: None)
+
+            return _modern_context()
+
+        def fake_legacy(url: str, auth: object | None = None):
+            calls["legacy_url"] = url
+            calls["legacy_auth"] = auth
+
+            @contextlib.asynccontextmanager
+            async def _legacy_context():
+                yield (object(), object(), lambda: None)
+
+            return _legacy_context()
+
+        monkeypatch.setattr(oauth_client_module, "_get_modern_streamable_http_client", lambda: fake_modern)
+        monkeypatch.setattr(oauth_client_module, "_legacy_streamablehttp_client", fake_legacy)
+
+        oauth_provider = object()
+        transport, http_client = oauth_client_module._build_streamable_transport(TEST_SERVER_URL, oauth_provider)
+
+        assert transport is not None
+        assert http_client is None
+        assert calls.get("modern_url") == TEST_SERVER_URL
+        assert calls.get("modern_auth") is oauth_provider
+        assert "legacy_url" not in calls
+
+    def test_build_streamable_transport_falls_back_to_legacy_api(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Fallback to streamablehttp_client when modern API is unavailable."""
+        from agency_swarm.mcp import oauth_client as oauth_client_module
+
+        calls: dict[str, object] = {}
+
+        def fake_legacy(url: str, auth: object | None = None):
+            calls["legacy_url"] = url
+            calls["legacy_auth"] = auth
+
+            @contextlib.asynccontextmanager
+            async def _legacy_context():
+                yield (object(), object(), lambda: None)
+
+            return _legacy_context()
+
+        monkeypatch.setattr(oauth_client_module, "_get_modern_streamable_http_client", lambda: None)
+        monkeypatch.setattr(oauth_client_module, "_legacy_streamablehttp_client", fake_legacy)
+
+        oauth_provider = object()
+        transport, http_client = oauth_client_module._build_streamable_transport(TEST_SERVER_URL, oauth_provider)
+
+        assert transport is not None
+        assert http_client is None
+        assert calls.get("legacy_url") == TEST_SERVER_URL
+        assert calls.get("legacy_auth") is oauth_provider
+
+
+def test_get_default_cache_dir_respects_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """get_default_cache_dir uses AGENCY_SWARM_MCP_CACHE_DIR when set."""
+    custom_dir = tmp_path / "custom-cache"
+    monkeypatch.setenv("AGENCY_SWARM_MCP_CACHE_DIR", str(custom_dir))
+
+    cache_dir = get_default_cache_dir()
+
+    assert cache_dir == custom_dir
+
+
+def test_get_default_cache_dir_uses_home_by_default() -> None:
+    """get_default_cache_dir defaults to ~/.agency-swarm/mcp-tokens."""
+    cache_dir = get_default_cache_dir()
+
+    assert cache_dir == Path.home() / ".agency-swarm" / "mcp-tokens"
+
+
+class TestMCPServerOAuthClientAuthOnly:
+    """Tests for OAuth-only MCPServerOAuthClient behavior."""
+
+    async def test_list_tools_authenticates_then_lists(self, tmp_path: Path) -> None:
+        """list_tools should authenticate and return tools."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from agency_swarm.mcp.oauth_client import MCPServerOAuthClient
+
+        config = MCPServerOAuth(
+            url=TEST_SERVER_URL,
+            name="test-server",
+            client_id="test-id",
+            client_secret="test-secret",
+            cache_dir=tmp_path,
+        )
+        client = MCPServerOAuthClient(config)
+
+        mock_session = MagicMock()
+        mock_result = MagicMock()
+        mock_result.tools = [MagicMock(name="tool1"), MagicMock(name="tool2")]
+        mock_session.list_tools = AsyncMock(return_value=mock_result)
+
+        with patch.object(client, "connect", new_callable=AsyncMock) as mock_connect:
+            mock_connect.side_effect = lambda: (
+                setattr(client, "session", mock_session) or setattr(client, "_authenticated", True)
+            )
+            tools = await client.list_tools()
+
+        assert len(tools) == 2
+        mock_connect.assert_awaited_once()
+        mock_session.list_tools.assert_awaited_once()
+
+    async def test_list_resource_templates_authenticates_and_forwards_cursor(self, tmp_path: Path) -> None:
+        """list_resource_templates should authenticate and preserve pagination."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from agency_swarm.mcp.oauth_client import MCPServerOAuthClient
+
+        config = MCPServerOAuth(
+            url=TEST_SERVER_URL,
+            name="test-server",
+            client_id="test-id",
+            client_secret="test-secret",
+            cache_dir=tmp_path,
+        )
+        client = MCPServerOAuthClient(config)
+
+        mock_session = MagicMock()
+        mock_result = MagicMock()
+        mock_session.list_resource_templates = AsyncMock(return_value=mock_result)
+
+        with patch.object(client, "connect", new_callable=AsyncMock) as mock_connect:
+            mock_connect.side_effect = lambda: (
+                setattr(client, "session", mock_session) or setattr(client, "_authenticated", True)
+            )
+            result = await client.list_resource_templates(cursor="next-page")
+
+        assert result is mock_result
+        mock_connect.assert_awaited_once()
+        mock_session.list_resource_templates.assert_awaited_once_with(cursor="next-page")
+
+    async def test_call_tool_authenticates_before_call(self, tmp_path: Path) -> None:
+        """call_tool should always ensure OAuth before executing."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from agency_swarm.mcp.oauth_client import MCPServerOAuthClient
+
+        config = MCPServerOAuth(
+            url=TEST_SERVER_URL,
+            name="test-server",
+            client_id="test-id",
+            client_secret="test-secret",
+            cache_dir=tmp_path,
+        )
+        client = MCPServerOAuthClient(config)
+
+        mock_session = MagicMock()
+        mock_result = MagicMock(content=[MagicMock(text="result")])
+        mock_session.call_tool = AsyncMock(return_value=mock_result)
+
+        with patch.object(client, "connect", new_callable=AsyncMock) as mock_connect:
+            mock_connect.side_effect = lambda: (
+                setattr(client, "session", mock_session) or setattr(client, "_authenticated", True)
+            )
+            await client.call_tool("test_tool", {"arg": "value"})
+
+        mock_connect.assert_awaited_once()
+        mock_session.call_tool.assert_awaited_once_with("test_tool", {"arg": "value"})

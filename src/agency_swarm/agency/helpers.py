@@ -1,20 +1,51 @@
 # --- Agency helper utility functions ---
 import logging
+import random
 from collections.abc import Callable
 from copy import deepcopy
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from agents import Agent as SDKAgent
 
+from agency_swarm.agent.constants import AgentVoice
+
 if TYPE_CHECKING:
     from agency_swarm.agent.core import AgencyContext, Agent
+    from agency_swarm.integrations.fastapi_utils.oauth_support import OAuthUserIdDependency
 
     from .core import Agency
 
 from agency_swarm.utils.files import get_external_caller_directory
 
 logger = logging.getLogger(__name__)
+
+
+def assign_random_agent_voices(agency: "Agency", voices: tuple[str, ...]) -> None:
+    """Assign deterministic provider voices to agents without an explicit voice."""
+    randomizable_agents = [
+        agent for name, agent in agency.agents.items() if agent.voice is None or name in agency._randomized_agent_names
+    ]
+    if not randomizable_agents:
+        return
+
+    rng = random.Random(agency._voice_random_seed)
+    used_voices = {
+        agent.voice
+        for name, agent in agency.agents.items()
+        if name not in agency._randomized_agent_names and agent.voice in voices
+    }
+    available = [voice for voice in voices if voice not in used_voices] or list(voices)
+    rng.shuffle(available)
+
+    for agent in randomizable_agents:
+        if not available:
+            available = [voice for voice in voices if voice not in used_voices] or list(voices)
+            rng.shuffle(available)
+        voice_choice = cast(AgentVoice, available.pop())
+        used_voices.add(voice_choice)
+        agent.voice = voice_choice
+        agency._randomized_agent_names.add(agent.name)
 
 
 def read_instructions(agency: "Agency", path: str) -> None:
@@ -37,6 +68,10 @@ def run_fastapi(
     app_token_env: str = "APP_TOKEN",
     cors_origins: list[str] | None = None,
     enable_agui: bool = False,
+    enable_realtime: bool = False,
+    realtime_options: dict[str, Any] | None = None,
+    oauth_user_id_dependency: "OAuthUserIdDependency | None" = None,
+    verify_oauth_callback_user: bool = False,
 ) -> None:
     """Serve this agency via the FastAPI integration.
 
@@ -47,6 +82,12 @@ def run_fastapi(
     cors_origins : list[str] | None
         Optional list of allowed CORS origins passed through to
         :func:`run_fastapi`.
+    oauth_user_id_dependency : OAuthUserIdDependency | None
+        Trusted authentication dependency required when the agency uses
+        OAuth-enabled MCP servers or hosted MCP tools.
+    verify_oauth_callback_user : bool
+        Reject an OAuth callback whose pending flow belongs to a different user.
+        Requires browser-carried authentication; see :func:`run_fastapi`.
     """
     from agency_swarm.integrations.fastapi import run_fastapi as run_fastapi_server
 
@@ -57,6 +98,10 @@ def run_fastapi(
         app_token_env=app_token_env,
         cors_origins=cors_origins,
         enable_agui=enable_agui,
+        enable_realtime=enable_realtime,
+        realtime_options=realtime_options,
+        oauth_user_id_dependency=oauth_user_id_dependency,
+        verify_oauth_callback_user=verify_oauth_callback_user,
     )
 
 
@@ -101,6 +146,9 @@ def build_fastapi_agencies(agency: "Agency") -> dict[str, Callable[..., "Agency"
             load_threads_callback=load_threads_callback,
             save_threads_callback=save_threads_callback,
             user_context=deepcopy(agency.user_context),
+            randomize_agent_voices=bool(getattr(agency, "_randomize_agent_voices", False)),
+            voice_random_seed=getattr(agency, "_voice_random_seed", None),
+            oauth_token_path=agency.oauth_token_path,
         )
 
     return {agency.name or "agency": agency_factory}

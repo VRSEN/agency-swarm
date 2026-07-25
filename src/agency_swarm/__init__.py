@@ -70,6 +70,7 @@ from .context import MasterContext  # noqa: E402
 from .hooks import PersistenceHooks  # noqa: E402
 from .integrations.fastapi import run_fastapi  # noqa: E402
 from .integrations.mcp_server import run_mcp  # noqa: E402
+from .integrations.realtime import run_realtime  # noqa: E402
 from .reminders import AfterEveryUserMessage, EveryNToolCalls, SystemReminder  # noqa: E402
 from .tools import (  # noqa: E402
     BaseTool,
@@ -100,6 +101,7 @@ from .tools import (  # noqa: E402
     ToolOutputText,
     ToolOutputTextDict,
     WebSearchTool,
+    enable_hosted_mcp_tool_oauth,
     function_tool,
     tool_output_file_from_file_id,
     tool_output_file_from_path,
@@ -122,6 +124,7 @@ __all__ = [
     "PersistenceHooks",
     "SendMessage",
     "run_fastapi",
+    "run_realtime",
     "run_mcp",
     # Re-exports from Agents SDK
     "SDKAgent",
@@ -159,6 +162,7 @@ __all__ = [
     "LocalShellTool",
     "PersistentShellTool",
     "WebSearchTool",
+    "enable_hosted_mcp_tool_oauth",
     "Model",
     "AgentHooks",
     "RunHooks",

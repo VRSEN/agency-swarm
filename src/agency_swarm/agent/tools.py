@@ -62,6 +62,8 @@ def load_tools_from_folder(agent: "Agent") -> None:
 
     Supports both ``BaseTool`` subclasses and ``FunctionTool``
     instances created via the ``@function_tool`` decorator.
+    Files prefixed with ``_`` or ``.`` and pytest files
+    (``test_*.py``, ``*_test.py``, ``conftest.py``) are skipped.
 
     Args:
         agent: The agent to load tools for
@@ -78,7 +80,11 @@ def load_tools_from_folder(agent: "Agent") -> None:
         return
 
     for file in folder_path.iterdir():
-        if not file.is_file() or file.suffix != ".py" or file.name.startswith("_"):
+        if not file.is_file() or file.suffix != ".py" or file.name.startswith(("_", ".")):
+            continue
+
+        if file.stem.startswith("test_") or file.stem.endswith("_test") or file.name == "conftest.py":
+            logger.debug("Skipping test file in tools folder: %s", file)
             continue
 
         tools = ToolFactory.from_file(file)

@@ -66,7 +66,8 @@
                     ]
                   },
                   "core-framework/tools/openapi-schemas",
-                  "core-framework/tools/mcp-integration"
+                  "core-framework/tools/mcp-integration",
+                  "core-framework/tools/mcp-oauth"
                 ]
               },
               {
@@ -114,6 +115,14 @@
                 ]
               },
               "additional-features/streaming",
+              {
+                "group": "Voice Agents",
+                "icon": "microphone",
+                "pages": [
+                  "additional-features/voice-agents/overview",
+                  "additional-features/voice-agents/deployment"
+                ]
+              },
               "additional-features/fastapi-integration",
               "additional-features/mcp-tools-server",
               {
