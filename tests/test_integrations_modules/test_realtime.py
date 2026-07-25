@@ -11,7 +11,7 @@ from agents.realtime.events import (
 )
 from agents.realtime.model_events import RealtimeModelAudioEvent
 
-from agency_swarm.integrations import realtime as realtime_module
+from agency_swarm.integrations import realtime as realtime_module, realtime_events as realtime_events_module
 
 
 class _FakeModel:
@@ -61,7 +61,7 @@ def test_sanitize_history_item_removes_audio_payloads() -> None:
         ],
     }
 
-    sanitized = realtime_module._sanitize_history_item(item)
+    sanitized = realtime_events_module._sanitize_history_item(item)
     assert sanitized is not None
     assert sanitized["content"][0] == {"type": "audio"}
     assert sanitized["content"][1] == {"type": "input_audio"}
