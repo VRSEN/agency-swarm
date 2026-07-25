@@ -96,6 +96,10 @@ agent = Agent(
 Use `system_reminders` for normal reminders. Use `hooks` only when you need custom lifecycle behavior beyond these built-in triggers.
 </Note>
 
+<Note>
+Creating your first agent with `system_reminders` installs a process-wide boundary around `Runner.run`, `Runner.run_sync`, `Runner.run_streamed`, and `RunState` serialization. That boundary is what keeps reminders out of saved history when you call `Runner` directly instead of going through an `Agency`. It stays in place for the rest of the process and applies to every agent in it, including SDK agents without reminders. Agents that never use `system_reminders` leave the SDK `Runner` untouched.
+</Note>
+
 ### Conversation starters cache
 
 Conversation starters are the suggested prompts you see in the chat UI.

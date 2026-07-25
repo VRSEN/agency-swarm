@@ -66,7 +66,6 @@ from openai.types.shared import Reasoning  # noqa: E402
 from .agency.core import Agency  # noqa: E402
 from .agent.core import AgencyContext, Agent  # noqa: E402
 from .agent.execution_streaming import StreamingRunResponse  # noqa: E402
-from .agent.runner import install_runner_boundary  # noqa: E402
 from .context import MasterContext  # noqa: E402
 from .hooks import PersistenceHooks  # noqa: E402
 from .integrations.fastapi import run_fastapi  # noqa: E402
@@ -109,8 +108,6 @@ from .tools import (  # noqa: E402
     tool_output_image_from_path,
 )
 from .utils.thread import ThreadManager  # noqa: E402
-
-install_runner_boundary()
 
 __all__ = [
     "Agent",

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import copy
+import subprocess
+import sys
 from dataclasses import dataclass
 
 import pytest
@@ -424,6 +426,32 @@ async def test_callable_tool_reminder_receives_live_run_wrapper() -> None:
     result = await Agency(agent).get_response("next")
 
     assert result.final_output == "usage=1;turn_input=1"
+
+
+def test_bare_import_leaves_sdk_runner_unpatched() -> None:
+    """Importing agency_swarm alone must not install the Runner boundary."""
+    probe = (
+        "import agency_swarm\n"
+        "from agents import Runner\n"
+        "print(getattr(Runner, '_agency_swarm_model_input_boundary_installed', False))\n"
+    )
+    # A subprocess is required: reminder-bearing agents in this session already installed the boundary.
+    completed = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True, check=False)
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.strip() == "False"
+
+
+def test_reminder_agent_installs_runner_boundary_once() -> None:
+    """The first reminder-bearing agent installs the boundary and later agents reuse it."""
+    Agent(name="BoundaryInstaller", instructions="x", system_reminders="remember this")
+    installed_run = Runner.__dict__["run"]
+
+    assert getattr(Runner, "_agency_swarm_model_input_boundary_installed", False) is True
+
+    Agent(name="BoundaryReuser", instructions="x", system_reminders="remember this too")
+
+    assert Runner.__dict__["run"] is installed_run
 
 
 def test_unsupported_system_reminder_subclass_is_rejected() -> None:
