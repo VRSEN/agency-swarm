@@ -892,6 +892,18 @@ def test_build_persistence_key_separates_oauth_server_urls() -> None:
     assert key_b.startswith("github::oauth::")
 
 
+def test_build_persistence_key_separates_oauth_client_ids() -> None:
+    server_a = MCPServerOAuth(url="http://localhost:8001/mcp", name="github", client_id="client-a")
+    server_b = MCPServerOAuth(url="http://localhost:8001/mcp", name="github", client_id="client-b")
+
+    key_a = _build_persistence_key(MCPServerOAuthClient(server_a), "user-a")
+    key_b = _build_persistence_key(MCPServerOAuthClient(server_b), "user-a")
+
+    assert key_a != key_b
+    assert key_a.startswith("github::oauth::")
+    assert key_b.startswith("github::oauth::")
+
+
 def test_build_persistence_key_separates_saas_oauth_requests() -> None:
     oauth_server = MCPServerOAuth(url="http://localhost:8001/mcp", name="github")
     oauth_client = MCPServerOAuthClient(oauth_server)

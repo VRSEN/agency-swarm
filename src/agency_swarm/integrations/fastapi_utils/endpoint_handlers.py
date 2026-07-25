@@ -212,15 +212,42 @@ class _RequestOverrideSession:
         if self._is_cleaned:
             return
         self._is_cleaned = True
+        primary_error: BaseException | None = None
+
+        def preserve_primary_error(error: BaseException) -> None:
+            nonlocal primary_error
+            if primary_error is None:
+                primary_error = error
+
         if self.restore_oauth_state:
-            await cleanup_oauth_runtime_mcp_servers()
-            restore_hosted_mcp_oauth_tools(self.agency)
+            try:
+                await cleanup_oauth_runtime_mcp_servers()
+            except BaseException as exc:
+                preserve_primary_error(exc)
+            try:
+                restore_hosted_mcp_oauth_tools(self.agency)
+            except BaseException as exc:
+                preserve_primary_error(exc)
         if self.oauth_snapshot is not None:
-            _restore_oauth_agent_state(self.agency, self.oauth_snapshot)
+            try:
+                _restore_oauth_agent_state(self.agency, self.oauth_snapshot)
+            except BaseException as exc:
+                preserve_primary_error(exc)
         if self.restore_snapshot is not None:
-            _restore_agency_state(self.agency, self.restore_snapshot)
+            try:
+                _restore_agency_state(self.agency, self.restore_snapshot)
+            except BaseException as exc:
+                preserve_primary_error(exc)
         if self.lease is not None:
-            await _release_agency_request_lease(self.lease)
+            try:
+                await _release_agency_request_lease(self.lease)
+            except BaseException as exc:
+                self._is_cleaned = False
+                preserve_primary_error(exc)
+            else:
+                self.lease = None
+        if primary_error is not None:
+            raise primary_error
 
 
 type _RequestStateEntry = tuple[ReferenceType[object], dict[asyncio.AbstractEventLoop, _AgencyRequestState]]
@@ -3122,5 +3149,7 @@ async def _acquire_agency_request_lease(agency: Agency, is_override: bool) -> _A
 
 async def _release_agency_request_lease(lease: _AgencyRequestLease) -> None:
     """Release a previously acquired request lease."""
-    for state in reversed(lease.states):
+    while lease.states:
+        state = lease.states[-1]
         await _release_request_state(state, lease.is_override)
+        lease.states = lease.states[:-1]

@@ -4,10 +4,12 @@ import asyncio
 import contextlib
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
-from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
+from mcp.client.auth.oauth2 import OAuthContext
+from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
+from pydantic import AnyUrl
 
 from agency_swarm.mcp.oauth import (
     FileTokenStorage,
@@ -166,7 +168,7 @@ class TestFileTokenStorage:
 
         # Saving should forward to callback
         await storage.set_tokens(test_token)
-        assert TEST_SERVER_URL in saved_tokens
+        assert f"{storage.server_cache_segment}::{TEST_SERVER_URL}" in saved_tokens
 
         # Loading should prefer callback data
         loaded_token = await storage.get_tokens()
@@ -205,8 +207,14 @@ class TestFileTokenStorage:
                 OAuthToken(access_token="token-b", token_type="Bearer", expires_in=3600, refresh_token="refresh-b")
             )
 
-            key_a = f"{build_oauth_user_segment('john@example.com', max_prefix_length=120)}::{TEST_SERVER_URL}"
-            key_b = f"{build_oauth_user_segment('john/example.com', max_prefix_length=120)}::{TEST_SERVER_URL}"
+            key_a = (
+                f"{build_oauth_user_segment('john@example.com', max_prefix_length=120)}::"
+                f"{storage.server_cache_segment}::{TEST_SERVER_URL}"
+            )
+            key_b = (
+                f"{build_oauth_user_segment('john/example.com', max_prefix_length=120)}::"
+                f"{storage.server_cache_segment}::{TEST_SERVER_URL}"
+            )
 
             assert key_a in saved_tokens
             assert key_b in saved_tokens
@@ -251,10 +259,38 @@ class TestFileTokenStorage:
         assert loaded_b.access_token == "production-token"
         assert storage_a.server_cache_segment != storage_b.server_cache_segment
 
-    async def test_token_storage_does_not_load_raw_callback_tokens_into_user_scoped_requests(
-        self, tmp_path: Path
-    ) -> None:
-        """The raw callback key is reserved for the shared default bucket."""
+    async def test_token_storage_separates_client_identities(self, tmp_path: Path) -> None:
+        """File-backed tokens should not leak across OAuth clients for one endpoint."""
+        server_a = MCPServerOAuth(
+            url=TEST_SERVER_URL,
+            name="github",
+            client_id="client-a",
+            client_secret="shared-secret",
+            cache_dir=tmp_path,
+        )
+        server_b = MCPServerOAuth(
+            url=TEST_SERVER_URL,
+            name="github",
+            client_id="client-b",
+            client_secret="shared-secret",
+            cache_dir=tmp_path,
+        )
+        provider_a = await create_oauth_provider(server_a)
+        provider_b = await create_oauth_provider(server_b)
+        storage_a = provider_a.context.storage
+        storage_b = provider_b.context.storage
+        assert isinstance(storage_a, FileTokenStorage)
+        assert isinstance(storage_b, FileTokenStorage)
+
+        await storage_a.set_tokens(OAuthToken(access_token="client-a-token", token_type="Bearer"))
+
+        assert await storage_b.get_tokens() is None
+        assert storage_a.server_cache_segment != storage_b.server_cache_segment
+        assert "shared-secret" not in server_a.get_client_identity()
+        assert "shared-secret" not in storage_a.server_cache_segment
+
+    async def test_token_storage_does_not_load_legacy_raw_callback_tokens(self, tmp_path: Path) -> None:
+        """Legacy server-only callback keys must not enter client-scoped buckets."""
         saved_tokens: dict[str, dict[str, str]] = {
             TEST_SERVER_URL: {
                 "access_token": "legacy-token",
@@ -365,6 +401,76 @@ class TestMCPServerOAuth:
         assert "authorization_code" in metadata.grant_types
         assert "refresh_token" in metadata.grant_types
         assert metadata.scope == "user repo"
+
+    def test_configured_client_secret_defaults_to_basic_auth(self, tmp_path: Path) -> None:
+        """Static client secrets use an auth method supported by the MCP SDK."""
+        config = MCPServerOAuth(
+            url=TEST_SERVER_URL,
+            name="test-server",
+            client_id="test-id",
+            client_secret="test-secret",
+        )
+
+        client_info = config.build_client_information()
+
+        assert client_info is not None
+        assert client_info.token_endpoint_auth_method == "client_secret_basic"
+        context = OAuthContext(
+            server_url=config.url,
+            client_metadata=config.build_client_metadata(),
+            storage=FileTokenStorage(tmp_path, config.name),
+            redirect_handler=None,
+            callback_handler=None,
+            client_info=client_info,
+        )
+        token_data, headers = context.prepare_token_auth({"client_id": "test-id"})
+        assert headers["Authorization"].startswith("Basic ")
+        assert "client_secret" not in token_data
+
+    def test_custom_client_auth_method_is_preserved(self) -> None:
+        """Explicit client metadata auth choices override the secret default."""
+        metadata = OAuthClientMetadata(
+            redirect_uris=[AnyUrl("http://localhost:8000/auth/callback")],
+            token_endpoint_auth_method="client_secret_post",
+        )
+        config = MCPServerOAuth(
+            url=TEST_SERVER_URL,
+            name="test-server",
+            client_id="test-id",
+            client_secret="test-secret",
+            client_metadata=metadata,
+        )
+
+        client_info = config.build_client_information()
+
+        assert client_info is not None
+        assert client_info.token_endpoint_auth_method == "client_secret_post"
+
+    def test_client_identity_covers_effective_oauth_configuration(self) -> None:
+        """Client identity changes with client ID, redirect URI, and auth server."""
+        base = MCPServerOAuth(url=TEST_SERVER_URL, name="test-server", client_id="client-a")
+        different_client = MCPServerOAuth(url=TEST_SERVER_URL, name="test-server", client_id="client-b")
+        different_redirect = MCPServerOAuth(
+            url=TEST_SERVER_URL,
+            name="test-server",
+            client_id="client-a",
+            redirect_uri="http://localhost:9000/other/callback",
+        )
+        different_auth_server = MCPServerOAuth(
+            url=TEST_SERVER_URL,
+            name="test-server",
+            client_id="client-a",
+            auth_server_url="https://auth.example.com",
+        )
+
+        identities = {
+            base.get_client_identity(),
+            different_client.get_client_identity(),
+            different_redirect.get_client_identity(),
+            different_auth_server.get_client_identity(),
+        }
+
+        assert len(identities) == 4
 
     def test_redirect_uri_reads_env_when_using_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Uses server-specific env redirect when config is default."""
@@ -745,6 +851,36 @@ class TestCreateOAuthProvider:
 
         assert provider.context.redirect_handler is runtime_redirect_handler
         assert provider.context.callback_handler is runtime_callback_handler
+
+    @pytest.mark.parametrize(
+        "explicit_redirect_uri",
+        [None, "http://localhost:9999/conflicting/callback"],
+    )
+    async def test_default_callback_uses_custom_client_metadata_redirect_uri(
+        self,
+        tmp_path: Path,
+        explicit_redirect_uri: str | None,
+    ) -> None:
+        """The local callback listener must match custom OAuth client metadata."""
+        redirect_uri = "http://127.0.0.1:8765/custom/oauth/callback"
+        server = MCPServerOAuth(
+            url=TEST_SERVER_URL,
+            name="provider-test-custom-metadata",
+            cache_dir=tmp_path,
+            redirect_uri=explicit_redirect_uri,
+            client_metadata=OAuthClientMetadata(redirect_uris=[AnyUrl(redirect_uri)]),
+            use_env_credentials=False,
+        )
+
+        with patch(
+            "agency_swarm.mcp.oauth.default_callback_handler",
+            new_callable=AsyncMock,
+            return_value=("code", "state"),
+        ) as callback:
+            provider = await create_oauth_provider(server)
+            await provider.context.callback_handler()
+
+        callback.assert_awaited_once_with(redirect_uri, timeout=300.0)
 
 
 class TestOAuthClientTransportCompatibility:

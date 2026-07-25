@@ -97,8 +97,8 @@ def get_oauth_runtime_context() -> OAuthRuntimeContext | None:
 class TokenCallbackRegistry:
     """Holds optional load/save callbacks for token persistence.
 
-    The callback key is the raw server URL for the shared default bucket and
-    `<user-segment>::<server_url>` for user-scoped requests.
+    Callback keys include the OAuth client namespace, server URL, and optional
+    user segment so credentials cannot cross OAuth client registrations.
     """
 
     load_callback: Callable[[str], TokenPayload | None] | None = None
@@ -131,6 +131,7 @@ class FileTokenStorage:
         server_name: str,
         server_url: str | None = None,
         token_callbacks: TokenCallbackRegistry | None = None,
+        client_identity: str | None = None,
     ):
         """Initialize file-based token storage.
 
@@ -139,22 +140,32 @@ class FileTokenStorage:
             server_name: Unique name for the MCP server
             server_url: Full MCP endpoint URL (used for storage isolation and callback identification)
             token_callbacks: Optional callback registry for custom persistence
+            client_identity: Secret-free identity for the effective OAuth client configuration
         """
         self.base_cache_dir = cache_dir
         self.server_name = server_name
         self.server_url = server_url or server_name
-        self.server_cache_segment = self.build_server_cache_segment(server_name, self.server_url)
+        self.client_identity = client_identity or "default-client"
+        self.server_cache_segment = self.build_server_cache_segment(
+            server_name,
+            self.server_url,
+            self.client_identity,
+        )
         self._token_callbacks = token_callbacks
 
     @staticmethod
-    def build_server_cache_segment(server_name: str, server_url: str | None = None) -> str:
-        """Build the cache bucket used for one MCP server endpoint."""
+    def build_server_cache_segment(
+        server_name: str,
+        server_url: str | None = None,
+        client_identity: str | None = None,
+    ) -> str:
+        """Build the cache bucket used for one MCP endpoint and OAuth client."""
         endpoint = server_url or server_name
         server_identity = server_name if endpoint == server_name else f"{server_name}::{endpoint}"
+        storage_identity = f"{server_identity}::oauth-client::{client_identity or 'default-client'}"
         return build_oauth_cache_segment(
-            server_identity,
+            storage_identity,
             max_prefix_length=120,
-            preserve_safe=endpoint == server_name,
         )
 
     def _get_user_cache_dir(self) -> Path:
@@ -243,9 +254,9 @@ class FileTokenStorage:
         """Return the callback persistence key for the active user context."""
         user_id = _user_id_context.get()
         if not user_id:
-            return self.server_url
+            return f"{self.server_cache_segment}::{self.server_url}"
         scoped_user = build_oauth_user_segment(user_id, max_prefix_length=120)
-        return f"{scoped_user}::{self.server_url}"
+        return f"{scoped_user}::{self.server_cache_segment}::{self.server_url}"
 
     async def get_tokens(self) -> OAuthToken | None:
         """Get stored tokens for current user."""
@@ -473,18 +484,21 @@ class MCPServerOAuth:
         return get_default_cache_dir()
 
     def build_client_metadata(self) -> OAuthClientMetadata:
-        """Build OAuth client metadata from config."""
+        """Build effective OAuth client metadata from config."""
         if self.client_metadata:
-            return self.client_metadata
+            metadata = self.client_metadata
+        else:
+            metadata = OAuthClientMetadata(
+                client_name=f"Agency Swarm - {self.name}",
+                redirect_uris=[AnyUrl(self.get_redirect_uri())],
+                grant_types=["authorization_code", "refresh_token"],
+                response_types=["code"],
+                scope=" ".join(self.scopes),
+            )
 
-        redirect_uri = self.get_redirect_uri()
-        return OAuthClientMetadata(
-            client_name=f"Agency Swarm - {self.name}",
-            redirect_uris=[AnyUrl(redirect_uri)],
-            grant_types=["authorization_code", "refresh_token"],
-            response_types=["code"],
-            scope=" ".join(self.scopes),
-        )
+        if self.get_client_secret() and metadata.token_endpoint_auth_method is None:
+            return metadata.model_copy(update={"token_endpoint_auth_method": "client_secret_basic"})
+        return metadata
 
     def get_client_id_optional(self) -> str | None:
         """Return the resolved client_id without raising."""
@@ -501,6 +515,12 @@ class MCPServerOAuth:
             return os.getenv("OAUTH_CALLBACK_URL", self.DEFAULT_REDIRECT_URI)
         return self.DEFAULT_REDIRECT_URI
 
+    def get_callback_redirect_uri(self, client_metadata: OAuthClientMetadata) -> str:
+        """Return the advertised URI used by the default local callback listener."""
+        if client_metadata.redirect_uris:
+            return str(client_metadata.redirect_uris[0])
+        return self.get_redirect_uri()
+
     def build_client_information(self) -> OAuthClientInformationFull | None:
         """Return prepopulated client information when static credentials exist."""
         client_id = self.get_client_id_optional()
@@ -516,6 +536,20 @@ class MCPServerOAuth:
         )
 
         return OAuthClientInformationFull(**metadata_data)
+
+    def get_client_identity(self) -> str:
+        """Return a stable, secret-free identity for OAuth persistence."""
+        metadata = self.build_client_metadata()
+        identity = json.dumps(
+            {
+                "auth_server_url": self.get_auth_server_url(),
+                "client_id": self.get_client_id_optional(),
+                "client_metadata": metadata.model_dump(mode="json", by_alias=True, exclude_none=True),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return build_oauth_cache_segment(identity, max_prefix_length=48)
 
     def get_auth_server_url(self) -> str | None:
         """Return the OAuth authorization server base URL."""
@@ -853,6 +887,7 @@ async def create_oauth_provider(
             server_name=server.name,
             server_url=server.url,
             token_callbacks=_TOKEN_CALLBACK_REGISTRY,
+            client_identity=server.get_client_identity(),
         )
 
     client_metadata = server.build_client_metadata()
@@ -880,7 +915,8 @@ async def create_oauth_provider(
         callback_timeout = runtime_context.timeout if runtime_context and runtime_context.timeout is not None else 300.0
 
         async def _wrapped_callback_handler() -> tuple[str, str | None]:
-            return await default_callback_handler(server.get_redirect_uri(), timeout=callback_timeout)
+            redirect_uri = server.get_callback_redirect_uri(client_metadata)
+            return await default_callback_handler(redirect_uri, timeout=callback_timeout)
 
         callback_handler = _wrapped_callback_handler
 

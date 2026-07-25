@@ -371,6 +371,119 @@ async def test_make_response_endpoint_does_not_release_unacquired_lock(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_cleanup_failure_restores_snapshots_and_releases_writer_lease(monkeypatch) -> None:
+    """Cleanup failures must not leave the shared agent writer-locked."""
+    pytest.importorskip("agents")
+
+    from agency_swarm.integrations.fastapi_utils import endpoint_handlers
+    from agency_swarm.integrations.fastapi_utils.override_policy import RequestOverridePolicy
+
+    class _Agent:
+        pass
+
+    class _Agency:
+        agents = {"A": _Agent()}
+
+    agency = _Agency()
+    lease = await endpoint_handlers._acquire_agency_request_lease(agency, is_override=True)
+    cleanup_calls: list[str] = []
+
+    async def _fail_cleanup() -> None:
+        cleanup_calls.append("cleanup")
+        raise RuntimeError("primary cleanup failure")
+
+    def _restore_hosted(_agency) -> None:
+        cleanup_calls.append("hosted")
+
+    def _fail_oauth_restore(_agency, _snapshot) -> None:
+        cleanup_calls.append("oauth")
+        raise ValueError("secondary OAuth restore failure")
+
+    def _restore_client(_agency, _snapshot) -> None:
+        cleanup_calls.append("client")
+
+    monkeypatch.setattr(endpoint_handlers, "cleanup_oauth_runtime_mcp_servers", _fail_cleanup)
+    monkeypatch.setattr(endpoint_handlers, "restore_hosted_mcp_oauth_tools", _restore_hosted)
+    monkeypatch.setattr(endpoint_handlers, "_restore_oauth_agent_state", _fail_oauth_restore)
+    monkeypatch.setattr(endpoint_handlers, "_restore_agency_state", _restore_client)
+
+    session = endpoint_handlers._RequestOverrideSession(
+        agency=agency,
+        policy=RequestOverridePolicy(None),
+        restore_oauth_state=True,
+        lease=lease,
+        oauth_snapshot={},
+        restore_snapshot={},
+    )
+
+    with pytest.raises(RuntimeError, match="primary cleanup failure"):
+        await session.cleanup()
+    await session.cleanup()
+
+    later_lease = await asyncio.wait_for(
+        endpoint_handlers._acquire_agency_request_lease(agency, is_override=True),
+        timeout=0.2,
+    )
+    await endpoint_handlers._release_agency_request_lease(later_lease)
+
+    assert cleanup_calls == ["cleanup", "hosted", "oauth", "client"]
+
+
+@pytest.mark.asyncio
+async def test_cleanup_retries_only_unreleased_regular_states(monkeypatch) -> None:
+    """Partial release retries must not decrement an already released reader twice."""
+    pytest.importorskip("agents")
+
+    from agency_swarm.integrations.fastapi_utils import endpoint_handlers
+    from agency_swarm.integrations.fastapi_utils.override_policy import RequestOverridePolicy
+
+    class _Agency:
+        pass
+
+    agency = _Agency()
+    state_a = endpoint_handlers._AgencyRequestState(active_regular_requests=1)
+    state_b = endpoint_handlers._AgencyRequestState(active_regular_requests=1)
+    lease = endpoint_handlers._AgencyRequestLease(states=(state_a, state_b), is_override=False)
+    release_attempts: list[object] = []
+    original_release = endpoint_handlers._release_request_state
+
+    async def _fail_second_release(state, is_override: bool) -> None:
+        release_attempts.append(state)
+        if len(release_attempts) == 2:
+            raise RuntimeError("second release failed")
+        await original_release(state, is_override)
+
+    async def _get_states(_agency):
+        return (state_a, state_b)
+
+    monkeypatch.setattr(endpoint_handlers, "_release_request_state", _fail_second_release)
+    monkeypatch.setattr(endpoint_handlers, "_get_agency_request_states", _get_states)
+
+    session = endpoint_handlers._RequestOverrideSession(
+        agency=agency,
+        policy=RequestOverridePolicy(None),
+        lease=lease,
+    )
+
+    with pytest.raises(RuntimeError, match="second release failed"):
+        await session.cleanup()
+
+    assert lease.states == (state_a,)
+    assert [state_a.active_regular_requests, state_b.active_regular_requests] == [1, 0]
+
+    await session.cleanup()
+
+    assert session.lease is None
+    assert [state_a.active_regular_requests, state_b.active_regular_requests] == [0, 0]
+
+    future_lease = await asyncio.wait_for(
+        endpoint_handlers._acquire_agency_request_lease(agency, is_override=True),
+        timeout=0.2,
+    )
+    await endpoint_handlers._release_agency_request_lease(future_lease)
+
+
+@pytest.mark.asyncio
 async def test_cancelled_override_notifies_waiting_regular_requests(monkeypatch) -> None:
     """Cancelling a waiting override should wake regular requests blocked on pending_overrides."""
     pytest.importorskip("agents")

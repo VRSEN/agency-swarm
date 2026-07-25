@@ -533,6 +533,7 @@ class Agent(BaseAgent[MasterContext]):
             server_name_schema["enum"] = server_names
 
         setattr(_authenticate_mcp_server, _MCP_AUTHENTICATION_TOOL_ATTR, True)
+        _authenticate_mcp_server.one_call_at_a_time = True  # type: ignore[attr-defined]
         self.add_tool(_authenticate_mcp_server)
 
     def _ensure_web_search_sources_include(self) -> None:

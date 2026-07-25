@@ -27,7 +27,7 @@ Use this when your agency runs on a server and users authenticate from a web/mob
 - **Mode:** `saas_stream`
 - **Hosted MCP** (Notion): Configure `MCPServerOAuth(url=..., name=...)` and deploy your agency.
 - **Self-hosted MCP** (GitHub/Google): Run your OAuth-enabled MCP server + deploy your agency.
-- **HostedMCPTool (remote MCP)**: If you use `HostedMCPTool`, OAuth tokens must be provided via `tool_config.authorization`. In FastAPI, wrap only the OAuth-protected hosted tool with `enable_hosted_mcp_tool_oauth(...)`. Agency Swarm will create an in-memory registry by default, or you can pass `oauth_registry=OAuthStateRegistry()` to share state across workers. It then surfaces the auth URL via `event: oauth_redirect` and injects the access token once authorized. Public hosted MCP servers should stay unwrapped.
+- **HostedMCPTool (remote MCP)**: If you use `HostedMCPTool`, OAuth tokens must be provided via `tool_config.authorization`. In FastAPI, wrap only the OAuth-protected hosted tool with `enable_hosted_mcp_tool_oauth(...)`. Agency Swarm creates an in-memory registry by default. For multiple workers, pass an external shared registry implementation, or use sticky routing or a single worker. It then surfaces the auth URL via `event: oauth_redirect` and injects the access token once authorized. Public hosted MCP servers should stay unwrapped.
 - **Deferred auth trigger (all modes):** Startup never forces OAuth discovery. The model gets an `authenticate_mcp_server(server_name)` tool and OAuth starts only when that tool is invoked for a specific authenticated MCP server.
 - **Tool parameter contract:** `server_name` is constrained to the configured authenticated MCP server names for that agent.
 - **Streaming is required**: OAuth authorization is delivered via `event: oauth_redirect`, so use `POST /{agency}/get_response_stream`. The non-streaming `POST /{agency}/get_response` endpoint is not compatible with OAuth-enabled MCP servers.
@@ -44,7 +44,7 @@ See the FastAPI OAuth section: [OAuth-enabled agencies](/additional-features/fas
 Use this when you are running locally (developer machine) and can open a browser.
 
 - **Mode:** `local_browser`
-- **Works with non-streaming**: `agency.get_response(...)` can open the browser and wait for the callback, then continue the run.
+- **Works with non-streaming**: `agency.get_response_sync(...)` can open the browser and wait for the callback, then continue the run.
 - **Hosted MCP** (Notion): Just the hosted MCP URL.
 - **Self-hosted MCP** (GitHub/Google): Start the MCP server locally + export `*_CLIENT_ID` / `*_CLIENT_SECRET`.
 
@@ -62,7 +62,7 @@ notion = MCPServerOAuth(url="https://mcp.notion.com/mcp", name="notion")
 
 agent = Agent(name="NotionAgent", mcp_servers=[notion])
 agency = Agency(agent)
-agency.get_response("List my recent Notion pages")  # Local run: browser opens for authorization
+agency.get_response_sync("List my recent Notion pages")  # Local run: browser opens for authorization
 ```
 
 **Self-hosted servers** (GitHub, Google) require you to run a FastMCP server with your OAuth credentials:
@@ -81,7 +81,7 @@ github = MCPServerOAuth(url="http://localhost:8001/mcp", name="github", scopes=[
 
 agent = Agent(name="GitHubAgent", mcp_servers=[github])
 agency = Agency(agent)
-agency.get_response("List my repositories")  # Local run: browser opens for authorization
+agency.get_response_sync("List my repositories")  # Local run: browser opens for authorization
 ```
 
 <Note>
@@ -133,7 +133,7 @@ For GitHub/Google, you need to create an OAuth app and run a FastMCP server:
    - Export: `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`
 
 2. **Google**: [Cloud Console](https://console.cloud.google.com/apis/credentials) → Create Credentials → OAuth client ID
-   - Callback URL: `http://localhost:8002/auth/callback`  
+   - Callback URL: `http://localhost:8002/auth/callback`
    - Export: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
 
 Then run the FastMCP server (see `examples/mcp_oauth/github_server.py` for GitHub, `examples/mcp_oauth/google_server.py` for Google).
@@ -198,9 +198,9 @@ Then run the FastMCP server (see `examples/mcp_oauth/github_server.py` for GitHu
 
 ## Token storage and isolation
 
-Tokens default to `~/.agency-swarm/mcp-tokens/{user}/{server-endpoint}/`. Set `AGENCY_SWARM_MCP_CACHE_DIR` for a global override or pass `cache_dir` per server.
+Tokens default to `~/.agency-swarm/mcp-tokens/{user}/{server-client}/`. Set `AGENCY_SWARM_MCP_CACHE_DIR` for a global override or pass `cache_dir` per server.
 
-User-scoped buckets use a collision-resistant filesystem segment derived from the authenticated user ID or `set_oauth_user_id()`. Legacy buckets whose old sanitized name could map to more than one user ID are intentionally not auto-migrated; those users must authorize again instead of risking cross-user token reuse.
+User-scoped buckets use a collision-resistant filesystem segment derived from the authenticated user ID or `set_oauth_user_id()`. Each server bucket also includes the effective OAuth client configuration, so different client registrations cannot reuse each other's tokens. Legacy buckets that do not identify the user or OAuth client unambiguously are intentionally not auto-migrated; those users must authorize again instead of risking credential reuse.
 
 For FastAPI, pass a trusted dependency that authenticates the request and returns a stable, non-secret user ID:
 
@@ -241,8 +241,8 @@ agency = Agency(
 Per-user layout (conceptual):
 ```
 ./data/oauth-tokens/
-  default/github-<endpoint-hash>/tokens.json
-  user_123-<hash>/github-<endpoint-hash>/tokens.json
+  default/github-<endpoint-and-client-hash>/tokens.json
+  user_123-<hash>/github-<endpoint-and-client-hash>/tokens.json
 ```
 Access tokens refresh automatically via the MCP SDK; if a refresh token expires, the flow will prompt for authorization again.
 

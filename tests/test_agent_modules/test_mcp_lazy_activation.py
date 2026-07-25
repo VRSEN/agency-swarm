@@ -1,3 +1,6 @@
+import asyncio
+import threading
+
 import pytest
 from agents import FunctionTool
 
@@ -146,6 +149,40 @@ async def test_authenticate_mcp_server_rejects_unknown_name(monkeypatch: pytest.
     activation_tool = next(tool for tool in agent.tools if getattr(tool, "name", "") == "authenticate_mcp_server")
     result = await activation_tool.on_invoke_tool(None, '{"server_name":"notion"}')
     assert "Unknown MCP server 'notion'" in result
+
+
+@pytest.mark.asyncio
+async def test_authenticate_mcp_server_serializes_parallel_activation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Parallel activation attempts must not mutate shared MCP state together."""
+    conversion_started = threading.Event()
+    release_conversion = threading.Event()
+    convert_calls: list[list[str]] = []
+
+    def _blocking_convert(agent: Agent) -> None:
+        convert_calls.append([str(getattr(server, "name", "")) for server in agent.mcp_servers])
+        conversion_started.set()
+        assert release_conversion.wait(timeout=1)
+        agent.mcp_servers.clear()
+
+    monkeypatch.setattr("agency_swarm.agent.core.convert_mcp_servers_to_tools", _blocking_convert)
+    agent = _make_oauth_agent(
+        MCPServerOAuth(url="https://example.com/github", name="github"),
+        MCPServerOAuth(url="https://example.com/notion", name="notion"),
+    )
+    activation_tool = next(tool for tool in agent.tools if getattr(tool, "name", "") == "authenticate_mcp_server")
+
+    first_task = asyncio.create_task(activation_tool.on_invoke_tool(None, '{"server_name":"github"}'))
+    assert await asyncio.to_thread(conversion_started.wait, 1)
+    second_result = await activation_tool.on_invoke_tool(None, '{"server_name":"notion"}')
+    release_conversion.set()
+    first_result = await asyncio.wait_for(first_task, timeout=0.2)
+
+    assert getattr(activation_tool, "one_call_at_a_time", False) is True
+    assert "authenticated and its tools are enabled" in first_result
+    assert "concurrency violation" in second_result
+    assert convert_calls == [["github"]]
+    assert set(agent._deferred_mcp_servers) == {"notion"}
+    assert agent.mcp_servers == []
 
 
 def test_ensure_mcp_tools_keeps_non_oauth_servers_eager(monkeypatch: pytest.MonkeyPatch) -> None:

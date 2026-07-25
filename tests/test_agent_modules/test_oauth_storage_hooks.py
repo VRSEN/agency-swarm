@@ -230,18 +230,19 @@ class TestFileTokenStorageWithContextVar:
 
         set_oauth_user_id(None)
 
-    async def test_storage_migrates_legacy_safe_user_scoped_token_files(self, tmp_path: Path) -> None:
-        """Legacy safe user buckets should migrate into hashed buckets."""
-        legacy_dir = tmp_path / "user1"
-        legacy_dir.mkdir(parents=True)
-        (legacy_dir / "test-server_tokens.json").write_text(
-            '{"access_token":"legacy","token_type":"Bearer","expires_in":3600}'
-        )
-
+    async def test_storage_migrates_only_client_scoped_legacy_token_files(self, tmp_path: Path) -> None:
+        """Safe user buckets migrate only files scoped to the OAuth client."""
         storage = FileTokenStorage(
             cache_dir=tmp_path,
             server_name="test-server",
+            client_identity="client-a",
         )
+        legacy_dir = tmp_path / "user1"
+        legacy_dir.mkdir(parents=True)
+        ambiguous_file = legacy_dir / "test-server_tokens.json"
+        ambiguous_file.write_text('{"access_token":"ambiguous","token_type":"Bearer","expires_in":3600}')
+        scoped_file = legacy_dir / f"{storage.server_cache_segment}_tokens.json"
+        scoped_file.write_text('{"access_token":"legacy","token_type":"Bearer","expires_in":3600}')
 
         set_oauth_user_id("user1")
         try:
@@ -254,7 +255,8 @@ class TestFileTokenStorageWithContextVar:
                 / storage.server_cache_segment
                 / "tokens.json"
             ).exists()
-            assert not (legacy_dir / "test-server_tokens.json").exists()
+            assert not scoped_file.exists()
+            assert ambiguous_file.exists()
         finally:
             set_oauth_user_id(None)
 
@@ -372,8 +374,13 @@ class TestFileTokenStorageWithContextVar:
         finally:
             set_oauth_user_id(None)
 
-    async def test_storage_migrates_legacy_safe_user_scoped_client_files(self, tmp_path: Path) -> None:
-        """Legacy safe user buckets should migrate client metadata too."""
+    async def test_storage_migrates_only_client_scoped_legacy_client_files(self, tmp_path: Path) -> None:
+        """Safe user buckets migrate client metadata only for the OAuth client."""
+        storage = FileTokenStorage(
+            cache_dir=tmp_path,
+            server_name="test-server",
+            client_identity="client-a",
+        )
         legacy_dir = tmp_path / "user1"
         legacy_dir.mkdir(parents=True)
         legacy_client_info = OAuthClientInformationFull(
@@ -382,12 +389,12 @@ class TestFileTokenStorageWithContextVar:
             client_id_issued_at=1234567890,
             redirect_uris=[AnyUrl("http://localhost:8000/auth/callback")],
         )
-        (legacy_dir / "test-server_client.json").write_text(legacy_client_info.model_dump_json(indent=2))
-
-        storage = FileTokenStorage(
-            cache_dir=tmp_path,
-            server_name="test-server",
+        ambiguous_file = legacy_dir / "test-server_client.json"
+        ambiguous_file.write_text(
+            legacy_client_info.model_copy(update={"client_id": "ambiguous-client"}).model_dump_json(indent=2)
         )
+        scoped_file = legacy_dir / f"{storage.server_cache_segment}_client.json"
+        scoped_file.write_text(legacy_client_info.model_dump_json(indent=2))
 
         set_oauth_user_id("user1")
         try:
@@ -400,7 +407,8 @@ class TestFileTokenStorageWithContextVar:
                 / storage.server_cache_segment
                 / "client.json"
             ).exists()
-            assert not (legacy_dir / "test-server_client.json").exists()
+            assert not scoped_file.exists()
+            assert ambiguous_file.exists()
         finally:
             set_oauth_user_id(None)
 
