@@ -137,7 +137,8 @@ class Agent(BaseAgent[MasterContext]):
             validation_attempts (int): Number of retries when an output guardrail trips. Defaults to 1.
             raise_input_guardrail_error (bool): Whether to raise input guardrail errors as exceptions.
                 Defaults to False.
-            voice (str | None): Preferred realtime voice token for this agent.
+            voice (str | None): Realtime session voice used when this agent is the entry agent. A realtime
+                session keeps one voice from start to finish, so a voice set on any other agent is not heard.
             handoff_reminder (str | None): Custom reminder for handoffs.
                 Defaults to `Transfer completed. You are {recipient_agent_name}. Please continue the task.`
 

@@ -45,7 +45,7 @@ class Agency:
             load_threads_callback: Callable used to load persisted conversation threads
             save_threads_callback: Callable used to save conversation threads
             user_context: Initial shared context accessible to all agents
-            randomize_agent_voices: Assign random realtime voices to agents that do not set `voice`
+            randomize_agent_voices: Assign provider-supported random voices to agents that do not set `voice`
             voice_random_seed: Optional seed used to make voice randomization deterministic
         """
 ```
@@ -312,7 +312,7 @@ class Agent(BaseAgent[MasterContext]):
             tool_use_behavior ("run_llm_again" | "stop_on_first_tool" | StopAtTools | dict[str, Any] | Callable):
                 Tool execution policy passed through to the agents SDK
             reset_tool_choice (bool | None): Whether to reset tool choice after tool calls
-            voice (str | None): Preferred realtime voice token for this agent
+            voice (str | None): Realtime session voice used when this agent is the entry agent
         """
 ```
 
@@ -329,7 +329,7 @@ class Agent(BaseAgent[MasterContext]):
 - **`raise_input_guardrail_error`** (bool): Controls input guardrail mode—False for non-strict (guidance as assistant), True for strict (raises exceptions).
 - **`handoff_reminder`** (str | None): Custom reminder appended to handoff prompts
 - **`tool_concurrency_manager`** (ToolConcurrencyManager): Coordinates concurrent tool execution
-- **`voice`** (str | None): Preferred realtime voice token used for audio sessions
+- **`voice`** (str | None): Realtime session voice used when this agent is the entry agent. A session keeps one voice from start to finish, so a voice set on any other agent is not heard.
 
 ### Core Execution Methods
 

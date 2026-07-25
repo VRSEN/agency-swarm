@@ -3,14 +3,13 @@ import asyncio
 import atexit
 import logging
 import os
-import random
 import threading
 import warnings
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from agents import RunConfig, RunHooks, RunResult, Tool, TResponseInputItem
 
-from agency_swarm.agent.constants import AGENT_REALTIME_VOICES, AgentVoice
+from agency_swarm.agent.constants import AGENT_OPENAI_REALTIME_VOICES
 from agency_swarm.agent.core import AgencyContext, Agent
 from agency_swarm.agent.execution_streaming import StreamingRunResponse
 from agency_swarm.hooks import PersistenceHooks
@@ -24,7 +23,7 @@ from .flow_compat import (
     CommunicationFlowEntry,
     normalize_parse_agent_flows_result as _normalize_parse_agent_flows_result,
 )
-from .helpers import read_instructions, run_fastapi as run_fastapi_helper
+from .helpers import assign_random_agent_voices, read_instructions, run_fastapi as run_fastapi_helper
 from .setup import (
     apply_shared_resources,
     configure_agents,
@@ -126,8 +125,9 @@ class Agency:
             load_threads_callback (ThreadLoadCallback | None, optional): Callable to load conversation threads.
             save_threads_callback (ThreadSaveCallback | None, optional): Callable to save conversation threads.
             user_context (dict[str, Any] | None, optional): Initial shared context accessible to all agents.
-            randomize_agent_voices (bool, optional): Assign deterministic random realtime voices to agents that do
-                not explicitly set `voice`.
+            randomize_agent_voices (bool, optional): Assign deterministic random realtime voices from the selected
+                provider's supported pool to agents that do not explicitly set `voice`. A realtime session keeps
+                one voice from start to finish, so only the entry agent's voice is heard on a call.
             voice_random_seed (int | None, optional): Optional seed to make voice randomization deterministic.
 
         Raises:
@@ -175,6 +175,7 @@ class Agency:
         self.shared_mcp_servers = shared_mcp_servers
         self._voice_random_seed = voice_random_seed if randomize_agent_voices else None
         self._randomize_agent_voices = randomize_agent_voices
+        self._randomized_agent_names: set[str] = set()
         self.thread_manager = ThreadManager(
             load_threads_callback=load_threads_callback, save_threads_callback=save_threads_callback
         )
@@ -193,7 +194,7 @@ class Agency:
         self._starter_cache_warmup_started = False
 
         if randomize_agent_voices:
-            self._assign_random_agent_voices()
+            assign_random_agent_voices(self, AGENT_OPENAI_REALTIME_VOICES)
 
         if not self.agents:
             raise ValueError("Agency must contain at least one agent.")
@@ -239,29 +240,6 @@ class Agency:
         if agent_name not in self._agent_runtime_state:
             raise ValueError(f"No runtime state found for agent: {agent_name}")
         return self._agent_runtime_state[agent_name]
-
-    def _assign_random_agent_voices(self) -> None:
-        """Assign deterministic random voices to agents lacking an explicit voice."""
-        unassigned_agents = [agent for agent in self.agents.values() if getattr(agent, "voice", None) is None]
-        if not unassigned_agents:
-            return
-
-        rng = random.Random(self._voice_random_seed)
-        used_voices = {voice for voice in (getattr(agent, "voice", None) for agent in self.agents.values()) if voice}
-        available = [voice for voice in AGENT_REALTIME_VOICES if voice not in used_voices]
-        if not available:
-            available = list(AGENT_REALTIME_VOICES)
-        rng.shuffle(available)
-
-        for agent in unassigned_agents:
-            if not available:
-                available = [voice for voice in AGENT_REALTIME_VOICES if voice not in used_voices]
-                if not available:
-                    available = list(AGENT_REALTIME_VOICES)
-                rng.shuffle(available)
-            voice_choice = available.pop()
-            used_voices.add(voice_choice)
-            agent.voice = cast(AgentVoice, voice_choice)
 
     def to_realtime(self, agent: "Agent | str | None" = None) -> "RealtimeAgency":
         """Create a realtime wrapper around this agency."""

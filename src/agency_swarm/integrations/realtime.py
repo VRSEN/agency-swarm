@@ -5,18 +5,12 @@ import base64
 import binascii
 import json
 import logging
-import os
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any, Literal, assert_never, cast
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from agents.realtime import RealtimeModelConfig, RealtimeRunner, RealtimeSession
-from agents.realtime.config import (
-    RealtimeInputAudioNoiseReductionConfig,
-    RealtimeSessionModelSettings,
-    RealtimeTurnDetectionConfig,
-)
+from agents.realtime.config import RealtimeSessionModelSettings
 from agents.realtime.events import (
     RealtimeAgentEndEvent,
     RealtimeAgentStartEvent,
@@ -38,13 +32,18 @@ from agents.realtime.events import (
 from agents.realtime.model_inputs import (
     RealtimeModelRawClientMessage,
     RealtimeModelSendRawMessage,
-    RealtimeModelSendSessionUpdate,
 )
 from starlette.websockets import WebSocket as StarletteWebSocket, WebSocketDisconnect
 
 from agency_swarm.agency.core import Agency
 from agency_swarm.agent.core import Agent
 from agency_swarm.context import MasterContext
+from agency_swarm.integrations.realtime_config import (
+    _normalize_provider,
+    _resolve_provider_options,
+    _resolve_session_voice,
+    build_model_settings,
+)
 from agency_swarm.realtime.agency import RealtimeAgency
 from agency_swarm.utils.thread import ThreadManager
 
@@ -55,10 +54,6 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 __all__ = ["run_realtime", "RealtimeSessionFactory", "build_model_settings"]
-
-SUPPORTED_REALTIME_PROVIDERS = ("openai", "xai")
-XAI_DEFAULT_REALTIME_MODEL = "grok-voice-think-fast-1.0"
-XAI_DEFAULT_REALTIME_URL = "wss://api.x.ai/v1/realtime"
 
 
 def _model_dump(item: Any) -> Any:
@@ -185,19 +180,8 @@ def _serialize_event(event: RealtimeSessionEvent) -> dict[str, Any] | None:
 async def _forward_session_events(
     session: RealtimeSession,
     send: Callable[[str], Awaitable[Any]],
-    *,
-    initial_voice: str | None = None,
 ) -> None:
-    current_voice = initial_voice
     async for event in session:
-        if isinstance(event, RealtimeAgentStartEvent):
-            desired_voice = getattr(event.agent, "voice", None)
-            if desired_voice and desired_voice != current_voice:
-                await session.model.send_event(
-                    RealtimeModelSendSessionUpdate(session_settings={"voice": desired_voice})
-                )
-                logger.info("Updated realtime voice to %s for agent %s", desired_voice, event.agent.name)
-                current_voice = desired_voice
         payload = _serialize_event(event)
         if payload is not None:
             await send(json.dumps(payload))
@@ -251,85 +235,6 @@ async def _handle_client_payload(session: RealtimeSession, payload: str) -> None
     await session.model.send_event(RealtimeModelSendRawMessage(message=client_message))
 
 
-def _normalize_provider(provider: str) -> Literal["openai", "xai"]:
-    normalized = provider.strip().lower()
-    if normalized not in SUPPORTED_REALTIME_PROVIDERS:
-        raise ValueError(
-            f"Unsupported realtime provider '{provider}'. "
-            f"Supported providers: {', '.join(SUPPORTED_REALTIME_PROVIDERS)}."
-        )
-    return cast(Literal["openai", "xai"], normalized)
-
-
-def _resolve_model_name(model: str | None, provider: Literal["openai", "xai"]) -> str:
-    if model and model.strip():
-        return model
-    if provider == "xai":
-        return XAI_DEFAULT_REALTIME_MODEL
-    return "gpt-realtime-2"
-
-
-def build_model_settings(
-    *,
-    model: str | None,
-    voice: str | None,
-    input_audio_format: str | None,
-    output_audio_format: str | None,
-    turn_detection: dict[str, Any] | None,
-    input_audio_noise_reduction: dict[str, Any] | None,
-    provider: str = "openai",
-) -> RealtimeSessionModelSettings:
-    normalized_provider = _normalize_provider(provider)
-    settings: RealtimeSessionModelSettings = {"model_name": _resolve_model_name(model, normalized_provider)}
-    if voice:
-        settings["voice"] = voice
-    if input_audio_format:
-        settings["input_audio_format"] = input_audio_format
-    if output_audio_format:
-        settings["output_audio_format"] = output_audio_format
-    if turn_detection:
-        settings["turn_detection"] = cast(RealtimeTurnDetectionConfig, turn_detection)
-    if input_audio_noise_reduction:
-        settings["input_audio_noise_reduction"] = cast(
-            RealtimeInputAudioNoiseReductionConfig, input_audio_noise_reduction
-        )
-    return settings
-
-
-def _resolve_provider_options(
-    provider: Literal["openai", "xai"],
-    provider_options: Mapping[str, Any] | None,
-    *,
-    model_name: str | None = None,
-) -> dict[str, Any]:
-    resolved = dict(provider_options or {})
-    if provider == "xai":
-        resolved.setdefault("url", XAI_DEFAULT_REALTIME_URL)
-        if resolved.get("url") and model_name:
-            resolved["url"] = _with_xai_model_query(str(resolved["url"]), model_name)
-        api_key_env = str(resolved.get("api_key_env") or "XAI_API_KEY")
-        resolved.setdefault("api_key_env", api_key_env)
-        if "api_key" not in resolved and api_key_env:
-            env_value = os.getenv(api_key_env, "").strip()
-            if env_value:
-                resolved["api_key"] = env_value
-    elif provider == "openai":
-        api_key_env = str(resolved.get("api_key_env") or "OPENAI_API_KEY")
-        resolved.setdefault("api_key_env", api_key_env)
-        if "api_key" not in resolved and api_key_env:
-            env_value = os.getenv(api_key_env, "").strip()
-            if env_value:
-                resolved["api_key"] = env_value
-    return resolved
-
-
-def _with_xai_model_query(url: str, model_name: str) -> str:
-    parts = urlsplit(url)
-    query_items = [(key, value) for key, value in parse_qsl(parts.query, keep_blank_values=True) if key != "model"]
-    query_items.append(("model", model_name))
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query_items), parts.fragment))
-
-
 def _create_runner_model(provider: Literal["openai", "xai"]):
     if provider == "xai":
         from agency_swarm.realtime.xai_model import XAIRealtimeWebSocketModel
@@ -342,23 +247,10 @@ async def _forward_events_to_twilio(
     session: RealtimeSession,
     websocket: StarletteWebSocket,
     get_stream_sid: Callable[[], str | None],
-    *,
-    initial_voice: str | None = None,
 ) -> None:
-    current_voice = initial_voice
     async for event in session:
         stream_sid = get_stream_sid()
         if stream_sid is None:
-            continue
-
-        if isinstance(event, RealtimeAgentStartEvent):
-            desired_voice = getattr(event.agent, "voice", None)
-            if desired_voice and desired_voice != current_voice:
-                await session.model.send_event(
-                    RealtimeModelSendSessionUpdate(session_settings={"voice": desired_voice})
-                )
-                logger.info("Updated realtime voice to %s for Twilio stream", desired_voice)
-                current_voice = desired_voice
             continue
 
         if isinstance(event, RealtimeAudio):
@@ -371,6 +263,12 @@ async def _forward_events_to_twilio(
 
 
 class RealtimeSessionFactory:
+    """Build realtime sessions for an agency.
+
+    The voice is resolved once, before the session starts, and stays fixed for the whole call.
+    Handoffs still switch the agent, its tools, and its instructions.
+    """
+
     def __init__(
         self,
         realtime_agency: RealtimeAgency,
@@ -382,6 +280,13 @@ class RealtimeSessionFactory:
         self._agency = realtime_agency
         self._base_model_settings = dict(base_model_settings)
         self._provider = _normalize_provider(provider)
+        _, session_voice = _resolve_session_voice(
+            self._agency,
+            self._provider,
+            cast(str | None, self._base_model_settings.get("voice")),
+        )
+        if session_voice is not None:
+            self._base_model_settings["voice"] = session_voice
         model_name = self._base_model_settings.get("model_name")
         self._provider_options = _resolve_provider_options(
             self._provider,
@@ -390,7 +295,8 @@ class RealtimeSessionFactory:
         )
 
     @property
-    def default_voice(self) -> str | None:
+    def session_voice(self) -> str | None:
+        """Voice used for every turn of a session created by this factory."""
         voice_value = self._base_model_settings.get("voice")
         return cast(str | None, voice_value)
 
@@ -403,10 +309,16 @@ class RealtimeSessionFactory:
                 if value is not None:
                     merged_settings[key] = value
 
+        model_name = merged_settings.get("model_name")
+        provider_options = _resolve_provider_options(
+            self._provider,
+            self._provider_options,
+            model_name=str(model_name) if model_name else None,
+        )
         model_settings = cast(RealtimeSessionModelSettings, merged_settings)
         model_config: RealtimeModelConfig = {"initial_model_settings": model_settings}
         for option_key in ("url", "api_key", "headers"):
-            option_value = self._provider_options.get(option_key)
+            option_value = provider_options.get(option_key)
             if option_value:
                 model_config[option_key] = option_value
 
@@ -468,12 +380,10 @@ def run_realtime(
 
     realtime_agency = _ensure_realtime_agency(agency, entry_agent)
     normalized_provider = _normalize_provider(provider)
-    entry_voice = getattr(realtime_agency.entry_agent, "voice", None)
-    effective_voice = voice if voice is not None else entry_voice
 
     base_settings = build_model_settings(
         model=model,
-        voice=effective_voice,
+        voice=voice,
         input_audio_format=input_audio_format,
         output_audio_format=output_audio_format,
         turn_detection=turn_detection,
@@ -507,7 +417,6 @@ def run_realtime(
                         _forward_session_events(
                             realtime_session,
                             websocket.send_text,
-                            initial_voice=session_factory.default_voice,
                         )
                     )
                     try:
@@ -594,14 +503,12 @@ def run_realtime(
                 return stream_sid
 
             try:
-                initial_voice = overrides.get("voice") if overrides else session_factory.default_voice
                 async with session as realtime_session:
                     events_task = asyncio.create_task(
                         _forward_events_to_twilio(
                             realtime_session,
                             websocket,
                             _get_stream_sid,
-                            initial_voice=initial_voice,
                         )
                     )
                     try:

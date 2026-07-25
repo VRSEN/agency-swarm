@@ -1,11 +1,14 @@
 # --- Agency helper utility functions ---
 import logging
+import random
 from collections.abc import Callable
 from copy import deepcopy
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from agents import Agent as SDKAgent
+
+from agency_swarm.agent.constants import AgentVoice
 
 if TYPE_CHECKING:
     from agency_swarm.agent.core import AgencyContext, Agent
@@ -15,6 +18,33 @@ if TYPE_CHECKING:
 from agency_swarm.utils.files import get_external_caller_directory
 
 logger = logging.getLogger(__name__)
+
+
+def assign_random_agent_voices(agency: "Agency", voices: tuple[str, ...]) -> None:
+    """Assign deterministic provider voices to agents without an explicit voice."""
+    randomizable_agents = [
+        agent for name, agent in agency.agents.items() if agent.voice is None or name in agency._randomized_agent_names
+    ]
+    if not randomizable_agents:
+        return
+
+    rng = random.Random(agency._voice_random_seed)
+    used_voices = {
+        agent.voice
+        for name, agent in agency.agents.items()
+        if name not in agency._randomized_agent_names and agent.voice in voices
+    }
+    available = [voice for voice in voices if voice not in used_voices] or list(voices)
+    rng.shuffle(available)
+
+    for agent in randomizable_agents:
+        if not available:
+            available = [voice for voice in voices if voice not in used_voices] or list(voices)
+            rng.shuffle(available)
+        voice_choice = cast(AgentVoice, available.pop())
+        used_voices.add(voice_choice)
+        agent.voice = voice_choice
+        agency._randomized_agent_names.add(agent.name)
 
 
 def read_instructions(agency: "Agency", path: str) -> None:

@@ -10,7 +10,7 @@ from openai.types.responses.response_prompt_param import ResponsePromptParam
 
 import agency_swarm
 from agency_swarm import Agency, Agent, Handoff, SDKHandoff
-from agency_swarm.agent.constants import AGENT_REALTIME_VOICES
+from agency_swarm.agent.constants import AGENT_OPENAI_REALTIME_VOICES
 from agency_swarm.agent.conversation_starters_cache import load_cached_starter
 from agency_swarm.tools import Handoff as ToolHandoff
 from agency_swarm.tools.send_message import SendMessage
@@ -265,8 +265,8 @@ def test_agency_randomizes_agent_voices_with_seed() -> None:
         voice_random_seed=21,
     )
 
-    assert agent_a.voice in AGENT_REALTIME_VOICES
-    assert agent_b.voice in AGENT_REALTIME_VOICES
+    assert agent_a.voice in AGENT_OPENAI_REALTIME_VOICES
+    assert agent_b.voice in AGENT_OPENAI_REALTIME_VOICES
     assert agent_a.voice != agent_b.voice
 
     clone_a = Agent(name="AgentA", instructions="Respond with short answers.")
@@ -293,5 +293,5 @@ def test_agency_randomization_respects_explicit_voice() -> None:
     )
 
     assert anchored.voice == "echo"
-    assert floating.voice in AGENT_REALTIME_VOICES
+    assert floating.voice in AGENT_OPENAI_REALTIME_VOICES
     assert floating.voice != "echo"

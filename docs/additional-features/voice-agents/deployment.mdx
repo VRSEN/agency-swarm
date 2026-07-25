@@ -31,7 +31,7 @@ run_realtime(
 python app.py
 ```
 
-The server prints every incoming websocket connection. When your agents declare `voice=`, the bridge carries that choice automatically; omit the parameter for the entry agent to inherit its own voice. Supply `cors_origins` when you deploy behind a browser client that runs on a different domain.
+The server prints every incoming websocket connection. Set `voice=` to pick the voice for the whole call, or leave it out to use the entry agent's voice—see [one voice per call](./overview#one-voice-per-call). Supply `cors_origins` when you deploy behind a browser client that runs on a different domain.
 
 <Tip>
 `run_realtime(..., return_app=True)` returns the FastAPI `app` object if you want to mount it inside an existing application rather than start a dedicated Uvicorn process.

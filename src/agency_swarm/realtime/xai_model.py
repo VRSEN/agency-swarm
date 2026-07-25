@@ -8,6 +8,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from agents.realtime import OpenAIRealtimeWebSocketModel, RealtimeModelConfig
+from openai.types.realtime import RealtimeClientEvent
 
 logger = logging.getLogger(__name__)
 
@@ -42,35 +43,17 @@ class XAIRealtimeWebSocketModel(OpenAIRealtimeWebSocketModel):
             return
 
         normalized = self._normalize_event(event)
-        if event_type in {
-            "conversation.item.input_audio_transcription.completed",
-            "conversation.item.truncated",
-        }:
-            # openai-agents emits conversation.item.retrieve for these events to
-            # refresh current history item state. xAI rejects that event type.
-            # Temporarily clearing current-item tracking preserves downstream
-            # event handling while preventing unsupported retrieve sends.
-            had_current_item_id = hasattr(self, "_current_item_id")
-            current_item_id = getattr(self, "_current_item_id", None)
-            if had_current_item_id:
-                self._current_item_id = None
-            try:
-                await super()._handle_ws_event(normalized)
-            finally:
-                if had_current_item_id:
-                    self._current_item_id = current_item_id
-            return
         await super()._handle_ws_event(normalized)
 
-    async def _send_raw_message(self, event: object) -> None:  # type: ignore[override]
+    async def _send_raw_message(self, event: RealtimeClientEvent) -> None:
         self._remember_requested_interrupt_response_from_event(event)
-        event_type = self._event_type_from_payload(event)
+        event_type = event.type
         if event_type in _XAI_UNSUPPORTED_CLIENT_EVENT_TYPES:
             # xAI rejects these OpenAI-specific events. Skipping them prevents
             # avoidable upstream session termination during voice turns.
             logger.debug("Dropping unsupported xAI realtime client event: %s", event_type)
             return
-        await super()._send_raw_message(event)  # type: ignore[arg-type]
+        await super()._send_raw_message(event)
 
     async def _send_pong(self, event: Mapping[str, object]) -> None:
         websocket = getattr(self, "_websocket", None)

@@ -4,6 +4,7 @@ import asyncio
 
 import pytest
 from agents.realtime import OpenAIRealtimeWebSocketModel
+from openai.types.realtime import ConversationItemRetrieveEvent
 
 from agency_swarm.realtime.xai_model import XAIRealtimeWebSocketModel
 
@@ -90,8 +91,17 @@ def test_transcription_usage_normalized_for_partial_payloads() -> None:
     assert detailed["input_token_details"] == {"audio_tokens": 1}
 
 
-def test_current_item_cleared_during_transcription_completed(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Transcription-completed handling suppresses conversation.item.retrieve sends."""
+def test_unsupported_retrieve_event_is_dropped() -> None:
+    """The xAI transport drops the SDK's unsupported history refresh event."""
+    model = XAIRealtimeWebSocketModel()
+
+    asyncio.run(
+        model._send_raw_message(ConversationItemRetrieveEvent(type="conversation.item.retrieve", item_id="item_9"))
+    )
+
+
+def test_server_event_handling_does_not_mutate_sdk_item_tracking(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The send override drops retrieves without changing the SDK's current item."""
     model = XAIRealtimeWebSocketModel()
     model._current_item_id = "item_9"
     seen: dict[str, str | None] = {}
@@ -101,11 +111,9 @@ def test_current_item_cleared_during_transcription_completed(monkeypatch: pytest
 
     monkeypatch.setattr(OpenAIRealtimeWebSocketModel, "_handle_ws_event", capture)
 
-    asyncio.run(
-        model._handle_ws_event({"type": "conversation.item.input_audio_transcription.completed", "item_id": "item_9"})
-    )
+    asyncio.run(model._handle_ws_event({"type": "conversation.item.truncated", "item_id": "item_9"}))
 
-    assert seen["during"] is None
+    assert seen["during"] == "item_9"
     assert model._current_item_id == "item_9"
 
 

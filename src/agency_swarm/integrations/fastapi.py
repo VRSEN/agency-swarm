@@ -249,7 +249,6 @@ def run_fastapi(
                             return
 
                         realtime_agency = agency_instance.to_realtime()
-                        entry_voice = getattr(realtime_agency.entry_agent, "voice", None)
                         config = dict(_realtime_defaults)
                         provider = str(config.pop("provider", "openai"))
                         provider_options = config.pop("provider_options", None)
@@ -262,7 +261,7 @@ def run_fastapi(
 
                         base_settings = build_model_settings(
                             model=config.get("model"),
-                            voice=config.get("voice", entry_voice),
+                            voice=config.get("voice"),
                             input_audio_format=config.get("input_audio_format"),
                             output_audio_format=config.get("output_audio_format"),
                             turn_detection=config.get("turn_detection"),
@@ -293,7 +292,6 @@ def run_fastapi(
                                 _rt_forward_session_events(
                                     realtime_session,
                                     websocket.send_text,
-                                    initial_voice=session_factory.default_voice,
                                 )
                             )
                             try:

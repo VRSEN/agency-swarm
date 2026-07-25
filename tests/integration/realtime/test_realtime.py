@@ -3,7 +3,8 @@ import asyncio
 import pytest
 from agents import RunContextWrapper
 
-from agency_swarm import Agency, Agent, run_fastapi
+from agency_swarm import Agency, Agent, Handoff, run_fastapi
+from agency_swarm.agent.constants import AGENT_XAI_REALTIME_VOICES
 from agency_swarm.context import MasterContext
 from agency_swarm.integrations import run_realtime
 from agency_swarm.tools import SendMessageHandoff
@@ -216,9 +217,9 @@ def test_run_realtime_defaults_voice_to_entry_agent(monkeypatch: pytest.MonkeyPa
     original_init = realtime_module.RealtimeSessionFactory.__init__
 
     def capture_init(self, realtime_agency, base_model_settings, **kwargs):  # type: ignore[no-untyped-def]
-        captured["voice"] = base_model_settings.get("voice")
-        captured["model_name"] = base_model_settings.get("model_name")
         original_init(self, realtime_agency, base_model_settings, **kwargs)
+        captured["voice"] = self.session_voice
+        captured["model_name"] = self._base_model_settings.get("model_name")
 
     monkeypatch.setattr(realtime_module.RealtimeSessionFactory, "__init__", capture_init)
 
@@ -228,6 +229,30 @@ def test_run_realtime_defaults_voice_to_entry_agent(monkeypatch: pytest.MonkeyPa
 
     assert captured.get("voice") == "marin"
     assert captured.get("model_name") == "gpt-realtime-2"
+
+
+def test_session_voice_ignores_voice_on_handoff_targets(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Only the entry agent's voice reaches the session; handoff targets cannot change it."""
+    billing = Agent(name="Billing", instructions="Handle billing.", voice="cedar")
+    concierge = Agent(name="Concierge", instructions="Route requests.", voice="marin")
+    agency = Agency(concierge, communication_flows=[(concierge > billing, Handoff)])
+    realtime_agency = agency.to_realtime()
+
+    from agency_swarm.integrations import realtime as realtime_module
+
+    captured: dict[str, object] = {}
+
+    async def capture_run(self, *, context, model_config):  # type: ignore[no-untyped-def]
+        captured.update(model_config["initial_model_settings"])
+        return object()
+
+    monkeypatch.setattr(realtime_module.RealtimeRunner, "run", capture_run)
+    factory = realtime_module.RealtimeSessionFactory(realtime_agency, {"model_name": "gpt-realtime-2"})
+    asyncio.run(factory.create_session())
+
+    assert realtime_agency.agents["Billing"].voice == "cedar"
+    assert factory.session_voice == "marin"
+    assert captured["voice"] == "marin"
 
 
 def test_realtime_agent_handles_missing_mcp_config() -> None:
@@ -265,6 +290,38 @@ def test_run_realtime_supports_xai_provider_defaults(monkeypatch: pytest.MonkeyP
     provider_options = captured.get("provider_options")
     assert isinstance(provider_options, dict)
     assert provider_options.get("url") == "wss://api.x.ai/v1/realtime?model=grok-voice-think-fast-1.0"
+
+
+def test_run_realtime_randomizes_voices_for_selected_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    entry = Agent(name="Entry", instructions="Test")
+    specialist = Agent(name="Specialist", instructions="Test")
+    agency = Agency(entry, specialist, randomize_agent_voices=True, voice_random_seed=21)
+    monkeypatch.setenv("XAI_API_KEY", "test-key")
+
+    from agency_swarm.integrations import realtime as realtime_module
+
+    captured: dict[str, str | None] = {}
+    original_init = realtime_module.RealtimeSessionFactory.__init__
+
+    def capture_init(self, realtime_agency, base_model_settings, **kwargs):  # type: ignore[no-untyped-def]
+        original_init(self, realtime_agency, base_model_settings, **kwargs)
+        captured.update({name: agent.voice for name, agent in realtime_agency.agents.items()})
+
+    monkeypatch.setattr(realtime_module.RealtimeSessionFactory, "__init__", capture_init)
+
+    app = run_realtime(agency=agency, provider="xai", return_app=True)
+    if app is None:
+        pytest.skip("FastAPI extras not installed")
+
+    assert set(captured.values()) <= set(AGENT_XAI_REALTIME_VOICES)
+
+
+def test_run_realtime_rejects_voice_unsupported_by_provider() -> None:
+    agent = Agent(name="ProviderAgent", instructions="Test", voice="rex")
+    agency = Agency(agent)
+
+    with pytest.raises(ValueError, match="Voice 'rex' is not supported by the openai realtime provider"):
+        run_realtime(agency=agency, provider="openai", return_app=True)
 
 
 def test_run_realtime_xai_url_includes_selected_model(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -327,6 +384,58 @@ def test_run_realtime_xai_url_replaces_stale_model_query(monkeypatch: pytest.Mon
     provider_options = captured.get("provider_options")
     assert isinstance(provider_options, dict)
     assert provider_options.get("url") == "wss://api.x.ai/v1/realtime?encoding=pcm16&model=selected-voice-model"
+
+
+def test_session_override_updates_xai_url_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    agent = Agent(name="ProviderAgent", instructions="Test")
+    agency = Agency(agent)
+    realtime_agency = agency.to_realtime()
+
+    from agency_swarm.integrations import realtime as realtime_module
+
+    captured: dict[str, object] = {}
+
+    async def capture_run(self, *, context, model_config):  # type: ignore[no-untyped-def]
+        captured.update(model_config)
+        return object()
+
+    monkeypatch.setattr(realtime_module.RealtimeRunner, "run", capture_run)
+    factory = realtime_module.RealtimeSessionFactory(
+        realtime_agency,
+        {"model_name": "base-model"},
+        provider="xai",
+        provider_options={"url": "wss://api.x.ai/v1/realtime?encoding=pcm16", "api_key": "test-key"},
+    )
+
+    asyncio.run(factory.create_session({"model_name": "override-model"}))
+
+    assert captured["url"] == "wss://api.x.ai/v1/realtime?encoding=pcm16&model=override-model"
+
+
+def test_session_factory_uses_xai_default_for_blank_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    agent = Agent(name="ProviderAgent", instructions="Test")
+    agency = Agency(agent)
+    realtime_agency = agency.to_realtime()
+
+    from agency_swarm.integrations import realtime as realtime_module
+
+    captured: dict[str, object] = {}
+
+    async def capture_run(self, *, context, model_config):  # type: ignore[no-untyped-def]
+        captured.update(model_config)
+        return object()
+
+    monkeypatch.setattr(realtime_module.RealtimeRunner, "run", capture_run)
+    factory = realtime_module.RealtimeSessionFactory(
+        realtime_agency,
+        {"model_name": "grok-voice-think-fast-1.0"},
+        provider="xai",
+        provider_options={"url": "", "api_key": "test-key"},
+    )
+
+    asyncio.run(factory.create_session())
+
+    assert captured["url"] == "wss://api.x.ai/v1/realtime?model=grok-voice-think-fast-1.0"
 
 
 def test_run_realtime_rejects_unsupported_provider() -> None:

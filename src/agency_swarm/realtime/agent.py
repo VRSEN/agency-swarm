@@ -26,6 +26,7 @@ class RealtimeAgent(SDKRealtimeAgent[MasterContext]):
             prompt=source.prompt if (source.prompt is None or not callable(source.prompt)) else None,
             output_guardrails=list(source.output_guardrails),
         )
+        # Read only for the entry agent: a realtime session keeps one voice for the whole call.
         self.voice = source.voice
 
     @property

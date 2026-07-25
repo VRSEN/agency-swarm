@@ -14,7 +14,6 @@ from agents.realtime.items import RealtimeItem
 from agents.realtime.model_inputs import (
     RealtimeModelRawClientMessage,
     RealtimeModelSendRawMessage,
-    RealtimeModelSendSessionUpdate,
 )
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -35,16 +34,12 @@ class RealtimeSessionContext(Protocol):
 
 
 class RealtimeSessionFactory(Protocol):
-    @property
-    def default_voice(self) -> str | None: ...
-
     async def create_session(self, overrides: dict[str, Any] | None = None) -> RealtimeSessionContext: ...
 
 
 class RealtimeWebSocketManager:
     def __init__(self, session_factory: RealtimeSessionFactory):
         self._session_factory = session_factory
-        self._session_voices: dict[str, str | None] = {}
         self._event_tasks: dict[str, asyncio.Task[None]] = {}
 
         self.active_sessions: dict[str, RealtimeSession] = {}
@@ -54,7 +49,6 @@ class RealtimeWebSocketManager:
     async def connect(self, websocket: WebSocket, session_id: str) -> bool:
         await websocket.accept()
         self.websockets[session_id] = websocket
-        self._session_voices[session_id] = self._session_factory.default_voice
 
         try:
             session_context = await self._session_factory.create_session()
@@ -64,7 +58,6 @@ class RealtimeWebSocketManager:
             with suppress(Exception):
                 await websocket.close(code=1011, reason="Failed to initialize realtime session.")
             self.websockets.pop(session_id, None)
-            self._session_voices.pop(session_id, None)
             return False
 
         self.active_sessions[session_id] = session
@@ -87,7 +80,6 @@ class RealtimeWebSocketManager:
 
         self.active_sessions.pop(session_id, None)
         self.websockets.pop(session_id, None)
-        self._session_voices.pop(session_id, None)
 
     async def send_audio(self, session_id: str, audio_bytes: bytes) -> None:
         session = self.active_sessions.get(session_id)
@@ -128,38 +120,12 @@ class RealtimeWebSocketManager:
 
         try:
             async for event in session:
-                if event.type == "agent_start":
-                    await self._apply_voice_update(session_id, session, event)
-
                 event_data = await self._serialize_event(event)
                 await websocket.send_text(json.dumps(event_data))
         except asyncio.CancelledError:
             raise
         except Exception:
             logger.exception("Error processing events for session %s", session_id)
-
-    async def _apply_voice_update(
-        self,
-        session_id: str,
-        session: RealtimeSession,
-        event: RealtimeSessionEvent,
-    ) -> None:
-        desired_voice = getattr(getattr(event, "agent", None), "voice", None)
-        if not desired_voice:
-            return
-
-        current_voice = self._session_voices.get(session_id)
-        if desired_voice == current_voice:
-            return
-
-        try:
-            await session.model.send_event(RealtimeModelSendSessionUpdate(session_settings={"voice": desired_voice}))
-        except Exception:
-            logger.exception("Failed to update realtime voice to %s", desired_voice)
-            return
-
-        logger.info("Updated realtime voice to %s", desired_voice)
-        self._session_voices[session_id] = desired_voice
 
     def _sanitize_history_item(self, item: RealtimeItem) -> dict[str, Any]:
         """Remove large binary payloads from history items while keeping transcripts."""

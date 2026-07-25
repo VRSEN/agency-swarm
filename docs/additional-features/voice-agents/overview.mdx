@@ -54,7 +54,21 @@ Set `voice` to any supported realtime token:
 - OpenAI voices: `alloy`, `ash`, `ballad`, `cedar`, `coral`, `echo`, `marin`, `sage`, `shimmer`, `verse`
 - xAI voices: `ara`, `eve`, `leo`, `rex`, `sal`
 
-Each agent can declare its own voice, and the realtime bridge keeps it consistent across handoffs. If you prefer variety without manual assignments, construct your agency with `randomize_agent_voices=True`; any agent missing an explicit voice receives a deterministic random pick at initialization.
+## One voice per call
+
+<Warning>
+**A call uses a single voice from start to finish.** Once the model has spoken, the realtime API refuses to switch voices—OpenAI answers with a `cannot_update_voice` error. Agency Swarm therefore picks the voice as the call starts and keeps it, even when the call hands off to another agent.
+</Warning>
+
+The voice comes from the first place that sets one:
+
+1. The `voice=` you pass to `run_realtime()` or the demo launcher.
+2. The `voice=` on your **entry agent**—the agent that answers the call.
+3. The provider's own default when neither is set.
+
+A `voice=` on any other agent is not used for that call. It is still worth setting: that agent uses its own voice whenever it is the one answering.
+
+If you want variety without picking voices by hand, build the agency with `randomize_agent_voices=True`. Every agent without an explicit voice gets a deterministic random pick from the provider's list, and the entry agent's pick becomes the voice for the call. Pass `voice_random_seed=` to keep the picks stable between runs.
 
 ## Add handoffs (optional)
 
@@ -63,8 +77,8 @@ Handoffs work exactly as they do in text mode. Register your flows once and they
 ```python
 from agency_swarm import Agency, Agent, Handoff
 
-billing = Agent(name="Billing", instructions="Handle billing questions briefly.", voice="cedar")
-faq = Agent(name="FAQ", instructions="Answer frequently asked questions.", voice="ash")
+billing = Agent(name="Billing", instructions="Handle billing questions briefly.")
+faq = Agent(name="FAQ", instructions="Answer frequently asked questions.")
 
 concierge = Agent(
     name="Concierge",
@@ -81,7 +95,7 @@ agency = Agency(
 )
 ```
 
-When the concierge hands off, the realtime session routes audio and tool access to the designated specialist agent. Because each agent above sets its own `voice`, callers hear the voice change as the conversation moves between agents.
+When the concierge hands off, the specialist takes over the conversation with its own instructions and tools. The caller keeps hearing the concierge's `marin` voice for the rest of the call, so give the specialists a different name or greeting if you want the switch to be obvious.
 
 ## Next steps
 
