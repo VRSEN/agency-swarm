@@ -6,6 +6,7 @@ from typing import Annotated, Any, TypeVar, cast
 
 from agents import (
     Agent as BaseAgent,
+    FunctionTool,
     RunConfig,
     RunContextWrapper,
     RunHooks,
@@ -48,6 +49,7 @@ from agency_swarm.agent.file_manager import AgentFileManager
 from agency_swarm.agent.tools import _attach_one_call_guard
 from agency_swarm.context import MasterContext
 from agency_swarm.tools.concurrency import ToolConcurrencyManager
+from agency_swarm.tools.function_tool_compat import normalize_function_tool
 from agency_swarm.tools.mcp_manager import convert_mcp_servers_to_tools
 from agency_swarm.utils.dry_run import is_dry_run
 
@@ -56,6 +58,7 @@ from .context_types import AgencyContext as AgencyContext, AgentRuntimeState
 logger = logging.getLogger(__name__)
 _WEB_SEARCH_SOURCES_INCLUDE = "web_search_call.action.sources"
 _MCP_AUTHENTICATION_TOOL_ATTR = "_agency_swarm_mcp_authentication_tool"
+_MCP_SERVER_TOOL_ATTR = "_agency_swarm_mcp_server_name"
 
 """Constants moved to agency_swarm.agent.constants (no behavior change)."""
 
@@ -495,6 +498,26 @@ class Agent(BaseAgent[MasterContext]):
 
         activation_lock = threading.Lock()
 
+        def _replace_mcp_server_tools(server_name: str, converted_tools: list[FunctionTool]) -> None:
+            retained_tools = [tool for tool in self.tools if getattr(tool, _MCP_SERVER_TOOL_ATTR, None) != server_name]
+            retained_names = {getattr(tool, "name", None) for tool in retained_tools}
+            replacement_tools: list[FunctionTool] = []
+            for tool in converted_tools:
+                prepared_tool = normalize_function_tool(tool)
+                if prepared_tool.name in retained_names:
+                    logger.warning(
+                        "Tool with name '%s' already exists for agent '%s'. Skipping.",
+                        prepared_tool.name,
+                        self.name,
+                    )
+                    continue
+                _attach_one_call_guard(prepared_tool, self)
+                setattr(prepared_tool, _MCP_SERVER_TOOL_ATTR, server_name)
+                replacement_tools.append(prepared_tool)
+                retained_names.add(prepared_tool.name)
+            self.tools = [*retained_tools, *replacement_tools]
+            self._ensure_web_search_sources_include()
+
         async def _activate_mcp_server(ctx: RunContextWrapper[MasterContext], server_name: str) -> str:
             selected = self._oauth_mcp_servers.get(server_name)
             runtime_state = ctx.context.agent_runtime_state.get(self.name)
@@ -512,7 +535,9 @@ class Agent(BaseAgent[MasterContext]):
             original_servers = list(self.mcp_servers)
             try:
                 self.mcp_servers = [selected]
-                conversion_task = asyncio.create_task(asyncio.to_thread(convert_mcp_servers_to_tools, self))
+                conversion_task = asyncio.create_task(
+                    asyncio.to_thread(convert_mcp_servers_to_tools, self, add_to_agent=False)
+                )
                 cancellation: asyncio.CancelledError | None = None
                 while not conversion_task.done():
                     try:
@@ -528,7 +553,7 @@ class Agent(BaseAgent[MasterContext]):
                     except Exception:
                         pass
                     raise cancellation
-                conversion_task.result()
+                _replace_mcp_server_tools(server_name, conversion_task.result())
             except Exception as exc:
                 self.mcp_servers = original_servers
                 return f"Failed to authenticate MCP server '{server_name}': {exc}"

@@ -169,8 +169,9 @@ class OAuthStateRegistry:
         try:
             await asyncio.wait_for(flow.event.wait(), timeout=timeout)
         except TimeoutError as exc:  # pragma: no cover - timeout exercised in runtime paths
-            await self.set_timeout(state=state)
-            raise OAuthFlowError(f"Timed out waiting for OAuth callback for state={state}") from exc
+            flow = await self.set_timeout(state=state)
+            if flow.status == "timeout":
+                raise OAuthFlowError(f"Timed out waiting for OAuth callback for state={state}") from exc
 
         if flow.error:
             raise OAuthFlowError(flow.error)

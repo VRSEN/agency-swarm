@@ -8,6 +8,8 @@ from concurrent.futures import Future
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypedDict, cast
 
+from agents import FunctionTool
+
 from agency_swarm.mcp.oauth_user import build_oauth_user_segment
 from agency_swarm.tools.hosted_mcp_oauth import (
     enable_hosted_mcp_tool_oauth,
@@ -1044,12 +1046,12 @@ def register_and_connect_agent_servers(agent: Any) -> None:
         default_mcp_manager._ensure_driver(getattr(srv, "_server", srv))
 
 
-def convert_mcp_servers_to_tools(agent: "Agent") -> None:
+def convert_mcp_servers_to_tools(agent: "Agent", *, add_to_agent: bool = True) -> list[FunctionTool]:
     """Convert agent's MCP servers to FunctionTool instances and add them to the agent's tools.
 
     This function:
     1. Converts all MCP servers to FunctionTool instances using ToolFactory.from_mcp
-    2. Adds the converted tools to the agent's tools list
+    2. Adds the converted tools to the agent's tools list when requested
     3. Clears the agent's mcp_servers list
 
     Args:
@@ -1059,7 +1061,7 @@ def convert_mcp_servers_to_tools(agent: "Agent") -> None:
 
     servers = getattr(agent, "mcp_servers", None)
     if not isinstance(servers, list) or len(servers) == 0:
-        return
+        return []
 
     if _OAUTH_AVAILABLE:
         _process_oauth_servers(agent, servers)
@@ -1075,8 +1077,10 @@ def convert_mcp_servers_to_tools(agent: "Agent") -> None:
         context=None,
         agent=agent,
     )
-    for tool in converted_tools:
-        agent.add_tool(tool)
+    if add_to_agent:
+        for tool in converted_tools:
+            agent.add_tool(tool)
 
     # Clear the mcp_servers list
     agent.mcp_servers.clear()
+    return converted_tools

@@ -11,7 +11,11 @@ from openai.types.responses.tool_param import Mcp
 
 from agency_swarm import Agency, Agent, enable_hosted_mcp_tool_oauth, run_fastapi
 from agency_swarm.integrations.fastapi_utils import endpoint_handlers
-from agency_swarm.integrations.fastapi_utils.oauth_support import OAuthStateRegistry
+from agency_swarm.integrations.fastapi_utils.oauth_support import (
+    OAuthFlowError,
+    OAuthFlowState,
+    OAuthStateRegistry,
+)
 from agency_swarm.mcp.oauth import MCPServerOAuth
 from tests.test_agency_modules._response_test_helpers import _make_agent
 
@@ -255,6 +259,47 @@ def test_oauth_timeout_does_not_overwrite_error_flow() -> None:
     assert result.code is None
     assert result.error == "access_denied"
     assert not flow.event.is_set()
+
+
+@pytest.mark.asyncio
+async def test_wait_for_code_returns_callback_that_wins_timeout_race(monkeypatch: pytest.MonkeyPatch) -> None:
+    registry = OAuthStateRegistry()
+    await registry.record_redirect(
+        state="callback-wins",
+        auth_url="https://idp.example.com/authorize?state=callback-wins",
+        server_name="oauth-demo",
+        user_id="owner-user",
+    )
+    original_set_timeout = registry.set_timeout
+
+    async def authorize_then_set_timeout(*, state: str) -> OAuthFlowState:
+        await registry.set_code(state=state, code="code-123", user_id="owner-user")
+        return await original_set_timeout(state=state)
+
+    monkeypatch.setattr(registry, "set_timeout", authorize_then_set_timeout)
+
+    assert await registry.wait_for_code(state="callback-wins", timeout=0) == ("code-123", "callback-wins")
+
+
+@pytest.mark.asyncio
+async def test_wait_for_code_surfaces_error_that_wins_timeout_race(monkeypatch: pytest.MonkeyPatch) -> None:
+    registry = OAuthStateRegistry()
+    await registry.record_redirect(
+        state="error-wins",
+        auth_url="https://idp.example.com/authorize?state=error-wins",
+        server_name="oauth-demo",
+        user_id="owner-user",
+    )
+    original_set_timeout = registry.set_timeout
+
+    async def error_then_set_timeout(*, state: str) -> OAuthFlowState:
+        await registry.set_error(state=state, error="access_denied")
+        return await original_set_timeout(state=state)
+
+    monkeypatch.setattr(registry, "set_timeout", error_then_set_timeout)
+
+    with pytest.raises(OAuthFlowError, match="access_denied"):
+        await registry.wait_for_code(state="error-wins", timeout=0)
 
 
 @pytest.mark.parametrize("endpoint_kind", ["response", "stream", "agui_messages", "agui_history"])

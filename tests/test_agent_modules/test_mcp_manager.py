@@ -533,7 +533,7 @@ def test_convert_mcp_servers_to_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     with patch("agency_swarm.tools.tool_factory.ToolFactory.from_mcp", return_value=["a", "b"]) as mock_from_mcp:
-        mcp_manager.convert_mcp_servers_to_tools(agent)
+        converted_tools = mcp_manager.convert_mcp_servers_to_tools(agent)
 
     assert mock_from_mcp.call_count == 1
     assert mock_from_mcp.call_args.kwargs == {
@@ -541,7 +541,24 @@ def test_convert_mcp_servers_to_tools(monkeypatch: pytest.MonkeyPatch) -> None:
         "context": None,
         "agent": agent,
     }
+    assert converted_tools == ["a", "b"]
     assert added_tools == ["a", "b"]
+    assert agent.mcp_servers == []
+
+
+def test_convert_mcp_servers_to_tools_can_stage_before_atomic_replacement() -> None:
+    added_tools: list[str] = []
+    agent = SimpleNamespace(
+        mcp_servers=["server"],
+        mcp_config={},
+        add_tool=lambda tool: added_tools.append(tool),
+    )
+
+    with patch("agency_swarm.tools.tool_factory.ToolFactory.from_mcp", return_value=["a", "b"]):
+        converted_tools = mcp_manager.convert_mcp_servers_to_tools(agent, add_to_agent=False)
+
+    assert converted_tools == ["a", "b"]
+    assert added_tools == []
     assert agent.mcp_servers == []
 
 

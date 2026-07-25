@@ -115,19 +115,20 @@ def test_oauth_agents_expose_authentication_tool_in_metadata() -> None:
 async def test_authenticate_mcp_server_triggers_selected_conversion(monkeypatch: pytest.MonkeyPatch) -> None:
     convert_calls: list[list[str]] = []
 
-    def _fake_convert(agent: Agent) -> None:
+    def _fake_convert(agent: Agent, *, add_to_agent: bool = True) -> list[FunctionTool]:
         names = [str(getattr(server, "name", "")) for server in agent.mcp_servers]
         convert_calls.append(names)
-        agent.add_tool(
-            FunctionTool(
-                name="github_tool",
-                description="test tool",
-                params_json_schema={"type": "object", "properties": {}},
-                on_invoke_tool=lambda _ctx, _input_json: "ok",
-                strict_json_schema=False,
-            )
+        converted_tool = FunctionTool(
+            name="github_tool",
+            description="test tool",
+            params_json_schema={"type": "object", "properties": {}},
+            on_invoke_tool=lambda _ctx, _input_json: "ok",
+            strict_json_schema=False,
         )
+        if add_to_agent:
+            agent.add_tool(converted_tool)
         agent.mcp_servers.clear()
+        return [converted_tool]
 
     monkeypatch.setattr("agency_swarm.agent.core.convert_mcp_servers_to_tools", _fake_convert)
     agent = _make_oauth_agent(
@@ -155,7 +156,7 @@ async def test_authenticate_mcp_server_triggers_selected_conversion(monkeypatch:
 
 @pytest.mark.asyncio
 async def test_authenticate_mcp_server_rejects_unknown_name(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("agency_swarm.agent.core.convert_mcp_servers_to_tools", lambda _agent: None)
+    monkeypatch.setattr("agency_swarm.agent.core.convert_mcp_servers_to_tools", lambda _agent, **_kwargs: [])
     agent = _make_oauth_agent(MCPServerOAuth(url="https://example.com/mcp", name="github"))
     agent.ensure_mcp_tools()
 
@@ -171,11 +172,12 @@ async def test_authenticate_mcp_server_serializes_parallel_activation(monkeypatc
     release_conversion = threading.Event()
     convert_calls: list[list[str]] = []
 
-    def _blocking_convert(agent: Agent) -> None:
+    def _blocking_convert(agent: Agent, **_kwargs: Any) -> list[FunctionTool]:
         convert_calls.append([str(getattr(server, "name", "")) for server in agent.mcp_servers])
         conversion_started.set()
         assert release_conversion.wait(timeout=1)
         agent.mcp_servers.clear()
+        return []
 
     monkeypatch.setattr("agency_swarm.agent.core.convert_mcp_servers_to_tools", _blocking_convert)
     agent = _make_oauth_agent(
@@ -207,11 +209,12 @@ async def test_authenticate_mcp_server_waits_for_conversion_worker_after_cancell
     release_conversion = threading.Event()
     conversion_finished = threading.Event()
 
-    def _blocking_convert(agent: Agent) -> None:
+    def _blocking_convert(agent: Agent, **_kwargs: Any) -> list[FunctionTool]:
         conversion_started.set()
         assert release_conversion.wait(timeout=1)
         agent.mcp_servers.clear()
         conversion_finished.set()
+        return []
 
     monkeypatch.setattr("agency_swarm.agent.core.convert_mcp_servers_to_tools", _blocking_convert)
     agent = _make_oauth_agent(MCPServerOAuth(url="https://example.com/github", name="github"))
@@ -246,7 +249,7 @@ async def test_authenticate_mcp_server_serializes_shared_agent_across_agencies(
     release_first_conversion = threading.Event()
     selected_cache_dirs: list[Path | None] = []
 
-    def _blocking_first_convert(agent: Agent) -> None:
+    def _blocking_first_convert(agent: Agent, **_kwargs: Any) -> list[FunctionTool]:
         selected_cache_dirs.append(agent.mcp_servers[0].cache_dir)
         if len(selected_cache_dirs) == 1:
             first_conversion_started.set()
@@ -254,6 +257,7 @@ async def test_authenticate_mcp_server_serializes_shared_agent_across_agencies(
         else:
             second_conversion_started.set()
         agent.mcp_servers.clear()
+        return []
 
     monkeypatch.setattr("agency_swarm.agent.core.convert_mcp_servers_to_tools", _blocking_first_convert)
     agent = _make_oauth_agent(MCPServerOAuth(url="https://example.com/github", name="github"))
@@ -283,6 +287,54 @@ async def test_authenticate_mcp_server_serializes_shared_agent_across_agencies(
     await asyncio.gather(first_task, second_task)
     assert selected_cache_dirs == [tmp_path / "agency-a", tmp_path / "agency-b"]
     assert agent.mcp_servers == []
+
+
+@pytest.mark.asyncio
+async def test_authenticate_mcp_server_replaces_tools_bound_to_another_agency(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Sequential activation must replace closures bound to the previous Agency."""
+
+    def _convert_bound_tool(agent: Agent, *, add_to_agent: bool = True) -> list[FunctionTool]:
+        selected_cache_dir = agent.mcp_servers[0].cache_dir
+
+        async def _invoke(_ctx: ToolContext[Any], _input_json: str) -> str:
+            return str(selected_cache_dir)
+
+        converted_tool = FunctionTool(
+            name="github_tool",
+            description="Return the cache root captured during conversion.",
+            params_json_schema={"type": "object", "properties": {}},
+            on_invoke_tool=_invoke,
+            strict_json_schema=False,
+        )
+        if add_to_agent:
+            agent.add_tool(converted_tool)
+        agent.mcp_servers.clear()
+        return [converted_tool]
+
+    monkeypatch.setattr("agency_swarm.agent.core.convert_mcp_servers_to_tools", _convert_bound_tool)
+    agent = _make_oauth_agent(MCPServerOAuth(url="https://example.com/github", name="github"))
+    agency_a = Agency(agent, oauth_token_path=str(tmp_path / "agency-a"))
+    agency_b = Agency(agent, oauth_token_path=str(tmp_path / "agency-b"))
+    activation_tool = next(tool for tool in agent.tools if getattr(tool, "name", "") == "authenticate_mcp_server")
+
+    first_result = await activation_tool.on_invoke_tool(
+        _activation_context(agency_a._agent_runtime_state),
+        '{"server_name":"github"}',
+    )
+    assert "authenticated and its tools are enabled" in first_result
+    first_bound_tool = next(tool for tool in agent.tools if getattr(tool, "name", "") == "github_tool")
+    assert await first_bound_tool.on_invoke_tool(_activation_context(), "{}") == str(tmp_path / "agency-a")
+
+    second_result = await activation_tool.on_invoke_tool(
+        _activation_context(agency_b._agent_runtime_state),
+        '{"server_name":"github"}',
+    )
+    assert "re-authentication attempt completed" in second_result
+    rebound_tools = [tool for tool in agent.tools if getattr(tool, "name", "") == "github_tool"]
+    assert len(rebound_tools) == 1
+    assert await rebound_tools[0].on_invoke_tool(_activation_context(), "{}") == str(tmp_path / "agency-b")
 
 
 def test_ensure_mcp_tools_keeps_non_oauth_servers_eager(monkeypatch: pytest.MonkeyPatch) -> None:

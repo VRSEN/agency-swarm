@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from agents import FunctionTool
 from agents.lifecycle import RunHooksBase
 from agents.run_internal.turn_preparation import validate_run_hooks
 from agents.tool_context import ToolContext
@@ -28,7 +29,7 @@ class _NoGlobalOauthCacheUpdateManager:
 @pytest.fixture(autouse=True)
 def disable_server_registration(monkeypatch: pytest.MonkeyPatch) -> None:
     """Prevent real MCP connections during tests."""
-    monkeypatch.setattr("agency_swarm.agent.core.convert_mcp_servers_to_tools", lambda *_: None)
+    monkeypatch.setattr("agency_swarm.agent.core.convert_mcp_servers_to_tools", lambda *_, **__: [])
 
 
 def _build_agent_with_oauth_server(server: MCPServerOAuth) -> Agent:
@@ -91,9 +92,10 @@ async def test_agencies_isolate_managed_cache_dirs_when_reusing_same_agent(
 ) -> None:
     selected_cache_dirs: list[Path | None] = []
 
-    def _capture_selected_server(selected_agent: Agent) -> None:
+    def _capture_selected_server(selected_agent: Agent, **_kwargs: object) -> list[FunctionTool]:
         selected_cache_dirs.append(selected_agent.mcp_servers[0].cache_dir)
         selected_agent.mcp_servers.clear()
+        return []
 
     monkeypatch.setattr("agency_swarm.agent.core.convert_mcp_servers_to_tools", _capture_selected_server)
     agent = _build_agent_with_oauth_server(MCPServerOAuth(url="http://localhost:8001/mcp", name="github"))
