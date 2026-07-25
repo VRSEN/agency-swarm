@@ -10,7 +10,7 @@ from typing import Any
 from agents import Tool
 from agents.agent_output import AgentOutputSchemaBase
 from agents.handoffs import Handoff
-from agents.items import ModelResponse, TResponseInputItem, TResponseStreamEvent
+from agents.items import ModelResponse, TResponseInputItem, TResponseOutputItem, TResponseStreamEvent
 from agents.model_settings import ModelSettings
 from agents.models.interface import Model, ModelTracing
 from agents.usage import Usage
@@ -300,6 +300,61 @@ async def _stream_text_events(text: str, model_name: str) -> AsyncIterator[TResp
     )
     yield ResponseCompletedEvent(
         response=completed_response,
+        sequence_number=sequence_number,
+        type="response.completed",
+    )
+
+
+async def _stream_output_item_events(
+    items: list[TResponseOutputItem],
+    model_name: str,
+) -> AsyncIterator[TResponseStreamEvent]:
+    """Stream arbitrary response output items (messages, tool calls, handoff calls)."""
+    response_id = f"resp_{uuid.uuid4().hex}"
+    created_at = int(time.time())
+    sequence_number = 0
+
+    def _response(output: list[TResponseOutputItem], usage: ResponseUsage | None) -> Response:
+        return Response(
+            id=response_id,
+            created_at=created_at,
+            model=model_name,
+            object="response",
+            output=output,
+            tool_choice="none",
+            tools=[],
+            parallel_tool_calls=False,
+            usage=usage,
+        )
+
+    yield ResponseCreatedEvent(response=_response([], None), sequence_number=sequence_number, type="response.created")
+    sequence_number += 1
+
+    for index, item in enumerate(items):
+        yield ResponseOutputItemAddedEvent(
+            item=item,
+            output_index=index,
+            sequence_number=sequence_number,
+            type="response.output_item.added",
+        )
+        sequence_number += 1
+        yield ResponseOutputItemDoneEvent(
+            item=item,
+            output_index=index,
+            sequence_number=sequence_number,
+            type="response.output_item.done",
+        )
+        sequence_number += 1
+
+    usage = ResponseUsage(
+        input_tokens=0,
+        input_tokens_details=InputTokensDetails(cached_tokens=0),
+        output_tokens=1,
+        output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
+        total_tokens=1,
+    )
+    yield ResponseCompletedEvent(
+        response=_response(items, usage),
         sequence_number=sequence_number,
         type="response.completed",
     )

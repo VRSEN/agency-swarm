@@ -19,6 +19,7 @@ from agents.stream_events import RunItemStreamEvent, StreamEvent
 from openai.types.responses import ResponseOutputMessage, ResponseOutputText
 
 from agency_swarm.agent.codex_model_input import with_codex_model_input_role_rewrite
+from agency_swarm.agent.system_reminder_state import agency_system_reminder_run
 from agency_swarm.context import MasterContext
 from agency_swarm.messages import MessageFilter, MessageFormatter
 from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
@@ -130,14 +131,15 @@ def perform_streamed_run(
     kwargs: dict[str, Any],
 ):
     """Return the streaming run object from Runner without guardrail logic."""
-    return Runner.run_streamed(
-        starting_agent=agent,
-        input=history_for_runner,
-        context=master_context_for_run,
-        hooks=hooks_override,
-        run_config=with_codex_model_input_role_rewrite(run_config_override or RunConfig()),
-        max_turns=kwargs.get("max_turns", 1000000),
-    )
+    with agency_system_reminder_run(master_context_for_run):
+        return Runner.run_streamed(
+            starting_agent=agent,
+            input=history_for_runner,
+            context=master_context_for_run,
+            hooks=hooks_override,
+            run_config=with_codex_model_input_role_rewrite(run_config_override or RunConfig()),
+            max_turns=kwargs.get("max_turns", 1000000),
+        )
 
 
 def run_stream_with_guardrails(

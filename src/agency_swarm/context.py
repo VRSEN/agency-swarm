@@ -8,7 +8,7 @@ the `ThreadManager`, all active `Agent` instances, and any user-defined context.
 
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from agents.items import ModelResponse
@@ -38,6 +38,7 @@ class MasterContext:
     _current_agent_run_id: str | None = None  # Current agent run ID for tracking
     _parent_run_id: str | None = None  # Parent run ID for nested agent calls
     _is_streaming: bool = False  # Flag to indicate if we're in streaming mode
+    _system_reminder_role: Literal["system", "developer"] = "system"
     streaming_context: "StreamingContext | None" = None  # Streaming context for passing state
     # Internal: tuples of (model_name, response) from sub-agents for per-model cost calculation
     _sub_agent_raw_responses: list[tuple[str | None, "ModelResponse"]] = field(default_factory=list)

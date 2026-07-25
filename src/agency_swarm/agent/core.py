@@ -46,8 +46,15 @@ from agency_swarm.agent.conversation_starters_cache import (
 )
 from agency_swarm.agent.execution_streaming import StreamingRunResponse
 from agency_swarm.agent.file_manager import AgentFileManager
+from agency_swarm.agent.runner import install_runner_boundary
+from agency_swarm.agent.system_reminders import (
+    normalize_system_reminders,
+    prepare_agent_hooks,
+    without_system_reminder_hooks,
+)
 from agency_swarm.agent.tools import _attach_one_call_guard
 from agency_swarm.context import MasterContext
+from agency_swarm.reminders import SystemReminder
 from agency_swarm.tools.concurrency import ToolConcurrencyManager
 from agency_swarm.tools.function_tool_compat import normalize_function_tool
 from agency_swarm.tools.mcp_manager import convert_mcp_servers_to_tools, get_active_oauth_user_id
@@ -82,9 +89,6 @@ def _resolve_oauth_owner_id(master_context: MasterContext | None) -> str | None:
 T = TypeVar("T", bound="Agent")
 
 
-"""AgencyContext moved to agency_swarm.agent.context_types (no behavior change)."""
-
-
 class Agent(BaseAgent[MasterContext]):
     """
     Agency Swarm Agent: Extends the base `agents.Agent` with capabilities for
@@ -100,7 +104,6 @@ class Agent(BaseAgent[MasterContext]):
     :class:`AgencyContext` from the owning :class:`Agency`.
     """
 
-    # --- Agency Swarm Specific Parameters ---
     files_folder: str | Path | None
     tools_folder: str | Path | None  # Directory path for automatic tool discovery and loading
     description: str | None
@@ -115,8 +118,8 @@ class Agent(BaseAgent[MasterContext]):
     supports_outbound_communication: bool = True
     supports_framework_tool_wiring: bool = True
     voice: AgentVoice | None
+    system_reminders: list[SystemReminder]
 
-    # --- Internal State ---
     _associated_vector_store_id: str | None = None
     files_folder_path: Path | None = None
     _openai_client: AsyncOpenAI | None = None
@@ -127,9 +130,6 @@ class Agent(BaseAgent[MasterContext]):
     _conversation_starters_cache: dict[str, Any]
     _conversation_starters_fingerprint: str | None
     _conversation_starters_warmup_started: bool
-
-    # --- SDK Agent Compatibility ---
-    # Re-declare attributes from BaseAgent for clarity and potential overrides
 
     def __init__(self, **kwargs: Any):
         """
@@ -162,6 +162,9 @@ class Agent(BaseAgent[MasterContext]):
                 Defaults to False.
             voice (str | None): Realtime session voice used when this agent is the entry agent. A realtime
                 session keeps one voice from start to finish, so a voice set on any other agent is not heard.
+            system_reminders (str | Callable | SystemReminder | list[str | Callable | SystemReminder] | None):
+                Transient system reminders injected before model calls. Plain strings and callables run after each
+                top-level user message.
             handoff_reminder (str | None): Custom reminder for handoffs.
                 Defaults to `Transfer completed. You are {recipient_agent_name}. Please continue the task.`
 
@@ -218,6 +221,16 @@ class Agent(BaseAgent[MasterContext]):
 
         # Remove description from base_agent_params if it was added for Swarm Agent
         base_agent_params.pop("description", None)
+        system_reminders = normalize_system_reminders(current_agent_params.get("system_reminders"))
+        if system_reminders:
+            # Reminders rely on the Runner boundary to stay transient on direct SDK runs.
+            # Install it lazily so importing agency_swarm never patches the SDK Runner.
+            install_runner_boundary()
+        prepared_hooks = prepare_agent_hooks(base_agent_params.get("hooks"), system_reminders)
+        if prepared_hooks is None:
+            base_agent_params.pop("hooks", None)
+        else:
+            base_agent_params["hooks"] = prepared_hooks
 
         # Initialize base agent
         super().__init__(**base_agent_params)
@@ -257,6 +270,7 @@ class Agent(BaseAgent[MasterContext]):
                     f"Valid options: {', '.join(AGENT_REALTIME_VOICES)}."
                 )
             self.voice = cast(AgentVoice, normalized_voice)
+        self.system_reminders = system_reminders
         self.handoff_reminder = current_agent_params.get("handoff_reminder")
 
         # Internal state
@@ -320,10 +334,8 @@ class Agent(BaseAgent[MasterContext]):
         # Refresh after MCP preparation so fingerprint includes deferred auth tools.
         self.refresh_conversation_starters_cache()
 
-    # --- Properties ---
     def __repr__(self) -> str:
         """Return a string representation of the Agent instance."""
-        # Get model information - try model_settings.model first, then fall back to model attribute
         model_info = "unknown"
         if hasattr(self, "model_settings") and self.model_settings and hasattr(self.model_settings, "model"):
             model_info = self.model_settings.model
@@ -331,6 +343,12 @@ class Agent(BaseAgent[MasterContext]):
             model_info = str(self.model)
 
         return f"<Agent name={self.name!r} desc={self.description!r} model={model_info!r}>"
+
+    def clone(self: T, **kwargs: Any) -> T:
+        """Clone the agent while rebuilding Agency Swarm's internal reminder hook."""
+        kwargs.setdefault("system_reminders", self.system_reminders)
+        kwargs["hooks"] = without_system_reminder_hooks(kwargs.get("hooks", self.hooks))
+        return cast(T, super().clone(**kwargs))
 
     @property
     def client(self) -> AsyncOpenAI:
@@ -385,7 +403,6 @@ class Agent(BaseAgent[MasterContext]):
                 base_tools.append(tool)
         return base_tools
 
-    # --- Tool Management ---
     def add_tool(self, tool: Tool) -> None:
         """
         Adds a `Tool` instance to the agent's list of tools.
@@ -665,8 +682,6 @@ class Agent(BaseAgent[MasterContext]):
             return self.file_manager.upload_file(file_path, include_in_vector_store)
         raise RuntimeError(f"Agent {self.name} has no file manager configured")
 
-        # --- Core Execution Methods ---
-
     async def get_response(
         self,
         message: str | list[TResponseInputItem],
@@ -778,6 +793,7 @@ class Agent(BaseAgent[MasterContext]):
         cacheable_starters = merge_cacheable_starters(
             self.conversation_starters if self.cache_conversation_starters else None,
             self.quick_replies,
+            self.system_reminders,
         )
         if not cacheable_starters:
             return
@@ -802,6 +818,7 @@ class Agent(BaseAgent[MasterContext]):
         cacheable_starters = merge_cacheable_starters(
             self.conversation_starters if self.cache_conversation_starters else None,
             self.quick_replies,
+            self.system_reminders,
         )
         if not cacheable_starters:
             return

@@ -55,7 +55,6 @@ if TYPE_CHECKING:
     from agents.items import ModelResponse
 
     from agency_swarm.agent.core import AgencyContext, Agent
-
 DEFAULT_MAX_TURNS = 1000000  # Unlimited by default
 
 logger = logging.getLogger(__name__)
@@ -109,9 +108,8 @@ class Execution:
         )
 
         master_context_for_run = None
+        run_result: RunResult | None = None
         try:
-            # Process message and file attachments
-            # attachment_manager is always initialized in Agent.__init__ via setup_file_manager()
             if self.agent.attachment_manager is None:
                 raise RuntimeError(f"attachment_manager not initialized for agent {self.agent.name}")
             processed_current_message_items = await self.agent.attachment_manager.process_message_and_files(
@@ -167,6 +165,7 @@ class Execution:
             cacheable_starters = merge_cacheable_starters(
                 self.agent.conversation_starters if self.agent.cache_conversation_starters else None,
                 self.agent.quick_replies,
+                self.agent.system_reminders,
             )
             has_user_context_override = bool(
                 context_override and any(key != "streaming_context" for key in context_override)
@@ -392,7 +391,12 @@ class Execution:
             # Cleanup execution state
             if "master_context_for_run" in locals() and master_context_for_run is not None:  # type: ignore[used-before-def]
                 cleanup_execution(
-                    self.agent, original_instructions, context_override, agency_context, master_context_for_run
+                    self.agent,
+                    original_instructions,
+                    context_override,
+                    agency_context,
+                    master_context_for_run,
+                    run_result,
                 )
             else:
                 # Ensure instructions are restored even if context was not prepared
@@ -505,6 +509,7 @@ class Execution:
                 cacheable_starters = merge_cacheable_starters(
                     self.agent.conversation_starters if self.agent.cache_conversation_starters else None,
                     self.agent.quick_replies,
+                    self.agent.system_reminders,
                 )
                 has_user_context_override = bool(
                     context_override and any(key != "streaming_context" for key in context_override)
@@ -633,7 +638,12 @@ class Execution:
             finally:
                 if master_context_for_run is not None:
                     cleanup_execution(
-                        self.agent, original_instructions, context_override, agency_context, master_context_for_run
+                        self.agent,
+                        original_instructions,
+                        context_override,
+                        agency_context,
+                        master_context_for_run,
+                        wrapper.final_result,
                     )
                 else:
                     self.agent.instructions = original_instructions

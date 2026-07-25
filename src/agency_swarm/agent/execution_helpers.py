@@ -12,6 +12,7 @@ from agents import (
     RunHooks,
     Runner,
     RunResult,
+    RunResultStreaming,
     TResponseInputItem,
     tracing,
 )
@@ -24,6 +25,11 @@ from openai.types.responses import (
 
 from agency_swarm.agent.codex_model_input import with_codex_model_input_role_rewrite
 from agency_swarm.agent.context_types import AgentRuntimeState
+from agency_swarm.agent.system_reminder_state import agency_system_reminder_run
+from agency_swarm.agent.system_reminders import (
+    clear_system_reminder_run_state,
+    suspend_system_reminder_run_state,
+)
 from agency_swarm.context import MasterContext
 from agency_swarm.messages import MessageFormatter
 from agency_swarm.tools.mcp_manager import default_mcp_manager
@@ -35,13 +41,6 @@ if TYPE_CHECKING:
     from agency_swarm.agent.core import AgencyContext, Agent
 
 logger = logging.getLogger(__name__)
-
-
-"""
-Execution helpers (non-streaming): split to keep file size under 500 lines.
-Streaming helpers moved to execution_streaming.py.
-"""
-
 
 TRACE_REGEX = re.compile(r"^trace_[a-f0-9]{32}$")
 
@@ -78,14 +77,15 @@ async def perform_single_run(
                 logger.warning(f"Entering async context for server {server.name}")
                 await mcp_stack.enter_async_context(server)  # type: ignore[arg-type]
 
-        result = await Runner.run(
-            starting_agent=agent,
-            input=history_for_runner,
-            context=master_context_for_run,
-            hooks=hooks_override,
-            run_config=with_codex_model_input_role_rewrite(run_config_override or RunConfig()),
-            max_turns=kwargs.get("max_turns", 1000000),
-        )
+        with agency_system_reminder_run(master_context_for_run):
+            result = await Runner.run(
+                starting_agent=agent,
+                input=history_for_runner,
+                context=master_context_for_run,
+                hooks=hooks_override,
+                run_config=with_codex_model_input_role_rewrite(run_config_override or RunConfig()),
+                max_turns=kwargs.get("max_turns", 1000000),
+            )
     return result
 
 
@@ -443,8 +443,14 @@ def cleanup_execution(
     context_override: dict[str, Any] | None,
     agency_context: "AgencyContext | None",
     master_context_for_run: MasterContext,
+    run_result: RunResult | RunResultStreaming | None = None,
 ) -> None:
     """Common cleanup logic for execution methods."""
+    if isinstance(run_result, (RunResult, RunResultStreaming)) and run_result.interruptions:
+        suspend_system_reminder_run_state(master_context_for_run, run_result.context_wrapper)
+    else:
+        clear_system_reminder_run_state(master_context_for_run)
+
     # Sync back context changes if we used a merged context due to override
     if context_override and agency_context and agency_context.agency_instance:
         base_user_context = getattr(agency_context.agency_instance, "user_context", {})

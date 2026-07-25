@@ -38,6 +38,7 @@ from agency_swarm.utils.model_utils import get_model_name, get_usage_tracking_mo
 if TYPE_CHECKING:
     from agency_swarm.agent.context_types import AgentRuntimeState
     from agency_swarm.agent.core import Agent
+    from agency_swarm.reminders import SystemReminder
 
 _CACHE_DIR_NAME = "starter_cache"
 _SENSITIVE_KEYS = ("key", "secret", "token", "authorization", "password")
@@ -57,17 +58,18 @@ def normalize_starter_text(text: str) -> str:
 def merge_cacheable_starters(
     conversation_starters: list[str] | None,
     quick_replies: list[str] | None,
+    system_reminders: list[SystemReminder] | None = None,
 ) -> list[str]:
+    if system_reminders and any(callable(reminder.message) for reminder in system_reminders):
+        return []
     merged: list[str] = []
     seen_normalized: set[str] = set()
-
     for starter in (conversation_starters or []) + (quick_replies or []):
         normalized = normalize_starter_text(starter)
         if not normalized or normalized in seen_normalized:
             continue
         seen_normalized.add(normalized)
         merged.append(starter)
-
     return merged
 
 
@@ -92,10 +94,7 @@ def compute_starter_cache_fingerprint(
         sanitized_mcp_config = _sanitize_mapping(cast(dict[str, Any], mcp_config))
     else:
         sanitized_mcp_config = _serialize_value(mcp_config)
-    if isinstance(shared_instructions, str):
-        shared_instructions_text = shared_instructions or None
-    else:
-        shared_instructions_text = None
+    shared_instructions_text = (shared_instructions or None) if isinstance(shared_instructions, str) else None
     payload = {
         "instructions": _instructions_signature(instructions),
         "shared_instructions": shared_instructions_text,
@@ -112,6 +111,7 @@ def compute_starter_cache_fingerprint(
         "mcp_config": sanitized_mcp_config,
         "handoffs": handoffs,
         "output_type": _output_type_signature(agent.output_type),
+        "system_reminders": _reminder_signatures(agent.system_reminders),
     }
     digest = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return _hash_string(digest)
@@ -530,6 +530,10 @@ def _handoff_signature(handoff: SDKHandoff) -> dict[str, Any]:
     return signature
 
 
+def _reminder_signatures(reminders: list[SystemReminder]) -> list[dict[str, Any]]:
+    return [{"type": type(reminder).__name__, "config": _serialize_value(reminder)} for reminder in reminders]
+
+
 def _handoff_signatures(agent: Agent, runtime_state: AgentRuntimeState | None) -> list[dict[str, Any]]:
     handoffs = [handoff for handoff in agent.handoffs if isinstance(handoff, SDKHandoff)]
     if runtime_state is not None:
@@ -568,8 +572,7 @@ def _serialize_value(value: Any) -> Any:
     if isinstance(value, dict):
         return {key: _serialize_value(val) for key, val in value.items()}
     if dataclasses.is_dataclass(value) and not isinstance(value, type):
-        data = dataclasses.asdict(cast(Any, value))
-        return {key: _serialize_value(val) for key, val in data.items()}
+        return {item.name: _serialize_value(getattr(value, item.name)) for item in dataclasses.fields(value)}
     if callable(value):
         return _callable_signature(value)
     return type(value).__name__
