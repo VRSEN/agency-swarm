@@ -215,6 +215,48 @@ def test_oauth_callback_rejects_late_code_for_terminal_flow() -> None:
     assert status.json()["status"] == "timeout"
 
 
+def test_oauth_timeout_does_not_overwrite_authorized_flow() -> None:
+    registry = OAuthStateRegistry()
+    flow = asyncio.run(
+        registry.record_redirect(
+            state="authorized-state",
+            auth_url="https://idp.example.com/authorize?state=authorized-state",
+            server_name="oauth-demo",
+            user_id="owner-user",
+        )
+    )
+    asyncio.run(registry.set_code(state="authorized-state", code="code-123", user_id="owner-user"))
+    flow.event.clear()
+
+    result = asyncio.run(registry.set_timeout(state="authorized-state"))
+
+    assert result.status == "authorized"
+    assert result.code == "code-123"
+    assert result.error is None
+    assert not flow.event.is_set()
+
+
+def test_oauth_timeout_does_not_overwrite_error_flow() -> None:
+    registry = OAuthStateRegistry()
+    flow = asyncio.run(
+        registry.record_redirect(
+            state="error-state",
+            auth_url="https://idp.example.com/authorize?state=error-state",
+            server_name="oauth-demo",
+            user_id="owner-user",
+        )
+    )
+    asyncio.run(registry.set_error(state="error-state", error="access_denied"))
+    flow.event.clear()
+
+    result = asyncio.run(registry.set_timeout(state="error-state"))
+
+    assert result.status == "error:access_denied"
+    assert result.code is None
+    assert result.error == "access_denied"
+    assert not flow.event.is_set()
+
+
 @pytest.mark.parametrize("endpoint_kind", ["response", "stream", "agui_messages", "agui_history"])
 def test_request_time_oauth_factory_requires_startup_oauth_config(endpoint_kind: str) -> None:
     agency_factory, calls = _stateful_factory(_oauth_agency)

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import threading
 from pathlib import Path
 from typing import Annotated, Any, TypeVar, cast
 
@@ -492,12 +493,9 @@ class Agent(BaseAgent[MasterContext]):
                 server_name_schema["enum"] = server_names
             return
 
-        @function_tool(name_override=tool_name)
-        async def _authenticate_mcp_server(ctx: RunContextWrapper[MasterContext], server_name: str) -> str:
-            """Authenticate one MCP server and enable its tools.
+        activation_lock = threading.Lock()
 
-            Call this again for the same server if MCP tool calls later return authentication or authorization errors.
-            """
+        async def _activate_mcp_server(ctx: RunContextWrapper[MasterContext], server_name: str) -> str:
             selected = self._oauth_mcp_servers.get(server_name)
             runtime_state = ctx.context.agent_runtime_state.get(self.name)
             if runtime_state is not None:
@@ -514,7 +512,23 @@ class Agent(BaseAgent[MasterContext]):
             original_servers = list(self.mcp_servers)
             try:
                 self.mcp_servers = [selected]
-                await asyncio.to_thread(convert_mcp_servers_to_tools, self)
+                conversion_task = asyncio.create_task(asyncio.to_thread(convert_mcp_servers_to_tools, self))
+                cancellation: asyncio.CancelledError | None = None
+                while not conversion_task.done():
+                    try:
+                        await asyncio.shield(conversion_task)
+                    except asyncio.CancelledError as exc:
+                        cancellation = exc
+                    except Exception:
+                        if cancellation is None:
+                            raise
+                if cancellation is not None:
+                    try:
+                        conversion_task.result()
+                    except Exception:
+                        pass
+                    raise cancellation
+                conversion_task.result()
             except Exception as exc:
                 self.mcp_servers = original_servers
                 return f"Failed to authenticate MCP server '{server_name}': {exc}"
@@ -534,6 +548,19 @@ class Agent(BaseAgent[MasterContext]):
                     )
                 return f"MCP server '{server_name}' is authenticated and its tools are enabled."
             return f"MCP server '{server_name}' re-authentication attempt completed. Retry the MCP tool call."
+
+        @function_tool(name_override=tool_name)
+        async def _authenticate_mcp_server(ctx: RunContextWrapper[MasterContext], server_name: str) -> str:
+            """Authenticate one MCP server and enable its tools.
+
+            Call this again for the same server if MCP tool calls later return authentication or authorization errors.
+            """
+            while not activation_lock.acquire(blocking=False):
+                await asyncio.sleep(0.01)
+            try:
+                return await _activate_mcp_server(ctx, server_name)
+            finally:
+                activation_lock.release()
 
         schema = _authenticate_mcp_server.params_json_schema
         server_name_schema = schema.get("properties", {}).get("server_name")

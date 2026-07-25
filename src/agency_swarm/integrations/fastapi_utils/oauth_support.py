@@ -147,13 +147,15 @@ class OAuthStateRegistry:
             return flow
 
     async def set_timeout(self, *, state: str) -> OAuthFlowState:
-        """Mark an OAuth flow as timed out and release any waiters."""
+        """Mark a pending OAuth flow as timed out and release its waiters."""
         with self._lock:
             self._prune_expired_locked()
             flow = self._flows.get(state)
             if flow is None:
                 flow = OAuthFlowState(state=state, auth_url="", server_name=None, user_id=None)
                 self._flows[state] = flow
+            if flow.status != "pending":
+                return flow
             flow.status = "timeout"
             flow.error = None
             _notify_oauth_flow(flow)

@@ -1,5 +1,6 @@
 import asyncio
 import threading
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -25,9 +26,9 @@ def _make_oauth_agent(*servers: object) -> Agent:
     )
 
 
-def _activation_context() -> ToolContext[Any]:
+def _activation_context(agent_runtime_state: dict[str, Any] | None = None) -> ToolContext[Any]:
     return ToolContext(
-        context=SimpleNamespace(agent_runtime_state={}),
+        context=SimpleNamespace(agent_runtime_state=agent_runtime_state or {}),
         tool_name="authenticate_mcp_server",
         tool_call_id="call-1",
         tool_arguments="{}",
@@ -194,6 +195,93 @@ async def test_authenticate_mcp_server_serializes_parallel_activation(monkeypatc
     assert "concurrency violation" in second_result
     assert convert_calls == [["github"]]
     assert set(agent._deferred_mcp_servers) == {"notion"}
+    assert agent.mcp_servers == []
+
+
+@pytest.mark.asyncio
+async def test_authenticate_mcp_server_waits_for_conversion_worker_after_cancellation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cancellation must not release activation state while its worker still runs."""
+    conversion_started = threading.Event()
+    release_conversion = threading.Event()
+    conversion_finished = threading.Event()
+
+    def _blocking_convert(agent: Agent) -> None:
+        conversion_started.set()
+        assert release_conversion.wait(timeout=1)
+        agent.mcp_servers.clear()
+        conversion_finished.set()
+
+    monkeypatch.setattr("agency_swarm.agent.core.convert_mcp_servers_to_tools", _blocking_convert)
+    agent = _make_oauth_agent(MCPServerOAuth(url="https://example.com/github", name="github"))
+    activation_tool = next(tool for tool in agent.tools if getattr(tool, "name", "") == "authenticate_mcp_server")
+    activation_task = asyncio.create_task(
+        activation_tool.on_invoke_tool(_activation_context(), '{"server_name":"github"}')
+    )
+
+    try:
+        assert await asyncio.to_thread(conversion_started.wait, 1)
+        activation_task.cancel()
+        await asyncio.sleep(0.01)
+        activation_task.cancel()
+        await asyncio.sleep(0.01)
+        assert not activation_task.done()
+    finally:
+        release_conversion.set()
+
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(activation_task, timeout=0.2)
+    assert conversion_finished.is_set()
+    assert agent.mcp_servers == []
+
+
+@pytest.mark.asyncio
+async def test_authenticate_mcp_server_serializes_shared_agent_across_agencies(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Agencies sharing one Agent must not activate different bound configs together."""
+    first_conversion_started = threading.Event()
+    second_conversion_started = threading.Event()
+    release_first_conversion = threading.Event()
+    selected_cache_dirs: list[Path | None] = []
+
+    def _blocking_first_convert(agent: Agent) -> None:
+        selected_cache_dirs.append(agent.mcp_servers[0].cache_dir)
+        if len(selected_cache_dirs) == 1:
+            first_conversion_started.set()
+            assert release_first_conversion.wait(timeout=1)
+        else:
+            second_conversion_started.set()
+        agent.mcp_servers.clear()
+
+    monkeypatch.setattr("agency_swarm.agent.core.convert_mcp_servers_to_tools", _blocking_first_convert)
+    agent = _make_oauth_agent(MCPServerOAuth(url="https://example.com/github", name="github"))
+    agency_a = Agency(agent, oauth_token_path=str(tmp_path / "agency-a"))
+    agency_b = Agency(agent, oauth_token_path=str(tmp_path / "agency-b"))
+    activation_tool = next(tool for tool in agent.tools if getattr(tool, "name", "") == "authenticate_mcp_server")
+    first_task = asyncio.create_task(
+        activation_tool.on_invoke_tool(
+            _activation_context(agency_a._agent_runtime_state),
+            '{"server_name":"github"}',
+        )
+    )
+
+    try:
+        assert await asyncio.to_thread(first_conversion_started.wait, 1)
+        second_task = asyncio.create_task(
+            activation_tool.on_invoke_tool(
+                _activation_context(agency_b._agent_runtime_state),
+                '{"server_name":"github"}',
+            )
+        )
+        await asyncio.sleep(0.02)
+        assert not second_conversion_started.is_set()
+    finally:
+        release_first_conversion.set()
+
+    await asyncio.gather(first_task, second_task)
+    assert selected_cache_dirs == [tmp_path / "agency-a", tmp_path / "agency-b"]
     assert agent.mcp_servers == []
 
 
