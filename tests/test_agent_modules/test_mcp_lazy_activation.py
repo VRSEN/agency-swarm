@@ -290,10 +290,10 @@ async def test_authenticate_mcp_server_serializes_shared_agent_across_agencies(
 
 
 @pytest.mark.asyncio
-async def test_authenticate_mcp_server_replaces_tools_bound_to_another_agency(
+async def test_authenticate_mcp_server_scopes_tools_to_each_agency_runtime(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Sequential activation must replace closures bound to the previous Agency."""
+    """Sequential activation must retain each Agency's bound tool closures."""
 
     def _convert_bound_tool(agent: Agent, *, add_to_agent: bool = True) -> list[FunctionTool]:
         selected_cache_dir = agent.mcp_servers[0].cache_dir
@@ -324,17 +324,24 @@ async def test_authenticate_mcp_server_replaces_tools_bound_to_another_agency(
         '{"server_name":"github"}',
     )
     assert "authenticated and its tools are enabled" in first_result
-    first_bound_tool = next(tool for tool in agent.tools if getattr(tool, "name", "") == "github_tool")
-    assert await first_bound_tool.on_invoke_tool(_activation_context(), "{}") == str(tmp_path / "agency-a")
+    first_runtime_tools = await agent.get_all_tools(_activation_context(agency_a._agent_runtime_state))
+    first_bound_tool_before = next(tool for tool in first_runtime_tools if getattr(tool, "name", "") == "github_tool")
+    assert await first_bound_tool_before.on_invoke_tool(_activation_context(), "{}") == str(tmp_path / "agency-a")
 
     second_result = await activation_tool.on_invoke_tool(
         _activation_context(agency_b._agent_runtime_state),
         '{"server_name":"github"}',
     )
     assert "re-authentication attempt completed" in second_result
-    rebound_tools = [tool for tool in agent.tools if getattr(tool, "name", "") == "github_tool"]
-    assert len(rebound_tools) == 1
-    assert await rebound_tools[0].on_invoke_tool(_activation_context(), "{}") == str(tmp_path / "agency-b")
+    first_runtime_tools = await agent.get_all_tools(_activation_context(agency_a._agent_runtime_state))
+    second_runtime_tools = await agent.get_all_tools(_activation_context(agency_b._agent_runtime_state))
+    first_bound_tool = next(tool for tool in first_runtime_tools if getattr(tool, "name", "") == "github_tool")
+    second_bound_tool = next(tool for tool in second_runtime_tools if getattr(tool, "name", "") == "github_tool")
+
+    assert first_bound_tool is first_bound_tool_before
+    assert await first_bound_tool.on_invoke_tool(_activation_context(), "{}") == str(tmp_path / "agency-a")
+    assert await second_bound_tool.on_invoke_tool(_activation_context(), "{}") == str(tmp_path / "agency-b")
+    assert not any(getattr(tool, "name", "") == "github_tool" for tool in agent.tools)
 
 
 def test_ensure_mcp_tools_keeps_non_oauth_servers_eager(monkeypatch: pytest.MonkeyPatch) -> None:

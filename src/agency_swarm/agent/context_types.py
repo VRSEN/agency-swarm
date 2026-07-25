@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from agents import FunctionTool
+
     from agency_swarm.tools.concurrency import ToolConcurrencyManager
     from agency_swarm.tools.send_message import SendMessage
     from agency_swarm.utils.thread import ThreadManager
@@ -19,6 +21,7 @@ class AgentRuntimeState:
     subagents: dict[str, "Agent"] = field(default_factory=dict)
     send_message_tools: dict[str, "SendMessage"] = field(default_factory=dict)
     oauth_mcp_servers: dict[str, Any] = field(default_factory=dict)
+    oauth_mcp_tools: dict[str, list["FunctionTool"]] = field(default_factory=dict)
     pending_per_thread: dict[int | None, set[str]] = field(default_factory=dict)
     handoffs: list[Any] = field(default_factory=list)
     pending_lock: asyncio.Lock = field(init=False)
@@ -30,6 +33,7 @@ class AgentRuntimeState:
         self.subagents = {}
         self.send_message_tools = {}
         self.oauth_mcp_servers = {}
+        self.oauth_mcp_tools = {}
         self.pending_per_thread = {}
         self.handoffs = []
         self.pending_lock = asyncio.Lock()

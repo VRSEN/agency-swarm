@@ -353,7 +353,13 @@ class Agent(BaseAgent[MasterContext]):
         if master_context:
             runtime_state = master_context.agent_runtime_state.get(self.name)
             if runtime_state:
+                overridden_servers = set(runtime_state.oauth_mcp_tools)
+                base_tools = [
+                    tool for tool in base_tools if getattr(tool, _MCP_SERVER_TOOL_ATTR, None) not in overridden_servers
+                ]
                 runtime_tools = list(runtime_state.send_message_tools.values())
+                for server_tools in runtime_state.oauth_mcp_tools.values():
+                    runtime_tools.extend(server_tools)
 
         if not runtime_tools:
             return base_tools
@@ -498,8 +504,11 @@ class Agent(BaseAgent[MasterContext]):
 
         activation_lock = threading.Lock()
 
-        def _replace_mcp_server_tools(server_name: str, converted_tools: list[FunctionTool]) -> None:
-            retained_tools = [tool for tool in self.tools if getattr(tool, _MCP_SERVER_TOOL_ATTR, None) != server_name]
+        def _prepare_mcp_server_tools(
+            server_name: str,
+            converted_tools: list[FunctionTool],
+            retained_tools: list[Tool],
+        ) -> list[FunctionTool]:
             retained_names = {getattr(tool, "name", None) for tool in retained_tools}
             replacement_tools: list[FunctionTool] = []
             for tool in converted_tools:
@@ -515,8 +524,32 @@ class Agent(BaseAgent[MasterContext]):
                 setattr(prepared_tool, _MCP_SERVER_TOOL_ATTR, server_name)
                 replacement_tools.append(prepared_tool)
                 retained_names.add(prepared_tool.name)
-            self.tools = [*retained_tools, *replacement_tools]
-            self._ensure_web_search_sources_include()
+            return replacement_tools
+
+        def _store_mcp_server_tools(
+            runtime_state: AgentRuntimeState | None,
+            server_name: str,
+            converted_tools: list[FunctionTool],
+        ) -> None:
+            retained_static_tools = [
+                tool for tool in self.tools if getattr(tool, _MCP_SERVER_TOOL_ATTR, None) != server_name
+            ]
+            if runtime_state is None:
+                replacement_tools = _prepare_mcp_server_tools(server_name, converted_tools, retained_static_tools)
+                self.tools = [*retained_static_tools, *replacement_tools]
+                self._ensure_web_search_sources_include()
+                return
+
+            retained_runtime_tools: list[Tool] = list(runtime_state.send_message_tools.values())
+            for retained_server_name, server_tools in runtime_state.oauth_mcp_tools.items():
+                if retained_server_name != server_name:
+                    retained_runtime_tools.extend(server_tools)
+            replacement_tools = _prepare_mcp_server_tools(
+                server_name,
+                converted_tools,
+                [*retained_static_tools, *retained_runtime_tools],
+            )
+            runtime_state.oauth_mcp_tools[server_name] = replacement_tools
 
         async def _activate_mcp_server(ctx: RunContextWrapper[MasterContext], server_name: str) -> str:
             selected = self._oauth_mcp_servers.get(server_name)
@@ -553,7 +586,7 @@ class Agent(BaseAgent[MasterContext]):
                     except Exception:
                         pass
                     raise cancellation
-                _replace_mcp_server_tools(server_name, conversion_task.result())
+                _store_mcp_server_tools(runtime_state, server_name, conversion_task.result())
             except Exception as exc:
                 self.mcp_servers = original_servers
                 return f"Failed to authenticate MCP server '{server_name}': {exc}"
