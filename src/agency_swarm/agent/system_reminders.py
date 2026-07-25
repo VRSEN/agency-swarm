@@ -3,10 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, cast
 
-from agents import Agent as SDKAgent, AgentHookContext, AgentHooks, RunContextWrapper, TResponseInputItem
+from agents import Agent as SDKAgent, AgentHookContext, AgentHooks, RunContextWrapper, ShellTool, TResponseInputItem
 from agents.items import ModelResponse
-from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionWebSearch
+from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionWebSearch, ResponseToolSearchCall
 from openai.types.responses.response_code_interpreter_tool_call import ResponseCodeInterpreterToolCall
+from openai.types.responses.response_function_shell_tool_call import ResponseFunctionShellToolCall
 from openai.types.responses.response_output_item import ImageGenerationCall, McpCall
 
 from agency_swarm.context import MasterContext
@@ -65,7 +66,7 @@ class CompositeAgentHooks(AgentHooks[MasterContext]):
         context: RunContextWrapper[MasterContext],
         agent: SDKAgent[Any],
         tool: Tool,
-        result: str,
+        result: object,
     ) -> None:
         for hook in self._hooks:
             await hook.on_tool_end(context, agent, tool, result)
@@ -119,7 +120,7 @@ class SystemReminderHooks(AgentHooks[MasterContext]):
         context: RunContextWrapper[MasterContext],
         agent: SDKAgent[Any],
         tool: Tool,
-        result: str,
+        result: object,
     ) -> None:
         self._advance_tool_call_counters(context, 1)
 
@@ -129,7 +130,7 @@ class SystemReminderHooks(AgentHooks[MasterContext]):
         agent: SDKAgent[MasterContext],
         response: ModelResponse,
     ) -> None:
-        hosted_calls = sum(1 for item in response.output if isinstance(item, _HOSTED_TOOL_CALL_TYPES))
+        hosted_calls = sum(1 for item in response.output if _is_hosted_tool_call(item, agent))
         self._advance_tool_call_counters(context, hosted_calls)
 
     async def on_llm_start(
@@ -251,6 +252,18 @@ def _has_current_top_level_user_message(context: MasterContext, agent_name: str)
 
 def _build_system_message(text: str) -> TResponseInputItem:
     return {"role": "system", "content": text}
+
+
+def _is_hosted_tool_call(item: object, agent: SDKAgent[Any]) -> bool:
+    if isinstance(item, _HOSTED_TOOL_CALL_TYPES):
+        return True
+    if isinstance(item, ResponseToolSearchCall):
+        return item.execution == "server"
+    if not isinstance(item, ResponseFunctionShellToolCall):
+        return False
+
+    shell_tool = next((tool for tool in agent.tools if isinstance(tool, ShellTool)), None)
+    return shell_tool is not None and (shell_tool.environment is None or shell_tool.environment["type"] != "local")
 
 
 @dataclass(slots=True)

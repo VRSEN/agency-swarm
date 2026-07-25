@@ -10,17 +10,24 @@ from agents import (
     AgentHooks,
     ModelSettings,
     RunContextWrapper,
+    ShellTool,
     Tool,
+    ToolSearchTool,
     TResponseInputItem,
     WebSearchTool,
     function_tool,
 )
 from agents.agent_output import AgentOutputSchemaBase
 from agents.handoffs import Handoff as SDKHandoff
-from agents.items import ModelResponse, TResponseStreamEvent
+from agents.items import ModelResponse, TResponseOutputItem, TResponseStreamEvent
 from agents.models.interface import Model, ModelTracing
 from agents.usage import Usage
-from openai.types.responses import ResponseFunctionWebSearch
+from openai.types.responses import ResponseFunctionWebSearch, ResponseToolSearchCall
+from openai.types.responses.response_container_reference import ResponseContainerReference
+from openai.types.responses.response_function_shell_tool_call import (
+    Action as ShellCallAction,
+    ResponseFunctionShellToolCall,
+)
 from openai.types.responses.response_function_web_search import ActionSearch
 from openai.types.responses.response_prompt_param import ResponsePromptParam
 
@@ -138,11 +145,12 @@ class _TwoToolCallsModel(Model):
         return _stream_text_events("done", self.model)
 
 
-class _WebSearchThenAnswerModel(Model):
-    """Emit one hosted web_search_call first, then a final message."""
+class _HostedToolThenAnswerModel(Model):
+    """Emit one hosted tool call first, then a final message."""
 
-    def __init__(self) -> None:
-        self.model = "test-web-search"
+    def __init__(self, tool_call: TResponseOutputItem) -> None:
+        self.model = "test-hosted-tool"
+        self.tool_call = tool_call
         self.recorded_inputs: list[list[TResponseInputItem]] = []
 
     async def get_response(
@@ -164,13 +172,11 @@ class _WebSearchThenAnswerModel(Model):
 
         self.recorded_inputs.append(copy.deepcopy(input))
         if len(self.recorded_inputs) == 1:
-            web_search_call = ResponseFunctionWebSearch(
-                id=f"ws_{uuid.uuid4().hex}",
-                action=ActionSearch(query="open follow-ups", type="search"),
-                status="completed",
-                type="web_search_call",
+            return ModelResponse(
+                output=[self.tool_call],
+                usage=Usage(),
+                response_id=f"resp_{uuid.uuid4().hex}",
             )
-            return ModelResponse(output=[web_search_call], usage=Usage(), response_id=f"resp_{uuid.uuid4().hex}")
         return _build_message_response("done", self.model)
 
     def stream_response(
@@ -318,7 +324,14 @@ async def test_every_n_tool_calls_injects_on_next_llm_call_and_resets() -> None:
 
 @pytest.mark.asyncio
 async def test_every_n_tool_calls_counts_hosted_tool_calls() -> None:
-    model = _WebSearchThenAnswerModel()
+    model = _HostedToolThenAnswerModel(
+        ResponseFunctionWebSearch(
+            id=f"ws_{uuid.uuid4().hex}",
+            action=ActionSearch(query="open follow-ups", type="search"),
+            status="completed",
+            type="web_search_call",
+        )
+    )
     agent = Agent(
         name="ReminderAgent",
         instructions="Search the web, then answer.",
@@ -334,6 +347,94 @@ async def test_every_n_tool_calls_counts_hosted_tool_calls() -> None:
     assert len(model.recorded_inputs) == 2
     assert not _contains_text(model.recorded_inputs[0], "Checkpoint reminder")
     assert _contains_text(model.recorded_inputs[1], "Checkpoint reminder")
+
+
+@pytest.mark.asyncio
+async def test_every_n_tool_calls_counts_hosted_tool_search_calls() -> None:
+    model = _HostedToolThenAnswerModel(
+        ResponseToolSearchCall(
+            id=f"ts_{uuid.uuid4().hex}",
+            arguments={"query": "open follow-ups"},
+            execution="server",
+            status="completed",
+            type="tool_search_call",
+        )
+    )
+    agent = Agent(
+        name="ReminderAgent",
+        instructions="Search the tools, then answer.",
+        model=model,
+        model_settings=ModelSettings(temperature=0.0),
+        tools=[ToolSearchTool()],
+        system_reminders=[EveryNToolCalls(1, "Checkpoint reminder")],
+    )
+    agency = Agency(agent)
+
+    await agency.get_response("Handle task-1")
+
+    assert len(model.recorded_inputs) == 2
+    assert not _contains_text(model.recorded_inputs[0], "Checkpoint reminder")
+    assert _contains_text(model.recorded_inputs[1], "Checkpoint reminder")
+
+
+@pytest.mark.asyncio
+async def test_every_n_tool_calls_counts_hosted_shell_calls() -> None:
+    model = _HostedToolThenAnswerModel(
+        ResponseFunctionShellToolCall(
+            id=f"sh_{uuid.uuid4().hex}",
+            action=ShellCallAction(commands=["pwd"]),
+            call_id=f"call_{uuid.uuid4().hex}",
+            environment=ResponseContainerReference(
+                container_id="container_test",
+                type="container_reference",
+            ),
+            status="completed",
+            type="shell_call",
+        )
+    )
+    agent = Agent(
+        name="ReminderAgent",
+        instructions="Inspect the hosted container, then answer.",
+        model=model,
+        model_settings=ModelSettings(temperature=0.0),
+        tools=[ShellTool(environment={"type": "container_reference", "container_id": "container_test"})],
+        system_reminders=[EveryNToolCalls(1, "Checkpoint reminder")],
+    )
+    agency = Agency(agent)
+
+    await agency.get_response("Handle task-1")
+
+    assert len(model.recorded_inputs) == 2
+    assert not _contains_text(model.recorded_inputs[0], "Checkpoint reminder")
+    assert _contains_text(model.recorded_inputs[1], "Checkpoint reminder")
+
+
+@pytest.mark.asyncio
+async def test_every_n_tool_calls_does_not_double_count_local_shell_calls() -> None:
+    model = _HostedToolThenAnswerModel(
+        ResponseFunctionShellToolCall(
+            id=f"sh_{uuid.uuid4().hex}",
+            action=ShellCallAction(commands=["pwd"]),
+            call_id=f"call_{uuid.uuid4().hex}",
+            environment=None,
+            status="completed",
+            type="shell_call",
+        )
+    )
+    agent = Agent(
+        name="ReminderAgent",
+        instructions="Inspect the local shell, then answer.",
+        model=model,
+        model_settings=ModelSettings(temperature=0.0),
+        tools=[ShellTool(executor=lambda _request: "done")],
+        system_reminders=[EveryNToolCalls(2, "Checkpoint reminder")],
+    )
+    agency = Agency(agent)
+
+    await agency.get_response("Handle task-1")
+
+    assert len(model.recorded_inputs) == 2
+    assert not _contains_text(model.recorded_inputs[1], "Checkpoint reminder")
 
 
 @pytest.mark.asyncio
