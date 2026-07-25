@@ -48,10 +48,20 @@ The server will start on http://localhost:8080 with these endpoints:
 
 ### Multi-User Support
 
-Include the `X-User-Id` header for per-user token isolation:
+Configure `oauth_user_id_dependency` with your application's authentication dependency. It must return a stable, non-secret ID for the authenticated user:
 ```python
-headers = {"X-User-Id": "user_123"}
-response = requests.post(url, json=payload, headers=headers)
+from fastapi import Depends
+
+from agency_swarm import run_fastapi
+from my_app.auth import User, get_current_user
+
+def get_oauth_user_id(user: User = Depends(get_current_user)) -> str:
+    return user.id
+
+run_fastapi(
+    agencies={"my-agency": create_agency},
+    oauth_user_id_dependency=get_oauth_user_id,
+)
 ```
 
 ### OAuth Streaming Contract (FastAPI)

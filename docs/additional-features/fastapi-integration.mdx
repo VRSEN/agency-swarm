@@ -48,6 +48,7 @@ agency.run_fastapi()
 | `allowed_local_file_dirs` | list | `None` | Allowlist for local `file_urls`; paths outside the list are rejected. |
 | `enable_realtime` | boolean | `false` | Mount `/<agency_name>/realtime` websocket route(s) in addition to REST endpoints. |
 | `realtime_options` | object | `{}` | Realtime session overrides (for example `provider`, `model`, `voice`, `turn_detection`). |
+| `oauth_user_id_dependency` | FastAPI dependency | `None` | Trusted authentication dependency required for OAuth-enabled agencies. It must return a stable, non-secret user ID. |
 
 </Accordion>
 
@@ -381,6 +382,23 @@ response = requests.post(cancel_url, json=payload)
 
 ### OAuth-enabled agencies
 
+Provide a trusted FastAPI dependency that authenticates the request and returns a stable, non-secret user ID:
+
+```python
+from fastapi import Depends
+
+from agency_swarm import run_fastapi
+from my_app.auth import User, get_current_user
+
+def get_oauth_user_id(user: User = Depends(get_current_user)) -> str:
+    return user.id
+
+run_fastapi(
+    agencies={"my-agency": create_agency},
+    oauth_user_id_dependency=get_oauth_user_id,
+)
+```
+
 If any agent uses `MCPServerOAuth`, `run_fastapi` automatically:
 - Adds `/auth/callback` and `/auth/status/{state}` routes
 - Defers OAuth MCP discovery until the model explicitly invokes `authenticate_mcp_server(server_name)` (so startup never forces auth)
@@ -388,12 +406,12 @@ If any agent uses `MCPServerOAuth`, `run_fastapi` automatically:
   - `event: oauth_redirect` with `{state, server, auth_url}`
   - `event: oauth_status` with `{state, server, status}` where `status` is `pending`, `authorized`, `error:<reason>`, or `timeout`
   - SSE keepalive comments every 15 seconds while OAuth is pending: `: keepalive <timestamp>`
-- Reads `X-User-Id` (if provided) to store tokens per user instead of the shared `default` bucket
+- Uses the authenticated ID from `oauth_user_id_dependency` to store tokens per user
 - Keeps OAuth state in an in-process registry; for multi-worker deployments, pass a shared registry (e.g., Redis-backed) via `run_fastapi(oauth_registry=...)` or use sticky routing.
 - Requires streaming: `POST /{agency}/get_response` returns `400` when OAuth-enabled MCP servers are present. Use `POST /{agency}/get_response_stream` (or `enable_agui=True`) and buffer the stream if you need a single final response.
 - Applies a 10-minute OAuth wait timeout per request. On timeout, the stream emits `oauth_status` = `timeout` and closes cleanly.
 
-You do not need custom handlers. FastAPI wiring is request-scoped and carries the OAuth prompts automatically.
+`oauth_user_id_dependency` is required for OAuth-enabled agencies. Do not trust a user ID read directly from a request header or body. FastAPI wiring remains request-scoped and carries the OAuth prompts automatically.
 
 For `HostedMCPTool`, FastAPI cannot infer whether a remote MCP server is public or OAuth-protected. To enable hosted OAuth, wrap only the protected tool with `enable_hosted_mcp_tool_oauth(...)` and leave `tool_config.authorization` empty. `run_fastapi(...)` will create an in-memory registry by default, or you can pass `oauth_registry=OAuthStateRegistry()` to share state across workers. Public hosted MCP servers should stay unwrapped.
 

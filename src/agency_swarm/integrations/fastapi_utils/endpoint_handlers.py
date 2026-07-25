@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from importlib import metadata
 from pathlib import Path
 from typing import Any, Literal, cast
-from weakref import WeakKeyDictionary
+from weakref import ReferenceType, ref
 
 from ag_ui.core import (
     AudioInputContent,
@@ -53,7 +53,7 @@ try:
 except ImportError:
     _LITELLM_AVAILABLE = False
     LitellmModel = None  # type: ignore[misc, assignment]
-from fastapi import Depends, Header, HTTPException, Request
+from fastapi import Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from openai import AsyncOpenAI, OpenAI
@@ -145,18 +145,22 @@ def _sse_keepalive_comment() -> str:
     return f": keepalive {int(time.time())}\n\n"
 
 
-def _update_oauth_pending(current: bool, payload: dict[str, Any]) -> bool:
+def _update_oauth_pending(pending_states: set[str], payload: dict[str, Any]) -> None:
+    state = payload.get("state")
+    if not isinstance(state, str) or state == "":
+        return
     event_type = payload.get("type")
     if event_type == "oauth_redirect":
-        return True
+        pending_states.add(state)
+        return
     if event_type != "oauth_status":
-        return current
+        return
     status = payload.get("status")
     if status == "pending":
-        return True
+        pending_states.add(state)
+        return
     if isinstance(status, str) and (status == "authorized" or status == "timeout" or status.startswith("error:")):
-        return False
-    return current
+        pending_states.discard(state)
 
 
 @dataclass
@@ -175,7 +179,7 @@ class _AgencyRequestState:
 
 @dataclass
 class _AgencyRequestLease:
-    state: _AgencyRequestState
+    states: tuple[_AgencyRequestState, ...]
     is_override: bool
 
 
@@ -219,8 +223,21 @@ class _RequestOverrideSession:
             await _release_agency_request_lease(self.lease)
 
 
-_AGENCY_REQUEST_STATES = WeakKeyDictionary[Agency, dict[asyncio.AbstractEventLoop, _AgencyRequestState]]()
+type _RequestStateEntry = tuple[ReferenceType[object], dict[asyncio.AbstractEventLoop, _AgencyRequestState]]
+_AGENT_REQUEST_STATES: dict[int, _RequestStateEntry] = {}
 _AGENCY_REQUEST_STATES_GUARD = threading.Lock()
+
+
+async def _no_oauth_user_id() -> None:
+    return None
+
+
+def _resolve_oauth_user_id(user_id: object, oauth_config: FastAPIOAuthConfig | None) -> str | None:
+    if oauth_config is None:
+        return None
+    if not isinstance(user_id, str) or user_id.strip() == "":
+        raise HTTPException(status_code=401, detail="OAuth authentication did not resolve a user ID")
+    return user_id
 
 
 def _apply_request_model_override(agent: Agent, model_name: str, config: ClientConfig | None = None) -> bool:
@@ -755,6 +772,23 @@ def _has_oauth_servers(agency_instance: Agency) -> bool:
     return False
 
 
+def _ensure_request_oauth_config(
+    agency_instance: Agency,
+    oauth_config: FastAPIOAuthConfig | None,
+) -> None:
+    """Reject request-time OAuth capabilities missed by the startup preview."""
+    if oauth_config is not None:
+        return
+    if _has_oauth_servers(agency_instance) or has_hosted_mcp_tools_missing_authorization(agency_instance):
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "The agency factory returned OAuth-enabled agents that were not present during FastAPI startup. "
+                "Ensure the startup factory preview exposes OAuth and configure oauth_user_id_dependency."
+            ),
+        )
+
+
 def _has_enabled_hosted_mcp_oauth(agency_instance: Agency) -> bool:
     agents_map = getattr(agency_instance, "agents", {})
     if not isinstance(agents_map, dict):
@@ -1001,13 +1035,14 @@ def make_response_endpoint(
     allowed_local_dirs: Sequence[str | Path] | None = None,
     oauth_config: FastAPIOAuthConfig | None = None,
 ):
-    user_header = oauth_config.user_header if oauth_config else "X-User-Id"
+    user_id_dependency = oauth_config.user_id_dependency if oauth_config else _no_oauth_user_id
 
     async def handler(
         request: request_model,
         token: str = Depends(verify_token),
-        user_id: str | None = Header(default=None, alias=user_header),
+        user_id: object = Depends(user_id_dependency),
     ):
+        user_id = _resolve_oauth_user_id(user_id, oauth_config)
         if request.chat_history is not None:
             # Chat history is now a flat list
             def load_callback() -> list:
@@ -1027,6 +1062,7 @@ def make_response_endpoint(
             )
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
+        _ensure_request_oauth_config(agency_instance, oauth_config)
         request_user_context = _with_oauth_user_context(request.user_context, user_id)
         override_policy = RequestOverridePolicy(request.client_config)
         override_session = _RequestOverrideSession(
@@ -1135,14 +1171,15 @@ def make_stream_endpoint(
     allowed_local_dirs: Sequence[str | Path] | None = None,
     oauth_config: FastAPIOAuthConfig | None = None,
 ):
-    user_header = oauth_config.user_header if oauth_config else "X-User-Id"
+    user_id_dependency = oauth_config.user_id_dependency if oauth_config else _no_oauth_user_id
 
     async def handler(
         http_request: Request,
         request: request_model,
         token: str = Depends(verify_token),
-        user_id: str | None = Header(default=None, alias=user_header),
+        user_id: object = Depends(user_id_dependency),
     ):
+        user_id = _resolve_oauth_user_id(user_id, oauth_config)
         if request.chat_history is not None:
             # Chat history is now a flat list
             def load_callback() -> list:
@@ -1162,6 +1199,7 @@ def make_stream_endpoint(
             )
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
+        _ensure_request_oauth_config(agency_instance, oauth_config)
         client_config = _resolve_stream_client_config(http_request, request.client_config)
         request_user_context = _with_oauth_user_context(request.user_context, user_id)
         override_policy = RequestOverridePolicy(client_config)
@@ -1250,7 +1288,7 @@ def make_stream_endpoint(
             connect_task: asyncio.Task | None = None
             cancel_task: asyncio.Task | None = None
             active_run: ActiveRun | None = None
-            oauth_pending = False
+            oauth_pending: set[str] = set()
             queue_task: asyncio.Task | None = (
                 asyncio.create_task(oauth_runtime.next_event()) if oauth_runtime is not None else None
             )
@@ -1313,7 +1351,7 @@ def make_stream_endpoint(
                         if queue_task and queue_task in done:
                             try:
                                 payload = queue_task.result()
-                                oauth_pending = _update_oauth_pending(oauth_pending, payload)
+                                _update_oauth_pending(oauth_pending, payload)
                                 async for oauth_chunk in _emit_oauth(payload):
                                     yield oauth_chunk
                                 if oauth_pending and keepalive_task is None:
@@ -1366,7 +1404,7 @@ def make_stream_endpoint(
                     if queue_task and queue_task in done:
                         try:
                             payload = queue_task.result()
-                            oauth_pending = _update_oauth_pending(oauth_pending, payload)
+                            _update_oauth_pending(oauth_pending, payload)
                             async for oauth_chunk in _emit_oauth(payload):
                                 yield oauth_chunk
                             if oauth_pending and keepalive_task is None:
@@ -1562,14 +1600,15 @@ def make_agui_chat_endpoint(
     allowed_local_dirs: Sequence[str | Path] | None = None,
     oauth_config: FastAPIOAuthConfig | None = None,
 ):
-    user_header = oauth_config.user_header if oauth_config else "X-User-Id"
+    user_id_dependency = oauth_config.user_id_dependency if oauth_config else _no_oauth_user_id
 
     async def handler(
         request: request_model,
         token: str = Depends(verify_token),
-        user_id: str | None = Header(default=None, alias=user_header),
+        user_id: object = Depends(user_id_dependency),
     ):
         """Accepts AG-UI `RunAgentInput`, returns an AG-UI event stream."""
+        user_id = _resolve_oauth_user_id(user_id, oauth_config)
 
         encoder = EventEncoder()
 
@@ -1615,6 +1654,7 @@ def make_agui_chat_endpoint(
         elif has_messages:
             # Pull the default agent from the agency
             agency = agency_factory()
+            _ensure_request_oauth_config(agency, oauth_config)
             default_agent = agency.entry_points[0]
 
             # Convert AG-UI messages to flat chat history with metadata
@@ -1637,7 +1677,7 @@ def make_agui_chat_endpoint(
             def load_callback() -> list:
                 return []
 
-            if not getattr(request, "file_urls", None):
+            if not getattr(request, "file_urls", None) and not combined_file_ids:
                 # Attachment-only requests keep the empty converted input; anything
                 # else without messages or chat history is a client error.
                 message_input = None
@@ -1653,6 +1693,7 @@ def make_agui_chat_endpoint(
 
         # Choose / build an agent – here we just create a demo agent each time.
         agency = agency_factory(load_threads_callback=load_callback)
+        _ensure_request_oauth_config(agency, oauth_config)
         request_user_context = _with_oauth_user_context(request.user_context, user_id)
         override_policy = RequestOverridePolicy(request.client_config)
         override_session = _RequestOverrideSession(
@@ -1735,7 +1776,7 @@ def make_agui_chat_endpoint(
             keepalive_task: asyncio.Task | None = None
             connect_task: asyncio.Task | None = None
             stream_task: asyncio.Task | None = None
-            oauth_pending = False
+            oauth_pending: set[str] = set()
 
             async def _emit_oauth(payload: dict[str, Any]) -> AsyncGenerator[str]:
                 event_type = payload.get("type")
@@ -1784,7 +1825,7 @@ def make_agui_chat_endpoint(
                         if queue_task and queue_task in done:
                             try:
                                 payload = queue_task.result()
-                                oauth_pending = _update_oauth_pending(oauth_pending, payload)
+                                _update_oauth_pending(oauth_pending, payload)
                                 async for oauth_chunk in _emit_oauth(payload):
                                     yield oauth_chunk
                                 if oauth_pending and keepalive_task is None:
@@ -1826,7 +1867,7 @@ def make_agui_chat_endpoint(
                     if queue_task and queue_task in done:
                         try:
                             payload = queue_task.result()
-                            oauth_pending = _update_oauth_pending(oauth_pending, payload)
+                            _update_oauth_pending(oauth_pending, payload)
                             async for oauth_chunk in _emit_oauth(payload):
                                 yield oauth_chunk
                             if oauth_pending and keepalive_task is None:
@@ -2983,14 +3024,28 @@ def _restore_agency_state(
         hosted_tool_compat.restore_attachment_compatibility(agent, attachment_compatibility)
 
 
-async def _get_agency_request_state(agency: Agency) -> _AgencyRequestState:
-    """Return per-agency request coordination state for the current event loop."""
-    loop = asyncio.get_running_loop()
+def _remove_request_state_entry(subject_id: int, subject_ref: ReferenceType[object]) -> None:
     with _AGENCY_REQUEST_STATES_GUARD:
-        per_loop = _AGENCY_REQUEST_STATES.get(agency)
-        if per_loop is None:
-            per_loop = {}
-            _AGENCY_REQUEST_STATES[agency] = per_loop
+        existing = _AGENT_REQUEST_STATES.get(subject_id)
+        if existing is not None and existing[0] is subject_ref:
+            _AGENT_REQUEST_STATES.pop(subject_id, None)
+
+
+def _get_identity_request_state(subject: object, loop: asyncio.AbstractEventLoop) -> _AgencyRequestState:
+    """Return request coordination state for one object identity and event loop."""
+    subject_id = id(subject)
+    with _AGENCY_REQUEST_STATES_GUARD:
+        entry = _AGENT_REQUEST_STATES.get(subject_id)
+        if entry is None or entry[0]() is not subject:
+            per_loop: dict[asyncio.AbstractEventLoop, _AgencyRequestState] = {}
+
+            def remove_expired_subject(expired_ref: ReferenceType[object]) -> None:
+                _remove_request_state_entry(subject_id, expired_ref)
+
+            subject_ref = ref(subject, remove_expired_subject)
+            _AGENT_REQUEST_STATES[subject_id] = (subject_ref, per_loop)
+        else:
+            per_loop = entry[1]
 
         # Drop closed-loop state to avoid unbounded growth in long-lived processes.
         closed_loops = [existing_loop for existing_loop in per_loop if existing_loop.is_closed()]
@@ -3000,8 +3055,8 @@ async def _get_agency_request_state(agency: Agency) -> _AgencyRequestState:
         active_loops = [existing_loop for existing_loop in per_loop if not existing_loop.is_closed()]
         if active_loops and loop not in per_loop:
             logger.warning(
-                "Agency '%s' is being reused across event loops; request coordination remains per-loop only.",
-                getattr(agency, "name", agency.__class__.__name__),
+                "Agent '%s' is being reused across event loops; request coordination remains per-loop only.",
+                getattr(subject, "name", subject.__class__.__name__),
             )
 
         existing = per_loop.get(loop)
@@ -3013,9 +3068,18 @@ async def _get_agency_request_state(agency: Agency) -> _AgencyRequestState:
         return created
 
 
-async def _acquire_agency_request_lease(agency: Agency, is_override: bool) -> _AgencyRequestLease:
-    """Acquire a regular or override lease for a request."""
-    state = await _get_agency_request_state(agency)
+async def _get_agency_request_states(agency: Agency) -> tuple[_AgencyRequestState, ...]:
+    """Return states for every unique underlying agent in deterministic order."""
+    loop = asyncio.get_running_loop()
+    agents_map = getattr(agency, "agents", None)
+    subjects = list(agents_map.values()) if isinstance(agents_map, dict) and agents_map else [agency]
+    unique_subjects = {id(subject): subject for subject in subjects}
+    return tuple(
+        _get_identity_request_state(unique_subjects[subject_id], loop) for subject_id in sorted(unique_subjects)
+    )
+
+
+async def _acquire_request_state(state: _AgencyRequestState, is_override: bool) -> None:
     async with state.state_changed:
         if is_override:
             state.pending_overrides += 1
@@ -3028,19 +3092,35 @@ async def _acquire_agency_request_lease(agency: Agency, is_override: bool) -> _A
                 state.pending_overrides -= 1
                 state.state_changed.notify_all()
         else:
-            # Once an override is queued, block new regular requests so the override
-            # can run as soon as in-flight regular work drains.
             await state.state_changed.wait_for(lambda: not state.override_active and state.pending_overrides == 0)
             state.active_regular_requests += 1
-    return _AgencyRequestLease(state=state, is_override=is_override)
 
 
-async def _release_agency_request_lease(lease: _AgencyRequestLease) -> None:
-    """Release a previously acquired request lease."""
-    state = lease.state
+async def _release_request_state(state: _AgencyRequestState, is_override: bool) -> None:
     async with state.state_changed:
-        if lease.is_override:
+        if is_override:
             state.override_active = False
         else:
             state.active_regular_requests -= 1
         state.state_changed.notify_all()
+
+
+async def _acquire_agency_request_lease(agency: Agency, is_override: bool) -> _AgencyRequestLease:
+    """Acquire reader or writer leases for every shared underlying agent."""
+    states = await _get_agency_request_states(agency)
+    acquired: list[_AgencyRequestState] = []
+    try:
+        for state in states:
+            await _acquire_request_state(state, is_override)
+            acquired.append(state)
+    except BaseException:
+        for state in reversed(acquired):
+            await _release_request_state(state, is_override)
+        raise
+    return _AgencyRequestLease(states=tuple(acquired), is_override=is_override)
+
+
+async def _release_agency_request_lease(lease: _AgencyRequestLease) -> None:
+    """Release a previously acquired request lease."""
+    for state in reversed(lease.states):
+        await _release_request_state(state, lease.is_override)

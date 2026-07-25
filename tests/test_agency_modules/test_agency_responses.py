@@ -1,3 +1,4 @@
+import copy
 import warnings
 from typing import Any
 
@@ -79,6 +80,28 @@ async def test_agency_get_response_with_hooks(mock_agent):
     assert result.final_output == "Test response"
     assert saved_messages
     assert mock_agent.last_hooks_override is hooks_override
+
+
+@pytest.mark.asyncio
+async def test_agency_get_response_default_persistence_saves_immutable_snapshots(mock_agent) -> None:
+    """Default persistence should save each completed message state exactly once."""
+    saved_messages: list[list[dict[str, Any]]] = []
+
+    def mock_load_cb() -> list[dict[str, Any]]:
+        return []
+
+    def mock_save_cb(messages: list[dict[str, Any]]) -> None:
+        saved_messages.append(copy.deepcopy(messages))
+
+    agency = Agency(mock_agent, load_threads_callback=mock_load_cb, save_threads_callback=mock_save_cb)
+
+    result = await agency.get_response("Test message", "MockAgent")
+
+    assert result.final_output == "Test response"
+    assert [[message["role"] for message in snapshot] for snapshot in saved_messages] == [
+        ["user"],
+        ["user", "assistant"],
+    ]
 
 
 @pytest.mark.asyncio

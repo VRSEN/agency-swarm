@@ -407,7 +407,7 @@ async def test_stream_endpoint_emits_keepalive_comments_while_oauth_pending(
         agency_factory,
         lambda: None,
         ActiveRunRegistry(),
-        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry()),
+        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry(), user_id_dependency=lambda: "test-user"),
     )
     response = await handler(http_request=_StubRequest(), request=BaseRequest(message="hi"), token=None, user_id="u1")
     chunks = [chunk async for chunk in response.body_iterator]

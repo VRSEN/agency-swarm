@@ -19,7 +19,7 @@ from agency_swarm.integrations.realtime import (
 )
 
 if TYPE_CHECKING:
-    from agency_swarm.integrations.fastapi_utils.oauth_support import OAuthStateRegistry
+    from agency_swarm.integrations.fastapi_utils.oauth_support import OAuthStateRegistry, OAuthUserIdDependency
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,7 @@ def run_fastapi(
     enable_realtime: bool = False,
     realtime_options: dict[str, Any] | None = None,
     oauth_registry: OAuthStateRegistry | None = None,
+    oauth_user_id_dependency: OAuthUserIdDependency | None = None,
 ):
     """Launch a FastAPI server exposing endpoints for multiple agencies and tools.
 
@@ -76,6 +77,9 @@ def run_fastapi(
         Optional OAuth state registry shared across workers (e.g., Redis-backed).
         Defaults to in-memory when not provided. For hosted MCP OAuth, pair this
         with `enable_hosted_mcp_tool_oauth(...)` on the specific protected tools.
+    oauth_user_id_dependency :
+        Required for OAuth-enabled agencies. A trusted FastAPI dependency that
+        authenticates the request and returns a stable, non-secret user ID.
     """
     if (agencies is None or len(agencies) == 0) and (tools is None or len(tools) == 0):
         logger.warning("No endpoints to deploy. Please provide at least one agency or tool.")
@@ -83,7 +87,7 @@ def run_fastapi(
 
     try:
         import uvicorn
-        from fastapi import FastAPI, Header, HTTPException
+        from fastapi import Depends, FastAPI, HTTPException
         from fastapi.middleware.cors import CORSMiddleware
         from starlette.websockets import WebSocket as StarletteWebSocket, WebSocketDisconnect
 
@@ -138,6 +142,7 @@ def run_fastapi(
 
     app = FastAPI(servers=[{"url": base_url}])
     app.state.verify_token = verify_token
+    app.state.oauth_user_id_dependency = oauth_user_id_dependency
 
     # Setup logging if enabled
     if enable_logging:
@@ -167,7 +172,6 @@ def run_fastapi(
         allow_headers=["*"],
     )
 
-    oauth_user_header = "X-User-Id"
     shared_oauth_registry: OAuthStateRegistry | None = oauth_registry
     endpoints = []
     agency_names = []
@@ -202,6 +206,11 @@ def run_fastapi(
         app_supports_hosted_mcp_oauth = (
             oauth_registry is not None or app_has_oauth_servers or app_has_hosted_oauth_tools
         )
+        if app_supports_hosted_mcp_oauth and oauth_user_id_dependency is None:
+            raise ValueError(
+                "OAuth-enabled FastAPI agencies require oauth_user_id_dependency. "
+                "Provide a trusted authentication dependency that returns a stable, non-secret user ID."
+            )
 
         for agency_name, agency_factory, preview_instance, has_oauth_servers, has_hosted_oauth_tools in agency_entries:
             agency_oauth_config: FastAPIOAuthConfig | None = None
@@ -209,9 +218,10 @@ def run_fastapi(
             if (has_oauth_servers or has_hosted_mcp_oauth) and shared_oauth_registry is None:
                 shared_oauth_registry = OAuthStateRegistry()
             if (has_oauth_servers or has_hosted_mcp_oauth) and shared_oauth_registry is not None:
+                assert oauth_user_id_dependency is not None
                 agency_oauth_config = FastAPIOAuthConfig(
                     shared_oauth_registry,
-                    user_header=oauth_user_header,
+                    user_id_dependency=oauth_user_id_dependency,
                     enable_hosted_mcp_oauth=has_hosted_mcp_oauth,
                 )
 
@@ -396,13 +406,17 @@ def run_fastapi(
             endpoints.append(f"/{agency_name}/get_metadata")
 
     if shared_oauth_registry is not None:
+        if oauth_user_id_dependency is None:
+            raise ValueError(
+                "OAuth-enabled FastAPI agencies require oauth_user_id_dependency. "
+                "Provide a trusted authentication dependency that returns a stable, non-secret user ID."
+            )
 
         async def oauth_callback(
             state: str,
             code: str | None = None,
             error: str | None = None,
             error_description: str | None = None,
-            user_id: str | None = Header(default=None, alias=oauth_user_header),
         ):
             # Handle OAuth provider error responses (e.g., user denied authorization)
             if error:
@@ -416,15 +430,23 @@ def run_fastapi(
             if not code:
                 raise HTTPException(status_code=400, detail="OAuth callback missing authorization code")
             try:
-                flow = await shared_oauth_registry.set_code(state=state, code=code, user_id=user_id)
+                flow = await shared_oauth_registry.set_code(state=state, code=code, user_id=None)
             except OAuthFlowError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
             if flow.error:
                 raise HTTPException(status_code=400, detail=f"OAuth callback failed: {flow.error}")
             return {"status": "ok", "state": state, "server_name": flow.server_name}
 
-        async def oauth_status(state: str):
-            return await shared_oauth_registry.get_status(state)
+        async def oauth_status(
+            state: str,
+            user_id: str = Depends(oauth_user_id_dependency),
+        ):
+            if not isinstance(user_id, str) or user_id.strip() == "":
+                raise HTTPException(status_code=401, detail="OAuth authentication did not resolve a user ID")
+            try:
+                return await shared_oauth_registry.get_status_for_user(state, user_id)
+            except OAuthFlowError as exc:
+                raise HTTPException(status_code=404, detail=str(exc)) from exc
 
         app.add_api_route("/auth/callback", oauth_callback, methods=["GET"])
         endpoints.append("/auth/callback")

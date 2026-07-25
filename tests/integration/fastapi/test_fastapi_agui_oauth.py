@@ -12,6 +12,10 @@ from agency_swarm.integrations.fastapi_utils.oauth_support import OAuthStateRegi
 from agency_swarm.mcp.oauth import MCPServerOAuth
 
 
+def _test_oauth_user_id() -> str:
+    return "test-user"
+
+
 def test_oauth_callback_handles_provider_error_response(monkeypatch):
     """OAuth callback gracefully handles provider error responses (no code param).
 
@@ -48,6 +52,7 @@ def test_oauth_callback_handles_provider_error_response(monkeypatch):
         return_app=True,
         app_token_env="",
         oauth_registry=registry,
+        oauth_user_id_dependency=_test_oauth_user_id,
     )
     client = TestClient(app)
 
@@ -84,6 +89,7 @@ def test_oauth_callback_rejects_unknown_success_state() -> None:
         return_app=True,
         app_token_env="",
         oauth_registry=OAuthStateRegistry(),
+        oauth_user_id_dependency=_test_oauth_user_id,
     )
     client = TestClient(app)
 
@@ -114,12 +120,12 @@ def test_run_fastapi_enables_oauth_routes_for_deferred_oauth_server() -> None:
         agencies={"test_agency": agency_factory},
         return_app=True,
         app_token_env="",
+        oauth_user_id_dependency=_test_oauth_user_id,
     )
     client = TestClient(app)
 
     response = client.get("/auth/status/test-state")
-    assert response.status_code == 200
-    assert response.json()["status"] == "unknown"
+    assert response.status_code == 404
 
 
 def test_run_fastapi_enables_oauth_routes_for_hosted_mcp_tool() -> None:
@@ -147,13 +153,13 @@ def test_run_fastapi_enables_oauth_routes_for_hosted_mcp_tool() -> None:
         agencies={"test_agency": agency_factory},
         return_app=True,
         app_token_env="",
+        oauth_user_id_dependency=_test_oauth_user_id,
     )
     client = TestClient(app)
 
     # Route should exist when hosted MCP tools need OAuth.
     response = client.get("/auth/status/test-state")
-    assert response.status_code == 200
-    assert response.json()["status"] == "unknown"
+    assert response.status_code == 404
 
 
 def test_run_fastapi_does_not_enable_hosted_mcp_oauth_routes_without_registry() -> None:
@@ -179,6 +185,7 @@ def test_run_fastapi_does_not_enable_hosted_mcp_oauth_routes_without_registry() 
         agencies={"test_agency": agency_factory},
         return_app=True,
         app_token_env="",
+        oauth_user_id_dependency=_test_oauth_user_id,
     )
     client = TestClient(app)
 
@@ -211,12 +218,12 @@ def test_run_fastapi_enables_opted_in_hosted_mcp_oauth_without_explicit_registry
         agencies={"test_agency": agency_factory},
         return_app=True,
         app_token_env="",
+        oauth_user_id_dependency=_test_oauth_user_id,
     )
     client = TestClient(app)
 
     response = client.get("/auth/status/test-state")
-    assert response.status_code == 200
-    assert response.json()["status"] == "unknown"
+    assert response.status_code == 404
 
 
 def test_run_fastapi_enables_hosted_mcp_oauth_for_mixed_agency_without_explicit_registry(monkeypatch) -> None:
@@ -270,6 +277,7 @@ def test_run_fastapi_enables_hosted_mcp_oauth_for_mixed_agency_without_explicit_
         agencies={"test_agency": agency_factory},
         return_app=True,
         app_token_env="",
+        oauth_user_id_dependency=_test_oauth_user_id,
     )
 
     assert captured_configs
@@ -327,6 +335,7 @@ def test_run_fastapi_keeps_public_hosted_agency_unopted_when_another_agency_uses
         agencies={"oauth_agency": oauth_agency_factory, "public_agency": hosted_agency_factory},
         return_app=True,
         app_token_env="",
+        oauth_user_id_dependency=_test_oauth_user_id,
     )
 
     assert app is not None
@@ -388,6 +397,7 @@ def test_run_fastapi_enables_opted_in_hosted_agency_when_another_agency_uses_oau
         agencies={"oauth_agency": oauth_agency_factory, "hosted_agency": hosted_agency_factory},
         return_app=True,
         app_token_env="",
+        oauth_user_id_dependency=_test_oauth_user_id,
     )
 
     assert app is not None
@@ -450,6 +460,7 @@ def test_run_fastapi_enables_opted_in_hosted_agency_before_oauth_agency(monkeypa
         agencies={"hosted_agency": hosted_agency_factory, "oauth_agency": oauth_agency_factory},
         return_app=True,
         app_token_env="",
+        oauth_user_id_dependency=_test_oauth_user_id,
     )
 
     assert app is not None
@@ -514,6 +525,7 @@ def test_run_fastapi_limits_hosted_mcp_oauth_to_explicitly_opted_tools(monkeypat
         return_app=True,
         app_token_env="",
         oauth_registry=OAuthStateRegistry(),
+        oauth_user_id_dependency=_test_oauth_user_id,
     )
 
     assert app is not None
@@ -584,6 +596,7 @@ def test_agui_stream_emits_oauth_redirect(monkeypatch):
         app_token_env="",
         enable_agui=True,
         oauth_registry=registry,
+        oauth_user_id_dependency=_test_oauth_user_id,
     )
     client = TestClient(app)
 

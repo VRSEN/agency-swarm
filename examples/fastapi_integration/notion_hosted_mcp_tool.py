@@ -62,15 +62,7 @@ DEMO_PAGE = """
       it opens the auth URL in a new tab and keeps the stream open.
     </div>
 
-    <div class="row">
-      <div>
-        <label for="userId"><strong>X-User-Id</strong></label><br/>
-        <input id="userId" value="demo_user" />
-      </div>
-      <div>
-        <button id="startBtn" class="btn btn-primary">Start</button>
-      </div>
-    </div>
+    <button id="startBtn" class="btn btn-primary">Start</button>
 
     <label for="message"><strong>Message</strong></label><br/>
     <textarea id="message">Search my Notion for any page and summarize it.</textarea>
@@ -115,7 +107,6 @@ DEMO_PAGE = """
         openAuthBtn.disabled = true;
         lastAuthUrl = null;
 
-        const userId = document.getElementById("userId").value;
         const message = document.getElementById("message").value;
 
         log("Starting stream...");
@@ -123,7 +114,6 @@ DEMO_PAGE = """
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "X-User-Id": userId,
           },
           body: JSON.stringify({ message }),
         });
@@ -233,12 +223,18 @@ def create_agency(load_threads_callback=None, save_threads_callback=None) -> Age
 
 if __name__ == "__main__":
     oauth_registry = OAuthStateRegistry()
+
+    def get_demo_user_id() -> str:
+        """Return one fixed identity for this local, single-user demo only."""
+        return "local-demo-user"
+
     app = run_fastapi(
         agencies={"notion_hosted_mcp": create_agency},
         host="0.0.0.0",
         port=PORT,
         return_app=True,
         oauth_registry=oauth_registry,
+        oauth_user_id_dependency=get_demo_user_id,
     )
 
     if app is None:

@@ -39,6 +39,7 @@ from .setup import (
 
 if TYPE_CHECKING:
     from agency_swarm.agent.context_types import AgentRuntimeState
+    from agency_swarm.integrations.fastapi_utils.oauth_support import OAuthUserIdDependency
     from agency_swarm.mcp.oauth import MCPServerOAuth as MCPServerOAuthType, OAuthStorageHooks as OAuthStorageHooksType
     from agency_swarm.mcp.oauth_client import MCPServerOAuthClient as MCPServerOAuthClientType
     from agency_swarm.realtime.agency import RealtimeAgency
@@ -487,6 +488,7 @@ class Agency:
         enable_agui: bool = False,
         enable_realtime: bool = False,
         realtime_options: dict[str, Any] | None = None,
+        oauth_user_id_dependency: "OAuthUserIdDependency | None" = None,
     ):
         """Serve this agency via the FastAPI integration.
 
@@ -497,6 +499,9 @@ class Agency:
         cors_origins : list[str] | None
             Optional list of allowed CORS origins passed through to
             :func:`run_fastapi`.
+        oauth_user_id_dependency : OAuthUserIdDependency | None
+            Trusted authentication dependency required when this agency uses
+            OAuth-enabled MCP servers or hosted MCP tools.
         """
         return run_fastapi_helper(
             self,
@@ -507,6 +512,7 @@ class Agency:
             enable_agui,
             enable_realtime,
             realtime_options,
+            oauth_user_id_dependency,
         )
 
     def get_agency_graph(self, include_tools: bool = True) -> dict[str, Any]:

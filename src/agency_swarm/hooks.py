@@ -157,7 +157,3 @@ class PersistenceHooks(RunHooks):
     async def on_agent_start(self, context: AgentHookContext[MasterContext], agent: Agent) -> None:
         """Bridge the current Agents SDK hook to the legacy run-start behavior."""
         self.on_run_start(context=context.context)
-
-    async def on_agent_end(self, context: AgentHookContext[MasterContext], agent: Agent, output: Any) -> None:
-        """Bridge the current Agents SDK hook to the legacy run-end behavior."""
-        self.on_run_end(context=context.context, result=output)

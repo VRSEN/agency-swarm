@@ -193,4 +193,4 @@ debug_agency_data.json
 work_context.md
 
 # Local OAuth tokens (may contain client secrets)
-/data/oauth-tokens/
+**/data/oauth-tokens/

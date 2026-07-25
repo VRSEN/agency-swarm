@@ -34,7 +34,7 @@ Use this when your agency runs on a server and users authenticate from a web/mob
 - **Deterministic stream contract after activation:** `meta` -> `oauth_redirect` -> `oauth_status` (`pending`) -> keepalive comments every 15s while waiting -> terminal `oauth_status` (`authorized`, `error:<reason>`, or `timeout`) -> `messages` -> `end`.
 - **Bounded wait:** SaaS OAuth waits up to 10 minutes before emitting `oauth_status` = `timeout`.
 - **Discovery-time auth after activation:** with standard FastMCP auth, MCP schema discovery (`list_tools`) is protected, so OAuth starts during discovery after the model invokes `authenticate_mcp_server(server_name)`.
-- **Per-user token isolation**: Send `X-User-Id` so each user gets their own token bucket.
+- **Per-user token isolation**: Configure `oauth_user_id_dependency` so each authenticated user gets a separate token bucket.
 
 See the FastAPI OAuth section: [OAuth-enabled agencies](/additional-features/fastapi-integration#oauth-enabled-agencies).
 
@@ -200,9 +200,26 @@ Then run the FastMCP server (see `examples/mcp_oauth/github_server.py` for GitHu
 
 Tokens default to `~/.agency-swarm/mcp-tokens/{user}/{server-endpoint}/`. Set `AGENCY_SWARM_MCP_CACHE_DIR` for a global override or pass `cache_dir` per server.
 
-User-scoped buckets now use a collision-resistant filesystem segment derived from `X-User-Id` or `set_oauth_user_id()`. Legacy buckets whose old sanitized name could map to more than one user ID are intentionally not auto-migrated; those users must authorize again instead of risking cross-user token reuse.
+User-scoped buckets use a collision-resistant filesystem segment derived from the authenticated user ID or `set_oauth_user_id()`. Legacy buckets whose old sanitized name could map to more than one user ID are intentionally not auto-migrated; those users must authorize again instead of risking cross-user token reuse.
 
-For per-user isolation in FastAPI, pass the `X-User-Id` header (the integration sets the OAuth user context automatically). For local or other non-FastAPI runs, either provide `oauth_token_path` with `user_context`, or call `set_oauth_user_id()` before the run:
+For FastAPI, pass a trusted dependency that authenticates the request and returns a stable, non-secret user ID:
+
+```python
+from fastapi import Depends
+
+from agency_swarm import run_fastapi
+from my_app.auth import User, get_current_user
+
+def get_oauth_user_id(user: User = Depends(get_current_user)) -> str:
+    return user.id
+
+run_fastapi(
+    agencies={"my-agency": create_agency},
+    oauth_user_id_dependency=get_oauth_user_id,
+)
+```
+
+Do not read the user ID directly from a request header or body. For local or other non-FastAPI runs, either provide `oauth_token_path` with `user_context`, or call `set_oauth_user_id()` before the run:
 
 ```python
 from agency_swarm import Agency, Agent

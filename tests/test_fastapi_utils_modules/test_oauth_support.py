@@ -30,6 +30,29 @@ from agency_swarm.mcp.oauth import MCPServerOAuth, get_oauth_user_id
 from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers, restore_hosted_mcp_oauth_tools
 
 
+def test_pending_oauth_states_remain_active_until_each_state_finishes() -> None:
+    pending: set[str] = set()
+    endpoint_handlers._update_oauth_pending(
+        pending,
+        {"type": "oauth_redirect", "state": "github", "status": None},
+    )
+    endpoint_handlers._update_oauth_pending(
+        pending,
+        {"type": "oauth_status", "state": "notion", "status": "pending"},
+    )
+    endpoint_handlers._update_oauth_pending(
+        pending,
+        {"type": "oauth_status", "state": "github", "status": "authorized"},
+    )
+    assert pending == {"notion"}
+
+    endpoint_handlers._update_oauth_pending(
+        pending,
+        {"type": "oauth_status", "state": "notion", "status": "timeout"},
+    )
+    assert pending == set()
+
+
 @pytest.mark.asyncio
 async def test_runtime_records_redirect_and_completes_on_callback() -> None:
     registry = OAuthStateRegistry()
@@ -765,7 +788,7 @@ async def test_fastapi_oauth_runtime_installs_handlers_after_request_lease(monke
         DummyRequest,
         lambda load_threads_callback=None: DummyAgency(),
         lambda *args, **kwargs: None,
-        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry()),
+        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry(), user_id_dependency=lambda: "test-user"),
     )
 
     with pytest.raises(HTTPException) as excinfo:
@@ -775,11 +798,14 @@ async def test_fastapi_oauth_runtime_installs_handlers_after_request_lease(monke
     assert order[:2] == ["lease", "install"]
 
 
-def test_fastapi_oauth_user_header_overrides_body_user_id() -> None:
-    """The trusted FastAPI user header controls OAuth identity over body context."""
-    context = endpoint_handlers._with_oauth_user_context({"plan": "pro", "user_id": "body-user"}, "header-user")
+def test_fastapi_authenticated_user_id_overrides_body_user_id() -> None:
+    """The authenticated dependency identity controls OAuth context over the request body."""
+    context = endpoint_handlers._with_oauth_user_context(
+        {"plan": "pro", "user_id": "body-user"},
+        "authenticated-user",
+    )
 
-    assert context == {"plan": "pro", "user_id": "header-user"}
+    assert context == {"plan": "pro", "user_id": "authenticated-user"}
 
 
 @pytest.mark.asyncio
@@ -938,7 +964,7 @@ async def test_get_response_rejects_oauth_servers_without_streaming() -> None:
         DummyRequest,
         agency_factory,
         lambda *args, **kwargs: None,
-        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry()),
+        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry(), user_id_dependency=lambda: "test-user"),
     )
 
     req = DummyRequest()
@@ -1000,7 +1026,11 @@ async def test_get_response_allows_hosted_mcp_tool_without_streaming_when_hosted
         DummyRequest,
         agency_factory,
         lambda *args, **kwargs: None,
-        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry(), enable_hosted_mcp_oauth=False),
+        oauth_config=FastAPIOAuthConfig(
+            OAuthStateRegistry(),
+            user_id_dependency=lambda: "test-user",
+            enable_hosted_mcp_oauth=False,
+        ),
     )
 
     req = DummyRequest()
@@ -1009,8 +1039,8 @@ async def test_get_response_allows_hosted_mcp_tool_without_streaming_when_hosted
 
 
 @pytest.mark.asyncio
-async def test_get_response_header_user_id_does_not_mutate_shared_agency_context() -> None:
-    """FastAPI header identity should stay request-scoped for reused agency instances."""
+async def test_get_response_authenticated_user_id_does_not_mutate_shared_agency_context() -> None:
+    """Authenticated identity should stay request-scoped for reused agency instances."""
 
     class DummyRequest:
         def __init__(self, user_context=None) -> None:
@@ -1057,14 +1087,14 @@ async def test_get_response_header_user_id_does_not_mutate_shared_agency_context
         DummyRequest,
         agency_factory,
         lambda *args, **kwargs: None,
-        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry()),
+        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry(), user_id_dependency=lambda: "test-user"),
     )
 
-    await endpoint(DummyRequest(), token=None, user_id="header-user")
-    await endpoint(DummyRequest(), token=None, user_id=None)
+    await endpoint(DummyRequest(), token=None, user_id="authenticated-user")
+    await endpoint(DummyRequest(), token=None, user_id="second-user")
 
     assert shared_agency.user_context == {"plan": "base"}
-    assert shared_agency.seen_contexts == [{"user_id": "header-user"}, None]
+    assert shared_agency.seen_contexts == [{"user_id": "authenticated-user"}, {"user_id": "second-user"}]
 
 
 @pytest.mark.asyncio
@@ -1147,7 +1177,7 @@ async def test_stream_cancel_stops_pending_oauth_attachment(monkeypatch: pytest.
         agency_factory,
         lambda *args, **kwargs: None,
         run_registry,
-        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry()),
+        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry(), user_id_dependency=lambda: "test-user"),
     )
     cancel_endpoint = make_cancel_endpoint(DummyRequest, lambda *args, **kwargs: None, run_registry)
 
@@ -1294,7 +1324,11 @@ async def test_get_response_rejects_hosted_mcp_tool_without_streaming() -> None:
         DummyRequest,
         agency_factory,
         lambda *args, **kwargs: None,
-        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry(), enable_hosted_mcp_oauth=True),
+        oauth_config=FastAPIOAuthConfig(
+            OAuthStateRegistry(),
+            user_id_dependency=lambda: "test-user",
+            enable_hosted_mcp_oauth=True,
+        ),
     )
 
     req = DummyRequest()
@@ -1364,7 +1398,11 @@ async def test_agui_endpoint_enables_hosted_mcp_oauth_when_opted_in(monkeypatch)
         DummyRequest,
         agency_factory,
         lambda *args, **kwargs: None,
-        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry(), enable_hosted_mcp_oauth=True),
+        oauth_config=FastAPIOAuthConfig(
+            OAuthStateRegistry(),
+            user_id_dependency=lambda: "test-user",
+            enable_hosted_mcp_oauth=True,
+        ),
     )
 
     response = await endpoint(DummyRequest(), token=None, user_id="user-1")
@@ -1407,7 +1445,7 @@ async def test_agui_endpoint_clears_oauth_user_context_after_stream() -> None:
         DummyRequest,
         agency_factory,
         lambda *args, **kwargs: None,
-        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry()),
+        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry(), user_id_dependency=lambda: "test-user"),
     )
 
     response = await endpoint(DummyRequest(), token=None, user_id="user-1")
@@ -1463,7 +1501,7 @@ async def test_get_response_rejects_deferred_oauth_servers_without_streaming() -
         DummyRequest,
         agency_factory,
         lambda *args, **kwargs: None,
-        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry()),
+        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry(), user_id_dependency=lambda: "test-user"),
     )
 
     req = DummyRequest()

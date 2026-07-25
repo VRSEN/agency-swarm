@@ -12,6 +12,7 @@ from agency_swarm.agent.constants import AgentVoice
 
 if TYPE_CHECKING:
     from agency_swarm.agent.core import AgencyContext, Agent
+    from agency_swarm.integrations.fastapi_utils.oauth_support import OAuthUserIdDependency
 
     from .core import Agency
 
@@ -69,6 +70,7 @@ def run_fastapi(
     enable_agui: bool = False,
     enable_realtime: bool = False,
     realtime_options: dict[str, Any] | None = None,
+    oauth_user_id_dependency: "OAuthUserIdDependency | None" = None,
 ) -> None:
     """Serve this agency via the FastAPI integration.
 
@@ -79,6 +81,9 @@ def run_fastapi(
     cors_origins : list[str] | None
         Optional list of allowed CORS origins passed through to
         :func:`run_fastapi`.
+    oauth_user_id_dependency : OAuthUserIdDependency | None
+        Trusted authentication dependency required when the agency uses
+        OAuth-enabled MCP servers or hosted MCP tools.
     """
     from agency_swarm.integrations.fastapi import run_fastapi as run_fastapi_server
 
@@ -91,6 +96,7 @@ def run_fastapi(
         enable_agui=enable_agui,
         enable_realtime=enable_realtime,
         realtime_options=realtime_options,
+        oauth_user_id_dependency=oauth_user_id_dependency,
     )
 
 

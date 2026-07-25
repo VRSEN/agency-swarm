@@ -728,7 +728,7 @@ async def test_agui_stream_emits_keepalive_comments_while_oauth_pending(monkeypa
         RunAgentInputCustom,
         agency_factory=lambda **_: _StubAgency(),
         verify_token=lambda: None,
-        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry()),
+        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry(), user_id_dependency=lambda: "test-user"),
     )
 
     request = RunAgentInputCustom(
@@ -795,7 +795,7 @@ async def test_stream_endpoint_cancels_oauth_attach_task_on_stream_close(
         agency_factory=lambda **_: _StubAgency(),
         verify_token=lambda: None,
         run_registry=endpoint_handlers_module.ActiveRunRegistry(),
-        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry()),
+        oauth_config=FastAPIOAuthConfig(OAuthStateRegistry(), user_id_dependency=lambda: "test-user"),
     )
 
     response = await handler(

@@ -1,6 +1,7 @@
 import asyncio
 import threading
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import parse_qs, urlparse
@@ -26,6 +27,9 @@ except ImportError:  # pragma: no cover - agents sdk is an optional dependency
 
 class OAuthFlowError(Exception):
     """Raised when an OAuth flow cannot complete."""
+
+
+type OAuthUserIdDependency = Callable[..., str | Awaitable[str]]
 
 
 @dataclass
@@ -179,6 +183,21 @@ class OAuthStateRegistry:
             flow = self._flows.get(state)
             if flow is None:
                 return {"state": state, "status": "unknown"}
+            return {
+                "state": state,
+                "status": flow.status,
+                "auth_url": flow.auth_url,
+                "server_name": flow.server_name,
+                "user_id": flow.user_id,
+            }
+
+    async def get_status_for_user(self, state: str, user_id: str) -> dict[str, Any]:
+        """Return flow status only when the authenticated user owns the state."""
+        with self._lock:
+            self._prune_expired_locked()
+            flow = self._flows.get(state)
+            if flow is None or flow.user_id != user_id:
+                raise OAuthFlowError(f"Unknown OAuth state: {state}")
             return {
                 "state": state,
                 "status": flow.status,
@@ -392,6 +411,6 @@ class FastAPIOAuthConfig:
     """Configuration passed into FastAPI endpoint factories."""
 
     registry: OAuthStateRegistry
-    user_header: str = "X-User-Id"
+    user_id_dependency: OAuthUserIdDependency
     timeout: float | None = 600.0
     enable_hosted_mcp_oauth: bool = False
