@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from agents import RunConfig, RunHooks, RunResult, Tool, TResponseInputItem
 
+from agency_swarm.agent.constants import AGENT_OPENAI_REALTIME_VOICES
 from agency_swarm.agent.core import AgencyContext, Agent
 from agency_swarm.agent.execution_streaming import StreamingRunResponse
 from agency_swarm.hooks import PersistenceHooks
@@ -22,7 +23,7 @@ from .flow_compat import (
     CommunicationFlowEntry,
     normalize_parse_agent_flows_result as _normalize_parse_agent_flows_result,
 )
-from .helpers import read_instructions, run_fastapi as run_fastapi_helper
+from .helpers import assign_random_agent_voices, read_instructions, run_fastapi as run_fastapi_helper
 from .setup import (
     apply_shared_resources,
     configure_agents,
@@ -33,6 +34,7 @@ from .setup import (
 
 if TYPE_CHECKING:
     from agency_swarm.agent.context_types import AgentRuntimeState
+    from agency_swarm.realtime.agency import RealtimeAgency
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +90,8 @@ class Agency:
         load_threads_callback: ThreadLoadCallback | None = None,
         save_threads_callback: ThreadSaveCallback | None = None,
         user_context: dict[str, Any] | None = None,
+        randomize_agent_voices: bool = False,
+        voice_random_seed: int | None = None,
     ):
         """
         Initializes the Agency object.
@@ -121,6 +125,10 @@ class Agency:
             load_threads_callback (ThreadLoadCallback | None, optional): Callable to load conversation threads.
             save_threads_callback (ThreadSaveCallback | None, optional): Callable to save conversation threads.
             user_context (dict[str, Any] | None, optional): Initial shared context accessible to all agents.
+            randomize_agent_voices (bool, optional): Assign deterministic random realtime voices from the selected
+                provider's supported pool to agents that do not explicitly set `voice`. A realtime session keeps
+                one voice from start to finish, so only the entry agent's voice is heard on a call.
+            voice_random_seed (int | None, optional): Optional seed to make voice randomization deterministic.
 
         Raises:
             ValueError: If the agency structure is not defined, or if agent names are duplicated.
@@ -165,6 +173,9 @@ class Agency:
         self.shared_tools_folder = shared_tools_folder
         self.shared_files_folder = shared_files_folder
         self.shared_mcp_servers = shared_mcp_servers
+        self._voice_random_seed = voice_random_seed if randomize_agent_voices else None
+        self._randomize_agent_voices = randomize_agent_voices
+        self._randomized_agent_names: set[str] = set()
         self.thread_manager = ThreadManager(
             load_threads_callback=load_threads_callback, save_threads_callback=save_threads_callback
         )
@@ -181,6 +192,9 @@ class Agency:
         self._save_threads_callback = save_threads_callback
         initialize_agent_runtime_state(self)
         self._starter_cache_warmup_started = False
+
+        if randomize_agent_voices:
+            assign_random_agent_voices(self, AGENT_OPENAI_REALTIME_VOICES)
 
         if not self.agents:
             raise ValueError("Agency must contain at least one agent.")
@@ -226,6 +240,20 @@ class Agency:
         if agent_name not in self._agent_runtime_state:
             raise ValueError(f"No runtime state found for agent: {agent_name}")
         return self._agent_runtime_state[agent_name]
+
+    def to_realtime(self, agent: "Agent | str | None" = None) -> "RealtimeAgency":
+        """Create a realtime wrapper around this agency."""
+        from agency_swarm.realtime.agency import RealtimeAgency
+
+        resolved_agent: Agent | None
+        if agent is None or isinstance(agent, Agent):
+            resolved_agent = agent
+        else:
+            resolved_agent = self.agents.get(agent)
+            if resolved_agent is None:
+                raise ValueError(f"Agent '{agent}' is not registered in this agency.")
+
+        return RealtimeAgency(self, agent=resolved_agent)
 
     async def get_response(
         self,
@@ -368,6 +396,8 @@ class Agency:
         app_token_env: str = "APP_TOKEN",
         cors_origins: list[str] | None = None,
         enable_agui: bool = False,
+        enable_realtime: bool = False,
+        realtime_options: dict[str, Any] | None = None,
     ):
         """Serve this agency via the FastAPI integration.
 
@@ -379,7 +409,16 @@ class Agency:
             Optional list of allowed CORS origins passed through to
             :func:`run_fastapi`.
         """
-        return run_fastapi_helper(self, host, port, app_token_env, cors_origins, enable_agui)
+        return run_fastapi_helper(
+            self,
+            host,
+            port,
+            app_token_env,
+            cors_origins,
+            enable_agui,
+            enable_realtime,
+            realtime_options,
+        )
 
     def get_agency_graph(self, include_tools: bool = True) -> dict[str, Any]:
         """Return a ReactFlow-compatible JSON graph describing the agency."""
