@@ -185,6 +185,36 @@ def test_oauth_callback_uses_state_and_status_requires_owner() -> None:
     assert other_status.status_code == 404
 
 
+def test_oauth_callback_rejects_late_code_for_terminal_flow() -> None:
+    registry = OAuthStateRegistry()
+    asyncio.run(
+        registry.record_redirect(
+            state="timed-out-state",
+            auth_url="https://idp.example.com/authorize?state=timed-out-state",
+            server_name="oauth-demo",
+            user_id="owner-user",
+        )
+    )
+    asyncio.run(registry.set_timeout(state="timed-out-state"))
+    app = run_fastapi(
+        agencies={"test_agency": _oauth_agency},
+        return_app=True,
+        app_token_env="",
+        oauth_registry=registry,
+        oauth_user_id_dependency=lambda: "owner-user",
+    )
+    assert app is not None
+    client = TestClient(app)
+
+    callback = client.get("/auth/callback?state=timed-out-state&code=late-code")
+    status = client.get("/auth/status/timed-out-state")
+
+    assert callback.status_code == 400
+    assert callback.json()["detail"] == "OAuth flow is not pending: state=timed-out-state, status=timeout"
+    assert status.status_code == 200
+    assert status.json()["status"] == "timeout"
+
+
 @pytest.mark.parametrize("endpoint_kind", ["response", "stream", "agui_messages", "agui_history"])
 def test_request_time_oauth_factory_requires_startup_oauth_config(endpoint_kind: str) -> None:
     agency_factory, calls = _stateful_factory(_oauth_agency)

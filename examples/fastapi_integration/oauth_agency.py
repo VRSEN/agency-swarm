@@ -25,6 +25,7 @@ github = MCPServerOAuth(
     url="http://localhost:8001/mcp",
     name="github",
     scopes=["repo", "user"],
+    use_env_credentials=False,
 )
 
 agent = Agent(

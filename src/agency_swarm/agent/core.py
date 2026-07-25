@@ -493,20 +493,28 @@ class Agent(BaseAgent[MasterContext]):
             return
 
         @function_tool(name_override=tool_name)
-        def _authenticate_mcp_server(server_name: str) -> str:
+        async def _authenticate_mcp_server(ctx: RunContextWrapper[MasterContext], server_name: str) -> str:
             """Authenticate one MCP server and enable its tools.
 
             Call this again for the same server if MCP tool calls later return authentication or authorization errors.
             """
             selected = self._oauth_mcp_servers.get(server_name)
+            runtime_state = ctx.context.agent_runtime_state.get(self.name)
+            if runtime_state is not None:
+                selected = runtime_state.oauth_mcp_servers.get(server_name, selected)
             if selected is None:
+                hosted_handler = getattr(self, "_agency_swarm_hosted_mcp_oauth_activation_handler", None)
+                if callable(hosted_handler):
+                    hosted_result = await hosted_handler(server_name)
+                    if isinstance(hosted_result, str):
+                        return hosted_result
                 available = ", ".join(server_names)
                 return f"Unknown MCP server '{server_name}'. Available servers: {available}"
 
             original_servers = list(self.mcp_servers)
             try:
                 self.mcp_servers = [selected]
-                convert_mcp_servers_to_tools(self)
+                await asyncio.to_thread(convert_mcp_servers_to_tools, self)
             except Exception as exc:
                 self.mcp_servers = original_servers
                 return f"Failed to authenticate MCP server '{server_name}': {exc}"

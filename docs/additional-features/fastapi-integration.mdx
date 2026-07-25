@@ -407,13 +407,13 @@ If any agent uses `MCPServerOAuth`, `run_fastapi` automatically:
   - `event: oauth_status` with `{state, server, status}` where `status` is `pending`, `authorized`, `error:<reason>`, or `timeout`
   - SSE keepalive comments every 15 seconds while OAuth is pending: `: keepalive <timestamp>`
 - Uses the authenticated ID from `oauth_user_id_dependency` to store tokens per user
-- Keeps OAuth state in an in-process registry. For multi-worker deployments, pass an external shared registry implementation via `run_fastapi(oauth_registry=...)`, or use sticky routing or a single worker.
+- Keeps OAuth callback state in an in-process registry. For multi-worker deployments, an external `oauth_registry` shares callback state only; token files must also use a shared persistent `oauth_token_path`. Otherwise, use sticky routing or a single worker.
 - Requires streaming: `POST /{agency}/get_response` returns `400` when OAuth-enabled MCP servers are present. Use `POST /{agency}/get_response_stream` (or `enable_agui=True`) and buffer the stream if you need a single final response.
 - Applies a 10-minute OAuth wait timeout per request. On timeout, the stream emits `oauth_status` = `timeout` and closes cleanly.
 
 `oauth_user_id_dependency` is required for OAuth-enabled agencies. Do not trust a user ID read directly from a request header or body. FastAPI wiring remains request-scoped and carries the OAuth prompts automatically.
 
-For `HostedMCPTool`, FastAPI cannot infer whether a remote MCP server is public or OAuth-protected. To enable hosted OAuth, wrap only the protected tool with `enable_hosted_mcp_tool_oauth(...)` and leave `tool_config.authorization` empty. `run_fastapi(...)` creates an in-memory registry by default. For multiple workers, pass an external shared registry implementation, or use sticky routing or a single worker. Public hosted MCP servers should stay unwrapped.
+For `HostedMCPTool`, FastAPI cannot infer whether a remote MCP server is public or OAuth-protected. To enable hosted OAuth, wrap only the protected tool with `enable_hosted_mcp_tool_oauth(...)` and leave `tool_config.authorization` empty. The tool is withheld until the model invokes `authenticate_mcp_server(server_name)`, so unrelated messages do not start OAuth. `run_fastapi(...)` creates an in-memory callback-state registry by default. For multiple workers, an external `oauth_registry` shares callback state only; configure each Agency with an `oauth_token_path` on shared persistent storage as well. Otherwise, use sticky routing or a single worker. Public hosted MCP servers should stay unwrapped.
 
 <Note>
 For OAuth-protected FastMCP servers, schema discovery (`list_tools`) is auth-protected. Discovery is deferred until the model invokes `authenticate_mcp_server(server_name)`, so startup does not force OAuth.

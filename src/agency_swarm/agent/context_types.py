@@ -18,6 +18,7 @@ class AgentRuntimeState:
     tool_concurrency_manager: "ToolConcurrencyManager"
     subagents: dict[str, "Agent"] = field(default_factory=dict)
     send_message_tools: dict[str, "SendMessage"] = field(default_factory=dict)
+    oauth_mcp_servers: dict[str, Any] = field(default_factory=dict)
     pending_per_thread: dict[int | None, set[str]] = field(default_factory=dict)
     handoffs: list[Any] = field(default_factory=list)
     pending_lock: asyncio.Lock = field(init=False)
@@ -28,6 +29,7 @@ class AgentRuntimeState:
         self.tool_concurrency_manager = tool_concurrency_manager or ToolConcurrencyManager()
         self.subagents = {}
         self.send_message_tools = {}
+        self.oauth_mcp_servers = {}
         self.pending_per_thread = {}
         self.handoffs = []
         self.pending_lock = asyncio.Lock()

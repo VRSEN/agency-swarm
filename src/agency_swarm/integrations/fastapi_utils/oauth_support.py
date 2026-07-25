@@ -119,14 +119,15 @@ class OAuthStateRegistry:
             flow = self._flows.get(state)
             if flow is None:
                 raise OAuthFlowError(f"Unknown OAuth state: {state}")
+            if flow.status != "pending":
+                raise OAuthFlowError(f"OAuth flow is not pending: state={state}, status={flow.status}")
+            if flow.user_id and user_id and flow.user_id != user_id:
+                flow.error = "user_mismatch"
+                flow.status = "error:user_mismatch"
             else:
-                if flow.user_id and user_id and flow.user_id != user_id:
-                    flow.error = "user_mismatch"
-                    flow.status = "error:user_mismatch"
-                else:
-                    flow.error = None
-                    flow.status = "authorized"
-                flow.code = code
+                flow.error = None
+                flow.status = "authorized"
+            flow.code = code
             _notify_oauth_flow(flow)
             return flow
 
@@ -138,8 +139,9 @@ class OAuthStateRegistry:
             error_msg = f"{error}: {error_description}" if error_description else error
             if flow is None:
                 raise OAuthFlowError(f"Unknown OAuth state: {state}")
-            else:
-                flow.error = error_msg
+            if flow.status != "pending":
+                raise OAuthFlowError(f"OAuth flow is not pending: state={state}, status={flow.status}")
+            flow.error = error_msg
             flow.status = f"error:{error_msg}"
             _notify_oauth_flow(flow)
             return flow

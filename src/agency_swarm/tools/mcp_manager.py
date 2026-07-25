@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import inspect
 import logging
 import threading
@@ -69,6 +70,8 @@ except ImportError:
     logger.debug("OAuth support not available - install MCP SDK to enable")
 
 _HOSTED_MCP_OAUTH_ORIGINAL_TOOL_ATTR = "_agency_swarm_hosted_mcp_oauth_original_tool"
+_HOSTED_MCP_OAUTH_ORIGINAL_TOOLS_ATTR = "_agency_swarm_hosted_mcp_oauth_original_tools"
+_HOSTED_MCP_OAUTH_ACTIVATION_HANDLER_ATTR = "_agency_swarm_hosted_mcp_oauth_activation_handler"
 _MANAGED_OAUTH_CACHE_DIR_ATTR = "_agency_swarm_managed_oauth_cache_dir"
 
 
@@ -142,6 +145,20 @@ def apply_managed_oauth_cache_dir(config: Any, cache_dir: Path | None) -> None:
         setattr(config, _MANAGED_OAUTH_CACHE_DIR_ATTR, True)
 
 
+def bind_managed_oauth_cache_dir(config: Any, cache_dir: Path | None) -> Any:  # noqa: ANN401
+    """Bind an Agency-managed cache dir without retargeting another Agency's config."""
+    if cache_dir is None:
+        return config
+    current = getattr(config, "cache_dir", None)
+    is_managed = bool(getattr(config, _MANAGED_OAUTH_CACHE_DIR_ATTR, False))
+    if current is not None and not is_managed:
+        return config
+    if is_managed and current != cache_dir:
+        config = copy.copy(config)
+    apply_managed_oauth_cache_dir(config, cache_dir)
+    return config
+
+
 def _clone_oauth_candidate(server: Any) -> Any:
     """Return a fresh OAuth client when the current object is already user-bound."""
     if not _OAUTH_AVAILABLE or _MCPServerOAuthClient is None:
@@ -187,6 +204,7 @@ def _current_oauth_handlers(client: Any) -> OAuthHandlerMap:
 
 
 _OAUTH_LIST_TOOLS_TIMEOUT_SECONDS = 620.0
+_OAUTH_LIST_TOOLS_TIMEOUT_GRACE_SECONDS = 20.0
 
 
 class PersistentMCPServerManager:
@@ -234,7 +252,7 @@ class PersistentMCPServerManager:
         runtime_context = _get_oauth_runtime_context()
         runtime_timeout = getattr(runtime_context, "timeout", None) if runtime_context is not None else None
         if isinstance(runtime_timeout, (int, float)) and runtime_timeout > 0:
-            return float(runtime_timeout)
+            return float(runtime_timeout) + _OAUTH_LIST_TOOLS_TIMEOUT_GRACE_SECONDS
         return _OAUTH_LIST_TOOLS_TIMEOUT_SECONDS
 
     def _ensure_driver(self, server: Any) -> None:
@@ -735,30 +753,30 @@ def _process_oauth_servers(agent: Any, servers: list[Any]) -> None:
             raise
 
 
-async def _authorize_hosted_mcp_tools(agent: Any, *, cache_dir: Path | None) -> None:
-    """Ensure HostedMCPTool has an OAuth access token when missing.
-
-    OpenAI's remote MCP tool (`HostedMCPTool`) requires callers to supply an OAuth
-    access token via `tool_config.authorization` for OAuth-protected servers.
-
-    For FastAPI deployments, request-scoped OAuth context routes redirects and callbacks
-    through SSE events and callback endpoints.
-    """
+async def _authorize_hosted_mcp_tool(agent: Any, source_tool: Any, *, cache_dir: Path | None) -> Any | None:
+    """Return a request-local HostedMCPTool with an OAuth access token."""
     if not _OAUTH_AVAILABLE or _MCPServerOAuth is None or _MCPServerOAuthClient is None:
-        return
+        return None
+    if _HostedMCPTool is None:
+        return None
+    source_tool_config = getattr(source_tool, "tool_config", None)
+    if not isinstance(source_tool_config, dict):
+        return None
+    server_label = source_tool_config.get("server_label")
+    server_url = source_tool_config.get("server_url")
+    if not isinstance(server_label, str) or server_label == "":
+        return None
+    if not isinstance(server_url, str) or server_url == "":
+        return None
 
-    tools = getattr(agent, "tools", None)
-    if not isinstance(tools, list) or len(tools) == 0:
-        return
-    if getattr(agent, "_hosted_mcp_oauth_enabled", False) is not True:
-        return
-    if not any(
-        getattr(tool, "name", None) == "hosted_mcp" and is_hosted_mcp_tool_oauth_enabled(tool) for tool in tools
-    ):
-        return
-    tools = list(tools)
-    agent.tools = tools
-
+    active_tool = enable_hosted_mcp_tool_oauth(
+        _HostedMCPTool(
+            tool_config=cast(dict[str, Any], dict(source_tool_config)),
+            on_approval_request=getattr(source_tool, "on_approval_request", None),
+        )
+    )
+    setattr(active_tool, _HOSTED_MCP_OAUTH_ORIGINAL_TOOL_ATTR, source_tool)
+    active_tool_config = cast(dict[str, Any], active_tool.tool_config)
     handler_factory = getattr(agent, "mcp_oauth_handler_factory", None)
     factory: Callable[[str], OAuthHandlerMap] | None = None
     if callable(handler_factory):
@@ -766,69 +784,101 @@ async def _authorize_hosted_mcp_tools(agent: Any, *, cache_dir: Path | None) -> 
 
     oauth_config_type = cast("type[MCPServerOAuth]", _MCPServerOAuth)
     oauth_client_type = cast(type[Any], _MCPServerOAuthClient)
+    oauth_srv = oauth_config_type(url=server_url, name=server_label, use_env_credentials=False)
+    apply_managed_oauth_cache_dir(oauth_srv, cache_dir)
+    server_handlers: OAuthHandlerMap = {}
+    if factory is not None:
+        server_handlers.update(factory(server_label))
+    oauth_client = oauth_client_type(oauth_srv, server_handlers or None)
 
-    hosted_mcp_tool_type = _HostedMCPTool
+    try:
+        await oauth_client.connect()
+        provider = getattr(oauth_client, "_oauth_provider", None)
+        if provider is None:
+            return None
+        tokens = await provider.context.storage.get_tokens()
+        if tokens is None or not getattr(tokens, "access_token", None):
+            return None
+        active_tool_config["authorization"] = tokens.access_token
+        return active_tool
+    finally:
+        await oauth_client.cleanup()
 
-    for index, tool in enumerate(list(tools)):
-        if getattr(tool, "name", None) != "hosted_mcp":
+
+def _stage_deferred_hosted_mcp_tools(agent: Any, *, cache_dir: Path | None) -> None:
+    """Withhold opted-in hosted tools until the model requests OAuth activation."""
+    tools = getattr(agent, "tools", None)
+    if not isinstance(tools, list) or getattr(agent, "_hosted_mcp_oauth_enabled", False) is not True:
+        return
+    if isinstance(getattr(agent, _HOSTED_MCP_OAUTH_ORIGINAL_TOOLS_ATTR, None), list):
+        return
+
+    candidates: dict[str, Any] = {}
+    for tool in tools:
+        if getattr(tool, "name", None) != "hosted_mcp" or not is_hosted_mcp_tool_oauth_enabled(tool):
             continue
-        if not is_hosted_mcp_tool_oauth_enabled(tool):
-            continue
-        original_tool = getattr(tool, _HOSTED_MCP_OAUTH_ORIGINAL_TOOL_ATTR, None)
-        is_injected_tool = original_tool is not None
-        source_tool = original_tool or tool
         tool_config = getattr(tool, "tool_config", None)
-        if not isinstance(tool_config, dict):
+        if not isinstance(tool_config, dict) or tool_config.get("authorization") not in (None, ""):
             continue
-        source_tool_config = getattr(source_tool, "tool_config", None)
-        if not isinstance(source_tool_config, dict):
-            source_tool_config = tool_config
-
-        # Respect user-provided authorization tokens.
-        if not is_injected_tool and tool_config.get("authorization") not in (None, ""):
-            continue
-
-        server_label = source_tool_config.get("server_label")
-        server_url = source_tool_config.get("server_url")
+        server_label = tool_config.get("server_label")
+        server_url = tool_config.get("server_url")
         if not isinstance(server_label, str) or server_label == "":
             continue
         if not isinstance(server_url, str) or server_url == "":
-            # Connector-based MCP tools have no server_url; token injection is not supported here.
             continue
+        if server_label in candidates:
+            raise ValueError(f"Hosted MCP server name '{server_label}' must be unique for OAuth activation")
+        candidates[server_label] = tool
+    if not candidates:
+        return
 
-        active_tool = tool
-        active_tool_config = tool_config
-        if hosted_mcp_tool_type is not None:
-            active_tool = enable_hosted_mcp_tool_oauth(
-                hosted_mcp_tool_type(
-                    tool_config=cast(dict[str, Any], dict(source_tool_config)),
-                    on_approval_request=getattr(source_tool, "on_approval_request", None),
-                )
-            )
-            setattr(active_tool, _HOSTED_MCP_OAUTH_ORIGINAL_TOOL_ATTR, source_tool)
-            tools[index] = active_tool
-            active_tool_config = cast(dict[str, Any], active_tool.tool_config)
+    local_servers = getattr(agent, "_oauth_mcp_servers", {})
+    local_names = set(local_servers) if isinstance(local_servers, dict) else set()
+    conflicts = local_names.intersection(candidates)
+    if conflicts:
+        conflict = sorted(conflicts)[0]
+        raise ValueError(f"MCP server name '{conflict}' is duplicated across local and hosted OAuth tools")
 
-        oauth_srv = oauth_config_type(url=server_url, name=server_label, use_env_credentials=False)
-        apply_managed_oauth_cache_dir(oauth_srv, cache_dir)
+    async def _activate_hosted_mcp(server_name: str) -> str | None:
+        selected = candidates.get(server_name)
+        if selected is None:
+            return None
+        active_tool = await _authorize_hosted_mcp_tool(agent, selected, cache_dir=cache_dir)
+        if active_tool is None:
+            return f"Failed to authenticate MCP server '{server_name}': no OAuth access token was returned"
 
-        server_handlers: OAuthHandlerMap = {}
-        if factory is not None:
-            server_handlers.update(factory(server_label))
-        handlers_arg = server_handlers if server_handlers else None
-        oauth_client = oauth_client_type(oauth_srv, handlers_arg)
+        current_tools = list(getattr(agent, "tools", []))
+        for index, tool in enumerate(current_tools):
+            if getattr(tool, _HOSTED_MCP_OAUTH_ORIGINAL_TOOL_ATTR, None) is selected:
+                current_tools[index] = active_tool
+                break
+        else:
+            current_tools.append(active_tool)
+        agent.tools = current_tools
+        return f"MCP server '{server_name}' is authenticated and its tools are enabled."
 
-        try:
-            await oauth_client.connect()
-            provider = getattr(oauth_client, "_oauth_provider", None)
-            if provider is None:
-                continue
-            tokens = await provider.context.storage.get_tokens()
-            if tokens is None or not getattr(tokens, "access_token", None):
-                continue
-            active_tool_config["authorization"] = tokens.access_token
-        finally:
-            await oauth_client.cleanup()
+    installer = getattr(agent, "_install_mcp_authentication_tool", None)
+    if not callable(installer):
+        return
+    original_tools = tools
+    activation_tool = next((tool for tool in tools if getattr(tool, "name", None) == "authenticate_mcp_server"), None)
+    original_schema = copy.deepcopy(getattr(activation_tool, "params_json_schema", None))
+    agent.tools = list(tools)
+    try:
+        installer(sorted(local_names.union(candidates)))
+    except BaseException:
+        agent.tools = original_tools
+        raise
+    if activation_tool is not None and isinstance(original_schema, dict):
+        request_schema = copy.deepcopy(activation_tool.params_json_schema)
+        activation_tool.params_json_schema = original_schema
+        request_activation = copy.copy(activation_tool)
+        request_activation.params_json_schema = request_schema
+        agent.tools = [request_activation if tool is activation_tool else tool for tool in agent.tools]
+    setattr(agent, _HOSTED_MCP_OAUTH_ORIGINAL_TOOLS_ATTR, original_tools)
+    setattr(agent, _HOSTED_MCP_OAUTH_ACTIVATION_HANDLER_ATTR, _activate_hosted_mcp)
+    withheld = {id(tool) for tool in candidates.values()}
+    agent.tools = [tool for tool in agent.tools if id(tool) not in withheld]
 
 
 def restore_hosted_mcp_oauth_tools(agency: Any) -> None:
@@ -840,10 +890,13 @@ def restore_hosted_mcp_oauth_tools(agency: Any) -> None:
         tools = getattr(agent, "tools", None)
         if not isinstance(tools, list):
             continue
-        for index, tool in enumerate(list(tools)):
-            original_tool = getattr(tool, _HOSTED_MCP_OAUTH_ORIGINAL_TOOL_ATTR, None)
-            if original_tool is not None:
-                tools[index] = original_tool
+        original_tools = getattr(agent, _HOSTED_MCP_OAUTH_ORIGINAL_TOOLS_ATTR, None)
+        if not isinstance(original_tools, list):
+            continue
+        agent.tools = original_tools
+        delattr(agent, _HOSTED_MCP_OAUTH_ORIGINAL_TOOLS_ATTR)
+        if hasattr(agent, _HOSTED_MCP_OAUTH_ACTIVATION_HANDLER_ATTR):
+            delattr(agent, _HOSTED_MCP_OAUTH_ACTIVATION_HANDLER_ATTR)
 
 
 def _sync_oauth_client_handlers(persistent: object, candidate: object) -> bool:
@@ -898,7 +951,7 @@ async def attach_persistent_mcp_servers(agency: Any) -> None:
         ensure_mcp_tools = getattr(agent, "ensure_mcp_tools", None)
         if callable(ensure_mcp_tools):
             ensure_mcp_tools()
-        await _authorize_hosted_mcp_tools(agent, cache_dir=cache_dir)
+        _stage_deferred_hosted_mcp_tools(agent, cache_dir=cache_dir)
         servers = getattr(agent, "mcp_servers", None)
         if not isinstance(servers, list):
             continue

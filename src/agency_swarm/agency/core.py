@@ -1,6 +1,7 @@
 # --- Core Agency class definition ---
 import asyncio
 import atexit
+import copy
 import logging
 import os
 import threading
@@ -17,8 +18,8 @@ from agency_swarm.hooks import CompositeRunHooks, PersistenceHooks
 from agency_swarm.streaming.utils import EventStreamMerger
 from agency_swarm.tools import BaseTool
 from agency_swarm.tools.mcp_manager import (
-    apply_managed_oauth_cache_dir,
     attach_persistent_mcp_servers,
+    bind_managed_oauth_cache_dir,
     default_mcp_manager,
 )
 from agency_swarm.utils.files import get_external_caller_directory
@@ -288,7 +289,15 @@ class Agency:
                 if config is None:
                     continue
                 has_oauth_servers = True
-                apply_managed_oauth_cache_dir(config, cache_dir)
+                bound_config = bind_managed_oauth_cache_dir(copy.copy(config), cache_dir)
+                bound_server = bound_config
+                if server is not config:
+                    bound_server = copy.copy(server)
+                    bound_server.oauth_config = bound_config
+                server_name = getattr(bound_server, "name", None)
+                if isinstance(server_name, str) and server_name != "":
+                    runtime_state = self._agent_runtime_state[agent.name]
+                    runtime_state.oauth_mcp_servers[server_name] = bound_server
 
         if has_oauth_servers and OAuthStorageHooksRuntime is not None:
             self._oauth_storage_hook = cast(RunHooks, OAuthStorageHooksRuntime())

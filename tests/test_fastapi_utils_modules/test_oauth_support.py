@@ -2,13 +2,17 @@ import asyncio
 import json
 import threading
 from queue import Empty, Queue
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
-from agents import HostedMCPTool
+from agents import FunctionTool, HostedMCPTool
+from agents.tool_context import ToolContext
 from fastapi import HTTPException
 from openai.types.responses.tool_param import Mcp
 
-from agency_swarm import enable_hosted_mcp_tool_oauth
+from agency_swarm import Agent, enable_hosted_mcp_tool_oauth
+from agency_swarm.agent.tools import add_tool
 from agency_swarm.integrations.fastapi_utils import endpoint_handlers
 from agency_swarm.integrations.fastapi_utils.endpoint_handlers import (
     ActiveRunRegistry,
@@ -27,7 +31,37 @@ from agency_swarm.integrations.fastapi_utils.oauth_support import (
 )
 from agency_swarm.integrations.fastapi_utils.override_policy import RequestOverridePolicy
 from agency_swarm.mcp.oauth import MCPServerOAuth, get_oauth_user_id
+from agency_swarm.tools.concurrency import ToolConcurrencyManager
 from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers, restore_hosted_mcp_oauth_tools
+
+
+async def _activate_hosted_mcp(agent: Any, server_name: str = "demo") -> HostedMCPTool:
+    tools = agent.tools
+    activation_tool = next(tool for tool in tools if tool.name == "authenticate_mcp_server")
+    context = ToolContext(
+        context=SimpleNamespace(agent_runtime_state={}),
+        tool_name="authenticate_mcp_server",
+        tool_call_id="call-1",
+        tool_arguments="{}",
+    )
+    result = await activation_tool.on_invoke_tool(context, json.dumps({"server_name": server_name}))
+    assert "authenticated and its tools are enabled" in result
+    return next(tool for tool in agent.tools if isinstance(tool, HostedMCPTool))
+
+
+class _HostedOAuthAgentStub:
+    def _install_mcp_authentication_tool(self, server_names: list[str]) -> None:
+        self.name = "HostedOAuthAgentStub"
+        self.tool_concurrency_manager = ToolConcurrencyManager()
+        self._oauth_mcp_servers = {}
+        self._deferred_mcp_servers = {}
+        Agent._install_mcp_authentication_tool(self, server_names)  # type: ignore[arg-type]
+
+    def add_tool(self, tool: Any) -> None:
+        add_tool(self, tool)  # type: ignore[arg-type]
+
+    def _ensure_web_search_sources_include(self) -> None:
+        return None
 
 
 def test_pending_oauth_states_remain_active_until_each_state_finishes() -> None:
@@ -180,7 +214,7 @@ async def test_wait_for_code_surfaces_user_mismatch_error() -> None:
 
 
 @pytest.mark.asyncio
-async def test_wait_for_code_recovers_after_user_mismatch_followed_by_valid_callback() -> None:
+async def test_registry_rejects_callback_after_user_mismatch() -> None:
     registry = OAuthStateRegistry()
     await registry.record_redirect(
         state="recover-state",
@@ -193,11 +227,10 @@ async def test_wait_for_code_recovers_after_user_mismatch_followed_by_valid_call
     with pytest.raises(OAuthFlowError, match="user_mismatch"):
         await registry.wait_for_code(state="recover-state", timeout=0.05)
 
-    await registry.set_code(state="recover-state", code="good-code", user_id="owner-1")
-    code, state = await registry.wait_for_code(state="recover-state", timeout=0.05)
+    with pytest.raises(OAuthFlowError, match="OAuth flow is not pending"):
+        await registry.set_code(state="recover-state", code="good-code", user_id="owner-1")
 
-    assert code == "good-code"
-    assert state == "recover-state"
+    assert (await registry.get_status("recover-state"))["status"] == "error:user_mismatch"
 
 
 @pytest.mark.asyncio
@@ -215,6 +248,57 @@ async def test_wait_for_code_times_out_cleanly() -> None:
 
     status = await registry.get_status("no-callback")
     assert status["status"] == "timeout"
+
+
+@pytest.mark.asyncio
+async def test_registry_rejects_callback_after_timeout() -> None:
+    registry = OAuthStateRegistry()
+    await registry.record_redirect(
+        state="timed-out-state",
+        auth_url="https://idp.example.com/authorize?state=timed-out-state",
+        server_name="github",
+        user_id=None,
+    )
+    await registry.set_timeout(state="timed-out-state")
+
+    with pytest.raises(OAuthFlowError, match="OAuth flow is not pending"):
+        await registry.set_code(state="timed-out-state", code="late-code", user_id=None)
+
+    assert (await registry.get_status("timed-out-state"))["status"] == "timeout"
+
+
+@pytest.mark.asyncio
+async def test_registry_rejects_callback_after_provider_error() -> None:
+    registry = OAuthStateRegistry()
+    await registry.record_redirect(
+        state="denied-state",
+        auth_url="https://idp.example.com/authorize?state=denied-state",
+        server_name="github",
+        user_id=None,
+    )
+    await registry.set_error(state="denied-state", error="access_denied")
+
+    with pytest.raises(OAuthFlowError, match="OAuth flow is not pending"):
+        await registry.set_code(state="denied-state", code="late-code", user_id=None)
+
+    assert (await registry.get_status("denied-state"))["status"] == "error:access_denied"
+
+
+@pytest.mark.asyncio
+async def test_registry_rejects_provider_error_after_authorization() -> None:
+    registry = OAuthStateRegistry()
+    await registry.record_redirect(
+        state="authorized-state",
+        auth_url="https://idp.example.com/authorize?state=authorized-state",
+        server_name="github",
+        user_id=None,
+    )
+    await registry.set_code(state="authorized-state", code="accepted-code", user_id=None)
+
+    with pytest.raises(OAuthFlowError, match="OAuth flow is not pending"):
+        await registry.set_error(state="authorized-state", error="late_error")
+
+    assert (await registry.get_status("authorized-state"))["status"] == "authorized"
 
 
 @pytest.mark.asyncio
@@ -325,7 +409,7 @@ def test_runtime_sets_handler_factory_for_hosted_mcp_tool() -> None:
         HostedMCPTool(tool_config=Mcp(type="mcp", server_label="demo", server_url="https://example.com/mcp"))
     )
 
-    class DummyAgent:
+    class DummyAgent(_HostedOAuthAgentStub):
         def __init__(self) -> None:
             self.mcp_servers = []
             self.tools = [hosted_mcp]
@@ -342,7 +426,7 @@ def test_runtime_skips_hosted_mcp_handler_factory_without_explicit_opt_in() -> N
     """Hosted MCP tools should stay inactive unless FastAPI explicitly opts them in."""
     hosted_mcp = HostedMCPTool(tool_config=Mcp(type="mcp", server_label="demo", server_url="https://example.com/mcp"))
 
-    class DummyAgent:
+    class DummyAgent(_HostedOAuthAgentStub):
         def __init__(self) -> None:
             self.mcp_servers = []
             self.tools = [hosted_mcp]
@@ -356,6 +440,36 @@ def test_runtime_skips_hosted_mcp_handler_factory_without_explicit_opt_in() -> N
 
 
 @pytest.mark.asyncio
+async def test_hosted_oauth_staging_is_atomic_when_activation_tool_is_reserved(tmp_path) -> None:
+    async def _custom_activation(_ctx, _input_json):
+        return "custom"
+
+    custom_activation = FunctionTool(
+        name="authenticate_mcp_server",
+        description="custom",
+        params_json_schema={"type": "object", "properties": {}},
+        on_invoke_tool=_custom_activation,
+        strict_json_schema=False,
+    )
+    hosted_mcp = enable_hosted_mcp_tool_oauth(
+        HostedMCPTool(tool_config=Mcp(type="mcp", server_label="demo", server_url="https://example.com/mcp"))
+    )
+    agent = Agent(name="demo", instructions="test", tools=[custom_activation, hosted_mcp])
+    agency = type("AgencyStub", (), {"agents": {"demo": agent}, "oauth_token_path": str(tmp_path)})()
+    FastAPIOAuthRuntime(OAuthStateRegistry(), user_id="user-1", enable_hosted_mcp_oauth=True).install_handler_factory(
+        agent
+    )
+    original_tools = list(agent.tools)
+
+    with pytest.raises(ValueError, match="reserved for OAuth MCP server activation"):
+        await attach_persistent_mcp_servers(agency)
+
+    assert agent.tools == original_tools
+    assert not hasattr(agent, "_agency_swarm_hosted_mcp_oauth_original_tools")
+    assert not hasattr(agent, "_agency_swarm_hosted_mcp_oauth_activation_handler")
+
+
+@pytest.mark.asyncio
 async def test_attach_persistent_mcp_servers_injects_hosted_mcp_oauth_token(tmp_path) -> None:
     """HostedMCPTool without authorization should emit oauth_redirect and receive injected token."""
 
@@ -363,7 +477,7 @@ async def test_attach_persistent_mcp_servers_injects_hosted_mcp_oauth_token(tmp_
         HostedMCPTool(tool_config=Mcp(type="mcp", server_label="demo", server_url="https://example.com/mcp"))
     )
 
-    class DummyAgent:
+    class DummyAgent(_HostedOAuthAgentStub):
         def __init__(self) -> None:
             self.mcp_servers = []
             self.tools = [hosted_mcp]
@@ -380,6 +494,8 @@ async def test_attach_persistent_mcp_servers_injects_hosted_mcp_oauth_token(tmp_
 
     # Patch OAuth client so no real network/OAuth is performed.
     from mcp.shared.auth import OAuthToken
+
+    connect_calls: list[str] = []
 
     class _FakeStorage:
         def __init__(self) -> None:
@@ -415,6 +531,7 @@ async def test_attach_persistent_mcp_servers_injects_hosted_mcp_oauth_token(tmp_
             self._oauth_provider = _FakeProvider(_FakeStorage())
 
         async def connect(self) -> None:
+            connect_calls.append(self.name)
             if self._redirect_handler is not None:
                 await self._redirect_handler("https://idp.example.com/authorize?state=test-state")
             await self._oauth_provider.context.storage.set_tokens(
@@ -434,15 +551,17 @@ async def test_attach_persistent_mcp_servers_injects_hosted_mcp_oauth_token(tmp_
         agency.agents = {"demo": agent}
 
         await attach_persistent_mcp_servers(agency)
+        assert connect_calls == []
+        assert hosted_mcp not in agent.tools
+        injected_tool = await _activate_hosted_mcp(agent)
     finally:
         mcp_manager_module._MCPServerOAuthClient = original_client
-
-    injected_tool = agent.tools[0]
 
     # Should inject token into the request-local HostedMCPTool clone only.
     assert injected_tool is not hosted_mcp
     assert injected_tool.tool_config.get("authorization") == "token-123"
     assert hosted_mcp.tool_config.get("authorization") is None
+    assert connect_calls == ["demo"]
 
     # And should have emitted an oauth_redirect event through runtime queue.
     event = await asyncio.wait_for(runtime.next_event(), timeout=0.1)
@@ -458,7 +577,7 @@ async def test_attach_persistent_mcp_servers_keeps_hosted_mcp_tokens_request_loc
         HostedMCPTool(tool_config=Mcp(type="mcp", server_label="demo", server_url="https://example.com/mcp"))
     )
 
-    class DummyAgent:
+    class DummyAgent(_HostedOAuthAgentStub):
         def __init__(self, tool: HostedMCPTool) -> None:
             self.mcp_servers = []
             self.tools = [tool]
@@ -515,20 +634,22 @@ async def test_attach_persistent_mcp_servers_keeps_hosted_mcp_tokens_request_loc
             OAuthStateRegistry(), user_id="user-a", enable_hosted_mcp_oauth=True
         ).install_handler_factory(agent_a)
         await attach_persistent_mcp_servers(DummyAgency(agent_a))
+        injected_a = await _activate_hosted_mcp(agent_a)
 
         agent_b = DummyAgent(shared_hosted_mcp)
         FastAPIOAuthRuntime(
             OAuthStateRegistry(), user_id="user-b", enable_hosted_mcp_oauth=True
         ).install_handler_factory(agent_b)
         await attach_persistent_mcp_servers(DummyAgency(agent_b))
+        injected_b = await _activate_hosted_mcp(agent_b)
     finally:
         mcp_manager_module._MCPServerOAuthClient = original_client
 
     assert shared_hosted_mcp.tool_config.get("authorization") is None
-    assert agent_a.tools[0] is not shared_hosted_mcp
-    assert agent_b.tools[0] is not shared_hosted_mcp
-    assert agent_a.tools[0].tool_config.get("authorization") == "token-user-a"
-    assert agent_b.tools[0].tool_config.get("authorization") == "token-user-b"
+    assert injected_a is not shared_hosted_mcp
+    assert injected_b is not shared_hosted_mcp
+    assert injected_a.tool_config.get("authorization") == "token-user-a"
+    assert injected_b.tool_config.get("authorization") == "token-user-b"
 
 
 @pytest.mark.asyncio
@@ -540,7 +661,7 @@ async def test_attach_persistent_mcp_servers_does_not_mutate_shared_hosted_mcp_t
     )
     shared_tools = [shared_hosted_mcp]
 
-    class DummyAgent:
+    class DummyAgent(_HostedOAuthAgentStub):
         def __init__(self) -> None:
             self.mcp_servers = []
             self.tools = shared_tools
@@ -593,12 +714,13 @@ async def test_attach_persistent_mcp_servers_does_not_mutate_shared_hosted_mcp_t
         ).install_handler_factory(agent_a)
 
         await attach_persistent_mcp_servers(DummyAgency(agent_a))
+        injected_tool = await _activate_hosted_mcp(agent_a)
     finally:
         mcp_manager_module._MCPServerOAuthClient = original_client
 
     assert shared_tools == [shared_hosted_mcp]
     assert agent_a.tools is not shared_tools
-    assert agent_a.tools[0].tool_config.get("authorization") == "token-user-a"
+    assert injected_tool.tool_config.get("authorization") == "token-user-a"
     assert agent_b.tools is shared_tools
     assert agent_b.tools == [shared_hosted_mcp]
 
@@ -611,7 +733,7 @@ async def test_hosted_mcp_oauth_tokens_are_restored_between_reused_agent_request
         HostedMCPTool(tool_config=Mcp(type="mcp", server_label="demo", server_url="https://example.com/mcp"))
     )
 
-    class DummyAgent:
+    class DummyAgent(_HostedOAuthAgentStub):
         def __init__(self) -> None:
             self.mcp_servers = []
             self.tools = [shared_hosted_mcp]
@@ -669,14 +791,16 @@ async def test_hosted_mcp_oauth_tokens_are_restored_between_reused_agent_request
             OAuthStateRegistry(), user_id="user-a", enable_hosted_mcp_oauth=True
         ).install_handler_factory(agent)
         await attach_persistent_mcp_servers(agency)
-        assert agent.tools[0].tool_config.get("authorization") == "token-user-a"
+        injected_a = await _activate_hosted_mcp(agent)
+        assert injected_a.tool_config.get("authorization") == "token-user-a"
         restore_hosted_mcp_oauth_tools(agency)
 
         FastAPIOAuthRuntime(
             OAuthStateRegistry(), user_id="user-b", enable_hosted_mcp_oauth=True
         ).install_handler_factory(agent)
         await attach_persistent_mcp_servers(agency)
-        assert agent.tools[0].tool_config.get("authorization") == "token-user-b"
+        injected_b = await _activate_hosted_mcp(agent)
+        assert injected_b.tool_config.get("authorization") == "token-user-b"
         restore_hosted_mcp_oauth_tools(agency)
     finally:
         mcp_manager_module._MCPServerOAuthClient = original_client

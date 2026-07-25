@@ -1,8 +1,11 @@
 import asyncio
 import threading
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from agents import FunctionTool
+from agents.tool_context import ToolContext
 
 from agency_swarm import Agency, Agent
 from agency_swarm.mcp.oauth import MCPServerOAuth
@@ -19,6 +22,15 @@ def _make_oauth_agent(*servers: object) -> Agent:
         name="OAuthAgent",
         instructions="Use MCP tools when needed.",
         mcp_servers=configured_servers,
+    )
+
+
+def _activation_context() -> ToolContext[Any]:
+    return ToolContext(
+        context=SimpleNamespace(agent_runtime_state={}),
+        tool_name="authenticate_mcp_server",
+        tool_call_id="call-1",
+        tool_arguments="{}",
     )
 
 
@@ -130,8 +142,8 @@ async def test_authenticate_mcp_server_triggers_selected_conversion(monkeypatch:
     assert isinstance(server_name_schema, dict)
     assert server_name_schema.get("enum") == ["github", "notion"]
 
-    first_result = await activation_tool.on_invoke_tool(None, '{"server_name":"github"}')
-    second_result = await activation_tool.on_invoke_tool(None, '{"server_name":"github"}')
+    first_result = await activation_tool.on_invoke_tool(_activation_context(), '{"server_name":"github"}')
+    second_result = await activation_tool.on_invoke_tool(_activation_context(), '{"server_name":"github"}')
 
     assert convert_calls == [["github"], ["github"]]
     assert "authenticated and its tools are enabled" in first_result
@@ -147,7 +159,7 @@ async def test_authenticate_mcp_server_rejects_unknown_name(monkeypatch: pytest.
     agent.ensure_mcp_tools()
 
     activation_tool = next(tool for tool in agent.tools if getattr(tool, "name", "") == "authenticate_mcp_server")
-    result = await activation_tool.on_invoke_tool(None, '{"server_name":"notion"}')
+    result = await activation_tool.on_invoke_tool(_activation_context(), '{"server_name":"notion"}')
     assert "Unknown MCP server 'notion'" in result
 
 
@@ -171,9 +183,9 @@ async def test_authenticate_mcp_server_serializes_parallel_activation(monkeypatc
     )
     activation_tool = next(tool for tool in agent.tools if getattr(tool, "name", "") == "authenticate_mcp_server")
 
-    first_task = asyncio.create_task(activation_tool.on_invoke_tool(None, '{"server_name":"github"}'))
+    first_task = asyncio.create_task(activation_tool.on_invoke_tool(_activation_context(), '{"server_name":"github"}'))
     assert await asyncio.to_thread(conversion_started.wait, 1)
-    second_result = await activation_tool.on_invoke_tool(None, '{"server_name":"notion"}')
+    second_result = await activation_tool.on_invoke_tool(_activation_context(), '{"server_name":"notion"}')
     release_conversion.set()
     first_result = await asyncio.wait_for(first_task, timeout=0.2)
 

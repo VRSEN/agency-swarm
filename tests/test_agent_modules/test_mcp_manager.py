@@ -636,7 +636,36 @@ def test_resolve_method_timeout_prefers_runtime_timeout_for_oauth_servers() -> N
     finally:
         set_oauth_runtime_context(None)
         set_oauth_user_id(None)
-    assert timeout == 123.0
+    assert timeout == 143.0
+
+
+@pytest.mark.asyncio
+async def test_oauth_list_tools_outer_timeout_allows_inner_timeout_to_surface() -> None:
+    class _InnerTimeoutOAuthClient(MCPServerOAuthClient):
+        async def list_tools(self, run_context: object | None = None) -> None:
+            await asyncio.sleep(0.05)
+            raise RuntimeError("inner OAuth callback timeout")
+
+        async def cleanup(self) -> None:
+            return None
+
+    manager = PersistentMCPServerManager()
+    oauth_client = _InnerTimeoutOAuthClient(MCPServerOAuth(url="http://localhost:8001/mcp", name="github"))
+    proxy = LoopAffineAsyncProxy(oauth_client, manager)
+    set_oauth_runtime_context(
+        OAuthRuntimeContext(
+            mode="saas_stream",
+            user_id="user-1",
+            timeout=0.01,
+        )
+    )
+    try:
+        with pytest.raises(RuntimeError, match="inner OAuth callback timeout"):
+            await proxy.list_tools()
+    finally:
+        set_oauth_runtime_context(None)
+        set_oauth_user_id(None)
+        await manager.shutdown()
 
 
 def test_sync_oauth_client_handlers_refreshes_runtime_handlers() -> None:
