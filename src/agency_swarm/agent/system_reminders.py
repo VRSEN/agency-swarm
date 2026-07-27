@@ -117,6 +117,12 @@ class SystemReminderHooks(AgentHooks[MasterContext]):
         ]
         self._tool_call_reminders = [reminder for reminder in reminders if isinstance(reminder, EveryNToolCalls)]
         self._run_state: dict[tuple[int, str], _RunReminderState] = {}
+        # EveryNToolCalls counts must survive run boundaries within the same conversation
+        # thread (see _thread_key), unlike everything else in `_run_state`, which is
+        # per-run only. Keying by the live `ThreadManager` and using a weak dictionary
+        # means counts disappear on their own once the owning Agency/thread is gone,
+        # without needing an explicit clear on every run boundary.
+        self._thread_tool_call_counts: weakref.WeakKeyDictionary[object, dict[int, int]] = weakref.WeakKeyDictionary()
 
     async def on_start(self, context: AgentHookContext[MasterContext], agent: SDKAgent[Any]) -> None:
         self._discard_stale_context_states(context)
@@ -209,6 +215,24 @@ class SystemReminderHooks(AgentHooks[MasterContext]):
             else:
                 state.tool_call_counts[index] = current_count
 
+        thread_key = self._thread_key(context)
+        if thread_key is not None:
+            self._thread_tool_call_counts[thread_key] = dict(state.tool_call_counts)
+
+    def _thread_key(self, context: RunContextWrapper[MasterContext]) -> object | None:
+        """Return the object identifying the conversation thread, if one exists.
+
+        A stable ``ThreadManager`` is what makes a run part of the same conversation
+        thread as an earlier run: Agency-managed runs and any direct run explicitly
+        given a shared ``MasterContext`` reuse the same instance across turns, while
+        every other run (no context, or a fresh minimal context) has no persistent
+        thread and its counters stay run-scoped, exactly as before.
+        """
+        master_context = context.context
+        if isinstance(master_context, MasterContext):
+            return master_context.thread_manager
+        return None
+
     def _get_state(
         self,
         context: RunContextWrapper[MasterContext],
@@ -220,6 +244,11 @@ class SystemReminderHooks(AgentHooks[MasterContext]):
         state = self._run_state.get(run_key)
         if state is None:
             state = _RunReminderState()
+            thread_key = self._thread_key(context)
+            if thread_key is not None:
+                persisted_counts = self._thread_tool_call_counts.get(thread_key)
+                if persisted_counts:
+                    state.tool_call_counts = dict(persisted_counts)
             self._run_state[run_key] = state
             if not is_active_agency_run(context.context):
                 weakref.finalize(context.usage, self._run_state.pop, run_key, None)
@@ -256,19 +285,7 @@ class SystemReminderHooks(AgentHooks[MasterContext]):
     def _state_from_payload(self, payload: dict[str, object]) -> _RunReminderState:
         user_indexes = int_values(payload.get("pending_user_message_indexes"))
         tool_indexes = set(int_values(payload.get("pending_tool_reminder_indexes")))
-        raw_counts = payload.get("tool_call_counts")
-        tool_call_counts = (
-            {
-                int(index): count
-                for index, count in raw_counts.items()
-                if str(index).isdigit()
-                and int(index) < len(self._tool_call_reminders)
-                and isinstance(count, int)
-                and not isinstance(count, bool)
-            }
-            if isinstance(raw_counts, dict)
-            else {}
-        )
+        tool_call_counts = self._clamped_tool_call_counts(payload.get("tool_call_counts"))
         raw_agent_name = payload.get("agent_name")
         agent_name = raw_agent_name if isinstance(raw_agent_name, str) else None
         return _RunReminderState(
@@ -281,6 +298,29 @@ class SystemReminderHooks(AgentHooks[MasterContext]):
             user_message_reminders_staged=payload.get("user_message_reminders_staged") is True,
             agent_name=agent_name,
         )
+
+    def _clamped_tool_call_counts(self, raw_counts: object) -> dict[int, int]:
+        """Bound deserialized tool-call counts to each reminder's valid ``[0, n)`` range.
+
+        ``_advance_tool_call_counters`` only ever produces counts in that range, but a
+        hand-crafted ``RunState`` payload is untrusted input: a huge or negative value
+        would otherwise force-fire or permanently suppress a reminder. Now that a
+        restored count can also be written into ``_thread_tool_call_counts`` and outlive
+        this one run (see ``_advance_tool_call_counters``), clamping here keeps a
+        hostile value from corrupting the whole thread instead of just one run.
+        """
+        if not isinstance(raw_counts, dict):
+            return {}
+        clamped: dict[int, int] = {}
+        for index, count in raw_counts.items():
+            if not (str(index).isdigit() and isinstance(count, int) and not isinstance(count, bool)):
+                continue
+            reminder_index = int(index)
+            if reminder_index >= len(self._tool_call_reminders):
+                continue
+            reminder_n = self._tool_call_reminders[reminder_index].n
+            clamped[reminder_index] = max(0, min(count, reminder_n - 1))
+        return clamped
 
     def _render_context(
         self,

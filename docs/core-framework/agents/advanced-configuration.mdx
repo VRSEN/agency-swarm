@@ -76,6 +76,12 @@ agent = Agent(
 
 `EveryNToolCalls` counts local function tools and hosted tools (such as `WebSearchTool` and `FileSearchTool`) toward the same threshold.
 
+The count accumulates across turns of the same conversation thread, not just within one
+`get_response()` call. A `15`-call threshold can be crossed by 7 tool calls in one turn and
+8 in the next; the reminder fires on the model call right after the 15th. A new conversation
+(a new `Agency`, or any run that doesn't share a `ThreadManager` with a prior run) starts its
+count at zero.
+
 If the reminder needs agency context, pass a callable:
 
 ```python
