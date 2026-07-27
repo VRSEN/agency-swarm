@@ -470,13 +470,15 @@ def restore_serialized_direct_run(direct_run: _DirectReminderRun, run_state: Run
 
 
 def _has_current_top_level_user_message(context: MasterContext, agent_name: str, run_id: str) -> bool:
+    # Walk the full thread history, newest first, ignoring messages that belong to any
+    # *other* run (including concurrent runs interleaved into the same thread). A message
+    # tagged with a different run_id never bounds this run's own messages, so it must be
+    # skipped rather than treated as an early-exit boundary.
     for message in reversed(context.thread_manager.get_all_messages()):
         if not isinstance(message, dict):
             continue
         message_run_id = message.get("agent_run_id")
         if message_run_id != run_id:
-            if message_run_id is not None:
-                break
             continue
         if message.get("role") == "user":
             return message.get("agent") == agent_name and message.get("callerAgent") is None
