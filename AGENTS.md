@@ -19,7 +19,7 @@ This file contains only repository-specific addenda to the controlling machine-g
 2.6 The general Codex review command is `codex review --base origin/main -c model_reasoning_effort="high"`.
 2.7 The policy Codex review command is `codex review --base origin/main -c model_reasoning_effort="xhigh"`.
 2.8 The pre-release Codex review command is `codex review --base origin/main -c model_reasoning_effort="xhigh"`.
-2.9 Broad, public, high-risk, or low-confidence repository-policy edits require a clean policy Codex review before shipping; that review uses `gpt-5.6-sol` (the Codex CLI default) or an approved substitute with `xhigh` reasoning; `high` is insufficient.
+2.9 Broad, public, high-risk, or low-confidence repository-policy edits require a clean policy Codex review before shipping; that review uses the Codex CLI default model with `xhigh` reasoning; `high` is insufficient.
 2.10 When the review command cannot be used, fall back only to an equivalent `codex exec` diff review with the same `origin/main` base and reasoning class.
 2.11 Save pre-release and fallback review output to `/tmp/codex_review_<short_sha>.txt`.
 2.12 Supporting reviews may supplement but never replace a required Codex review.
