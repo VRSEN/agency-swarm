@@ -12,7 +12,7 @@ from agents import Agent as SDKAgent, RunContextWrapper, TResponseInputItem
 from agents.handoffs import Handoff as SDKHandoff
 
 from agency_swarm.context import MasterContext
-from agency_swarm.reminders import SystemReminder
+from agency_swarm.reminders import EveryNToolCalls, SystemReminder
 
 if TYPE_CHECKING:
     from agents.run_state import RunState
@@ -231,6 +231,46 @@ def build_system_message(
 ) -> TResponseInputItem:
     """Build one transient reminder input item."""
     return {"role": role, "content": text}
+
+
+def thread_key(context: RunContextWrapper[MasterContext]) -> object | None:
+    """Return the object identifying the conversation thread, if one exists.
+
+    A stable ``ThreadManager`` is what makes a run part of the same conversation
+    thread as an earlier run: Agency-managed runs and any direct run explicitly
+    given a shared ``MasterContext`` reuse the same instance across turns, while
+    every other run (no context, or a fresh minimal context) has no persistent
+    thread and its counters stay run-scoped.
+    """
+    master_context = context.context
+    if isinstance(master_context, MasterContext):
+        return master_context.thread_manager
+    return None
+
+
+def clamped_tool_call_counts(
+    raw_counts: object,
+    tool_call_reminders: Sequence[EveryNToolCalls],
+) -> dict[int, int]:
+    """Bound deserialized tool-call counts to each reminder's valid ``[0, n)`` range.
+
+    The advance logic that produces these counts never yields a value outside that
+    range, but decoded JSON from a ``RunState`` payload is untrusted input: a huge or
+    negative value would otherwise force-fire or permanently suppress a reminder, and
+    could now also be written into cross-run thread-persisted counts.
+    """
+    if not isinstance(raw_counts, dict):
+        return {}
+    clamped: dict[int, int] = {}
+    for index, count in raw_counts.items():
+        if not (str(index).isdigit() and isinstance(count, int) and not isinstance(count, bool)):
+            continue
+        reminder_index = int(index)
+        if reminder_index >= len(tool_call_reminders):
+            continue
+        reminder_n = tool_call_reminders[reminder_index].n
+        clamped[reminder_index] = max(0, min(count, reminder_n - 1))
+    return clamped
 
 
 _SUSPENDED_DIRECT_RUNS: WeakKeyDictionary[

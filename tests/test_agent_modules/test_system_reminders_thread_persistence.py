@@ -18,7 +18,7 @@ from agents.models.interface import Model, ModelTracing
 from openai.types.responses.response_prompt_param import ResponsePromptParam
 
 from agency_swarm import Agency, Agent, EveryNToolCalls
-from agency_swarm.agent.system_reminder_state import _RunReminderState
+from agency_swarm.agent.system_reminder_state import _RunReminderState, thread_key as resolve_thread_key
 from tests.deterministic_model import _build_message_response, _build_tool_call_response, _stream_text_events
 from tests.test_agent_modules.test_system_reminders_review_regressions import (
     _contains,
@@ -206,8 +206,8 @@ async def test_hostile_tool_call_count_does_not_corrupt_persistent_thread_state(
 
     await hooks.on_tool_end(negative_context, agent, _local_tool, "ok")
 
-    thread_key = hooks._thread_key(negative_context)
-    assert hooks._thread_tool_call_counts[thread_key] == {0: 1}
+    negative_thread_key = resolve_thread_key(negative_context)
+    assert hooks._thread_tool_call_counts[negative_thread_key] == {0: 1}
 
     # A hostile huge positive count behaves like a legitimate value at the threshold.
     huge_context = _run_context(agent, "run-huge")
@@ -216,5 +216,5 @@ async def test_hostile_tool_call_count_does_not_corrupt_persistent_thread_state(
 
     await hooks.on_tool_end(huge_context, agent, _local_tool, "ok")
 
-    huge_thread_key = hooks._thread_key(huge_context)
+    huge_thread_key = resolve_thread_key(huge_context)
     assert hooks._thread_tool_call_counts[huge_thread_key] == {0: 0}
