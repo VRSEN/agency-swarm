@@ -449,3 +449,28 @@ async def test_agent_clone_replaces_internal_reminder_hooks() -> None:
     assert not _contains(disabled_model.inputs[0], "old reminder")
     assert _contains(replacement_model.inputs[0], "new reminder")
     assert not _contains(replacement_model.inputs[0], "old reminder")
+
+
+@pytest.mark.asyncio
+async def test_user_message_reminder_survives_concurrent_runs_on_shared_thread() -> None:
+    """Two `get_response` calls racing on the same Agency must each keep their own reminder.
+
+    `_has_current_top_level_user_message` scans thread history in reverse looking for the
+    user message that started *this* run. When two runs interleave on one thread, the
+    newest message can belong to the other run; the scan must skip past it and keep
+    looking, not abort early and report the reminder missing.
+    """
+    model = _ReminderEchoModel()
+    agent = Agent(name="Concurrent", instructions="x", model=model, system_reminders="reminder!")
+    agency = Agency(agent)
+
+    first_result, second_result = await asyncio.gather(
+        agency.get_response("message one"),
+        agency.get_response("message two"),
+    )
+
+    assert model.calls == 2
+    assert _contains(model.inputs[0], "reminder!")
+    assert _contains(model.inputs[1], "reminder!")
+    assert first_result.final_output == "reminder!"
+    assert second_result.final_output == "reminder!"
