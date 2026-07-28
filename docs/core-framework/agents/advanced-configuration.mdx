@@ -59,14 +59,14 @@ agent = Agent(
 
 This reminder is added only to the model input. It is **not saved** in the thread history.
 
-For tool-heavy agents, add a checkpoint reminder:
+For a long autonomous run that may call many tools before it returns, add a checkpoint reminder:
 
 ```python
 from agency_swarm import Agent, EveryNToolCalls
 
 agent = Agent(
-    name="SupportAgent",
-    instructions="Answer clearly and keep the user moving forward.",
+    name="ResearchAgent",
+    instructions="Complete the full research task before replying. Use tools as needed.",
     system_reminders=[
         "Before replying, end with one clear next step.",
         EveryNToolCalls(15, "Pause and summarize progress before using more tools."),
@@ -74,7 +74,9 @@ agent = Agent(
 )
 ```
 
-`EveryNToolCalls` counts local function tools and hosted tools (such as `WebSearchTool` and `FileSearchTool`) toward the same threshold.
+`EveryNToolCalls` counts local function tools and hosted tools (such as `WebSearchTool` and `FileSearchTool`) separately for each agent within one logical run. A logical run starts with a user request to an agency or a direct `Runner` call. Handoffs and resumed interruptions stay in that run. The count resets when the run completes, fails, or is cancelled.
+
+For each configured `EveryNToolCalls`, if parallel tool calls cross several of its thresholds before the next model call, Agency Swarm produces exactly one reminder for that model call. It keeps the modulo remainder—the calls left after dividing by `n`—toward the next threshold.
 
 If the reminder needs agency context, pass a callable:
 

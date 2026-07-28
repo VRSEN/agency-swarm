@@ -94,9 +94,10 @@ class _RecordingModel(DeterministicModel):
         )
 
 
-class _TwoToolCallsModel(Model):
-    def __init__(self) -> None:
-        self.model = "test-two-tool-calls"
+class _NToolCallsPerTurnModel(Model):
+    def __init__(self, tool_calls_per_turn: int = 2) -> None:
+        self.model = "test-n-tool-calls-per-turn"
+        self.tool_calls_per_turn = tool_calls_per_turn
         self.recorded_inputs: list[list[TResponseInputItem]] = []
 
     async def get_response(
@@ -124,9 +125,13 @@ class _TwoToolCallsModel(Model):
             if isinstance(item, dict) and item.get("type") in {"function_call_output", "tool_call_output_item"}:
                 tool_outputs += 1
 
-        if tool_outputs < 2:
+        await self._before_response(input, tool_outputs)
+        if tool_outputs < self.tool_calls_per_turn:
             return _build_tool_call_response(tools[0].name, {})
         return _build_message_response("done", self.model)
+
+    async def _before_response(self, input_items: list[TResponseInputItem], tool_outputs: int) -> None:
+        pass
 
     def stream_response(
         self,
@@ -308,7 +313,7 @@ async def test_after_every_user_message_is_transient_in_thread_history() -> None
 
 @pytest.mark.asyncio
 async def test_every_n_tool_calls_injects_on_next_llm_call_and_resets() -> None:
-    model = _TwoToolCallsModel()
+    model = _NToolCallsPerTurnModel()
     agent = Agent(
         name="ReminderAgent",
         instructions="Use the tool until the task is done.",

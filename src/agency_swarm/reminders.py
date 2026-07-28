@@ -75,7 +75,11 @@ class AfterEveryUserMessage(SystemReminder):
 
 @dataclass(frozen=True, slots=True)
 class EveryNToolCalls(SystemReminder):
-    """Inject a transient reminder on the next model call after every N tool calls."""
+    """Inject a transient reminder on the next model call after every N tool calls.
+
+    EveryNToolCalls counts tool calls per agent and per logical run; resumed interruptions
+    preserve the count, while completed runs reset it.
+    """
 
     n: int
     message: ReminderMessage
