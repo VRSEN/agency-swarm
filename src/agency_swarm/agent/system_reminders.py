@@ -263,8 +263,8 @@ class SystemReminderHooks(AgentHooks[MasterContext]):
                 for index, count in raw_counts.items()
                 if str(index).isdigit()
                 and int(index) < len(self._tool_call_reminders)
-                and isinstance(count, int)
-                and not isinstance(count, bool)
+                and type(count) is int
+                and 0 <= count < self._tool_call_reminders[int(index)].n
             }
             if isinstance(raw_counts, dict)
             else {}

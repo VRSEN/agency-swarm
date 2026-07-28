@@ -163,11 +163,11 @@ class Agent(BaseAgent[MasterContext]):
             voice (str | None): Realtime session voice used when this agent is the entry agent. A realtime
                 session keeps one voice from start to finish, so a voice set on any other agent is not heard.
             system_reminders (str | Callable | SystemReminder | list[str | Callable | SystemReminder] | None):
-                Transient system reminders injected before model calls. Plain strings and callables run after each
-                top-level user message.
+                Transient reminders precede model calls. Strings and callables run after top-level user messages.
+                EveryNToolCalls counts tool calls per agent and per logical run; resumed interruptions preserve
+                the count, while completed runs reset it.
             handoff_reminder (str | None): Custom reminder for handoffs.
                 Defaults to `Transfer completed. You are {recipient_agent_name}. Please continue the task.`
-
         ## OpenAI Agents SDK Parameters:
             prompt (Prompt | DynamicPromptFunction | None): Dynamic prompt configuration.
             model (str | Model | None): Model identifier (e.g., "gpt-5.4") or Model instance.
