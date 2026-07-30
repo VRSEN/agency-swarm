@@ -541,11 +541,11 @@ async def test_attach_persistent_mcp_servers_injects_hosted_mcp_oauth_token(tmp_
         async def cleanup(self) -> None:
             return None
 
-    from agency_swarm.tools import mcp_manager as mcp_manager_module
+    from agency_swarm.tools import hosted_mcp_activation as hosted_mcp_activation_module
 
-    original_client = mcp_manager_module._MCPServerOAuthClient
+    original_client = hosted_mcp_activation_module._MCPServerOAuthClient
     try:
-        mcp_manager_module._MCPServerOAuthClient = _FakeOAuthClient  # type: ignore[assignment]
+        hosted_mcp_activation_module._MCPServerOAuthClient = _FakeOAuthClient  # type: ignore[assignment]
         agency = DummyAgency()
         # Use the same agent instance that has the handler factory installed.
         agency.agents = {"demo": agent}
@@ -555,7 +555,7 @@ async def test_attach_persistent_mcp_servers_injects_hosted_mcp_oauth_token(tmp_
         assert hosted_mcp not in agent.tools
         injected_tool = await _activate_hosted_mcp(agent)
     finally:
-        mcp_manager_module._MCPServerOAuthClient = original_client
+        hosted_mcp_activation_module._MCPServerOAuthClient = original_client
 
     # Should inject token into the request-local HostedMCPTool clone only.
     assert injected_tool is not hosted_mcp
@@ -623,11 +623,11 @@ async def test_attach_persistent_mcp_servers_keeps_hosted_mcp_tokens_request_loc
         async def cleanup(self) -> None:
             return None
 
-    from agency_swarm.tools import mcp_manager as mcp_manager_module
+    from agency_swarm.tools import hosted_mcp_activation as hosted_mcp_activation_module
 
-    original_client = mcp_manager_module._MCPServerOAuthClient
+    original_client = hosted_mcp_activation_module._MCPServerOAuthClient
     try:
-        mcp_manager_module._MCPServerOAuthClient = _FakeOAuthClient  # type: ignore[assignment]
+        hosted_mcp_activation_module._MCPServerOAuthClient = _FakeOAuthClient  # type: ignore[assignment]
 
         agent_a = DummyAgent(shared_hosted_mcp)
         FastAPIOAuthRuntime(
@@ -643,7 +643,7 @@ async def test_attach_persistent_mcp_servers_keeps_hosted_mcp_tokens_request_loc
         await attach_persistent_mcp_servers(DummyAgency(agent_b))
         injected_b = await _activate_hosted_mcp(agent_b)
     finally:
-        mcp_manager_module._MCPServerOAuthClient = original_client
+        hosted_mcp_activation_module._MCPServerOAuthClient = original_client
 
     assert shared_hosted_mcp.tool_config.get("authorization") is None
     assert injected_a is not shared_hosted_mcp
@@ -702,13 +702,13 @@ async def test_attach_persistent_mcp_servers_does_not_mutate_shared_hosted_mcp_t
         async def cleanup(self) -> None:
             return None
 
-    from agency_swarm.tools import mcp_manager as mcp_manager_module
+    from agency_swarm.tools import hosted_mcp_activation as hosted_mcp_activation_module
 
     agent_a = DummyAgent()
     agent_b = DummyAgent()
-    original_client = mcp_manager_module._MCPServerOAuthClient
+    original_client = hosted_mcp_activation_module._MCPServerOAuthClient
     try:
-        mcp_manager_module._MCPServerOAuthClient = _FakeOAuthClient  # type: ignore[assignment]
+        hosted_mcp_activation_module._MCPServerOAuthClient = _FakeOAuthClient  # type: ignore[assignment]
         FastAPIOAuthRuntime(
             OAuthStateRegistry(), user_id="user-a", enable_hosted_mcp_oauth=True
         ).install_handler_factory(agent_a)
@@ -716,7 +716,7 @@ async def test_attach_persistent_mcp_servers_does_not_mutate_shared_hosted_mcp_t
         await attach_persistent_mcp_servers(DummyAgency(agent_a))
         injected_tool = await _activate_hosted_mcp(agent_a)
     finally:
-        mcp_manager_module._MCPServerOAuthClient = original_client
+        hosted_mcp_activation_module._MCPServerOAuthClient = original_client
 
     assert shared_tools == [shared_hosted_mcp]
     assert agent_a.tools is not shared_tools
@@ -779,13 +779,13 @@ async def test_hosted_mcp_oauth_tokens_are_restored_between_reused_agent_request
         async def cleanup(self) -> None:
             return None
 
-    from agency_swarm.tools import mcp_manager as mcp_manager_module
+    from agency_swarm.tools import hosted_mcp_activation as hosted_mcp_activation_module
 
     agent = DummyAgent()
     agency = DummyAgency(agent)
-    original_client = mcp_manager_module._MCPServerOAuthClient
+    original_client = hosted_mcp_activation_module._MCPServerOAuthClient
     try:
-        mcp_manager_module._MCPServerOAuthClient = _FakeOAuthClient  # type: ignore[assignment]
+        hosted_mcp_activation_module._MCPServerOAuthClient = _FakeOAuthClient  # type: ignore[assignment]
 
         FastAPIOAuthRuntime(
             OAuthStateRegistry(), user_id="user-a", enable_hosted_mcp_oauth=True
@@ -803,7 +803,7 @@ async def test_hosted_mcp_oauth_tokens_are_restored_between_reused_agent_request
         assert injected_b.tool_config.get("authorization") == "token-user-b"
         restore_hosted_mcp_oauth_tools(agency)
     finally:
-        mcp_manager_module._MCPServerOAuthClient = original_client
+        hosted_mcp_activation_module._MCPServerOAuthClient = original_client
 
     assert agent.tools[0] is shared_hosted_mcp
     assert shared_hosted_mcp.tool_config.get("authorization") is None
@@ -963,18 +963,18 @@ async def test_attach_persistent_mcp_servers_skips_hosted_mcp_oauth_without_expl
         async def cleanup(self) -> None:
             return None
 
-    from agency_swarm.tools import mcp_manager as mcp_manager_module
+    from agency_swarm.tools import hosted_mcp_activation as hosted_mcp_activation_module
 
-    original_client = mcp_manager_module._MCPServerOAuthClient
+    original_client = hosted_mcp_activation_module._MCPServerOAuthClient
     try:
-        mcp_manager_module._MCPServerOAuthClient = _FakeOAuthClient  # type: ignore[assignment]
+        hosted_mcp_activation_module._MCPServerOAuthClient = _FakeOAuthClient  # type: ignore[assignment]
         agency = DummyAgency()
         FastAPIOAuthRuntime(
             OAuthStateRegistry(), user_id="user-1", enable_hosted_mcp_oauth=False
         ).install_handler_factory(next(iter(agency.agents.values())))
         await attach_persistent_mcp_servers(agency)
     finally:
-        mcp_manager_module._MCPServerOAuthClient = original_client
+        hosted_mcp_activation_module._MCPServerOAuthClient = original_client
 
     assert connect_calls == []
     assert hosted_mcp.tool_config.get("authorization") is None
@@ -1030,16 +1030,16 @@ async def test_attach_persistent_mcp_servers_skips_hosted_mcp_oauth_without_runt
         async def cleanup(self) -> None:
             return None
 
-    from agency_swarm.tools import mcp_manager as mcp_manager_module
+    from agency_swarm.tools import hosted_mcp_activation as hosted_mcp_activation_module
 
-    original_client = mcp_manager_module._MCPServerOAuthClient
+    original_client = hosted_mcp_activation_module._MCPServerOAuthClient
     connect_calls: list[str] = []
     try:
-        mcp_manager_module._MCPServerOAuthClient = _FakeOAuthClient  # type: ignore[assignment]
+        hosted_mcp_activation_module._MCPServerOAuthClient = _FakeOAuthClient  # type: ignore[assignment]
         agency = DummyAgency()
         await attach_persistent_mcp_servers(agency)
     finally:
-        mcp_manager_module._MCPServerOAuthClient = original_client
+        hosted_mcp_activation_module._MCPServerOAuthClient = original_client
 
     assert connect_calls == []
     assert hosted_mcp.tool_config.get("authorization") is None

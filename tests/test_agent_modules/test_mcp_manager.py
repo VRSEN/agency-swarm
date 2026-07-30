@@ -11,6 +11,7 @@ from unittest.mock import patch
 import pytest
 
 import agency_swarm.tools.mcp_manager as mcp_manager
+import agency_swarm.tools.mcp_persistence as mcp_persistence
 from agency_swarm.mcp import MCPServerOAuth, MCPServerOAuthClient
 from agency_swarm.mcp.oauth import FileTokenStorage, OAuthRuntimeContext, set_oauth_runtime_context, set_oauth_user_id
 from agency_swarm.mcp.oauth_user import build_oauth_user_segment
@@ -302,7 +303,7 @@ def test_shutdown_sync_logs_non_loop_runtime_error(
         coro.close()
         raise RuntimeError("other runtime")
 
-    monkeypatch.setattr(mcp_manager.asyncio, "run", fake_run)
+    monkeypatch.setattr(mcp_persistence.asyncio, "run", fake_run)
 
     with caplog.at_level(logging.WARNING):
         manager.shutdown_sync()
@@ -323,8 +324,8 @@ def test_shutdown_sync_schedules_shutdown_when_loop_running(monkeypatch: pytest.
             scheduled.append(coro)
             coro.close()
 
-    monkeypatch.setattr(mcp_manager.asyncio, "run", fake_run)
-    monkeypatch.setattr(mcp_manager.asyncio, "get_running_loop", lambda: _FakeLoop())
+    monkeypatch.setattr(mcp_persistence.asyncio, "run", fake_run)
+    monkeypatch.setattr(mcp_persistence.asyncio, "get_running_loop", lambda: _FakeLoop())
 
     manager.shutdown_sync()
 
@@ -343,8 +344,8 @@ def test_shutdown_sync_logs_when_loop_lookup_fails(
     def fake_get_running_loop() -> Any:
         raise RuntimeError("no running loop")
 
-    monkeypatch.setattr(mcp_manager.asyncio, "run", fake_run)
-    monkeypatch.setattr(mcp_manager.asyncio, "get_running_loop", fake_get_running_loop)
+    monkeypatch.setattr(mcp_persistence.asyncio, "run", fake_run)
+    monkeypatch.setattr(mcp_persistence.asyncio, "get_running_loop", fake_get_running_loop)
 
     with caplog.at_level(logging.WARNING):
         manager.shutdown_sync()
@@ -361,7 +362,7 @@ def test_shutdown_sync_logs_unexpected_exception(
         coro.close()
         raise ValueError("boom")
 
-    monkeypatch.setattr(mcp_manager.asyncio, "run", fake_run)
+    monkeypatch.setattr(mcp_persistence.asyncio, "run", fake_run)
 
     with caplog.at_level(logging.WARNING):
         manager.shutdown_sync()
