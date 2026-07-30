@@ -595,7 +595,7 @@ class TestOAuthHandlers:
         with pytest.raises(RuntimeError, match="OAuth callback input is unavailable in non-interactive mode"):
             await default_callback_handler("https://example.com/auth/callback")
 
-    @patch("agency_swarm.mcp.oauth._listen_for_callback_once")
+    @patch("agency_swarm.mcp.oauth_flow._listen_for_callback_once")
     async def test_callback_handler_prefers_local_server(
         self,
         mock_listen: Any,
@@ -607,14 +607,14 @@ class TestOAuthHandlers:
             return "server_code", "server_state"
 
         mock_listen.side_effect = fake_listen
-        monkeypatch.setattr("agency_swarm.mcp.oauth._can_poll_stdin_for_callback", lambda: False)
+        monkeypatch.setattr("agency_swarm.mcp.oauth_flow._can_poll_stdin_for_callback", lambda: False)
 
         code, state = await default_callback_handler("http://localhost:8000/auth/callback")
 
         assert (code, state) == ("server_code", "server_state")
         assert mock_listen.await_count == 1
 
-    @patch("agency_swarm.mcp.oauth._listen_for_callback_once")
+    @patch("agency_swarm.mcp.oauth_flow._listen_for_callback_once")
     async def test_callback_handler_allows_manual_entry_while_listener_pending(
         self,
         mock_listen: Any,
@@ -630,15 +630,15 @@ class TestOAuthHandlers:
             return "manual_code", "manual_state"
 
         mock_listen.side_effect = slow_listen
-        monkeypatch.setattr("agency_swarm.mcp.oauth._can_poll_stdin_for_callback", lambda: True)
-        monkeypatch.setattr("agency_swarm.mcp.oauth._prompt_for_callback_url_polling", fake_poll)
+        monkeypatch.setattr("agency_swarm.mcp.oauth_flow._can_poll_stdin_for_callback", lambda: True)
+        monkeypatch.setattr("agency_swarm.mcp.oauth_flow._prompt_for_callback_url_polling", fake_poll)
 
         code, state = await default_callback_handler("http://localhost:8000/auth/callback")
 
         assert (code, state) == ("manual_code", "manual_state")
         assert mock_listen.await_count == 1
 
-    @patch("agency_swarm.mcp.oauth._listen_for_callback_once")
+    @patch("agency_swarm.mcp.oauth_flow._listen_for_callback_once")
     async def test_callback_handler_reprompts_after_invalid_manual_input(
         self,
         mock_listen: Any,
@@ -660,8 +660,8 @@ class TestOAuthHandlers:
             return "manual_code", "manual_state"
 
         mock_listen.side_effect = slow_listen
-        monkeypatch.setattr("agency_swarm.mcp.oauth._can_poll_stdin_for_callback", lambda: True)
-        monkeypatch.setattr("agency_swarm.mcp.oauth._prompt_for_callback_url_polling", flaky_poll)
+        monkeypatch.setattr("agency_swarm.mcp.oauth_flow._can_poll_stdin_for_callback", lambda: True)
+        monkeypatch.setattr("agency_swarm.mcp.oauth_flow._prompt_for_callback_url_polling", flaky_poll)
 
         code, state = await default_callback_handler("http://localhost:8000/auth/callback")
 
@@ -669,7 +669,7 @@ class TestOAuthHandlers:
         assert attempts["count"] == 2
         assert "Invalid callback URL" in capsys.readouterr().out
 
-    @patch("agency_swarm.mcp.oauth._listen_for_callback_once")
+    @patch("agency_swarm.mcp.oauth_flow._listen_for_callback_once")
     async def test_callback_handler_uses_listener_when_polling_unavailable(
         self,
         mock_listen: Any,
@@ -681,7 +681,7 @@ class TestOAuthHandlers:
             return "server_code", "server_state"
 
         mock_listen.side_effect = fake_listen
-        monkeypatch.setattr("agency_swarm.mcp.oauth._can_poll_stdin_for_callback", lambda: False)
+        monkeypatch.setattr("agency_swarm.mcp.oauth_flow._can_poll_stdin_for_callback", lambda: False)
 
         code, state = await default_callback_handler("http://localhost:8000/auth/callback")
 
@@ -693,7 +693,7 @@ class TestOAuthHandlers:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """_prompt_for_callback_url_polling should raise EOFError instead of looping forever."""
-        from agency_swarm.mcp import oauth as oauth_module
+        from agency_swarm.mcp import oauth_flow as oauth_flow_module
 
         class _DummyStdin:
             def isatty(self) -> bool:
@@ -703,13 +703,13 @@ class TestOAuthHandlers:
                 return ""
 
         dummy_stdin = _DummyStdin()
-        monkeypatch.setattr(oauth_module.sys, "stdin", dummy_stdin)
-        monkeypatch.setattr(oauth_module.select, "select", lambda _r, _w, _x, _t: ([dummy_stdin], [], []))
+        monkeypatch.setattr(oauth_flow_module.sys, "stdin", dummy_stdin)
+        monkeypatch.setattr(oauth_flow_module.select, "select", lambda _r, _w, _x, _t: ([dummy_stdin], [], []))
 
         with pytest.raises(EOFError, match="stdin reached EOF"):
-            await oauth_module._prompt_for_callback_url_polling(poll_interval=0.0)
+            await oauth_flow_module._prompt_for_callback_url_polling(poll_interval=0.0)
 
-    @patch("agency_swarm.mcp.oauth._listen_for_callback_once")
+    @patch("agency_swarm.mcp.oauth_flow._listen_for_callback_once")
     async def test_callback_handler_falls_back_when_listener_unavailable(
         self,
         mock_listen: Any,
@@ -724,13 +724,13 @@ class TestOAuthHandlers:
             await asyncio.sleep(0.05)
             return "manual_code", "manual_state"
 
-        monkeypatch.setattr("agency_swarm.mcp.oauth._prompt_for_callback_url", fake_prompt)
+        monkeypatch.setattr("agency_swarm.mcp.oauth_flow._prompt_for_callback_url", fake_prompt)
 
         code, state = await default_callback_handler("http://localhost:9999/callback")
 
         assert (code, state) == ("manual_code", "manual_state")
 
-    @patch("agency_swarm.mcp.oauth._listen_for_callback_once")
+    @patch("agency_swarm.mcp.oauth_flow._listen_for_callback_once")
     async def test_callback_handler_falls_back_when_listener_times_out(
         self,
         mock_listen: Any,
@@ -743,7 +743,7 @@ class TestOAuthHandlers:
         async def fake_prompt() -> tuple[str, str | None]:
             return "manual_code", "manual_state"
 
-        monkeypatch.setattr("agency_swarm.mcp.oauth._prompt_for_callback_url", fake_prompt)
+        monkeypatch.setattr("agency_swarm.mcp.oauth_flow._prompt_for_callback_url", fake_prompt)
 
         code, state = await default_callback_handler("http://localhost:8000/auth/callback")
 
