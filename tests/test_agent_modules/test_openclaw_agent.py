@@ -224,7 +224,7 @@ def test_openclaw_agent_rejects_manual_handoffs() -> None:
         name="Recipient",
         description="Recipient",
         instructions="Return the result.",
-        model="gpt-5.4-mini",
+        model="gpt-5.6-luna",
     )
 
     with pytest.raises(TypeError, match="does not accept manual handoffs"):
@@ -276,7 +276,7 @@ def test_openclaw_agent_skips_shared_tool_wiring() -> None:
         name="Coordinator",
         description="Coordinator",
         instructions="Coordinate the work.",
-        model="gpt-5.4-mini",
+        model="gpt-5.6-luna",
     )
 
     agency = Agency(
@@ -318,7 +318,7 @@ def test_openclaw_agent_cannot_register_subagent() -> None:
         name="Recipient",
         description="Recipient",
         instructions="Return the result.",
-        model="gpt-5.4-mini",
+        model="gpt-5.6-luna",
     )
 
     with pytest.raises(ValueError, match="cannot register subagents because it is configured as receive-only"):
@@ -335,7 +335,7 @@ def test_openclaw_agent_cannot_be_sender_in_communication_flows() -> None:
         name="Specialist",
         description="Specialist",
         instructions="Return the result.",
-        model="gpt-5.4-mini",
+        model="gpt-5.6-luna",
     )
 
     with pytest.raises(ValueError, match="cannot be the sender in communication_flows"):

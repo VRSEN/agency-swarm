@@ -77,7 +77,7 @@ async def test_conversation_starter_cache_reuse_without_llm(tmp_path, monkeypatc
     agent_cached = Agent(
         name="StarterAgent",
         instructions="You are helpful.",
-        model="gpt-5.4-mini",
+        model="gpt-5.6-luna",
         conversation_starters=[starter],
         cache_conversation_starters=True,
     )
@@ -240,7 +240,7 @@ async def test_conversation_starter_cache_skips_on_shared_instructions_change(tm
     agent = Agent(
         name="StarterAgent",
         instructions="You are helpful.",
-        model="gpt-5.4-mini",
+        model="gpt-5.6-luna",
         conversation_starters=[starter],
         cache_conversation_starters=True,
     )
@@ -264,7 +264,7 @@ async def test_conversation_starter_cache_populates_for_agency_tools(tmp_path, m
     ceo = Agent(
         name="CEO",
         instructions="Always use send_message to ask the Worker for weather.",
-        model="gpt-5.4-mini",
+        model="gpt-5.6-luna",
         conversation_starters=starters,
         cache_conversation_starters=True,
     )
@@ -272,7 +272,7 @@ async def test_conversation_starter_cache_populates_for_agency_tools(tmp_path, m
         name="Worker",
         instructions="Provide weather using get_weather.",
         tools=[get_weather],
-        model="gpt-5.4-mini",
+        model="gpt-5.6-luna",
     )
     Agency(ceo, communication_flows=[(ceo > worker)], name="TerminalDemoAgency")
 

@@ -28,8 +28,8 @@ def test_get_model_name_from_openai_model_objects() -> None:
     """Model-name extraction should work for both Responses and Chat models."""
     client = AsyncOpenAI(api_key="test")
     cases = [
-        OpenAIResponsesModel(model="gpt-5.4-mini", openai_client=client),
-        OpenAIChatCompletionsModel(model="gpt-5.4-mini", openai_client=client),
+        OpenAIResponsesModel(model="gpt-5.6-luna", openai_client=client),
+        OpenAIChatCompletionsModel(model="gpt-5.6-luna", openai_client=client),
     ]
     for model in cases:
-        assert get_model_name(model) == "gpt-5.4-mini"
+        assert get_model_name(model) == "gpt-5.6-luna"

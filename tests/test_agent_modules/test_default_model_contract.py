@@ -61,14 +61,14 @@ def test_framework_default_model_uses_bundled_long_context_pricing() -> None:
     pricing_data = load_pricing_data()
     pricing = get_model_pricing(FRAMEWORK_DEFAULT_MODEL, pricing_data)
     assert pricing is not None
-    assert pricing["cache_creation_input_token_cost_above_272k_tokens"] == 2.5e-6
-    assert pricing["cache_read_input_token_cost_above_272k_tokens"] == 2e-7
-    assert pricing["input_cost_per_token_above_272k_tokens"] == 2e-6
-    assert pricing["output_cost_per_token_above_272k_tokens"] == 9e-6
+    assert pricing["cache_creation_input_token_cost_above_272k_tokens"] == 5e-7
+    assert pricing["cache_read_input_token_cost_above_272k_tokens"] == 4e-8
+    assert pricing["input_cost_per_token_above_272k_tokens"] == 4e-7
+    assert pricing["output_cost_per_token_above_272k_tokens"] == 1.8e-6
 
     expected_cost = 300_000 * pricing["input_cost_per_token_above_272k_tokens"]
     expected_cost += 1_000 * pricing["output_cost_per_token_above_272k_tokens"]
-    assert expected_cost == pytest.approx(0.609)
+    assert expected_cost == pytest.approx(0.1218)
     assert calculate_openai_cost(
         FRAMEWORK_DEFAULT_MODEL,
         input_tokens=300_000,

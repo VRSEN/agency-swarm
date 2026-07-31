@@ -16,7 +16,7 @@ def _make_chat_agent(name: str) -> Agent:
     return Agent(
         name=name,
         instructions="Test",
-        model=OpenAIChatCompletionsModel(model="gpt-5.4-mini", openai_client=client),
+        model=OpenAIChatCompletionsModel(model="gpt-5.6-luna", openai_client=client),
     )
 
 
@@ -25,7 +25,7 @@ def _make_responses_agent(name: str) -> Agent:
     return Agent(
         name=name,
         instructions="Test",
-        model=OpenAIResponsesModel(model="gpt-5.4-mini", openai_client=client),
+        model=OpenAIResponsesModel(model="gpt-5.6-luna", openai_client=client),
     )
 
 

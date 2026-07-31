@@ -292,7 +292,7 @@ def test_agent_initialization_with_all_parameters():
             agent = Agent(
                 name="CompleteAgent",
                 instructions="Complete agent with all params",
-                model="gpt-5.4-mini",
+                model="gpt-5.6-luna",
                 tools=[tool1],
                 output_type=TaskOutput,
                 files_folder=str(temp_dir),  # Use temporary directory
@@ -301,7 +301,7 @@ def test_agent_initialization_with_all_parameters():
 
         assert agent.name == "CompleteAgent"
         assert agent.instructions == "Complete agent with all params"
-        assert agent.model == "gpt-5.4-mini"
+        assert agent.model == "gpt-5.6-luna"
         assert len(agent.tools) == 2
         assert agent.tools[0] == tool1
         assert agent.tools[1].__class__.__name__ == "FileSearchTool"
@@ -323,15 +323,15 @@ def test_agent_instruction_loading_variants(tmp_path):
     instruction_file.write_text(instruction_content)
 
     # Absolute path
-    agent = Agent(name="TestAgent", instructions=str(instruction_file), model="gpt-5.4-mini")
+    agent = Agent(name="TestAgent", instructions=str(instruction_file), model="gpt-5.6-luna")
     assert agent.instructions == instruction_content
 
     # Relative path resolved from caller directory
-    relative_agent = Agent(name="TestAgent", instructions="../data/files/instructions.md", model="gpt-5.4-mini")
+    relative_agent = Agent(name="TestAgent", instructions="../data/files/instructions.md", model="gpt-5.6-luna")
     assert relative_agent.instructions == "Test instructions"
 
     instruction_text = "Direct instruction text, not a file path"
-    agent = Agent(name="TestAgent", instructions=instruction_text, model="gpt-5.4-mini")
+    agent = Agent(name="TestAgent", instructions=instruction_text, model="gpt-5.6-luna")
     assert agent.instructions == instruction_text
 
 

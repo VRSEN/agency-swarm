@@ -67,10 +67,10 @@ class BrokenHandoff(Handoff):
 
 def test_agency_with_mixed_communication_flows():
     """Test Agency with mixed communication flow formats."""
-    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
-    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
-    agent3 = Agent(name="Agent3", instructions="Test agent 3", model="gpt-5.4-mini")
-    agent4 = Agent(name="Agent4", instructions="Test agent 4", model="gpt-5.4-mini")
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.6-luna")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.6-luna")
+    agent3 = Agent(name="Agent3", instructions="Test agent 3", model="gpt-5.6-luna")
+    agent4 = Agent(name="Agent4", instructions="Test agent 4", model="gpt-5.6-luna")
 
     agency = Agency(
         agent1,
@@ -92,9 +92,9 @@ def test_agency_with_mixed_communication_flows():
 
 def test_agency_with_mixed_communication_flows_reverse():
     """Test Agency with reverse communication flow."""
-    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
-    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
-    agent3 = Agent(name="Agent3", instructions="Test agent 3", model="gpt-5.4-mini")
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.6-luna")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.6-luna")
+    agent3 = Agent(name="Agent3", instructions="Test agent 3", model="gpt-5.6-luna")
 
     agency = Agency(
         agent1,
@@ -113,8 +113,8 @@ def test_agency_with_mixed_communication_flows_reverse():
 
 def test_agent_pair_can_use_send_message_and_handoff():
     """Test that one agent pair can expose both SendMessage and Handoff."""
-    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
-    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.6-luna")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.6-luna")
 
     agency = Agency(
         agent1,
@@ -138,8 +138,8 @@ def test_agent_pair_can_use_send_message_and_handoff():
 @pytest.mark.parametrize("tool_mapping", ([Handoff], Handoff))
 def test_legacy_two_value_flow_parser_patch_still_initializes_agency(monkeypatch, tool_mapping):
     """Test compatibility with OpenSwarm projects that patch parse_agent_flows."""
-    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
-    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.6-luna")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.6-luna")
 
     def parse_agent_flows_legacy(_agency: Agency, _flows: list[Any]):
         return [(agent1, agent2)], {("Agent1", "Agent2"): tool_mapping}
@@ -156,8 +156,8 @@ def test_legacy_two_value_flow_parser_patch_still_initializes_agency(monkeypatch
 
 def test_runtime_registration_keeps_multiple_send_message_tool_classes() -> None:
     """Test runtime registration creates each requested SendMessage class for one recipient."""
-    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
-    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.6-luna")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.6-luna")
     runtime_state = AgentRuntimeState()
 
     agent1.register_subagent(agent2, send_message_tool_class=CustomSendMessage, runtime_state=runtime_state)
@@ -171,8 +171,8 @@ def test_runtime_registration_keeps_multiple_send_message_tool_classes() -> None
 
 def test_runtime_handoff_variant_is_preserved_with_static_handoff() -> None:
     """Test runtime handoff variants are not dropped when a static handoff targets the same agent."""
-    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
-    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.6-luna")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.6-luna")
     agent1.handoffs.append(Handoff().create_handoff(recipient_agent=agent2))
 
     agency = Agency(
@@ -195,8 +195,8 @@ def test_runtime_handoff_variant_is_preserved_with_static_handoff() -> None:
 
 def test_same_name_handoff_variants_are_preserved_with_static_handoff() -> None:
     """Test distinct handoff classes are preserved even when they share one tool name."""
-    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
-    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.6-luna")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.6-luna")
     agent1.handoffs.append(Handoff().create_handoff(recipient_agent=agent2))
 
     agency = Agency(
@@ -219,8 +219,8 @@ def test_same_name_handoff_variants_are_preserved_with_static_handoff() -> None:
 
 def test_same_base_handoff_is_deduplicated_with_static_handoff() -> None:
     """Test the same base handoff is not duplicated when static and runtime sources overlap."""
-    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
-    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.6-luna")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.6-luna")
     agent1.handoffs.append(Handoff().create_handoff(recipient_agent=agent2))
 
     agency = Agency(
@@ -243,8 +243,8 @@ def test_same_base_handoff_is_deduplicated_with_static_handoff() -> None:
 
 def test_later_communication_tool_is_wired_after_handoff_failure() -> None:
     """Test one broken tool class does not prevent later configured tools from wiring."""
-    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
-    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.6-luna")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.6-luna")
 
     agency = Agency(
         agent1,
@@ -260,8 +260,8 @@ def test_later_communication_tool_is_wired_after_handoff_failure() -> None:
 
 def test_duplicate_communication_tool_class_is_rejected():
     """Test that multiple SendMessage tools for the same pair are rejected."""
-    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
-    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.6-luna")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.6-luna")
 
     with pytest.raises(ValueError, match="Duplicate communication tool class detected"):
         Agency(
@@ -284,8 +284,8 @@ def test_duplicate_communication_tool_class_is_rejected():
 
 def test_unsupported_communication_tool_class_is_rejected():
     """Test that communication flows only accept supported tool families."""
-    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
-    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.6-luna")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.6-luna")
 
     with pytest.raises(TypeError, match="Expected a SendMessage or Handoff subclass"):
         Agency(
@@ -298,8 +298,8 @@ def test_unsupported_communication_tool_class_is_rejected():
 
 def test_empty_communication_tool_class_list_is_rejected():
     """Test that an explicit empty tool class list is not treated as a default flow."""
-    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
-    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.6-luna")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.6-luna")
 
     with pytest.raises(ValueError, match="tool class list cannot be empty"):
         Agency(agent1, communication_flows=[(agent1, agent2, [])])
@@ -307,9 +307,9 @@ def test_empty_communication_tool_class_list_is_rejected():
 
 def test_duplicate_flow_detection_with_chains():
     """Test that duplicate flows are detected with AgentFlow chains."""
-    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
-    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
-    agent3 = Agent(name="Agent3", instructions="Test agent 3", model="gpt-5.4-mini")
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.6-luna")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.6-luna")
+    agent3 = Agent(name="Agent3", instructions="Test agent 3", model="gpt-5.6-luna")
 
     with pytest.raises(ValueError, match="Duplicate communication tool class detected"):
         Agency(
@@ -323,9 +323,9 @@ def test_duplicate_flow_detection_with_chains():
 
 def test_agent_flow_with_handoff_tool():
     """Test that Handoff works with AgentFlow."""
-    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
-    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
-    agent3 = Agent(name="Agent3", instructions="Test agent 3", model="gpt-5.4-mini")
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.6-luna")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.6-luna")
+    agent3 = Agent(name="Agent3", instructions="Test agent 3", model="gpt-5.6-luna")
 
     # This should work without errors
     agency = Agency(
@@ -349,8 +349,8 @@ def test_agent_flow_with_handoff_tool():
 
 
 def test_send_message_handoff_name_is_deprecated(monkeypatch: pytest.MonkeyPatch) -> None:
-    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.4-mini")
-    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.4-mini")
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5.6-luna")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5.6-luna")
     monkeypatch.setattr(agency_setup, "_warned_deprecated_send_message_handoff", False)
 
     with pytest.deprecated_call(match=r"SendMessageHandoff is deprecated; use Handoff instead\."):

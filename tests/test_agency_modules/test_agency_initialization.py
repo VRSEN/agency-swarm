@@ -150,7 +150,7 @@ def test_agency_shared_instructions_file_loading(tmp_path):
     shared_file.write_text(shared_content)
 
     # Create test agent
-    agent = Agent(name="TestAgent", instructions="You are a test agent.", model="gpt-5.4-mini")
+    agent = Agent(name="TestAgent", instructions="You are a test agent.", model="gpt-5.6-luna")
 
     # Create agency with shared instruction file
     agency = Agency(
@@ -165,7 +165,7 @@ def test_agency_shared_instructions_string():
     """Test that agency accepts instruction strings that aren't files."""
     shared_text = "These are shared instructions as text"
 
-    agent = Agent(name="TestAgent", instructions="Test agent instructions", model="gpt-5.4-mini")
+    agent = Agent(name="TestAgent", instructions="Test agent instructions", model="gpt-5.6-luna")
 
     agency = Agency(
         agent,  # Entry point agent as positional argument
@@ -178,7 +178,7 @@ def test_agency_shared_instructions_string():
 
 def test_agency_shared_instructions_none():
     """Test agency with no shared instructions."""
-    agent = Agent(name="TestAgent", instructions="Test agent", model="gpt-5.4-mini")
+    agent = Agent(name="TestAgent", instructions="Test agent", model="gpt-5.6-luna")
 
     agency = Agency(
         agent,  # Entry point agent as positional argument

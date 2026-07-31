@@ -381,14 +381,14 @@ def test_starter_cache_fingerprint_changes_for_guardrails_runtime_tools_and_hand
     agent_with_guardrails = Agent(
         name="GuardrailAgent",
         instructions="You are helpful.",
-        model="gpt-5.4-mini",
+        model="gpt-5.6-luna",
         input_guardrails=[require_support_prefix],
         output_guardrails=[block_emails],
     )
     agent_without_guardrails = Agent(
         name="BaselineAgent",
         instructions="You are helpful.",
-        model="gpt-5.4-mini",
+        model="gpt-5.6-luna",
         input_guardrails=[],
         output_guardrails=[],
     )
@@ -399,12 +399,12 @@ def test_starter_cache_fingerprint_changes_for_guardrails_runtime_tools_and_hand
     sender = Agent(
         name="SenderAgent",
         instructions="You are helpful.",
-        model="gpt-5.4-mini",
+        model="gpt-5.6-luna",
     )
     recipient = Agent(
         name="RecipientAgent",
         instructions="You are helpful.",
-        model="gpt-5.4-mini",
+        model="gpt-5.6-luna",
     )
     runtime_state = AgentRuntimeState()
     fingerprint_before = compute_starter_cache_fingerprint(sender, runtime_state=runtime_state)
@@ -415,12 +415,12 @@ def test_starter_cache_fingerprint_changes_for_guardrails_runtime_tools_and_hand
     handoff_sender = Agent(
         name="HandoffSender",
         instructions="You are helpful.",
-        model="gpt-5.4-mini",
+        model="gpt-5.6-luna",
     )
     handoff_recipient = Agent(
         name="HandoffRecipient",
         instructions="You are helpful.",
-        model="gpt-5.4-mini",
+        model="gpt-5.6-luna",
     )
     handoff_runtime = AgentRuntimeState()
     handoff_before = compute_starter_cache_fingerprint(handoff_sender, runtime_state=handoff_runtime)
@@ -436,8 +436,8 @@ def test_starter_cache_fingerprint_preserves_same_name_handoff_classes() -> None
     class SecondDefaultNamedHandoff(Handoff):
         pass
 
-    sender = Agent(name="HandoffSender", instructions="You are helpful.", model="gpt-5.4-mini")
-    recipient = Agent(name="HandoffRecipient", instructions="You are helpful.", model="gpt-5.4-mini")
+    sender = Agent(name="HandoffSender", instructions="You are helpful.", model="gpt-5.6-luna")
+    recipient = Agent(name="HandoffRecipient", instructions="You are helpful.", model="gpt-5.6-luna")
     runtime_state = AgentRuntimeState()
 
     runtime_state.handoffs.append(FirstDefaultNamedHandoff().create_handoff(recipient))
@@ -460,7 +460,7 @@ def test_starter_cache_fingerprint_changes_when_system_reminders_change() -> Non
         return Agent(
             name="ReminderFingerprintAgent",
             instructions="You are helpful.",
-            model="gpt-5.4-mini",
+            model="gpt-5.6-luna",
             system_reminders=list(reminders),
         )
 
@@ -595,7 +595,7 @@ def test_cache_serialization_and_replay_utilities(tmp_path, monkeypatch) -> None
     assert isinstance(parsed_schema, _StructuredOutput)
     assert parsed_schema.answer == "yes"
 
-    build_agent = Agent(name="BuildAgent", instructions="Test", model="gpt-5.4-mini")
+    build_agent = Agent(name="BuildAgent", instructions="Test", model="gpt-5.6-luna")
     build_items: list[TResponseInputItem] = [
         "skip",
         {"type": "message", "role": "assistant", "content": "Assistant reply"},
@@ -619,7 +619,7 @@ def _make_fingerprint_agent(*, tools: list[object], mcp_config: object, output_t
     return SimpleNamespace(
         instructions="Base instructions",
         prompt=None,
-        model="gpt-5.4-mini",
+        model="gpt-5.6-luna",
         model_settings=None,
         input_guardrails=[],
         output_guardrails=[],

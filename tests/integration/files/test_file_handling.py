@@ -200,7 +200,7 @@ async def _setup_file_search_agent(real_openai_client: AsyncOpenAI, tmp_path: Pa
         instructions="""You are an agent that can read and analyze text files using FileSearch.
         When asked questions about files, always use your FileSearch tool to search through the uploaded documents.
         Be direct and specific in your answers based on what you find in the files.""",
-        model="gpt-5.4-mini",
+        model="gpt-5.6-luna",
         model_settings=ModelSettings(tool_choice="required"),
         include_search_results=True,
         tool_use_behavior="stop_on_first_tool",
@@ -294,7 +294,7 @@ async def test_files_folder_reuse_without_missing_directory_warning(
         "instructions": "You are a document assistant who relies on FileSearch for answers.",
         "files_folder": str(files_dir),
         "include_search_results": True,
-        "model": "gpt-5.4-mini",
+        "model": "gpt-5.6-luna",
         "model_settings": ModelSettings(tool_choice="file_search"),
         "tool_use_behavior": "stop_on_first_tool",
     }
@@ -611,7 +611,7 @@ async def test_vector_store_cleanup_on_init(real_openai_client: AsyncOpenAI, tmp
         "instructions": "Use FileSearch to answer from documents.",
         "files_folder": str(files_dir),
         "include_search_results": True,
-        "model": "gpt-5.4-mini",
+        "model": "gpt-5.6-luna",
         "model_settings": ModelSettings(tool_choice="file_search"),
         "tool_use_behavior": "stop_on_first_tool",
     }
@@ -682,7 +682,7 @@ async def test_file_reupload_on_mtime_update(real_openai_client: AsyncOpenAI, tm
         "instructions": "Use FileSearch to answer from documents.",
         "files_folder": str(files_dir),
         "include_search_results": True,
-        "model": "gpt-5.4-mini",
+        "model": "gpt-5.6-luna",
         "model_settings": ModelSettings(tool_choice="file_search"),
         "tool_use_behavior": "stop_on_first_tool",
     }
