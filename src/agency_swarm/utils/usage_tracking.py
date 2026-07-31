@@ -1,24 +1,20 @@
-"""
-Usage tracking utilities for Agency Swarm.
-
-This module provides functions to track and calculate token usage and costs
-for both OpenAI and LiteLLM models.
-"""
+"""Track and price model token usage."""
 
 import json
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock
 from typing import NotRequired, Protocol, TypedDict, cast
 
 from agents.items import ModelResponse
 from agents.result import RunResultBase
+from agents.usage import RequestUsage, Usage
+from openai.types.responses.response_usage import InputTokensDetails
 
 logger = logging.getLogger(__name__)
 
-# Path to the pricing JSON file
 PRICING_FILE_PATH = Path(__file__).parent.parent / "data" / "model_prices_and_context_window.json"
 
 PricingData = dict[str, dict[str, float]]
@@ -29,6 +25,7 @@ _BASE_PRICING_KEYS = (
     "input_cost_per_token",
     "output_cost_per_token",
     "cache_read_input_token_cost",
+    "cache_creation_input_token_cost",
     "output_cost_per_reasoning_token",
 )
 _TIERED_PRICING_KEY = re.compile(r"^(?P<base_key>.+)_above_(?P<threshold>\d+)k_tokens$")
@@ -37,6 +34,7 @@ _TIERED_PRICING_KEY = re.compile(r"^(?P<base_key>.+)_above_(?P<threshold>\d+)k_t
 class UsageStatsDict(TypedDict):
     request_count: int
     cached_tokens: int
+    cache_write_tokens: NotRequired[int]
     input_tokens: int
     output_tokens: int
     total_tokens: int
@@ -61,9 +59,18 @@ class _HasMainAgentModel(Protocol):
     _main_agent_model: str
 
 
+@dataclass(frozen=True)
+class RequestUsageStats:
+    input_tokens: int
+    output_tokens: int
+    cached_tokens: int = 0
+    cache_write_tokens: int = 0
+    reasoning_tokens: int | None = None
+
+
 @dataclass
 class UsageStats:
-    """Usage statistics for a run or session."""
+    """Aggregated usage with any available per-request breakdown."""
 
     request_count: int = 0
     cached_tokens: int = 0
@@ -71,12 +78,24 @@ class UsageStats:
     output_tokens: int = 0
     total_tokens: int = 0
     total_cost: float = 0.0
-    # Additional fields from Responses API
     reasoning_tokens: int | None = None
     audio_tokens: int | None = None
+    cache_write_tokens: int = 0
+    request_usage_entries: list[RequestUsageStats] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if self.request_count == 1 and not self.request_usage_entries:
+            self.request_usage_entries.append(
+                RequestUsageStats(
+                    input_tokens=self.input_tokens,
+                    output_tokens=self.output_tokens,
+                    cached_tokens=self.cached_tokens,
+                    cache_write_tokens=self.cache_write_tokens,
+                    reasoning_tokens=self.reasoning_tokens,
+                )
+            )
 
     def __add__(self, other: "UsageStats") -> "UsageStats":
-        """Merge two UsageStats objects."""
         return UsageStats(
             request_count=self.request_count + other.request_count,
             cached_tokens=self.cached_tokens + other.cached_tokens,
@@ -94,13 +113,15 @@ class UsageStats:
                 if self.audio_tokens is not None or other.audio_tokens is not None
                 else None
             ),
+            cache_write_tokens=self.cache_write_tokens + other.cache_write_tokens,
+            request_usage_entries=self.request_usage_entries + other.request_usage_entries,
         )
 
     def to_dict(self) -> UsageStatsDict:
-        """Convert to dictionary for JSON serialization."""
         result: UsageStatsDict = {
             "request_count": self.request_count,
             "cached_tokens": self.cached_tokens,
+            "cache_write_tokens": self.cache_write_tokens,
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
             "total_tokens": self.total_tokens,
@@ -113,8 +134,11 @@ class UsageStats:
         return result
 
 
+class UsageCostCalculationError(ValueError):
+    """Raised when aggregate usage cannot be priced accurately."""
+
+
 def load_pricing_data() -> PricingData:
-    """Load pricing data from the JSON file."""
     global _PRICING_DATA_CACHE
     with _PRICING_DATA_LOCK:
         if _PRICING_DATA_CACHE is not None:
@@ -153,7 +177,6 @@ def load_pricing_data() -> PricingData:
 
 
 def get_model_pricing(model_name: str, pricing_data: PricingData | None = None) -> dict[str, float] | None:
-    """Resolve exact, provider-prefixed, or versioned model pricing."""
     if pricing_data is None:
         pricing_data = load_pricing_data()
 
@@ -170,14 +193,11 @@ def get_model_pricing(model_name: str, pricing_data: PricingData | None = None) 
     if "-" in model_name:
         parts = model_name.split("-")
         if len(parts) >= 4:
-            try:
-                year, month, day = parts[-3], parts[-2], parts[-1]
-                if len(year) == 4 and year.isdigit() and month.isdigit() and day.isdigit():
-                    base_name = "-".join(parts[:-3])
-                    if base_name in pricing_data:
-                        return pricing_data[base_name]
-            except (ValueError, IndexError):
-                pass
+            year, month, day = parts[-3], parts[-2], parts[-1]
+            if len(year) == 4 and year.isdigit() and month.isdigit() and day.isdigit():
+                base_name = "-".join(parts[:-3])
+                if base_name in pricing_data:
+                    return pricing_data[base_name]
 
         base_name = "-".join(parts[:-1])
         if base_name in pricing_data:
@@ -212,8 +232,9 @@ def calculate_openai_cost(
     cached_tokens: int = 0,
     reasoning_tokens: int | None = None,
     pricing_data: PricingData | None = None,
+    cache_write_tokens: int = 0,
 ) -> float:
-    """Calculate per-token cost, selecting declared tiers by total input size."""
+    """Price one model request, selecting tiers by that request's input size."""
     if pricing_data is None:
         pricing_data = load_pricing_data()
 
@@ -224,7 +245,7 @@ def calculate_openai_cost(
 
     input_cost_per_token = _get_token_price(model_pricing, "input_cost_per_token", input_tokens)
     output_cost_per_token = _get_token_price(model_pricing, "output_cost_per_token", input_tokens)
-    non_cached_input = max(0, input_tokens - cached_tokens)
+    non_cached_input = max(0, input_tokens - cached_tokens - cache_write_tokens)
     cost = non_cached_input * input_cost_per_token
 
     cache_read_cost_per_token = _get_token_price(
@@ -235,6 +256,15 @@ def calculate_openai_cost(
     )
     if cached_tokens > 0:
         cost += cached_tokens * cache_read_cost_per_token
+
+    cache_write_cost_per_token = _get_token_price(
+        model_pricing,
+        "cache_creation_input_token_cost",
+        input_tokens,
+        input_cost_per_token,
+    )
+    if cache_write_tokens > 0:
+        cost += cache_write_tokens * cache_write_cost_per_token
 
     cost += output_tokens * output_cost_per_token
 
@@ -250,93 +280,129 @@ def calculate_openai_cost(
     return cost
 
 
-def _extract_usage_from_response(response: ModelResponse) -> dict[str, int]:
-    """Extract usage data from a single response.
+def _cache_write_tokens(input_details: InputTokensDetails) -> int:
+    cache_write_tokens = input_details.model_dump().get("cache_write_tokens")
+    return cache_write_tokens if isinstance(cache_write_tokens, int) else 0
 
-    Returns a dict with normalized keys: requests, cached_tokens, input_tokens, output_tokens, total_tokens
-    """
-    usage = response.usage
-    return {
-        "requests": usage.requests,
-        "cached_tokens": usage.input_tokens_details.cached_tokens,
-        "input_tokens": usage.input_tokens,
-        "output_tokens": usage.output_tokens,
-        "total_tokens": usage.total_tokens,
-    }
+
+def _request_usage_stats(usage: RequestUsage) -> RequestUsageStats:
+    return RequestUsageStats(
+        input_tokens=usage.input_tokens,
+        output_tokens=usage.output_tokens,
+        cached_tokens=usage.input_tokens_details.cached_tokens,
+        cache_write_tokens=_cache_write_tokens(usage.input_tokens_details),
+        reasoning_tokens=usage.output_tokens_details.reasoning_tokens or None,
+    )
+
+
+def _usage_stats_from_sdk(usage: Usage) -> UsageStats:
+    return UsageStats(
+        request_count=usage.requests,
+        cached_tokens=usage.input_tokens_details.cached_tokens,
+        input_tokens=usage.input_tokens,
+        output_tokens=usage.output_tokens,
+        total_tokens=usage.total_tokens,
+        reasoning_tokens=usage.output_tokens_details.reasoning_tokens or None,
+        cache_write_tokens=_cache_write_tokens(usage.input_tokens_details),
+        request_usage_entries=[_request_usage_stats(entry) for entry in usage.request_usage_entries],
+    )
 
 
 def extract_usage_from_run_result(run_result: RunResultBase | None) -> UsageStats | None:
-    """Extract usage information from a RunResult or RunResultStreaming object.
-
-    Aggregates usage from:
-    1. Main agent via context_wrapper.usage
-    2. Sub-agent responses via _sub_agent_responses_with_model
-
-    Args:
-        run_result: A RunResult or RunResultStreaming object from the agents SDK
-
-    Returns:
-        UsageStats object or None if usage information is not available
-    """
-    if run_result is None:
+    """Extract aggregated and per-request usage from a run result."""
+    if run_result is None or not hasattr(run_result, "context_wrapper") or run_result.context_wrapper is None:
         return None
 
-    # Initialize counters
-    request_count = 0
-    cached_tokens = 0
-    input_tokens = 0
-    output_tokens = 0
-    total_tokens = 0
-    reasoning_tokens = None
-    audio_tokens = None  # TODO(voice): Populate when Agency Swarm adds voice/realtime support.
-    found_any_usage = False
+    try:
+        usage_stats = _usage_stats_from_sdk(run_result.context_wrapper.usage)
+    except (AttributeError, TypeError):
+        return None
 
-    # Extract usage from context_wrapper if available
-    if hasattr(run_result, "context_wrapper") and run_result.context_wrapper is not None:
-        try:
-            usage = run_result.context_wrapper.usage
-            found_any_usage = True
-
-            request_count = usage.requests
-            cached_tokens = usage.input_tokens_details.cached_tokens
-            input_tokens = usage.input_tokens
-            output_tokens = usage.output_tokens
-            total_tokens = usage.total_tokens
-            reasoning_tokens = usage.output_tokens_details.reasoning_tokens or None
-        except (AttributeError, TypeError):
-            # Skip if context_wrapper or usage is not accessible
-            pass
-
-    # Aggregate usage from sub-agent responses
     if hasattr(run_result, "_sub_agent_responses_with_model"):
         sub_agent_responses = cast(_HasSubAgentResponsesWithModel, run_result)._sub_agent_responses_with_model
         for item in sub_agent_responses:
             try:
                 if isinstance(item, tuple) and len(item) == 2:
                     _, response = item
-                    resp_usage = _extract_usage_from_response(response)
-                    request_count += resp_usage.get("requests", 0)
-                    cached_tokens += resp_usage.get("cached_tokens", 0)
-                    input_tokens += resp_usage.get("input_tokens", 0)
-                    output_tokens += resp_usage.get("output_tokens", 0)
-                    total_tokens += resp_usage.get("total_tokens", 0)
-                    sub_reasoning = response.usage.output_tokens_details.reasoning_tokens
-                    if sub_reasoning:
-                        reasoning_tokens = (reasoning_tokens or 0) + sub_reasoning
+                    usage_stats += _usage_stats_from_sdk(response.usage)
             except Exception:
                 pass  # Skip malformed entries
 
-    if not found_any_usage:
-        return None
+    return usage_stats
 
-    return UsageStats(
-        request_count=request_count,
-        cached_tokens=cached_tokens,
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
-        total_tokens=total_tokens,
-        reasoning_tokens=reasoning_tokens,
-        audio_tokens=audio_tokens,
+
+def _has_complete_request_breakdown(usage_stats: UsageStats) -> bool:
+    entries = usage_stats.request_usage_entries
+    return len(entries) == usage_stats.request_count and (
+        sum(entry.input_tokens for entry in entries) == usage_stats.input_tokens
+        and sum(entry.output_tokens for entry in entries) == usage_stats.output_tokens
+        and sum(entry.cached_tokens for entry in entries) == usage_stats.cached_tokens
+        and sum(entry.cache_write_tokens for entry in entries) == usage_stats.cache_write_tokens
+        and (
+            usage_stats.reasoning_tokens is None
+            or sum(entry.reasoning_tokens or 0 for entry in entries) == usage_stats.reasoning_tokens
+        )
+    )
+
+
+def _tier_boundary_is_ambiguous(
+    usage_stats: UsageStats,
+    model_name: str,
+    pricing_data: PricingData | None,
+) -> bool:
+    model_pricing = get_model_pricing(model_name, pricing_data)
+    if model_pricing is None:
+        return False
+    priced_tokens = {
+        "input_cost_per_token": max(
+            0,
+            usage_stats.input_tokens - usage_stats.cached_tokens - usage_stats.cache_write_tokens,
+        ),
+        "output_cost_per_token": usage_stats.output_tokens,
+        "cache_read_input_token_cost": usage_stats.cached_tokens,
+        "cache_creation_input_token_cost": usage_stats.cache_write_tokens,
+        "output_cost_per_reasoning_token": usage_stats.reasoning_tokens or 0,
+    }
+    for tier_key in model_pricing:
+        match = _TIERED_PRICING_KEY.fullmatch(tier_key)
+        if match is None or priced_tokens.get(match.group("base_key"), 0) == 0:
+            continue
+        if int(match.group("threshold")) * 1000 < usage_stats.input_tokens:
+            return True
+    return False
+
+
+def _calculate_usage_cost(
+    usage_stats: UsageStats,
+    model_name: str,
+    pricing_data: PricingData | None,
+) -> float:
+    if _has_complete_request_breakdown(usage_stats):
+        return sum(
+            calculate_openai_cost(
+                model_name=model_name,
+                input_tokens=entry.input_tokens,
+                output_tokens=entry.output_tokens,
+                cached_tokens=entry.cached_tokens,
+                reasoning_tokens=entry.reasoning_tokens,
+                pricing_data=pricing_data,
+                cache_write_tokens=entry.cache_write_tokens,
+            )
+            for entry in usage_stats.request_usage_entries
+        )
+    if usage_stats.request_count > 1 and _tier_boundary_is_ambiguous(usage_stats, model_name, pricing_data):
+        raise UsageCostCalculationError(
+            f"Cannot calculate tiered cost for {usage_stats.request_count} aggregated requests "
+            "without a complete per-request token breakdown."
+        )
+    return calculate_openai_cost(
+        model_name=model_name,
+        input_tokens=usage_stats.input_tokens,
+        output_tokens=usage_stats.output_tokens,
+        cached_tokens=usage_stats.cached_tokens,
+        reasoning_tokens=usage_stats.reasoning_tokens,
+        pricing_data=pricing_data,
+        cache_write_tokens=usage_stats.cache_write_tokens,
     )
 
 
@@ -346,114 +412,64 @@ def calculate_usage_with_cost(
     pricing_data: PricingData | None = None,
     run_result: RunResultBase | None = None,
 ) -> UsageStats:
-    """Calculate cost for usage statistics and add it to the stats.
-
-    Uses a unified approach for all models:
-    1. Calculates costs per-response using pricing data (handles multi-agent correctly)
-    2. Falls back to single-model calculation using aggregated usage
-
-    Args:
-        usage_stats: Usage statistics without cost
-        model_name: Optional model name for cost calculation. If not provided,
-            will be extracted from run_result._main_agent_model if available.
-        pricing_data: Optional pre-loaded pricing data
-        run_result: Optional RunResult to extract cost from. Contains both
-            main agent's raw_responses and sub-agent responses with model info.
-
-    Returns:
-        UsageStats with cost calculated
-    """
-    # Extract main agent's model from run_result if not explicitly provided
+    """Add per-request cost to usage statistics."""
     if model_name is None and run_result is not None and hasattr(run_result, "_main_agent_model"):
         model_name = cast(_HasMainAgentModel, run_result)._main_agent_model
 
-    # Try per-response costing first for multi-agent correctness.
     if run_result:
         total_cost = 0.0
         calculated_any = False
 
         def _calculate_response_cost(response: ModelResponse, resp_model_name: str | None) -> float:
-            """Calculate cost for a single response given its model name."""
             if not resp_model_name:
                 return 0.0
 
-            response_usage = response.usage
-            response_reasoning_tokens = response_usage.output_tokens_details.reasoning_tokens or None
+            return _calculate_usage_cost(_usage_stats_from_sdk(response.usage), resp_model_name, pricing_data)
 
-            return calculate_openai_cost(
-                model_name=resp_model_name,
-                input_tokens=response_usage.input_tokens,
-                output_tokens=response_usage.output_tokens,
-                cached_tokens=response_usage.input_tokens_details.cached_tokens,
-                reasoning_tokens=response_reasoning_tokens,
-                pricing_data=pricing_data,
-            )
+        for response in run_result.raw_responses:
+            try:
+                response_cost = _calculate_response_cost(response, model_name)
+                if response_cost > 0:
+                    total_cost += response_cost
+                    calculated_any = True
+            except UsageCostCalculationError:
+                raise
+            except Exception as e:
+                logger.debug(f"Could not calculate cost for main agent response: {e}")
 
-        # Process main agent's raw_responses (use fallback model_name)
-        raw_responses = run_result.raw_responses
-        if len(raw_responses) > 0:
-            for response in raw_responses:
-                try:
-                    # For main agent responses, use the provided model_name as fallback
-                    response_cost = _calculate_response_cost(response, model_name)
-                    if response_cost > 0:
-                        total_cost += response_cost
-                        calculated_any = True
-                except Exception as e:
-                    logger.debug(f"Could not calculate cost for main agent response: {e}")
-
-        # Process sub-agent responses with their specific model names
-        # These are stored as tuples of (model_name, response)
         if hasattr(run_result, "_sub_agent_responses_with_model"):
             sub_agent_responses = cast(_HasSubAgentResponsesWithModel, run_result)._sub_agent_responses_with_model
-            if len(sub_agent_responses) > 0:
-                for item in sub_agent_responses:
-                    try:
-                        if isinstance(item, tuple) and len(item) == 2:
-                            sub_model_name, response = item
-                            response_cost = _calculate_response_cost(response, sub_model_name)
-                            if response_cost > 0:
-                                total_cost += response_cost
-                                calculated_any = True
-                    except Exception as e:
-                        logger.debug(f"Could not calculate cost for sub-agent response: {e}")
+            for item in sub_agent_responses:
+                try:
+                    if isinstance(item, tuple) and len(item) == 2:
+                        sub_model_name, response = item
+                        response_cost = _calculate_response_cost(response, sub_model_name)
+                        if response_cost > 0:
+                            total_cost += response_cost
+                            calculated_any = True
+                except UsageCostCalculationError:
+                    raise
+                except Exception as e:
+                    logger.debug(f"Could not calculate cost for sub-agent response: {e}")
 
         if calculated_any:
             usage_stats.total_cost = total_cost
             return usage_stats
 
-    # Fall back to single-model costing using aggregated usage.
     if model_name:
-        # Handle LiteLLM model name format (e.g., "litellm/anthropic/claude-sonnet-4").
         actual_model_name = model_name
         if "/" in model_name:
             parts = model_name.split("/")
             if len(parts) > 1:
                 actual_model_name = "/".join(parts[-2:]) if len(parts) > 2 else parts[-1]
 
-        cost = calculate_openai_cost(
-            model_name=actual_model_name,
-            input_tokens=usage_stats.input_tokens,
-            output_tokens=usage_stats.output_tokens,
-            cached_tokens=usage_stats.cached_tokens,
-            reasoning_tokens=usage_stats.reasoning_tokens,
-            pricing_data=pricing_data,
-        )
+        cost = _calculate_usage_cost(usage_stats, actual_model_name, pricing_data)
 
-        # If cost calculation failed with model name, try with full LiteLLM path
         if cost == 0.0 and model_name != actual_model_name:  # noqa: PLR2004
-            cost = calculate_openai_cost(
-                model_name=model_name,
-                input_tokens=usage_stats.input_tokens,
-                output_tokens=usage_stats.output_tokens,
-                cached_tokens=usage_stats.cached_tokens,
-                reasoning_tokens=usage_stats.reasoning_tokens,
-                pricing_data=pricing_data,
-            )
+            cost = _calculate_usage_cost(usage_stats, model_name, pricing_data)
 
         usage_stats.total_cost = cost
     else:
-        # No model name provided and couldn't extract from responses
         logger.debug("No model name available for cost calculation")
         usage_stats.total_cost = 0.0
 
@@ -461,22 +477,9 @@ def calculate_usage_with_cost(
 
 
 def format_usage_for_display(usage_stats: UsageStats, model_name: str | None = None) -> str:
-    """Format usage statistics for display in terminal or logs.
-
-    Args:
-        usage_stats: Usage statistics to format
-        model_name: Optional model name to include in output
-
-    Returns:
-        Formatted string
-    """
-    lines = []
+    lines = [f"Requests: {usage_stats.request_count}", "Tokens:", f"  Input: {usage_stats.input_tokens:,}"]
     if model_name:
-        lines.append(f"Model: {model_name}")
-
-    lines.append(f"Requests: {usage_stats.request_count}")
-    lines.append("Tokens:")
-    lines.append(f"  Input: {usage_stats.input_tokens:,}")
+        lines.insert(0, f"Model: {model_name}")
     if usage_stats.cached_tokens > 0:
         lines.append(f"  Cached: {usage_stats.cached_tokens:,}")
     lines.append(f"  Output: {usage_stats.output_tokens:,}")
