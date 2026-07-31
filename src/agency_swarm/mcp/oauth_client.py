@@ -34,6 +34,7 @@ from .oauth import (
     OAuthRedirectHandler,
     create_oauth_provider,
 )
+from .oauth_provider import ErrorCapturingOAuthClientProvider
 
 logger = logging.getLogger(__name__)
 
@@ -180,9 +181,18 @@ class MCPServerOAuthClient(MCPServer):
             self._authenticated = True
             logger.info(f"Successfully authenticated to OAuth MCP server: {self.name}")
 
-        except asyncio.CancelledError:
+        except asyncio.CancelledError as exc:
+            flow_error = (
+                self._oauth_provider.pop_last_flow_error()
+                if isinstance(self._oauth_provider, ErrorCapturingOAuthClientProvider)
+                else None
+            )
             logger.info("OAuth MCP client connect cancelled: %s", self.name)
             # Ensure we close any partially-opened async context managers even when cancelled.
+            if flow_error is not None:
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await self.cleanup()
+                raise flow_error from exc
             await self.cleanup()
             raise
         except Exception:
@@ -346,6 +356,7 @@ class MCPServerOAuthClient(MCPServer):
         cleanup gracefully since connections may have been made from different tasks.
         """
         logger.info(f"Cleaning up OAuth MCP client: {self.name}")
+        cancellation: asyncio.CancelledError | None = None
 
         # Cleanup discovery session
         await self._cleanup_discovery()
@@ -354,6 +365,8 @@ class MCPServerOAuthClient(MCPServer):
         if self._session_context and self._session_entered:
             try:
                 await self._session_context.__aexit__(None, None, None)
+            except asyncio.CancelledError as exc:
+                cancellation = exc
             except RuntimeError as e:
                 if "cancel scope" in str(e).lower() or "different task" in str(e).lower():
                     logger.debug(f"Session cleanup skipped (different task) for {self.name}")
@@ -371,6 +384,8 @@ class MCPServerOAuthClient(MCPServer):
         if self._transport_context and self._transport_entered:
             try:
                 await self._transport_context.__aexit__(None, None, None)
+            except asyncio.CancelledError as exc:
+                cancellation = cancellation or exc
             except RuntimeError as e:
                 if "cancel scope" in str(e).lower() or "different task" in str(e).lower():
                     logger.debug(f"Transport cleanup skipped (different task) for {self.name}")
@@ -383,11 +398,17 @@ class MCPServerOAuthClient(MCPServer):
 
         self._transport_context = None
         if self._http_client is not None:
-            with contextlib.suppress(Exception):
+            try:
                 await self._http_client.aclose()
+            except asyncio.CancelledError as exc:
+                cancellation = cancellation or exc
+            except Exception:
+                logger.exception(f"Error closing HTTP client for {self.name}")
         self._http_client = None
 
         logger.info(f"Cleaned up OAuth MCP client: {self.name}")
+        if cancellation is not None:
+            raise cancellation
 
     async def __aenter__(self):
         """Async context manager entry."""
