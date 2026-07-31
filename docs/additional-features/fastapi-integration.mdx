@@ -253,12 +253,11 @@ run_fastapi(
     },
     tools=[example_tool, test_tool],
     enable_realtime=True,
-    realtime_options={"provider": "openai", "model": "gpt-realtime-mini"},
+    realtime_options={"provider": "openai", "model": "gpt-realtime-2.1-mini"},
 )
 ```
 
 Endpoints follow the reference above; tool schemas mirror the definitions of `example_tool` and `test_tool`.
-
 </Accordion>
 
 ---

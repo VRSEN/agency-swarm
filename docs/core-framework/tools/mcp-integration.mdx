@@ -103,7 +103,7 @@ Server specified in the HostedMCPTool should be publicly accessible for the agen
 </Note>
 
 <Note>
-If the remote MCP server is **OAuth-protected**, pass the user's OAuth access token via `tool_config.authorization` (not via headers). See [OAuth for MCP Servers](/core-framework/tools/mcp-oauth).
+If the remote MCP server is **OAuth-protected**, direct `HostedMCPTool` usage requires the user's access token in `tool_config.authorization`, not in headers. With `run_fastapi`, leave `authorization` empty and wrap the protected tool with `enable_hosted_mcp_tool_oauth(...)` so Agency Swarm obtains and injects the token. See [OAuth for MCP Servers](/core-framework/tools/mcp-oauth).
 </Note>
 </Accordion>
 
@@ -160,7 +160,7 @@ local_agent = Agent(
     description="An agent that can use local MCP tools.",
     instructions="Use the available MCP tools to help users.",
     mcp_servers=[stdio_server],  # Local servers go here
-    model="gpt-5.4-mini",
+    model="gpt-5.6-luna",
 )
 
 # For hosted MCP servers, use tools parameter
@@ -169,7 +169,7 @@ hosted_agent = Agent(
     description="An agent that can use hosted MCP tools.",
     instructions="Use the available hosted MCP tools to help users.",
     tools=[hosted_tool],  # Hosted tools go here
-    model="gpt-5.4-mini",
+    model="gpt-5.6-luna",
 )
 ```
 </Accordion>

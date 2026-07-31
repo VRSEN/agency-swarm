@@ -15,12 +15,12 @@ Agency Swarm reuses your existing `Agent` definitions for voice. This page shows
 ## Prerequisites
 
 - Access to a supported realtime provider:
-  - OpenAI (`gpt-realtime-2` by default, or the cheaper `gpt-realtime-mini`)
-  - xAI (`grok-voice-think-fast-1.0`; legacy `grok-voice-fast-1.0` remains available for older deployments)
-- The standard install—no extras needed:
+  - OpenAI (`gpt-realtime-2` is the Agency Swarm default; see [OpenAI's realtime model catalog](https://developers.openai.com/api/docs/models/all#realtime-and-audio) for other models and current pricing)
+  - xAI (`grok-voice-think-fast-1.0` is the Agency Swarm default; see [xAI's Speech to Speech guide](https://docs.x.ai/developers/model-capabilities/audio/speech-to-speech#model-selection) for current model availability)
+- The voice extra:
 
 ```bash
-pip install agency-swarm
+pip install "agency-swarm[voice]"
 ```
 
 ## Define your agent (same API)

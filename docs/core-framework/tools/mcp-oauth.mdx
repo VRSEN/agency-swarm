@@ -8,7 +8,7 @@ icon: "key"
 
 This feature lets **your users** connect their personal accounts to AI agents you build. When a user wants your agent to access their Gmail, GitHub, or Notion, they simply click "Authorize" in their browser—just like signing into any app. The agent then stores their credentials and can access their data on their behalf.
 
-**Example:** You build a productivity agent. A user asks it to "summarize my unread emails." The agent prompts the user to authorize Gmail access. They click approve, and the agent can now read their inbox. Next time, it just works—no login required until the token expires.
+**Example:** You build a productivity agent. A user asks it to "summarize my unread emails." The agent prompts the user to authorize Gmail access. They click approve, and the agent can now read their inbox. Next time, the stored token is reused or refreshed automatically. The user signs in again only when the token can no longer be refreshed.
 
 ## Why use this?
 
@@ -27,7 +27,7 @@ Use this when your agency runs on a server and users authenticate from a web/mob
 - **Mode:** `saas_stream`
 - **Hosted MCP** (Notion): Configure `MCPServerOAuth(url=..., name=...)` and deploy your agency.
 - **Self-hosted MCP** (GitHub/Google): Run your OAuth-enabled MCP server + deploy your agency.
-- **HostedMCPTool (remote MCP)**: If you use `HostedMCPTool`, OAuth tokens must be provided via `tool_config.authorization`. In FastAPI, wrap only the OAuth-protected hosted tool with `enable_hosted_mcp_tool_oauth(...)`. Agency Swarm creates an in-memory callback-state registry by default. For multiple workers, an external `oauth_registry` shares callback state only; configure `oauth_token_path` on shared persistent storage as well, or use sticky routing or a single worker. Agency Swarm surfaces the auth URL via `event: oauth_redirect` and injects the access token once authorized. Public hosted MCP servers should stay unwrapped.
+- **HostedMCPTool (remote MCP)**: Outside FastAPI, provide the OAuth token through `tool_config.authorization`. In FastAPI, leave `authorization` empty and wrap only the OAuth-protected hosted tool with `enable_hosted_mcp_tool_oauth(...)`. Agency Swarm creates an in-memory callback-state registry by default. For multiple workers, an external `oauth_registry` shares callback state only; configure `oauth_token_path` on shared persistent storage as well, or use sticky routing or a single worker. Agency Swarm surfaces the auth URL via `event: oauth_redirect` and injects the access token once authorized. Public hosted MCP servers should stay unwrapped.
 - **Deferred auth trigger (all modes):** Startup never forces OAuth discovery. The model gets an `authenticate_mcp_server(server_name)` tool and OAuth starts only when that tool is invoked for a specific authenticated MCP server.
 - **Tool parameter contract:** `server_name` is constrained to the configured authenticated MCP server names for that agent.
 - **Streaming is required**: OAuth authorization is delivered via `event: oauth_redirect`, so use `POST /{agency}/get_response_stream`. The non-streaming `POST /{agency}/get_response` endpoint is not compatible with OAuth-enabled MCP servers.
@@ -85,7 +85,7 @@ agency.get_response_sync("List my repositories")  # Local run: browser opens for
 ```
 
 <Note>
-First run opens the browser for consent. Tokens are cached under `~/.agency-swarm/mcp-tokens/` and reused automatically. Users only re-authorize when tokens expire.
+The first run opens the browser for consent. Tokens are cached under `~/.agency-swarm/mcp-tokens/`, reused, and refreshed automatically. Users re-authorize only when refresh is no longer possible.
 </Note>
 
 ## OAuth flow at a glance
@@ -100,7 +100,7 @@ sequenceDiagram
 
     User->>Agent: Prompt needs OAuth data
     Agent->>Agent: Load cached tokens
-    alt Missing/expired
+    alt Missing or no longer refreshable
         Agent->>Browser: Open auth_url
         Browser->>Provider: User approves scopes
         Provider-->>Browser: Redirect with code/state
