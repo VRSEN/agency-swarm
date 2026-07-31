@@ -45,7 +45,7 @@ Set `include_web_search_sources=False` to skip this.
 
 ### System Reminders
 
-Use `system_reminders` when you want the agent to see a short reminder before model calls, without writing hooks.
+Use `system_reminders` when you want the agent to see a short reminder at a supported trigger, without writing hooks.
 
 ```python
 from agency_swarm import Agent
@@ -57,7 +57,7 @@ agent = Agent(
 )
 ```
 
-This reminder is added only to the model input. It is **not saved** in the thread history.
+A plain string or callable is added before the first model call of each top-level user turn. It appears only in the model input and is **not saved** in the thread history.
 
 For tool-heavy agents, add a checkpoint reminder:
 

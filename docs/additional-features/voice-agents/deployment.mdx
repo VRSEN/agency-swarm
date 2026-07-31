@@ -102,5 +102,5 @@ Deployment checklist:
 For a lower-level implementation (custom playback tracking, fine-grained buffering), see the [Twilio demo README](https://github.com/VRSEN/agency-swarm/blob/main/src/agency_swarm/ui/demos/realtime/twilio/README.md).
 
 <Note>
-Store your Twilio account SID and auth token in a local `.env`, export them before launching the demo, and keep `OPENAI_API_KEY` alongside them. The packaged server reads standard environment variables; no credentials live in source control.
+Set `OPENAI_API_KEY` or `XAI_API_KEY` for the realtime provider you selected. You configure the phone number and webhook in the Twilio Console, so this bridge does not read a Twilio account SID or auth token. Keep provider keys out of source control.
 </Note>

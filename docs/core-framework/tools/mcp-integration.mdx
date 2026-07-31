@@ -103,7 +103,7 @@ Server specified in the HostedMCPTool should be publicly accessible for the agen
 </Note>
 
 <Note>
-If the remote MCP server is **OAuth-protected**, pass the user's OAuth access token via `tool_config.authorization` (not via headers). See [OAuth for MCP Servers](/core-framework/tools/mcp-oauth).
+If the remote MCP server is **OAuth-protected**, direct `HostedMCPTool` usage requires the user's access token in `tool_config.authorization`, not in headers. With `run_fastapi`, leave `authorization` empty and wrap the protected tool with `enable_hosted_mcp_tool_oauth(...)` so Agency Swarm obtains and injects the token. See [OAuth for MCP Servers](/core-framework/tools/mcp-oauth).
 </Note>
 </Accordion>
 
