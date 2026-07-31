@@ -40,6 +40,7 @@ from .oauth_flow import (
     default_callback_handler,
     default_redirect_handler,
 )
+from .oauth_provider import ErrorCapturingOAuthClientProvider
 from .oauth_user import build_oauth_cache_segment, build_oauth_user_segment
 
 # Contextvar for per-user token isolation
@@ -461,7 +462,7 @@ async def create_oauth_provider(
 
         callback_handler = _wrapped_callback_handler
 
-    provider = OAuthClientProvider(
+    provider = ErrorCapturingOAuthClientProvider(
         server_url=server.url,
         client_metadata=client_metadata,
         storage=storage,

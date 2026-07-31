@@ -21,15 +21,25 @@ class OAuthStorageHooks(RunHooks):  # type: ignore[type-arg]
     Sets the user_id contextvar from MasterContext at the start of each run,
     enabling per-user token isolation in FileTokenStorage.
 
-    Usage:
-        from agency_swarm import Agency
-        from agency_swarm.mcp.oauth import OAuthStorageHooks
+    Agency installs this hook automatically when an agent has an OAuth MCP server:
 
+        from agency_swarm import Agency, Agent
+        from agency_swarm.mcp import MCPServerOAuth
+
+        agent = Agent(
+            name="OAuth Agent",
+            instructions="Use the MCP tools.",
+            mcp_servers=[
+                MCPServerOAuth(
+                    url="https://example.com/mcp",
+                    name="example",
+                )
+            ],
+        )
         agency = Agency(
-            [agent],
+            agent,
             oauth_token_path="./data",
             user_context={"user_id": "user_123"},
-            hooks=[OAuthStorageHooks()],
         )
     """
 

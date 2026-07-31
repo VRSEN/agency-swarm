@@ -3,7 +3,7 @@
 import json
 import os
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 from urllib.parse import urlsplit
@@ -20,6 +20,7 @@ from .oauth import (
     OAuthRedirectHandler,
     get_default_cache_dir,
 )
+from .oauth_provider import preserve_configured_scopes
 from .oauth_user import build_oauth_cache_segment
 
 
@@ -32,7 +33,7 @@ class MCPServerOAuth:
         name: Unique identifier for this server
         client_id: OAuth client ID (reads from env if None and use_env_credentials=True)
         client_secret: OAuth client secret (reads from env if None and use_env_credentials=True)
-        scopes: List of OAuth scopes to request
+        scopes: OAuth scopes to request. When omitted, discovery supplies the default.
         redirect_uri: OAuth redirect URI for callback
         cache_dir: Directory for token storage (uses default if None)
         storage: Custom token storage implementation (overrides cache_dir)
@@ -51,7 +52,7 @@ class MCPServerOAuth:
     name: str
     client_id: str | None = None
     client_secret: str | None = None
-    scopes: list[str] = field(default_factory=lambda: ["user"])
+    scopes: list[str] | None = None
     redirect_uri: str | None = None
     cache_dir: Path | None = None
     storage: TokenStorage | None = None
@@ -112,12 +113,12 @@ class MCPServerOAuth:
                 redirect_uris=[AnyUrl(self.get_redirect_uri())],
                 grant_types=["authorization_code", "refresh_token"],
                 response_types=["code"],
-                scope=" ".join(self.scopes),
+                scope=" ".join(self.scopes) if self.scopes is not None else None,
             )
 
         if self.get_client_secret() and metadata.token_endpoint_auth_method is None:
-            return metadata.model_copy(update={"token_endpoint_auth_method": "client_secret_basic"})
-        return metadata
+            metadata = metadata.model_copy(update={"token_endpoint_auth_method": "client_secret_basic"})
+        return preserve_configured_scopes(metadata, self.scopes)
 
     def get_client_id_optional(self) -> str | None:
         """Return the resolved client_id without raising."""
