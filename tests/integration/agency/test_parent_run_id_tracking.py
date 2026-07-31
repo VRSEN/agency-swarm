@@ -42,7 +42,7 @@ def three_level_agency():
     worker = Agent(
         name="Worker",
         instructions="You are a Worker. When asked to do work, respond with 'Work completed by Worker'.",
-        model="gpt-5.4-mini",
+        model="gpt-5.6-luna",
     )
 
     # Create Manager agent (middle layer - orchestrates Worker)
@@ -53,7 +53,7 @@ def three_level_agency():
             "Use send_message to ask Worker to 'Please do the work'. "
             "After receiving Worker's response, summarize as 'Manager coordinated: [Worker's response]'."
         ),
-        model="gpt-5.4-mini",
+        model="gpt-5.6-luna",
     )
 
     # Create CEO agent (top layer - orchestrates Manager)
@@ -64,7 +64,7 @@ def three_level_agency():
             "Use send_message to ask Manager to 'Please manage this task'. "
             "After receiving Manager's response, summarize as 'CEO executed: [Manager's response]'."
         ),
-        model="gpt-5.4-mini",
+        model="gpt-5.6-luna",
     )
 
     # Create agency with orchestration flows

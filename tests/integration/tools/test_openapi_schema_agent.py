@@ -31,7 +31,7 @@ async def test_agent_calls_pastebin_tool(monkeypatch):
     agent = Agent(
         name="PasteAgent",
         instructions="Use the pastebin tool.",
-        model="gpt-5.4-mini",
+        model="gpt-5.6-luna",
         schemas_folder=str(SCHEMA_PATH.parent),
         api_headers={"pastebin.json": {"Authorization": "Bearer test-token"}},
     )

@@ -56,7 +56,7 @@ class _NonOpenAIProvider(ModelProvider):
 class _CapturingResponsesModel(OpenAIResponsesModel):
     def __init__(self, *, base_url: str) -> None:
         super().__init__(
-            model="gpt-5.4-mini",
+            model="gpt-5.6-luna",
             openai_client=AsyncOpenAI(api_key="sk-test", base_url=base_url),
         )
         self.inputs: list[list[dict[str, Any]]] = []

@@ -118,7 +118,7 @@ def test_extract_usage_from_run_result_extracts_reasoning_and_sums_subagent_reas
 
     run_result = _make_run_result(usage=main_usage)
     typing.cast(_HasSubAgentResponsesWithModel, run_result)._sub_agent_responses_with_model = [
-        ("gpt-5.4-mini", ModelResponse(output=[], usage=sub_usage, response_id=None))
+        ("gpt-5.6-luna", ModelResponse(output=[], usage=sub_usage, response_id=None))
     ]
 
     stats = extract_usage_from_run_result(run_result)
@@ -574,8 +574,8 @@ def test_format_usage_for_display_includes_optional_fields() -> None:
         audio_tokens=1,
     )
 
-    formatted = format_usage_for_display(usage_stats, model_name="gpt-5.4-mini")
-    assert "Model: gpt-5.4-mini" in formatted
+    formatted = format_usage_for_display(usage_stats, model_name="gpt-5.6-luna")
+    assert "Model: gpt-5.6-luna" in formatted
     assert "Requests: 2" in formatted
     assert "Cached: 3" in formatted
     assert "Reasoning: 2" in formatted

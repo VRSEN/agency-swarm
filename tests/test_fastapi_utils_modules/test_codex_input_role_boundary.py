@@ -36,7 +36,7 @@ def _multi_provider_unknown_prefix_model_id(base_url: str) -> MultiProvider:
 
 
 def test_model_call_rewrites_system_replay_for_codex_openai_provider_run_config() -> None:
-    agent = Agent(name="A", instructions="normal agent instructions", model="gpt-5.4-mini")
+    agent = Agent(name="A", instructions="normal agent instructions", model="gpt-5.6-luna")
     run_config = RunConfig(
         model_provider=OpenAIProvider(api_key="sk-test", base_url=CODEX_BASE_URL),
     )
@@ -58,7 +58,7 @@ def test_model_call_keeps_system_replay_for_codex_openai_provider_base_url_with_
 ) -> None:
     from agency_swarm.messages import codex_input
 
-    agent = Agent(name="A", instructions="normal agent instructions", model="gpt-5.4-mini")
+    agent = Agent(name="A", instructions="normal agent instructions", model="gpt-5.6-luna")
     run_config = RunConfig(
         model_provider=OpenAIProvider(api_key="sk-test", base_url=CODEX_BASE_URL),
     )
@@ -83,7 +83,7 @@ def test_model_call_rewrites_system_replay_for_lazy_openai_provider_codex_env(
 ) -> None:
     from agency_swarm.messages import codex_input
 
-    agent = Agent(name="A", instructions="normal agent instructions", model="gpt-5.4-mini")
+    agent = Agent(name="A", instructions="normal agent instructions", model="gpt-5.6-luna")
     run_config = RunConfig(
         model_provider=OpenAIProvider(api_key="sk-test"),
     )
@@ -98,7 +98,7 @@ def test_model_call_rewrites_system_replay_for_default_provider_codex_env(
 ) -> None:
     from agency_swarm.messages import codex_input
 
-    agent = Agent(name="A", instructions="normal agent instructions", model="gpt-5.4-mini")
+    agent = Agent(name="A", instructions="normal agent instructions", model="gpt-5.6-luna")
     monkeypatch.setattr(codex_input, "get_default_openai_client", lambda: None)
     monkeypatch.setenv("OPENAI_BASE_URL", CODEX_BASE_URL)
 
@@ -106,7 +106,7 @@ def test_model_call_rewrites_system_replay_for_default_provider_codex_env(
 
 
 def test_model_call_rewrites_system_replay_for_codex_multi_provider_base_url() -> None:
-    agent = Agent(name="A", instructions="normal agent instructions", model="gpt-5.4-mini")
+    agent = Agent(name="A", instructions="normal agent instructions", model="gpt-5.6-luna")
     run_config = RunConfig(
         model_provider=MultiProvider(openai_api_key="sk-test", openai_base_url=CODEX_BASE_URL),
     )
@@ -178,7 +178,7 @@ def test_model_call_rewrites_system_replay_for_nested_codex_multi_provider_route
 
 
 def test_model_call_rewrites_system_replay_for_codex_multi_provider_client() -> None:
-    agent = Agent(name="A", instructions="normal agent instructions", model="gpt-5.4-mini")
+    agent = Agent(name="A", instructions="normal agent instructions", model="gpt-5.6-luna")
     run_config = RunConfig(
         model_provider=MultiProvider(openai_client=AsyncOpenAI(api_key="sk-test", base_url=CODEX_BASE_URL)),
     )
@@ -196,7 +196,7 @@ def test_model_call_rewrites_system_replay_for_codex_multi_provider_unknown_pref
 
 
 def test_model_call_keeps_system_replay_for_non_codex_openai_provider_run_config() -> None:
-    agent = Agent(name="A", instructions="normal agent instructions", model="gpt-5.4-mini")
+    agent = Agent(name="A", instructions="normal agent instructions", model="gpt-5.6-luna")
     run_config = RunConfig(
         model_provider=OpenAIProvider(api_key="sk-test", base_url=OPENAI_BASE_URL),
     )
@@ -209,7 +209,7 @@ def test_model_call_rewrites_system_replay_for_non_codex_openai_provider_base_ur
 ) -> None:
     from agency_swarm.messages import codex_input
 
-    agent = Agent(name="A", instructions="normal agent instructions", model="gpt-5.4-mini")
+    agent = Agent(name="A", instructions="normal agent instructions", model="gpt-5.6-luna")
     run_config = RunConfig(
         model_provider=OpenAIProvider(api_key="sk-test", base_url=OPENAI_BASE_URL),
     )
@@ -225,7 +225,7 @@ def test_model_call_keeps_system_replay_for_explicit_non_openai_provider(
 ) -> None:
     from agency_swarm.messages import codex_input
 
-    agent = Agent(name="A", instructions="normal agent instructions", model="gpt-5.4-mini")
+    agent = Agent(name="A", instructions="normal agent instructions", model="gpt-5.6-luna")
     run_config = RunConfig(model_provider=_NonOpenAIProvider())
     monkeypatch.setattr(
         codex_input, "get_default_openai_client", lambda: AsyncOpenAI(api_key="sk-test", base_url=CODEX_BASE_URL)
@@ -253,7 +253,7 @@ def test_model_call_keeps_system_replay_for_explicit_non_codex_openai_client(
 ) -> None:
     from agency_swarm.messages import codex_input
 
-    agent = Agent(name="A", instructions="normal agent instructions", model="gpt-5.4-mini")
+    agent = Agent(name="A", instructions="normal agent instructions", model="gpt-5.6-luna")
     run_config = RunConfig(
         model_provider=OpenAIProvider(openai_client=AsyncOpenAI(api_key="sk-test", base_url=OPENAI_BASE_URL)),
     )

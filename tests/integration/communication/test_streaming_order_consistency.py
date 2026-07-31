@@ -173,8 +173,8 @@ async def test_full_streaming_flow_hardcoded_sequence(
         )
         user_message = "Start."
     else:
-        main_model = "gpt-5.4-mini"
-        helper_model = "gpt-5.4-mini"
+        main_model = "gpt-5.6-luna"
+        helper_model = "gpt-5.6-luna"
         main_model_settings = ModelSettings(
             reasoning=Reasoning(effort="low"),
             tool_choice="get_market_data",
@@ -387,7 +387,7 @@ async def test_nested_delegation_streaming() -> None:
             "Then use send_message to ask AgentB to process and analyze data. "
             "Finally respond with 'Complete'."
         ),
-        model="gpt-5.4-mini",
+        model="gpt-5.6-luna",
         tools=[],
     )
 
@@ -400,7 +400,7 @@ async def test_nested_delegation_streaming() -> None:
             "Then use process_data tool with the response. "
             "Finally respond 'Processed'."
         ),
-        model="gpt-5.4-mini",
+        model="gpt-5.6-luna",
         model_settings=ModelSettings(tool_choice="required"),
         tools=[process_data],
     )
@@ -409,7 +409,7 @@ async def test_nested_delegation_streaming() -> None:
         name="AgentC",
         description="Risk analyzer",
         instructions="When asked: use analyze_risk tool and respond 'Risk analyzed'.",
-        model="gpt-5.4-mini",
+        model="gpt-5.6-luna",
         model_settings=ModelSettings(tool_choice="required"),
         tools=[analyze_risk],
     )
