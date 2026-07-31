@@ -160,7 +160,7 @@ local_agent = Agent(
     description="An agent that can use local MCP tools.",
     instructions="Use the available MCP tools to help users.",
     mcp_servers=[stdio_server],  # Local servers go here
-    model="gpt-5.4-mini",
+    model="gpt-5.6-luna",
 )
 
 # For hosted MCP servers, use tools parameter
@@ -169,7 +169,7 @@ hosted_agent = Agent(
     description="An agent that can use hosted MCP tools.",
     instructions="Use the available hosted MCP tools to help users.",
     tools=[hosted_tool],  # Hosted tools go here
-    model="gpt-5.4-mini",
+    model="gpt-5.6-luna",
 )
 ```
 </Accordion>

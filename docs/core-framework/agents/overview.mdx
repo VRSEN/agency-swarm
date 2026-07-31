@@ -57,7 +57,7 @@ In agency swarm, to create an agent, you need to instantiate the `Agent` class.
 | Name *(required)* | `name` | The name of the agent. |
 | Instructions *(optional)* | `instructions` | The instructions for the agent. Will be used as the "system prompt" when this agent is invoked. Can be a string or a function that dynamically generates instructions. Default: `None` |
 | Description *(optional)* | `description` | A description of the agent's role or purpose, used to convey agent's role to other agents. Default: `None` |
-| Model *(optional)* | `model` | The model implementation to use when invoking the LLM. Omitting it or passing `model=None` selects Agency Swarm's `gpt-5.6-luna` default. To keep a different model, pass its name or model object explicitly, such as `model="gpt-5.4-mini"`. |
+| Model *(optional)* | `model` | The model implementation to use when invoking the LLM. Omitting it or passing `model=None` selects Agency Swarm's `gpt-5.6-luna` default. To use a different supported model, pass its name or model object explicitly. |
 | Model Settings *(optional)* | `model_settings` | Configures model-specific tuning parameters (e.g. temperature, top_p). See [ModelSettings documentation](https://openai.github.io/openai-agents-python/ref/model_settings/) for details. Agency Swarm applies the model-specific SDK defaults, then fills unset fields with `truncation="auto"` and `include_usage=True`. The default `gpt-5.6-luna` reasoning effort is `"none"`. |
 | Tools *(optional)* | `tools` | A list of tools that the agent can use. Default: `[]` |
 | Tools Folder *(optional)* | `tools_folder` | Path to a directory containing tool definitions. Tools are automatically discovered and loaded from this directory. Supports both BaseTool subclasses and modern FunctionTool instances. Default: `None` |
@@ -107,7 +107,7 @@ from agency_swarm import Agent, ModelSettings, Reasoning
 example_agent = Agent(
     name="agent_name",
     description="agent_description",
-    model="gpt-5.4-mini",
+    model="gpt-5.6-luna",
     instructions="./instructions.md",
     files_folder="./files",
     tools_folder="./tools",
