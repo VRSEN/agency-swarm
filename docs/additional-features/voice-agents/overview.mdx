@@ -4,7 +4,30 @@ description: "Design voice-first assistants with the same Agency Swarm agents yo
 icon: "microphone"
 ---
 
-Agency Swarm reuses your existing `Agent` definitions for voice. This page shows how to adapt agents for spoken conversations; deployment lives on the dedicated [Deployment](./deployment) guide.
+Agency Swarm reuses your existing `Agent` definitions for voice. This page shows how to adapt agents for spoken conversations.
+
+## Try it locally
+
+Save this as `voice_demo.py`. It starts the packaged browser client on your computer, so you can speak with your agent before you host anything.
+
+```python
+from agency_swarm import Agency, Agent
+from agency_swarm.ui.demos.realtime import RealtimeDemoLauncher
+
+voice_agent = Agent(
+    name="Voice Concierge",
+    instructions="You are a friendly concierge. Keep answers brief.",
+    voice="marin",
+)
+
+RealtimeDemoLauncher.start(Agency(voice_agent), host="127.0.0.1")
+```
+
+1. Install the voice extra: `pip install "agency-swarm[voice]"`.
+2. Set `OPENAI_API_KEY`, then run `python voice_demo.py`.
+3. Open [http://127.0.0.1:8000](http://127.0.0.1:8000), click **Connect**, and allow microphone access.
+
+When you are ready to host the browser client or connect phone calls, use the [Deployment](./deployment) guide.
 
 ## What you can build
 
