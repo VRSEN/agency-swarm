@@ -1,13 +1,19 @@
 import copy
 import warnings
+from pathlib import Path
 from typing import Any
 
 import pytest
-from agents import RunHooks
+from agents import RunHooks, function_tool
+from mcp.shared.auth import OAuthToken
 
-from agency_swarm import Agency
-from agency_swarm.mcp.oauth import MCPServerOAuth, get_oauth_user_id, set_oauth_user_id
+from agency_swarm import Agency, Agent
+from agency_swarm.mcp.oauth import FileTokenStorage, MCPServerOAuth, get_oauth_user_id, set_oauth_user_id
+from agency_swarm.mcp.oauth_user import build_oauth_user_segment
+from agency_swarm.tools.mcp_loop_proxy import LoopAffineAsyncProxy
+from agency_swarm.tools.mcp_persistence import PersistentMCPServerManager
 from agency_swarm.utils.thread import ThreadManager
+from tests.deterministic_model import DeterministicModel
 from tests.test_agency_modules._response_test_helpers import CapturingAgent, _make_agent
 
 # --- Fixtures ---
@@ -36,6 +42,26 @@ class OAuthContextRecordingHooks(RunHooks):
 
     async def on_agent_start(self, context: Any, agent: Any) -> None:
         self.user_ids_on_start.append(get_oauth_user_id())
+
+
+class _TokenPersistingServer:
+    """Small MCP-driver stand-in that writes through the real token storage."""
+
+    name = "token-storage"
+    session: object | None = None
+
+    def __init__(self, cache_dir: Path) -> None:
+        self.storage = FileTokenStorage(cache_dir=cache_dir, server_name=self.name)
+
+    async def connect(self) -> None:
+        self.session = object()
+
+    async def cleanup(self) -> None:
+        self.session = None
+
+    async def store_token(self, token: str) -> str:
+        await self.storage.set_tokens(OAuthToken(access_token=token, token_type="Bearer"))
+        return self.storage._get_user_cache_dir().name
 
 
 @pytest.mark.asyncio
@@ -231,6 +257,49 @@ async def test_agency_get_response_stream_preserves_oauth_hooks_with_hooks_overr
     assert hooks_override.user_ids_on_start == ["agency-user"]
     assert oauth_agent.last_hooks_override is not hooks_override
     assert get_oauth_user_id() is None
+
+
+@pytest.mark.asyncio
+async def test_agency_user_context_isolates_oauth_tokens_through_tool_driver(tmp_path: Path) -> None:
+    """Documented Agency wiring must reach the storage driver used by OAuth tools."""
+    manager = PersistentMCPServerManager()
+    server = _TokenPersistingServer(tmp_path)
+    await manager.ensure_connected(server)
+    proxy = LoopAffineAsyncProxy(server, manager)
+
+    @function_tool
+    async def store_data(key: str, value: str) -> str:
+        return await proxy.store_token(value)
+
+    try:
+        bucket_names: list[str] = []
+        for user_id, token in (("user_123", "token123"), ("user_456", "token456")):
+            agent = Agent(
+                name="OAuth Agent",
+                instructions="Store tokens when requested.",
+                model=DeterministicModel(),
+                tools=[store_data],
+                mcp_servers=[MCPServerOAuth(url="http://127.0.0.1:1/mcp", name="oauth")],
+            )
+            agency = Agency(agent, oauth_token_path=str(tmp_path), user_context={"user_id": user_id})
+
+            result = await agency.get_response(f"store token with value {token}")
+            bucket_names.append(result.final_output)
+
+        expected_buckets = [
+            build_oauth_user_segment(user_id, max_prefix_length=120) for user_id in ("user_123", "user_456")
+        ]
+        assert bucket_names == expected_buckets
+        assert (
+            "token123"
+            in (tmp_path / expected_buckets[0] / server.storage.server_cache_segment / "tokens.json").read_text()
+        )
+        assert (
+            "token456"
+            in (tmp_path / expected_buckets[1] / server.storage.server_cache_segment / "tokens.json").read_text()
+        )
+    finally:
+        await manager.shutdown()
 
 
 @pytest.mark.asyncio

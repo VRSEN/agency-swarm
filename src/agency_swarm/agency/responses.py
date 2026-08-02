@@ -234,27 +234,26 @@ async def get_response(
     previous_oauth_user_id = _set_attach_oauth_user_context(agency, context_override)
     try:
         await attach_persistent_mcp_servers(agency)
+        message_for_call: str | list[TResponseInputItem] = message
+        if _should_add_recipient_switch_reminder(agency_context=agency_context, target_agent_name=target_agent.name):
+            message_for_call = _build_user_message_with_recipient_reminder(message, target_agent=target_agent)
+
+        return await target_agent.get_response(
+            message=message_for_call,
+            sender_name=None,
+            context_override=context_override,
+            hooks_override=effective_hooks,
+            run_config_override=run_config,
+            file_ids=file_ids,
+            additional_instructions=additional_instructions,
+            agency_context=agency_context,  # Pass stateless context
+            **kwargs,
+        )
     finally:
         if previous_oauth_user_id is not _NO_OAUTH_CONTEXT:
             from agency_swarm.mcp.oauth import set_oauth_user_id
 
             set_oauth_user_id(cast("str | None", previous_oauth_user_id))
-
-    message_for_call: str | list[TResponseInputItem] = message
-    if _should_add_recipient_switch_reminder(agency_context=agency_context, target_agent_name=target_agent.name):
-        message_for_call = _build_user_message_with_recipient_reminder(message, target_agent=target_agent)
-
-    return await target_agent.get_response(
-        message=message_for_call,
-        sender_name=None,
-        context_override=context_override,
-        hooks_override=effective_hooks,
-        run_config_override=run_config,
-        file_ids=file_ids,
-        additional_instructions=additional_instructions,
-        agency_context=agency_context,  # Pass stateless context
-        **kwargs,
-    )
 
 
 def get_response_sync(
@@ -380,38 +379,39 @@ def get_response_stream(
                 previous_oauth_user_id = _set_attach_oauth_user_context(agency, enhanced_context)
                 try:
                     await attach_persistent_mcp_servers(agency)
+                    message_for_call: str | list[TResponseInputItem] = message
+                    if isinstance(message, str) and not message.strip():
+                        message_for_call = message
+                    elif _should_add_recipient_switch_reminder(
+                        agency_context=agency_context,
+                        target_agent_name=target_agent.name,
+                    ):
+                        message_for_call = _build_user_message_with_recipient_reminder(
+                            message, target_agent=target_agent
+                        )
+
+                    primary_stream = target_agent.get_response_stream(
+                        message=message_for_call,
+                        sender_name=None,
+                        context_override=enhanced_context,
+                        hooks_override=effective_hooks,
+                        run_config_override=run_config_override,
+                        file_ids=file_ids,
+                        additional_instructions=additional_instructions,
+                        agency_context=agency_context,
+                        **kwargs,
+                    )
+
+                    if isinstance(primary_stream, StreamingRunResponse):
+                        wrapper._adopt_stream(primary_stream)
+
+                    async for event in agency.event_stream_merger.merge_streams(primary_stream, streaming_context):
+                        yield event
                 finally:
                     if previous_oauth_user_id is not _NO_OAUTH_CONTEXT:
                         from agency_swarm.mcp.oauth import set_oauth_user_id
 
                         set_oauth_user_id(cast("str | None", previous_oauth_user_id))
-
-                message_for_call: str | list[TResponseInputItem] = message
-                if isinstance(message, str) and not message.strip():
-                    message_for_call = message
-                elif _should_add_recipient_switch_reminder(
-                    agency_context=agency_context,
-                    target_agent_name=target_agent.name,
-                ):
-                    message_for_call = _build_user_message_with_recipient_reminder(message, target_agent=target_agent)
-
-                primary_stream = target_agent.get_response_stream(
-                    message=message_for_call,
-                    sender_name=None,
-                    context_override=enhanced_context,
-                    hooks_override=effective_hooks,
-                    run_config_override=run_config_override,
-                    file_ids=file_ids,
-                    additional_instructions=additional_instructions,
-                    agency_context=agency_context,
-                    **kwargs,
-                )
-
-                if isinstance(primary_stream, StreamingRunResponse):
-                    wrapper._adopt_stream(primary_stream)
-
-                async for event in agency.event_stream_merger.merge_streams(primary_stream, streaming_context):
-                    yield event
         except asyncio.CancelledError:
             wrapper._resolve_final_result(None)
             raise
