@@ -41,6 +41,7 @@ pip install -U agency-swarm
 - **Model backends:**
   - **OpenAI (native):** GPT-5 family, GPT-4o, etc.
   - **Via LiteLLM (router):** Anthropic (Claude), Google (Gemini), Grok (xAI), Azure OpenAI, **OpenRouter (gateway)**, etc.
+  - **[OrcaRouter (gateway)](https://www.orcarouter.ai):** use any OrcaRouter model with `Agent(model="orcarouter/<provider>/<model>")` and `ORCAROUTER_API_KEY`
 - **OS**: macOS, Linux, Windows
 
 If you hit environment issues, see the [Installation guide](https://agency-swarm.ai/welcome/installation).
