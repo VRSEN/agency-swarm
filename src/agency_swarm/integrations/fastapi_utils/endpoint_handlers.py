@@ -111,6 +111,7 @@ from agency_swarm.utils.openrouter import (
     get_openrouter_model_name,
     is_openrouter_model_name,
 )
+from agency_swarm.utils.orcarouter import build_orcarouter_chat_model, is_orcarouter_model_name
 from agency_swarm.utils.serialization import serialize
 from agency_swarm.utils.usage_tracking import (
     calculate_usage_with_cost,
@@ -334,6 +335,14 @@ def _apply_request_model_override(agent: Agent, model_name: str, config: ClientC
             should_replay_reasoning_content=getattr(model, "should_replay_reasoning_content", None),
         )
         return gateway_client is not None or (source_openrouter_model is None and _has_request_openai_overrides(config))
+
+    if is_orcarouter_model_name(model_name):
+        gateway_client = _resolve_request_gateway_client(agent, config)
+        if gateway_client is not None:
+            agent.model = build_orcarouter_chat_model(model_name, openai_client=gateway_client)
+        else:
+            agent.model = build_orcarouter_chat_model(model_name)
+        return True
 
     if get_openrouter_model_name(model) is not None:
         if _is_litellm_model(model_name):

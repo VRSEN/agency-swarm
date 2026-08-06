@@ -11,6 +11,7 @@ from agency_swarm.ui.demos.copilot import CopilotDemoLauncher
 from agency_swarm.ui.generators.html_generator import HTMLVisualizationGenerator
 from agency_swarm.utils.model_utils import get_agent_capabilities
 from agency_swarm.utils.openrouter import get_openrouter_model_name
+from agency_swarm.utils.orcarouter import get_orcarouter_model_name
 
 if TYPE_CHECKING:
     from .core import Agency
@@ -212,6 +213,10 @@ def _describe_model(model: Any) -> str:
     openrouter_model = get_openrouter_model_name(model)
     if openrouter_model is not None:
         return openrouter_model
+
+    orcarouter_model = get_orcarouter_model_name(model)
+    if orcarouter_model is not None:
+        return orcarouter_model
 
     model_name = getattr(model, "model", None)
     if isinstance(model_name, str):
