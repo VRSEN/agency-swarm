@@ -8,6 +8,7 @@ from openai import AsyncOpenAI
 from agency_swarm import Agency, Agent
 from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
 from agency_swarm.utils.openrouter import get_openrouter_model_name, is_openrouter_model_name
+from agency_swarm.utils.orcarouter import get_orcarouter_model_name, is_orcarouter_model_name
 
 
 def get_allowed_dirs_for_metadata(allowed_local_dirs: Sequence[str | Path]) -> list[str]:
@@ -53,7 +54,9 @@ class RequestOverridePolicy:
 
         base_client: AsyncOpenAI | None = None
         selected_agent = _get_upload_client_agent(agency, recipient_agent=recipient_agent)
-        if not _uses_openrouter_request_client(selected_agent, self.config):
+        if not _uses_openrouter_request_client(selected_agent, self.config) and not _uses_orcarouter_request_client(
+            selected_agent, self.config
+        ):
             if selected_agent is not None:
                 base_client = _get_openai_client_from_agent(selected_agent)
                 if base_client is None:
@@ -89,6 +92,12 @@ def _uses_openrouter_request_client(agent: Agent | None, config: ClientConfig) -
     if isinstance(config.model, str) and is_openrouter_model_name(config.model):
         return True
     return agent is not None and get_openrouter_model_name(agent.model) is not None
+
+
+def _uses_orcarouter_request_client(agent: Agent | None, config: ClientConfig) -> bool:
+    if isinstance(config.model, str) and is_orcarouter_model_name(config.model):
+        return True
+    return agent is not None and get_orcarouter_model_name(agent.model) is not None
 
 
 def _get_openai_client_from_agent(agent: Agent) -> AsyncOpenAI | None:

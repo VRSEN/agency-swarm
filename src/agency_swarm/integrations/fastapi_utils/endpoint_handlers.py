@@ -111,6 +111,13 @@ from agency_swarm.utils.openrouter import (
     get_openrouter_model_name,
     is_openrouter_model_name,
 )
+from agency_swarm.utils.orcarouter import (
+    ORCAROUTER_API_KEY_ENV,
+    ORCAROUTER_BASE_URL,
+    build_orcarouter_chat_model,
+    get_orcarouter_model_name,
+    is_orcarouter_model_name,
+)
 from agency_swarm.utils.serialization import serialize
 from agency_swarm.utils.usage_tracking import (
     calculate_usage_with_cost,
@@ -335,6 +342,40 @@ def _apply_request_model_override(agent: Agent, model_name: str, config: ClientC
         )
         return gateway_client is not None or (source_openrouter_model is None and _has_request_openai_overrides(config))
 
+    if is_orcarouter_model_name(model_name):
+        source_orcarouter_model = get_orcarouter_model_name(model)
+        gateway_client = None
+        orcarouter_client = None
+        if source_orcarouter_model is not None:
+            gateway_client = _resolve_request_gateway_client(agent, config)
+            orcarouter_client = gateway_client if gateway_client is not None else _get_openai_client_from_agent(agent)
+        elif _has_request_openai_overrides(config):
+            source_client = _get_openai_client_from_agent(agent)
+            if source_client is not None and _should_copy_source_openai_client_for_orcarouter(source_client, config):
+                orcarouter_client = _copy_source_openai_client_for_orcarouter(source_client, config)
+        agent.model = build_orcarouter_chat_model(
+            model_name,
+            api_key=None if orcarouter_client is not None or config is None else config.api_key,
+            base_url=None if orcarouter_client is not None or config is None else config.base_url,
+            default_headers=_orcarouter_override_default_headers(config, orcarouter_client),
+            openai_client=orcarouter_client,
+        )
+        return gateway_client is not None or (source_orcarouter_model is None and _has_request_openai_overrides(config))
+
+    if get_orcarouter_model_name(model) is not None:
+        if _is_litellm_model(model_name):
+            _apply_request_litellm_model(agent, model_name)
+            return False
+        if not _should_wrap_orcarouter_override_with_openai_client(model_name, config):
+            agent.model = model_name
+            return False
+        client = _resolve_openai_client_after_orcarouter_override(config)
+        if client is None:
+            agent.model = model_name
+            return False
+        agent.model = OpenAIChatCompletionsModel(model=model_name, openai_client=client)
+        return _has_request_openai_overrides(config)
+
     if get_openrouter_model_name(model) is not None:
         if _is_litellm_model(model_name):
             _apply_request_litellm_model(agent, model_name)
@@ -402,6 +443,13 @@ def _should_reuse_source_openai_client(client: AsyncOpenAI | None) -> bool:
         return False
     base_url = str(client.base_url).rstrip("/")
     return base_url == OPENROUTER_BASE_URL
+
+
+def _should_reuse_source_orcarouter_client(client: AsyncOpenAI | None) -> bool:
+    if client is None:
+        return False
+    base_url = str(client.base_url).rstrip("/")
+    return base_url == ORCAROUTER_BASE_URL
 
 
 def _should_preserve_source_openai_headers(client: AsyncOpenAI | None) -> bool:
@@ -482,6 +530,68 @@ def _resolve_openai_client_after_openrouter_override(config: ClientConfig | None
         base_url=config.base_url,
         default_headers=config.default_headers,
     )
+
+
+def _should_copy_source_openai_client_for_orcarouter(
+    client: AsyncOpenAI | None,
+    config: ClientConfig | None = None,
+) -> bool:
+    if client is None:
+        return False
+    if client is get_default_openai_client():
+        return False
+    base_url = str(client.base_url).rstrip("/")
+    if base_url != "https://api.openai.com/v1":
+        return False
+    return bool((None if config is None else config.api_key) or os.getenv(ORCAROUTER_API_KEY_ENV))
+
+
+def _copy_source_openai_client_for_orcarouter(
+    client: AsyncOpenAI,
+    config: ClientConfig | None,
+) -> AsyncOpenAI:
+    return client.copy(
+        api_key=(None if config is None else config.api_key) or os.getenv(ORCAROUTER_API_KEY_ENV),
+        base_url=(None if config is None else config.base_url) or ORCAROUTER_BASE_URL,
+        default_headers=(None if config is None else config.default_headers) or _copyable_source_openai_headers(client),
+    )
+
+
+def _orcarouter_override_default_headers(
+    config: ClientConfig | None,
+    orcarouter_client: AsyncOpenAI | None,
+) -> dict[str, str] | None:
+    if orcarouter_client is not None:
+        return None
+    if config is not None and config.default_headers is not None:
+        return config.default_headers
+    return None
+
+
+def _resolve_openai_client_after_orcarouter_override(config: ClientConfig | None) -> AsyncOpenAI | None:
+    """Build a non-OrcaRouter OpenAI client when an OrcaRouter wrapper swaps away."""
+    base_client = get_default_openai_client()
+    if config is None:
+        return base_client
+    if base_client is None:
+        if config.api_key is None and config.base_url is None:
+            return None
+        return AsyncOpenAI(
+            api_key=config.api_key,
+            base_url=config.base_url,
+            default_headers=config.default_headers,
+        )
+    return base_client.copy(
+        api_key=config.api_key,
+        base_url=config.base_url,
+        default_headers=config.default_headers,
+    )
+
+
+def _should_wrap_orcarouter_override_with_openai_client(model_name: str, config: ClientConfig | None) -> bool:
+    if _is_openai_model_name(model_name):
+        return True
+    return config is not None and config.base_url is not None
 
 
 def _rebuild_openai_responses_model(
@@ -605,7 +715,7 @@ def apply_openai_client_config(agency: Agency, config: ClientConfig) -> None:
         # File attachment handling uses agent.client / agent.client_sync directly.
         # Keep those clients request-scoped too, so file_ids work without server env keys.
         if openai_overrides_present:
-            if _uses_openrouter_request_client(agent, config):
+            if _uses_openrouter_request_client(agent, config) or _uses_orcarouter_request_client(agent, config):
                 _apply_openrouter_file_clients_to_agent(agent)
             else:
                 _apply_request_scoped_openai_clients_to_agent(agent, config)
@@ -2232,6 +2342,12 @@ def _uses_openrouter_request_client(agent: Agent, config: ClientConfig) -> bool:
     return get_openrouter_model_name(agent.model) is not None
 
 
+def _uses_orcarouter_request_client(agent: Agent, config: ClientConfig) -> bool:
+    if isinstance(config.model, str) and is_orcarouter_model_name(config.model):
+        return True
+    return get_orcarouter_model_name(agent.model) is not None
+
+
 def _apply_openrouter_file_clients_to_agent(agent: Agent) -> None:
     """Keep direct file clients off the OpenRouter chat client."""
     async_client = _get_cached_openai_client_from_agent(agent) or get_default_openai_client()
@@ -2731,6 +2847,8 @@ def _agent_supports_openai_client_override(agent: Agent) -> bool:
     """Return True only when request OpenAI client overrides are applicable."""
     if get_openrouter_model_name(agent.model) is not None:
         return True
+    if get_orcarouter_model_name(agent.model) is not None:
+        return True
     model_name = _get_model_name_for_override_logging(agent)
     if model_name is None:
         return False
@@ -2758,6 +2876,8 @@ def _log_unsupported_client_override(agent: Agent) -> None:
 def _build_openai_model_for_client(model_name: str, client: AsyncOpenAI, *, chat: bool = False) -> Model:
     if _should_reuse_source_openai_client(client):
         return build_openrouter_chat_model(model_name, openai_client=client)
+    if _should_reuse_source_orcarouter_client(client):
+        return build_orcarouter_chat_model(model_name, openai_client=client)
     if chat:
         return OpenAIChatCompletionsModel(model=model_name, openai_client=client)
     return OpenAIResponsesModel(model=model_name, openai_client=client)

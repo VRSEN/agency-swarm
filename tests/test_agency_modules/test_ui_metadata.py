@@ -73,6 +73,21 @@ class TestMetadataDetails:
 
         assert agent_node["data"]["model"] == "openrouter/anthropic/claude-sonnet-4.5"
 
+    def test_get_metadata_uses_orcarouter_model_alias(self):
+        from agency_swarm.utils.orcarouter import build_orcarouter_chat_model
+
+        model = build_orcarouter_chat_model(
+            "orcarouter/openai/gpt-5",
+            openai_client=AsyncOpenAI(api_key="sk-orca-test", base_url="https://api.orcarouter.ai/v1"),
+        )
+        agent = Agent(name="OrcaRouterAgent", instructions="Use OrcaRouter", model=model)
+        agency = Agency(agent)
+
+        payload = agency.get_metadata()
+        agent_node = next(n for n in payload["nodes"] if n["id"] == "OrcaRouterAgent")
+
+        assert agent_node["data"]["model"] == "orcarouter/openai/gpt-5"
+
     def test_hosted_mcp_tools_unique_ids(self):
         """HostedMCPTool instances should produce unique tool nodes and server labels."""
         from agents import HostedMCPTool
