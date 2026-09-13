@@ -3,16 +3,16 @@ repos:
     rev: v6.0.0
     hooks:
       - id: trailing-whitespace
-        exclude: ^docs/
+        exclude: ^(docs|tests/data)/
       - id: end-of-file-fixer
-        exclude: ^docs/
+        exclude: ^(docs|tests/data)/
       - id: check-yaml
       - id: check-toml
       - id: debug-statements
         language_version: python3
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.9
+    rev: v0.16.3
     hooks:
       - id: ruff
         args: [--fix, --select=I]

@@ -13,7 +13,7 @@ export default function CopilotKitPage() {
     parameters: [{
       name: "themeColor",
       description: "The theme color to set. Make sure to pick nice colors.",
-      required: true, 
+      required: true,
     }],
     handler({ themeColor }) {
       setThemeColor(themeColor);
@@ -74,8 +74,8 @@ function YourMainContent({ themeColor }: { themeColor: string }) {
     ],
     render: ({ args }) => {
       return (
-        <div 
-          style={{ background: `linear-gradient(to right, ${args.color1}, ${args.color2})`}} 
+        <div
+          style={{ background: `linear-gradient(to right, ${args.color1}, ${args.color2})`}}
           className="p-10 my-4 rounded-xl flex flex-col justify-between flex-row"
         >
           <p className="text-white/50">{args.color1}</p>
@@ -96,14 +96,14 @@ function YourMainContent({ themeColor }: { themeColor: string }) {
         <hr className="border-white/20 my-6" />
         <div className="flex flex-col gap-3">
           {proverbs.map((proverb, index) => (
-            <div 
-              key={index} 
+            <div
+              key={index}
               className="bg-white/15 p-4 rounded-xl text-white relative group hover:bg-white/20 transition-all"
             >
               <p className="pr-8">{proverb}</p>
-              <button 
+              <button
                 onClick={() => setProverbs(proverbs.filter((_, i) => i !== index))}
-                className="absolute right-3 top-3 opacity-0 group-hover:opacity-100 transition-opacity 
+                className="absolute right-3 top-3 opacity-0 group-hover:opacity-100 transition-opacity
                   bg-red-500 hover:bg-red-600 text-white rounded-full h-6 w-6 flex items-center justify-center"
               >
                 ✕
