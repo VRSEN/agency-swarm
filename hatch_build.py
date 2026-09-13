@@ -4,7 +4,8 @@ Custom build hook for Agency Swarm.
 This hook downloads the latest pricing data from LiteLLM before building the package.
 
 The pricing file is:
-1. Downloaded on `main` and detached release checkouts before each build
+1. Downloaded on `main` and detached release checkouts before each wheel or sdist build;
+   editable installs (`uv sync`, `make sync`) keep the committed copy
 2. Corrected with repository-owned overrides when LiteLLM is temporarily stale
 3. Included in the package artifacts (via pyproject.toml)
 4. Committed to the repo so tests can run without network access
@@ -190,6 +191,11 @@ class CustomBuildHook(BuildHookInterface):
         """Refresh main-branch pricing data or validate the committed offline copy."""
         pricing_file_path = Path(self.root) / PRICING_FILE_RELATIVE_PATH
         pricing_file_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if version == "editable":
+            _validate_existing_pricing_file(pricing_file_path)
+            logger.info("Skipping pricing data download for an editable install; using the committed file.")
+            return
 
         branch = _get_git_branch(str(self.root))
         if branch not in {"main", "HEAD"}:

@@ -226,12 +226,11 @@ if __name__ == "__main__":
             shared_instructions="Test MCP stdio server integration",
         )
 
-        # Test that agent can list tools from stdio server
-        res = await agency.get_response("What tools do you have available?")
-        response_text = str(res.final_output).lower()
+        # The agent should call the stdio server's tool and receive its real output
+        res = await agency.get_response("Call test_sample_tool with the text 'stdio-check-42'.")
+        tool_outputs = [str(item.output) for item in res.new_items if isinstance(item, ToolCallOutputItem)]
 
-        # Should find test_sample_tool from our stdio server
-        assert "test_sample_tool" in response_text or "test sample tool" in response_text
+        assert any("Echo: stdio-check-42" in output for output in tool_outputs), tool_outputs
 
     finally:
         # Cleanup
