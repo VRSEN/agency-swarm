@@ -35,6 +35,9 @@ class _OAuthServerState:
     registration_scopes: list[str | None] = field(default_factory=list)
     authorization_scopes: list[str | None] = field(default_factory=list)
     registration_auth_methods: list[str | None] = field(default_factory=list)
+    auth_methods_supported: list[str] = field(
+        default_factory=lambda: ["client_secret_basic", "client_secret_post", "none"]
+    )
 
 
 class _OAuthTestServer(HTTPServer):
@@ -106,7 +109,7 @@ class _OAuthRequestHandler(BaseHTTPRequestHandler):
                     "response_types_supported": ["code"],
                     "grant_types_supported": ["authorization_code", "refresh_token"],
                     "code_challenge_methods_supported": ["S256"],
-                    "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post", "none"],
+                    "token_endpoint_auth_methods_supported": self.server.state.auth_methods_supported,
                     "scopes_supported": ["treasure.read", "user"],
                 },
             )
@@ -138,8 +141,12 @@ class _OAuthRequestHandler(BaseHTTPRequestHandler):
             self.server.state.registration_auth_methods.append(
                 requested_method if isinstance(requested_method, str) else None
             )
-            # Like Notion: a client that names no auth method is registered as confidential.
-            auth_method = requested_method if isinstance(requested_method, str) else "client_secret_basic"
+            supported = self.server.state.auth_methods_supported
+            if isinstance(requested_method, str) and requested_method not in supported:
+                self._send_json(400, {"error": "invalid_client_metadata"})
+                return
+            # Like Notion: a client that names no auth method gets the first advertised one.
+            auth_method = requested_method if isinstance(requested_method, str) else supported[0]
             registration.update(
                 {
                     "client_id": "test-client",
@@ -398,3 +405,18 @@ async def test_dynamic_registration_uses_public_client_without_secret(
         pass
 
     assert oauth_server.state.registration_auth_methods == ["none"]
+
+
+@pytest.mark.asyncio
+async def test_dynamic_registration_leaves_auth_method_to_confidential_only_servers(
+    oauth_server: _OAuthTestServer,
+    tmp_path: Path,
+) -> None:
+    """Servers that do not advertise public clients choose the auth method themselves."""
+    oauth_server.state.auth_methods_supported = ["client_secret_post"]
+    config = _oauth_config(oauth_server, tmp_path, scopes=None)
+
+    async with _connected_client(config):
+        pass
+
+    assert oauth_server.state.registration_auth_methods == [None]
