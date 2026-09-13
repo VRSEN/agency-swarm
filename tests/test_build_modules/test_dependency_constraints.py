@@ -18,7 +18,9 @@ def test_dependency_constraints_exclude_incompatible_releases() -> None:
     assert Version("2.44.0") in openai.specifier
     assert Version("2.45.0") not in openai.specifier
     assert agents.specifier == SpecifierSet("==0.18.1")
-    assert Version("1.83.0") in litellm.specifier
-    assert Version("1.91.0") in litellm.specifier
-    assert Version("1.92.0") not in litellm.specifier
+    # LiteLLM 1.92-1.95 lack macOS or Windows wheels, so those installs fall back to a failing source build.
+    for supported in ("1.83.0", "1.91.0", "1.96.0", "1.97.0"):
+        assert Version(supported) in litellm.specifier
+    for unsupported in ("1.92.0", "1.93.0", "1.94.0", "1.95.0", "1.98.0"):
+        assert Version(unsupported) not in litellm.specifier
     assert extra.specifier == litellm.specifier
