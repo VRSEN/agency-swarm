@@ -34,6 +34,7 @@ from agency_swarm.tools.mcp_manager import default_mcp_manager
 class _OAuthServerState:
     registration_scopes: list[str | None] = field(default_factory=list)
     authorization_scopes: list[str | None] = field(default_factory=list)
+    registration_auth_methods: list[str | None] = field(default_factory=list)
 
 
 class _OAuthTestServer(HTTPServer):
@@ -105,7 +106,7 @@ class _OAuthRequestHandler(BaseHTTPRequestHandler):
                     "response_types_supported": ["code"],
                     "grant_types_supported": ["authorization_code", "refresh_token"],
                     "code_challenge_methods_supported": ["S256"],
-                    "token_endpoint_auth_methods_supported": ["none"],
+                    "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post", "none"],
                     "scopes_supported": ["treasure.read", "user"],
                 },
             )
@@ -133,17 +134,29 @@ class _OAuthRequestHandler(BaseHTTPRequestHandler):
             registration = self._read_json()
             scope = registration.get("scope")
             self.server.state.registration_scopes.append(scope if isinstance(scope, str) else None)
+            requested_method = registration.get("token_endpoint_auth_method")
+            self.server.state.registration_auth_methods.append(
+                requested_method if isinstance(requested_method, str) else None
+            )
+            # Like Notion: a client that names no auth method is registered as confidential.
+            auth_method = requested_method if isinstance(requested_method, str) else "client_secret_basic"
             registration.update(
                 {
                     "client_id": "test-client",
                     "client_id_issued_at": 1,
-                    "token_endpoint_auth_method": "none",
+                    "token_endpoint_auth_method": auth_method,
                 }
             )
+            if auth_method != "none":
+                registration["client_secret"] = "test-secret"
             self._send_json(201, registration)
             return
         if parsed.path == "/token":
             token_request = self._read_form()
+            if self.headers.get("Authorization", "").startswith("Basic ") and "client_id" in token_request:
+                error = "Client must not use multiple authentication methods"
+                self._send_json(400, {"error": "invalid_request", "error_description": error})
+                return
             if token_request.get("code") != "test-code":
                 self._send_json(400, {"error": "invalid_grant"})
                 return
@@ -371,3 +384,17 @@ async def test_discovery_scopes_are_default_when_scopes_are_omitted(
 
     assert oauth_server.state.registration_scopes == ["treasure.read"]
     assert oauth_server.state.authorization_scopes == ["treasure.read"]
+
+
+@pytest.mark.asyncio
+async def test_dynamic_registration_uses_public_client_without_secret(
+    oauth_server: _OAuthTestServer,
+    tmp_path: Path,
+) -> None:
+    """Strict servers such as Notion reject Basic auth sent with client_id in the token body."""
+    config = _oauth_config(oauth_server, tmp_path, scopes=None)
+
+    async with _connected_client(config):
+        pass
+
+    assert oauth_server.state.registration_auth_methods == ["none"]
