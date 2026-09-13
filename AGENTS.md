@@ -8,6 +8,7 @@ This file contains only repository-specific addenda to the controlling machine-g
 1.2 `CLAUDE.md` must remain a symlink to `AGENTS.md`; verify it before relying on repository policy or shipping a repository-policy change.
 1.3 Shared policy from `VRSEN/agentswarm-cli` may appear here only as a strict subset or a necessary Python/Agency adaptation; omit CLI, TUI, OpenCode, Bun, npm, and package-layout rules without a Python or Agency equivalent.
 1.4 If an active pull request duplicates an open Dependabot dependency update, close the Dependabot pull request through the normal public-mutation approval path.
+1.5 Commits and pull requests carry no AI attribution: no AI `Co-Authored-By` trailers and no "Generated with" footers in commit messages, pull request titles, or pull request descriptions.
 
 ## 2. Repository Commands And Review Artifacts
 
