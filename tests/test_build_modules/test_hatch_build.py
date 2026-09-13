@@ -41,6 +41,14 @@ def _mock_refresh_download(
     )
 
 
+def _forbid_download(monkeypatch: pytest.MonkeyPatch, *, branch: str = "main") -> None:
+    def _fail_download(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("editable installs must not download pricing data")
+
+    monkeypatch.setattr(hatch_build, "_get_git_branch", lambda _root: branch)
+    monkeypatch.setattr(hatch_build.urllib.request, "urlopen", _fail_download)
+
+
 def _pricing_file(tmp_path: Path) -> Path:
     pricing_file_path = tmp_path / PRICING_FILE_RELATIVE_PATH
     pricing_file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -82,6 +90,28 @@ def test_non_main_build_rejects_malformed_pricing(monkeypatch: pytest.MonkeyPatc
 
     with pytest.raises(RuntimeError, match="is not valid JSON"):
         hook.initialize(version="0.0.0", build_data={})
+
+
+@pytest.mark.parametrize("branch", ["main", "HEAD"])
+def test_editable_build_keeps_committed_pricing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, branch: str) -> None:
+    _forbid_download(monkeypatch, branch=branch)
+    pricing_file_path = _pricing_file(tmp_path)
+    original = b'{"sample_spec": {}, "model": {}}\n'
+    pricing_file_path.write_bytes(original)
+    hook = _build_hook_with_root(tmp_path)
+
+    hook.initialize(version="editable", build_data={})
+
+    assert pricing_file_path.read_bytes() == original
+
+
+def test_editable_build_rejects_malformed_pricing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _forbid_download(monkeypatch)
+    _pricing_file(tmp_path).write_text("{", encoding="utf-8")
+    hook = _build_hook_with_root(tmp_path)
+
+    with pytest.raises(RuntimeError, match="is not valid JSON"):
+        hook.initialize(version="editable", build_data={})
 
 
 @pytest.mark.parametrize("branch", ["main", "HEAD"])
