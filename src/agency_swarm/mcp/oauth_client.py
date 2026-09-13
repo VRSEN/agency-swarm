@@ -5,6 +5,7 @@ from typing import Any, TypedDict
 
 from agents import RunContextWrapper
 from agents.agent import AgentBase
+from agents.exceptions import UserError
 from agents.mcp.server import MCPServerStreamableHttp
 from mcp.types import (
     CallToolResult,
@@ -15,6 +16,7 @@ from mcp.types import (
     ReadResourceResult,
     Tool as MCPTool,
 )
+from pydantic import AnyUrl
 
 from .oauth import (
     MCPServerOAuth,
@@ -66,8 +68,9 @@ class MCPServerOAuthClient(MCPServerStreamableHttp):
         self.params["auth"] = provider
         try:
             await super().connect()
-        except asyncio.CancelledError as exc:
-            # The MCP HTTP writer logs and swallows OAuth errors, so they surface as a cancellation.
+        except (asyncio.CancelledError, UserError) as exc:
+            # The MCP HTTP writer logs and swallows OAuth errors, so they surface as a cancellation
+            # or as the SDK's generic connection error. Raise the OAuth error the provider captured.
             flow_error = provider.pop_last_flow_error()
             if flow_error is None:
                 raise
@@ -110,6 +113,6 @@ class MCPServerOAuthClient(MCPServerStreamableHttp):
         await self._connect_if_needed()
         return await super().list_resource_templates(cursor)
 
-    async def read_resource(self, uri: str) -> ReadResourceResult:
+    async def read_resource(self, uri: str | AnyUrl) -> ReadResourceResult:
         await self._connect_if_needed()
-        return await super().read_resource(uri)
+        return await super().read_resource(str(uri))
