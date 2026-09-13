@@ -18,4 +18,5 @@ repos:
         args: [--fix, --select=I]
         exclude: ^docs/
       - id: ruff-format
+        types_or: [python, pyi, jupyter, markdown]
         exclude: ^docs/
