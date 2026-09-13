@@ -60,6 +60,7 @@ Define tools using the modern `@function_tool` decorator (recommended), or exten
     ```python
     from agency_swarm import function_tool
 
+
     @function_tool
     def my_custom_tool(example_field: str) -> str:
         """A brief description of what the custom tool does."""
@@ -71,6 +72,7 @@ Define tools using the modern `@function_tool` decorator (recommended), or exten
     ```python
     from agency_swarm.tools import BaseTool
     from pydantic import Field
+
 
     class MyCustomTool(BaseTool):
         """
@@ -99,6 +101,7 @@ Define tools using the modern `@function_tool` decorator (recommended), or exten
 
     ```python
     from agency_swarm.tools import ToolFactory
+
     # using local file
     with open("schemas/your_schema.json") as f:
         tools = ToolFactory.from_openapi_schema(
@@ -107,6 +110,7 @@ Define tools using the modern `@function_tool` decorator (recommended), or exten
 
     # using requests
     import requests
+
     tools = ToolFactory.from_openapi_schema(
         requests.get("https://api.example.com/openapi.json").json(),
     )
@@ -121,9 +125,9 @@ Define tools using the modern `@function_tool` decorator (recommended), or exten
     ceo = Agent(
         name="CEO",
         description="Responsible for client communication, task planning and management.",
-        instructions="You must converse with other agents to ensure complete task execution.", # can be a file like ./instructions.md
-        files_folder="./files", # files to be uploaded to OpenAI
-        schemas_folder="./schemas", # OpenAPI schemas to be converted into tools
+        instructions="You must converse with other agents to ensure complete task execution.",  # can be a file like ./instructions.md
+        files_folder="./files",  # files to be uploaded to OpenAI
+        schemas_folder="./schemas",  # OpenAPI schemas to be converted into tools
         tools=[my_custom_tool],  # FunctionTool returned by @function_tool (or adapt BaseTool via ToolFactory)
         model="gpt-5.6-luna",
         model_settings=ModelSettings(
@@ -144,6 +148,7 @@ Establish how your agents will communicate with each other.
 
     ```python
     from agency_swarm import Agency
+
     # if importing from local files
     from Developer import Developer
     from VirtualAssistant import VirtualAssistant
@@ -155,10 +160,10 @@ Establish how your agents will communicate with each other.
         ceo,  # CEO will be the entry point for communication with the user
         communication_flows=[
             ceo > dev,  # CEO can initiate communication with Developer
-            ceo > va,   # CEO can initiate communication with Virtual Assistant
-            dev > va    # Developer can initiate communication with Virtual Assistant
+            ceo > va,  # CEO can initiate communication with Virtual Assistant
+            dev > va,  # Developer can initiate communication with Virtual Assistant
         ],
-        shared_instructions='agency_manifesto.md', # shared instructions for all agents
+        shared_instructions="agency_manifesto.md",  # shared instructions for all agents
     )
     ```
 
@@ -184,9 +189,11 @@ Programmatic (async):
 ```python
 import asyncio
 
+
 async def main():
     resp = await agency.get_response("Create a project skeleton.")
     print(resp.final_output)
+
 
 asyncio.run(main())
 ```
