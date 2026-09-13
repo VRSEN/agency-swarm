@@ -20,5 +20,10 @@ def test_dependency_constraints_exclude_incompatible_releases() -> None:
     assert agents.specifier == SpecifierSet("==0.18.1")
     assert Version("1.83.0") in litellm.specifier
     assert Version("1.91.0") in litellm.specifier
-    assert Version("1.92.0") not in litellm.specifier
+    # 1.92.x-1.95.x ship no macOS wheels (1.92.x-1.93.x no Windows wheels either), so installs fall back to
+    # failing source builds.
+    for incompatible in ("1.92.0", "1.93.0", "1.94.0", "1.95.0"):
+        assert Version(incompatible) not in litellm.specifier
+    assert Version("1.96.0") in litellm.specifier
+    assert Version("1.97.0") in litellm.specifier
     assert extra.specifier == litellm.specifier
