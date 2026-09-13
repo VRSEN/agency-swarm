@@ -32,6 +32,7 @@ This directory contains runnable examples demonstrating key features of Agency S
   - `client.py` – Client examples for testing endpoints
 - **`interactive/realtime/demo.py`** – Launch the packaged realtime voice/web demo (edit to customize agents)
 - **`mcp_servers.py`** – Using tools from MCP servers (local and hosted)
+- **[`agent_guild_observation.py`](agent_guild_observation.py)** – Optional public endpoint observations through a native tool, before a separate explicit host MCP attachment. Run `uv run python -m examples.agent_guild_observation URL` without a model or API key. The exact public URL is disclosed to Agent Guild, which may probe it; the report is advisory and does not authorize later execution.
 - **`connectors.py`** – Google Calendar integration using OpenAI hosted tools
 
 ## Model Providers
@@ -40,4 +41,4 @@ This directory contains runnable examples demonstrating key features of Agency S
 ## Observability
 - **`observability.py`** – OpenAI, Langfuse and AgentOps tracing integration
 
-Run any file with `python examples/<name>.py` after setting your `OPENAI_API_KEY`.
+Other examples generally run with `python examples/<name>.py` after setting your `OPENAI_API_KEY` (model requests may incur provider charges).
