@@ -116,11 +116,8 @@ class MCPServerOAuth:
                 scope=" ".join(self.scopes) if self.scopes is not None else None,
             )
 
-        if metadata.token_endpoint_auth_method is None:
-            # Without a secret, register as a public PKCE client. Otherwise servers such as Notion issue
-            # client_secret_basic, and the MCP SDK then sends two client auth methods in the token request.
-            auth_method = "client_secret_basic" if self.get_client_secret() else "none"
-            metadata = metadata.model_copy(update={"token_endpoint_auth_method": auth_method})
+        if self.get_client_secret() and metadata.token_endpoint_auth_method is None:
+            metadata = metadata.model_copy(update={"token_endpoint_auth_method": "client_secret_basic"})
         return preserve_configured_scopes(metadata, self.scopes)
 
     def get_client_id_optional(self) -> str | None:
