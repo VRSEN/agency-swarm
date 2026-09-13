@@ -37,7 +37,7 @@ filesystem_server = MCPServerStdio(
         "command": "npx",
         "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
     },
-    cache_tools_list=True
+    cache_tools_list=True,
 )
 
 # Add to existing Agent instantiation
@@ -64,7 +64,7 @@ github_server = MCPServerStdio(
         "args": ["-y", "@modelcontextprotocol/server-github"],
         "env": {"GITHUB_TOKEN": os.getenv("GITHUB_TOKEN")},
     },
-    cache_tools_list=True
+    cache_tools_list=True,
 )
 
 # Slack Server (if available)
@@ -75,7 +75,7 @@ slack_server = MCPServerStdio(
         "args": ["-y", "@modelcontextprotocol/server-slack"],
         "env": {"SLACK_TOKEN": os.getenv("SLACK_TOKEN")},
     },
-    cache_tools_list=True
+    cache_tools_list=True,
 )
 ```
 
@@ -88,6 +88,7 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
+
 
 class ToolName(BaseTool):
     """Clear description for agent."""
@@ -105,6 +106,7 @@ class ToolName(BaseTool):
             return str(result)
         except Exception as e:
             return f"Error: {str(e)}"
+
 
 if __name__ == "__main__":
     # Test with real data
@@ -136,13 +138,14 @@ Restrict inputs to valid values:
 from typing import Literal
 from pydantic import EmailStr
 
+
 class RunCommand(BaseTool):
     """Execute predefined system commands."""
 
     command: Literal["start", "stop", "restart"] = Field(
-        ...,
-        description="Command to execute: 'start', 'stop', or 'restart'."
+        ..., description="Command to execute: 'start', 'stop', or 'restart'."
     )
+
 
 class EmailSender(BaseTool):
     recipient: EmailStr = Field(..., description="Valid email address.")
@@ -168,6 +171,7 @@ Shared state is a centralized dictionary accessible by all tools and agents. Use
 ```python
 class QueryDatabase(BaseTool):
     """Retrieves data and stores it in shared state."""
+
     question: str = Field(..., description="The query to execute.")
 
     def run(self):
@@ -175,8 +179,8 @@ class QueryDatabase(BaseTool):
         context = query_database(self.question)
 
         # Store in shared state for other tools to use
-        self._shared_state.set('context', context)
-        self._shared_state.set('query_timestamp', datetime.now())
+        self._shared_state.set("context", context)
+        self._shared_state.set("query_timestamp", datetime.now())
 
         return "Context retrieved and stored successfully."
 ```
@@ -185,12 +189,13 @@ class QueryDatabase(BaseTool):
 ```python
 class GenerateReport(BaseTool):
     """Generates report using data from shared state."""
+
     format: str = Field(..., description="Report format")
 
     def run(self):
         # Get data from shared state
-        context = self._shared_state.get('context')
-        timestamp = self._shared_state.get('query_timestamp')
+        context = self._shared_state.get("context")
+        timestamp = self._shared_state.get("query_timestamp")
 
         if not context:
             raise ValueError("No context found. Please run QueryDatabase first.")

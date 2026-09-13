@@ -69,7 +69,7 @@ test_queries = [
     "Query 2: [Multi-agent collaboration task]",
     "Query 3: [Edge case scenario]",
     "Query 4: [Error handling test]",
-    "Query 5: [Complex real-world request]"
+    "Query 5: [Complex real-world request]",
 ]
 
 for i, query in enumerate(test_queries, 1):

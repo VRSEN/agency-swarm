@@ -55,8 +55,10 @@ from fastapi import Depends
 from agency_swarm import run_fastapi
 from my_app.auth import User, get_current_user
 
+
 def get_oauth_user_id(user: User = Depends(get_current_user)) -> str:
     return user.id
+
 
 run_fastapi(
     agencies={"my-agency": create_agency},
