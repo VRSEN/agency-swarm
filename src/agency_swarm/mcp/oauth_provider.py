@@ -6,6 +6,7 @@ from collections.abc import AsyncGenerator
 
 import httpx
 from mcp.client.auth import OAuthClientProvider
+from mcp.client.auth.utils import create_client_registration_request
 from mcp.shared.auth import OAuthClientMetadata
 from pydantic import PrivateAttr
 
@@ -72,6 +73,30 @@ class ErrorCapturingOAuthClientProvider(OAuthClientProvider):
         self._last_flow_error = None
         return error
 
+    def _registration_for_server(self, request: httpx.Request) -> httpx.Request:
+        """Register as a public PKCE client when no auth method is set and the server supports it.
+
+        Servers such as Notion otherwise issue client_secret_basic, and the MCP SDK then sends two
+        client auth methods in the token request (modelcontextprotocol/python-sdk#3138).
+        """
+        client_metadata = self.context.client_metadata
+        server_metadata = self.context.oauth_metadata
+        if (
+            request.method != "POST"
+            or self.context.client_info is not None
+            or client_metadata.token_endpoint_auth_method is not None
+            or server_metadata is None
+            or "none" not in (server_metadata.token_endpoint_auth_methods_supported or [])
+        ):
+            return request
+        base_url = self.context.get_authorization_base_url(self.context.server_url)
+        registration = create_client_registration_request(server_metadata, client_metadata, base_url)
+        if request.url != registration.url:
+            return request
+        logger.debug("Registering OAuth client for %s as a public client", self.context.server_url)
+        public_client = client_metadata.model_copy(update={"token_endpoint_auth_method": "none"})
+        return create_client_registration_request(server_metadata, public_client, base_url)
+
     async def async_auth_flow(
         self,
         request: httpx.Request,
@@ -82,7 +107,7 @@ class ErrorCapturingOAuthClientProvider(OAuthClientProvider):
         try:
             next_request = await anext(flow)
             while True:
-                response = yield next_request
+                response = yield self._registration_for_server(next_request)
                 next_request = await flow.asend(response)
         except StopAsyncIteration:
             return
