@@ -222,6 +222,10 @@ class _OAuthRequestHandler(BaseHTTPRequestHandler):
                 },
             )
             return
+        if method == "tools/call":
+            content = [{"type": "text", "text": "treasure opened"}]
+            self._send_json(200, {"jsonrpc": "2.0", "id": request_id, "result": {"content": content, "isError": False}})
+            return
         self._send_json(
             200,
             {
@@ -420,3 +424,20 @@ async def test_dynamic_registration_leaves_auth_method_to_confidential_only_serv
         pass
 
     assert oauth_server.state.registration_auth_methods == [None]
+
+
+@pytest.mark.asyncio
+async def test_call_tool_connects_with_oauth_on_first_use(
+    oauth_server: _OAuthTestServer,
+    tmp_path: Path,
+) -> None:
+    """A fresh client authorizes and connects when its first MCP call is a tool call."""
+    client = MCPServerOAuthClient(_oauth_config(oauth_server, tmp_path, scopes=None))
+
+    try:
+        result = await client.call_tool("open_treasure", {})
+    finally:
+        await client.cleanup()
+
+    assert [getattr(item, "text", None) for item in result.content] == ["treasure opened"]
+    assert oauth_server.state.authorization_scopes == ["treasure.read"]
