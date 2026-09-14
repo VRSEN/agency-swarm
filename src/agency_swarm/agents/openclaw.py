@@ -27,6 +27,30 @@ class OpenClawAgent(Agent):
         api_key: str | None = None,
         **kwargs: Any,
     ) -> None:
+        """
+        Initializes an agent backed by an OpenClaw worker.
+
+        ## OpenClaw-Specific Parameters:
+            base_url (str | None): Full base URL of the worker. When set, it wins outright and
+                `host`, `port` and `api_path` are ignored.
+            host (str | None): Worker host. Falls back to the `OPENCLAW_PROXY_HOST` environment
+                variable, then to `127.0.0.1`.
+            port (int | None): Worker port. Falls back to the `OPENCLAW_PROXY_PORT` environment
+                variable, then to `PORT`, then to `8000`.
+            api_path (str): Path appended to host/port. Defaults to `/openclaw/v1`.
+            api_key (str | None): Key sent to the worker.
+
+        The URL is resolved in this order:
+
+        1. `base_url`, if given.
+        2. `OPENCLAW_PROXY_BASE_URL`, if set and non-empty. With no `host`, `port` or custom
+           `api_path`, it is used as-is; otherwise those override the matching parts of it.
+        3. `http://<host>:<port><api_path>`, each part resolved as described above.
+
+        Note that step 2's fallback chain for the port ends at a bare `PORT`, which many hosting
+        platforms set for the listening process. On such a platform this agent will look for its
+        worker on the platform's own port unless `port` or `OPENCLAW_PROXY_PORT` is set.
+        """
         resolved_model = _pop_openclaw_model_override(kwargs)
         _validate_openclaw_agent_kwargs(kwargs)
         resolved_base_url = _resolve_openclaw_base_url(
