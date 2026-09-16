@@ -138,6 +138,7 @@ agency_swarm/agents/AgentName/
 from agency_swarm import Agent
 from agency_swarm.tools.example import ExampleTool
 
+
 class AgentName(Agent):
     def __init__(self):
         super().__init__(
