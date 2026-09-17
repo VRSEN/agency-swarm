@@ -24,9 +24,11 @@ class MessageFilter:
         "custom_tool_call",
         "shell_call",
         "local_shell_call",
+        "tool_search_call",
         # Agents SDK item types
         "tool_call_item",
         "handoff_call_item",
+        "tool_search_call_item",
     }
 
     CALL_ID_OUTPUT_TYPES = {
@@ -37,9 +39,11 @@ class MessageFilter:
         "custom_tool_call_output",
         "shell_call_output",
         "local_shell_call_output",
+        "tool_search_output",
         # Agents SDK item types
         "tool_call_output_item",
         "handoff_output_item",
+        "tool_search_output_item",
     }
 
     # === PATTERN 2: approval_request_id linking ===
