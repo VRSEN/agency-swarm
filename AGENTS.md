@@ -44,6 +44,7 @@ This file contains only repository-specific addenda to the controlling machine-g
 4.9 Target test coverage of at least 90%.
 4.10 When editing an oversized file, keep the net change minimal and reduce its size in the same change unless the user approves otherwise.
 4.11 When dependency requirements or resolved versions change, update every affected lockfile in the same change.
+4.12 Keep terminology self-consistent: code identifiers, internal symbols, comments, user-facing copy, and documentation use the same product vocabulary (for example, canonical mode names), and each change's polishing pass includes a terminology-consistency check.
 
 ## 5. Tests And Runtime-Specific Proof
 
