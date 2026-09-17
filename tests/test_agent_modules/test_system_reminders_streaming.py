@@ -184,6 +184,30 @@ async def test_every_n_tool_calls_cadence_survives_streamed_handoff() -> None:
 
 
 @pytest.mark.asyncio
+async def test_every_n_tool_calls_resets_across_streamed_agency_runs() -> None:
+    script: list[ScriptStep] = []
+    for _turn in range(3):
+        script.extend([lambda tools, _handoffs: [_function_call(tools[0].name)] for _call in range(7)])
+        script.append(lambda _tools, _handoffs: [_message("done")])
+    model = _ScriptedStreamModel(script)
+    agent = Agent(
+        name="StreamedRunAgent",
+        instructions="Use the tool until the task is done.",
+        model=model,
+        tools=[_local_tool],
+        system_reminders=[EveryNToolCalls(15, "Checkpoint reminder")],
+    )
+    agency = Agency(agent)
+
+    for turn in range(3):
+        async for _event in agency.get_response_stream(f"Handle task {turn}"):
+            pass
+
+    assert len(model.inputs) == 24
+    assert not any(_contains(input_items, "Checkpoint reminder") for input_items in model.inputs)
+
+
+@pytest.mark.asyncio
 async def test_streamed_handoff_cadence_matches_non_streaming() -> None:
     """The streamed cadence above is the same one `get_response` already produces."""
     agency, coordinator_model = _handoff_back_agency()
