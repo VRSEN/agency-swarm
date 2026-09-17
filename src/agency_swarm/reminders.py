@@ -65,7 +65,7 @@ class SystemReminder:
 
 @dataclass(frozen=True, slots=True)
 class AfterEveryUserMessage(SystemReminder):
-    """Inject a transient reminder before the first model call of each top-level user turn."""
+    """Inject a transient reminder on every model call of each top-level user turn."""
 
     message: ReminderMessage
 
@@ -90,3 +90,31 @@ class EveryNToolCalls(SystemReminder):
             raise TypeError("EveryNToolCalls.n must be an integer.")
         if self.n <= 0:
             raise ValueError("EveryNToolCalls.n must be greater than 0.")
+
+
+def normalize_system_reminders(value: object) -> list[SystemReminder]:
+    """Validate and normalize Agent(system_reminders=...)."""
+    if value is None:
+        return []
+    if isinstance(value, str) or callable(value):
+        return [AfterEveryUserMessage(value)]
+    if isinstance(value, SystemReminder):
+        return [_validate_supported_reminder(value)]
+    if not isinstance(value, list):
+        raise TypeError("system_reminders must be a string, callable, reminder config, or list of those.")
+
+    reminders: list[SystemReminder] = []
+    for item in value:
+        if isinstance(item, str) or callable(item):
+            reminders.append(AfterEveryUserMessage(item))
+        elif isinstance(item, SystemReminder):
+            reminders.append(_validate_supported_reminder(item))
+        else:
+            raise TypeError("system_reminders entries must be strings, callables, or SystemReminder instances.")
+    return reminders
+
+
+def _validate_supported_reminder(reminder: SystemReminder) -> SystemReminder:
+    if isinstance(reminder, (AfterEveryUserMessage, EveryNToolCalls)):
+        return reminder
+    raise TypeError(f"unsupported system reminder type: {type(reminder).__name__}")

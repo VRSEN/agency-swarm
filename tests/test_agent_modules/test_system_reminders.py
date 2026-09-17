@@ -31,7 +31,7 @@ from openai.types.responses.response_function_shell_tool_call import (
 from openai.types.responses.response_function_web_search import ActionSearch
 from openai.types.responses.response_prompt_param import ResponsePromptParam
 
-from agency_swarm import AfterEveryUserMessage, Agency, Agent, EveryNToolCalls, MasterContext
+from agency_swarm import AfterEveryUserMessage, Agency, Agent, EveryNToolCalls, MasterContext, Runner
 from agency_swarm.tools import Handoff
 from tests.deterministic_model import (
     DeterministicModel,
@@ -207,6 +207,12 @@ async def check_task_state(ctx: RunContextWrapper[MasterContext]) -> str:
     return ctx.context.user_context.get("task_state", "ready")
 
 
+@function_tool
+async def report_progress() -> str:
+    """Return a deterministic tool output that needs no run context."""
+    return "ready"
+
+
 def _extract_text(item: TResponseInputItem) -> str | None:
     if not isinstance(item, dict):
         return None
@@ -309,6 +315,50 @@ async def test_after_every_user_message_is_transient_in_thread_history() -> None
     history = agency.thread_manager.get_all_messages()
     assert [message["role"] for message in history] == ["user", "assistant"]
     assert not any("Task state:" in str(message.get("content", "")) for message in history)
+
+
+@pytest.mark.asyncio
+async def test_after_every_user_message_repeats_on_post_tool_calls() -> None:
+    """A tool call must not drop the reminder from later model calls in the turn."""
+    model = _NToolCallsPerTurnModel(tool_calls_per_turn=2)
+    agent = Agent(
+        name="ReminderAgent",
+        instructions="Use the tool until the task is done.",
+        model=model,
+        model_settings=ModelSettings(temperature=0.0),
+        tools=[check_task_state],
+        system_reminders="End every reply with DONE.",
+    )
+    agency = Agency(agent, user_context={"task_state": "ready"})
+
+    await agency.get_response("Handle task-1")
+    await agency.get_response("Handle task-2")
+
+    assert len(model.recorded_inputs) == 6
+    for input_items in model.recorded_inputs:
+        assert _contains_text(input_items, "End every reply with DONE.")
+    history = agency.thread_manager.get_all_messages()
+    assert not any("DONE." in str(message.get("content", "")) for message in history)
+
+
+@pytest.mark.asyncio
+async def test_after_every_user_message_repeats_on_post_tool_calls_direct_run() -> None:
+    """The direct ``Runner.run`` boundary must re-inject the reminder the same way."""
+    model = _NToolCallsPerTurnModel(tool_calls_per_turn=2)
+    agent = Agent(
+        name="DirectReminderAgent",
+        instructions="Use the tool until the task is done.",
+        model=model,
+        model_settings=ModelSettings(temperature=0.0),
+        tools=[report_progress],
+        system_reminders="End every reply with DONE.",
+    )
+
+    await Runner.run(agent, "Handle task")
+
+    assert len(model.recorded_inputs) == 3
+    for input_items in model.recorded_inputs:
+        assert _contains_text(input_items, "End every reply with DONE.")
 
 
 @pytest.mark.asyncio

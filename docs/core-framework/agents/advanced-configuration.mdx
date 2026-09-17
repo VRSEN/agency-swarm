@@ -57,7 +57,7 @@ agent = Agent(
 )
 ```
 
-A plain string or callable is added before the first model call of each top-level user turn. It appears only in the model input and is **not saved** in the thread history.
+A plain string or callable is added on every model call of each top-level user turn. It appears only in the model input and is **not saved** in the thread history.
 
 For a long autonomous run that may call many tools before it returns, add a checkpoint reminder:
 

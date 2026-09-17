@@ -48,13 +48,12 @@ from agency_swarm.agent.execution_streaming import StreamingRunResponse
 from agency_swarm.agent.file_manager import AgentFileManager
 from agency_swarm.agent.runner import install_runner_boundary
 from agency_swarm.agent.system_reminders import (
-    normalize_system_reminders,
     prepare_agent_hooks,
     without_system_reminder_hooks,
 )
 from agency_swarm.agent.tools import _attach_one_call_guard
 from agency_swarm.context import MasterContext
-from agency_swarm.reminders import SystemReminder
+from agency_swarm.reminders import SystemReminder, normalize_system_reminders
 from agency_swarm.tools.concurrency import ToolConcurrencyManager
 from agency_swarm.tools.function_tool_compat import normalize_function_tool
 from agency_swarm.tools.mcp_manager import convert_mcp_servers_to_tools, get_active_oauth_user_id
