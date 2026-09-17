@@ -29,6 +29,8 @@ TRANSIENT_REMINDER_MARKER = _TransientReminderMarker.INSTANCE
 class _RunReminderState:
     pending_reminders: list[SystemReminder] = field(default_factory=list)
     pending_tool_reminder_indexes: set[int] = field(default_factory=set)
+    turn_reminders: list[SystemReminder] = field(default_factory=list)
+    input_filter_injects: bool = False
     tool_call_counts: dict[int, int] = field(default_factory=dict)
     user_message_reminders_staged: bool = False
     live_context: RunContextWrapper[Any] | None = None
@@ -63,6 +65,7 @@ class _DirectReminderRun:
             state = hook._run_state.pop(run_key, None)
             if state is not None:
                 state.live_context = None
+                state.turn_reminders.clear()
                 states.append((hook, state))
         if states:
             _SUSPENDED_DIRECT_RUNS[context] = states
@@ -166,6 +169,7 @@ def suspend_agency_run_hooks(
         for run_key in [key for key in hook._run_state if key[0] == context_id]:
             state = hook._run_state.pop(run_key)
             state.live_context = None
+            state.turn_reminders.clear()
             states.append((hook, state))
     if states:
         _SUSPENDED_DIRECT_RUNS[target] = states

@@ -170,9 +170,19 @@ class SystemReminderHooks(AgentHooks[MasterContext]):
         input_items: list[TResponseInputItem],
         *,
         role: Literal["system", "developer"],
+        via_input_filter: bool = False,
     ) -> list[TResponseInputItem]:
         state = self._get_state(context, agent_name=agent.name, remember_context=False)
-        if not state.pending_reminders:
+        if via_input_filter:
+            # call_model_input_filter runs before on_llm_start on every model call of
+            # this run, so once it participates it owns reminder re-injection. The
+            # hook must not inject a second copy afterwards, or it would also bring
+            # back reminders a user-supplied filter deliberately removed.
+            state.input_filter_injects = True
+        reminders = list(state.pending_reminders)
+        if via_input_filter or not state.input_filter_injects:
+            reminders = list(state.turn_reminders) + reminders
+        if not reminders:
             return []
 
         swarm_agent = cast("Agent", agent)
@@ -182,8 +192,13 @@ class SystemReminderHooks(AgentHooks[MasterContext]):
                 reminder.render(render_context, swarm_agent),
                 role=role,
             )
-            for reminder in state.pending_reminders
+            for reminder in reminders
         ]
+        for reminder in state.pending_reminders:
+            if any(reminder is configured for configured in self._user_message_reminders) and all(
+                reminder is not active for active in state.turn_reminders
+            ):
+                state.turn_reminders.append(reminder)
         state.pending_reminders.clear()
         state.pending_tool_reminder_indexes.clear()
         input_items[0:0] = messages
@@ -408,36 +423,10 @@ def inject_pending_system_reminders(
     """Inject pending reminders before the final model-input filter runs."""
     wrapper = cast(RunContextWrapper[MasterContext], RunContextWrapper(context))
     for hook in _iter_system_reminder_hooks(agent.hooks):
-        for message in hook._inject_pending_reminders(wrapper, agent, input_items, role="system"):
+        for message in hook._inject_pending_reminders(
+            wrapper, agent, input_items, role="system", via_input_filter=True
+        ):
             cast(dict[object, object], message)[TRANSIENT_REMINDER_MARKER] = True
-
-
-def normalize_system_reminders(value: object) -> list[SystemReminder]:
-    """Validate and normalize Agent(system_reminders=...)."""
-    if value is None:
-        return []
-    if isinstance(value, str) or callable(value):
-        return [AfterEveryUserMessage(value)]
-    if isinstance(value, SystemReminder):
-        return [_validate_supported_reminder(value)]
-    if not isinstance(value, list):
-        raise TypeError("system_reminders must be a string, callable, reminder config, or list of those.")
-
-    reminders: list[SystemReminder] = []
-    for item in value:
-        if isinstance(item, str) or callable(item):
-            reminders.append(AfterEveryUserMessage(item))
-        elif isinstance(item, SystemReminder):
-            reminders.append(_validate_supported_reminder(item))
-        else:
-            raise TypeError("system_reminders entries must be strings, callables, or SystemReminder instances.")
-    return reminders
-
-
-def _validate_supported_reminder(reminder: SystemReminder) -> SystemReminder:
-    if isinstance(reminder, (AfterEveryUserMessage, EveryNToolCalls)):
-        return reminder
-    raise TypeError(f"unsupported system reminder type: {type(reminder).__name__}")
 
 
 def _iter_system_reminder_hooks(

@@ -168,6 +168,33 @@ async def test_after_every_user_message_injects_in_agency_streaming() -> None:
 
 
 @pytest.mark.asyncio
+async def test_after_every_user_message_repeats_on_streamed_tool_followup() -> None:
+    """A streamed tool call must not drop the reminder from the follow-up model call."""
+    model = _ScriptedStreamModel(
+        [
+            lambda tools, _handoffs: [_function_call(tools[0].name)],
+            lambda _tools, _handoffs: [_message("done")],
+        ]
+    )
+    agent = Agent(
+        name="Streamer",
+        instructions="x",
+        model=model,
+        model_settings=ModelSettings(temperature=0.0),
+        tools=[_local_tool],
+        system_reminders="streamed reminder",
+    )
+    agency = Agency(agent)
+
+    async for _event in agency.get_response_stream("next"):
+        pass
+
+    assert len(model.inputs) == 2
+    for input_items in model.inputs:
+        assert _contains(input_items, "streamed reminder")
+
+
+@pytest.mark.asyncio
 async def test_every_n_tool_calls_cadence_survives_streamed_handoff() -> None:
     """Handing off and back must not reset the coordinator's streamed tool-call counter."""
     agency, coordinator_model = _handoff_back_agency()
