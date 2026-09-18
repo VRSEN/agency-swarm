@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, TypedDict, cast
 
-from mcp.client.auth import OAuthClientProvider
+from mcp.client.auth import OAuthClientProvider  # noqa: F401 - re-exported for existing imports
 from mcp.shared.auth import (
     OAuthClientInformationFull,
     OAuthToken,
@@ -407,7 +407,7 @@ async def create_oauth_provider(
     server: MCPServerOAuth,
     redirect_handler: OAuthRedirectHandler | None = None,
     callback_handler: OAuthCallbackHandler | None = None,
-) -> OAuthClientProvider:
+) -> ErrorCapturingOAuthClientProvider:
     """Create OAuth provider for MCP server.
 
     Args:

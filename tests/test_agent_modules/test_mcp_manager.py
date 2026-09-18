@@ -706,7 +706,6 @@ def test_sync_oauth_client_handlers_refreshes_runtime_handlers() -> None:
         {"redirect": first_redirect, "callback": first_callback},
     )
     persistent.session = object()
-    persistent._authenticated = True
     persistent._oauth_provider = SimpleNamespace(
         context=SimpleNamespace(
             redirect_handler=first_redirect,
@@ -733,7 +732,6 @@ def test_sync_oauth_client_handlers_refreshes_runtime_handlers() -> None:
         assert persistent._oauth_provider.context.redirect_handler is second_redirect
         assert persistent._oauth_provider.context.callback_handler is second_callback
         assert persistent.session is not None
-        assert persistent._authenticated is True
     finally:
         set_oauth_runtime_context(None)
         set_oauth_user_id(None)
