@@ -185,8 +185,8 @@ def _move_gateway_variant_extra_args(extra_args: dict[str, Any]) -> None:
         extra_args["extra_body"] = extra_body
 
 
-def _reasoning_effort_value(value: Any) -> ReasoningEffortValue | None:
-    if value in {"none", "minimal", "low", "medium", "high", "xhigh"}:
+def _reasoning_effort_value(value: object) -> ReasoningEffortValue | None:
+    if isinstance(value, str) and value in {"none", "minimal", "low", "medium", "high", "xhigh"}:
         return cast(ReasoningEffortValue, value)
     return None
 
