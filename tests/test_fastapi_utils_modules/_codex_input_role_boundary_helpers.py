@@ -116,6 +116,19 @@ def _roles(messages: list[dict[str, Any]]) -> list[str]:
     return [message["role"] for message in messages]
 
 
+def _prepared_runner_input(kwargs: dict[str, Any]) -> list[dict[str, Any]]:
+    """Model-facing input for a mocked Runner call.
+
+    With the SDK session adapter the ``input`` kwarg only carries the new items;
+    the session supplies history. ``prepared_input`` is exactly what the
+    session_input_callback feeds the model.
+    """
+    session = kwargs.get("session")
+    if session is not None and hasattr(session, "prepared_input"):
+        return cast(list[dict[str, Any]], session.prepared_input())
+    return cast(list[dict[str, Any]], kwargs["input"])
+
+
 def _agency_factory(**kwargs: Any) -> Agency:
     return Agency(
         Agent(name="A", instructions="normal agent instructions"), load_threads_callback=kwargs["load_threads_callback"]

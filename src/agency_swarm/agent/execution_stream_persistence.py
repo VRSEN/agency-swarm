@@ -104,6 +104,7 @@ def _compute_content_hash(run_item: RunItem) -> str | None:
 
 
 if TYPE_CHECKING:
+    from agency_swarm.agent.agency_session import AgencySession
     from agency_swarm.agent.core import AgencyContext, Agent
     from agency_swarm.context import MasterContext
 
@@ -166,6 +167,7 @@ def _persist_run_item_if_needed(
     current_agent_run_id: str,
     agency_context: "AgencyContext | None",
     metadata_store: StreamMetadataStore,
+    session: "AgencySession | None" = None,
 ) -> None:
     """Persist run item to thread manager with agency metadata if applicable."""
     run_item_obj = getattr(event, "item", None)
@@ -201,8 +203,10 @@ def _persist_run_item_if_needed(
     )
 
     # Skip per-event persistence for forwarded items (they're persisted by their originating agent)
-    # but continue to capture metadata below for final persistence matching
-    if not is_forwarded and not MessageFilter.should_filter(formatted_item):
+    # but continue to capture metadata below for final persistence matching. Also skip when the
+    # SDK already saved this item through the session (turn-end saves can race the event queue).
+    already_persisted = session is not None and session.is_already_persisted(item_dict)
+    if not is_forwarded and not already_persisted and not MessageFilter.should_filter(formatted_item):
         agency_context.thread_manager.add_messages([formatted_item])  # type: ignore[arg-type]
 
     # Capture the timestamp that was just generated for this item

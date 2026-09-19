@@ -13,9 +13,9 @@ from agents import (
     RunResultStreaming,
     TResponseInputItem,
 )
-from agents.items import MessageOutputItem
 from agents.stream_events import StreamEvent
 
+from agency_swarm.agent.agency_session import create_agency_session
 from agency_swarm.agent.conversation_starters_cache import (
     build_run_items_from_cached,
     compute_starter_cache_fingerprint,
@@ -38,17 +38,14 @@ from agency_swarm.agent.execution_helpers import (
     extract_hosted_tool_results_if_needed,
     get_run_trace_id,
     prepare_master_context,
-    run_item_to_tresponse_input_item,
     run_with_guardrails,
     setup_execution,
 )
 from agency_swarm.agent.execution_streaming import StreamingRunResponse, run_stream_with_guardrails
 from agency_swarm.messages import (
     MessageFilter,
-    MessageFormatter,
 )
 from agency_swarm.streaming.id_normalizer import StreamIdNormalizer
-from agency_swarm.utils.citation_extractor import extract_direct_file_annotations
 from agency_swarm.utils.model_utils import get_usage_tracking_model_name
 
 if TYPE_CHECKING:
@@ -128,18 +125,19 @@ class Execution:
                     initial_saved_count = 0
             is_first_message = initial_saved_count == 0
 
-            # Prepare history for runner, persisting initiating messages with agent_run_id and parent_run_id
-            history_for_runner = MessageFormatter.prepare_history_for_runner(
-                processed_current_message_items,
-                self.agent,
-                sender_name,
-                agency_context,
+            # Build the SDK session over the shared store; the SDK owns history
+            # prepend and turn persistence from here on.
+            session = create_agency_session(
+                agent=self.agent,
+                sender_name=sender_name,
+                agency_context=agency_context,
+                new_input_items=processed_current_message_items,
                 agent_run_id=current_agent_run_id,
                 parent_run_id=parent_run_id,
                 run_trace_id=run_trace_id,
                 run_config_override=run_config_override,
             )
-            logger.debug(f"Running agent '{self.agent.name}' with history length {len(history_for_runner)}")
+            logger.debug(f"Running agent '{self.agent.name}' with history length {len(session.prepared_input())}")
 
             # Prepare context and store reference for potential sync-back
             master_context_for_run = prepare_master_context(self.agent, context_override, agency_context)
@@ -211,7 +209,8 @@ class Execution:
             if cached_starter is None:
                 run_result, master_context_for_run = await run_with_guardrails(
                     agent=self.agent,
-                    history_for_runner=history_for_runner,
+                    input_items=processed_current_message_items,
+                    session=session,
                     master_context_for_run=master_context_for_run,
                     sender_name=sender_name,
                     agency_context=agency_context,
@@ -235,8 +234,14 @@ class Execution:
                 run_items = build_run_items_from_cached(self.agent, replay_items)
                 final_output_text = extract_final_output_text(replay_items)
                 final_output = parse_cached_output(final_output_text, self.agent.output_type)
+                # No SDK run happens on the cached path; the input was persisted at
+                # session creation, so only the replayed items need storing here.
+                # Snapshot the model input before the replay lands in the store so
+                # RunResult.input keeps legacy semantics (history + new input only).
+                result_input = session.prepared_input()
+                session.persist_items(replay_items)
                 run_result = RunResult(
-                    input=history_for_runner,
+                    input=result_input,
                     new_items=run_items,
                     raw_responses=[],
                     final_output=final_output,
@@ -280,70 +285,20 @@ class Execution:
                 f"Agent '{self.agent.name}' completed run. New Items: {len(run_result.new_items)}, {completion_info}"
             )
 
-            # Always save response items (both user and agent-to-agent calls)
+            # Turn items are persisted by the SDK through the AgencySession; only
+            # synthetic hosted-tool outputs (not part of model history) are appended here.
             if agency_context and agency_context.thread_manager and run_result.new_items:
-                items_to_save: list[TResponseInputItem] = []
-                logger.debug(f"Preparing to save {len(run_result.new_items)} new items from RunResult")
-
-                # Only extract hosted tool results if hosted tools were actually used
                 hosted_tool_outputs = extract_hosted_tool_results_if_needed(
                     self.agent,
                     run_result.new_items,
                     sender_name,
                 )
-
-                # Extract direct file annotations from assistant messages
-                assistant_messages = [item for item in run_result.new_items if isinstance(item, MessageOutputItem)]
-                citations_by_message = (
-                    extract_direct_file_annotations(assistant_messages, agent_name=self.agent.name)
-                    if assistant_messages
-                    else {}
-                )
-
-                current_agent_name = self.agent.name
-
-                for i, run_item_obj in enumerate(run_result.new_items):
-                    item_dict = run_item_to_tresponse_input_item(
-                        run_item_obj
-                    )  # Convert RunItems to TResponseInputItems
-                    if item_dict:
-                        MessageFormatter.add_citations_to_message(run_item_obj, item_dict, citations_by_message)
-
-                        # Add agency metadata to the response items
-                        formatted_item = MessageFormatter.add_agency_metadata(
-                            item_dict,
-                            agent=current_agent_name,
-                            caller_agent=sender_name,
-                            agent_run_id=current_agent_run_id,
-                            parent_run_id=parent_run_id,
-                            run_trace_id=run_trace_id,
-                            history_protocol=MessageFormatter.resolve_history_protocol_for_agent_name(
-                                current_agent_name,
-                                default_agent=self.agent,
-                                agency_context=agency_context,
-                            ),
-                        )
-                        items_to_save.append(formatted_item)
-                        content_preview = str(item_dict.get("content", ""))[:50]
-                        logger.debug(
-                            f"  [NewItem #{i}] type={type(run_item_obj).__name__}, "
-                            f"role={item_dict.get('role')}, content_preview='{content_preview}...'"
-                        )
-
-                        # If this item indicates a handoff, update current agent for subsequent items
-                        if run_item_obj.type == "handoff_output_item":
-                            target = MessageFormatter.extract_handoff_target_name(run_item_obj)
-                            if target:
-                                current_agent_name = target
-
-                items_to_save.extend(hosted_tool_outputs)
-                filtered_items = MessageFilter.filter_messages(items_to_save)  # type: ignore[arg-type] # Filter out unwanted message types
-
-                normalizer = StreamIdNormalizer()
-                normalized_items = normalizer.normalize_message_dicts(filtered_items)
-
-                agency_context.thread_manager.add_messages(normalized_items)  # type: ignore[arg-type] # Save filtered items to flat storage
-                logger.debug(f"Saved {len(filtered_items)} items to storage (filtered from {len(items_to_save)}).")
+                if hosted_tool_outputs:
+                    filtered_items = MessageFilter.filter_messages(hosted_tool_outputs)  # type: ignore[arg-type]
+                    normalizer = StreamIdNormalizer()
+                    normalized_items = normalizer.normalize_message_dicts(filtered_items)
+                    agency_context.thread_manager.add_messages(normalized_items)  # type: ignore[arg-type]
+                    logger.debug(f"Saved {len(normalized_items)} hosted tool output items to storage.")
 
             if (
                 matched_starter
@@ -472,11 +427,11 @@ class Execution:
                         initial_saved_count = 0
                 is_first_message = initial_saved_count == 0
 
-                history_for_runner = MessageFormatter.prepare_history_for_runner(
-                    processed_current_message_items,
-                    self.agent,
-                    sender_name,
-                    agency_context,
+                session = create_agency_session(
+                    agent=self.agent,
+                    sender_name=sender_name,
+                    agency_context=agency_context,
+                    new_input_items=processed_current_message_items,
                     agent_run_id=current_agent_run_id,
                     parent_run_id=parent_run_id,
                     run_trace_id=run_trace_id,
@@ -486,7 +441,7 @@ class Execution:
                 logger.debug(
                     "Starting streaming run for agent '%s' with %d history items.",
                     self.agent.name,
-                    len(history_for_runner),
+                    len(session.prepared_input()),
                 )
 
                 matched_starter: str | None = None
@@ -552,14 +507,18 @@ class Execution:
                         parent_run_id=parent_run_id,
                     )
                     replay_items = filter_replay_items(replay_items)
-                    if agency_context and agency_context.thread_manager:
-                        agency_context.thread_manager.add_messages(replay_items)
+                    # No SDK run happens on the cached path; the input was persisted
+                    # at session creation, so only the replayed items need storing.
+                    # Snapshot the model input before the replay lands in the store
+                    # so RunResult.input keeps legacy semantics (history + new input).
+                    result_input = session.prepared_input()
+                    session.persist_items(replay_items)
 
                     run_items = build_run_items_from_cached(self.agent, replay_items)
                     final_output_text = extract_final_output_text(replay_items)
                     final_output = parse_cached_output(final_output_text, self.agent.output_type)
                     run_result = RunResult(
-                        input=history_for_runner,
+                        input=result_input,
                         new_items=run_items,
                         raw_responses=[],
                         final_output=final_output,
@@ -595,7 +554,8 @@ class Execution:
 
                 stream_handle = run_stream_with_guardrails(
                     agent=self.agent,
-                    initial_history_for_runner=history_for_runner,
+                    initial_input_items=processed_current_message_items,
+                    session=session,
                     master_context_for_run=master_context_for_run,
                     sender_name=sender_name,
                     agency_context=agency_context,

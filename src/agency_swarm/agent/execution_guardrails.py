@@ -9,8 +9,6 @@ from agents import (
 from agency_swarm.messages import MessageFormatter
 
 if TYPE_CHECKING:
-    from agents import RunConfig
-
     from .context_types import AgencyContext
     from .core import Agent
 
@@ -81,13 +79,13 @@ def append_guardrail_feedback(
     current_agent_run_id: str,
     exception: BaseException,
     include_assistant: bool,
-    run_config_override: "RunConfig | None" = None,
-) -> list[TResponseInputItem]:
-    """Persist guardrail feedback messages and rebuild history for retry.
+) -> None:
+    """Persist guardrail feedback messages to the shared store.
 
     Restores message_origin metadata consistent with previous behavior while
     keeping refactored structure. This enables downstream consumers to
-    differentiate guidance provenance.
+    differentiate guidance provenance. Retries replay the persisted store via
+    the session, so no rebuilt history is returned.
     """
     assistant_output, guidance_text = extract_guardrail_texts(exception)
     history_protocol = MessageFormatter.resolve_history_protocol(agent)
@@ -139,15 +137,3 @@ def append_guardrail_feedback(
         )
 
         agency_context.thread_manager.add_messages(to_persist)  # type: ignore[arg-type]
-
-    # Rebuild full history for retry using persisted messages
-    return MessageFormatter.prepare_history_for_runner(
-        [],
-        agent,
-        sender_name,
-        agency_context,
-        agent_run_id=current_agent_run_id,
-        parent_run_id=parent_run_id,
-        run_trace_id=run_trace_id,
-        run_config_override=run_config_override,
-    )

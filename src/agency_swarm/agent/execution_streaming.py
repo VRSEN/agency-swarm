@@ -3,6 +3,7 @@ import logging
 import typing
 from collections.abc import AsyncGenerator, Callable
 from contextlib import AsyncExitStack, suppress
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any, cast
 
 from agents import (
@@ -17,6 +18,7 @@ from agents.items import MessageOutputItem, RunItem
 from agents.stream_events import RunItemStreamEvent, StreamEvent
 from openai.types.responses import ResponseOutputMessage, ResponseOutputText
 
+from agency_swarm.agent.agency_session import AgencySession
 from agency_swarm.agent.codex_model_input import with_codex_model_input_role_rewrite
 from agency_swarm.agent.runner import Runner
 from agency_swarm.agent.system_reminder_state import agency_system_reminder_run
@@ -124,28 +126,35 @@ def prune_guardrail_messages(
 def perform_streamed_run(
     *,
     agent: "Agent",
-    history_for_runner: list[TResponseInputItem],
+    input_items: list[TResponseInputItem],
+    session: AgencySession,
     master_context_for_run: MasterContext,
     hooks_override: RunHooks | None,
     run_config_override: RunConfig | None,
     kwargs: dict[str, Any],
 ):
     """Return the streaming run object from Runner without guardrail logic."""
+    run_config = with_codex_model_input_role_rewrite(run_config_override or RunConfig())
+    # Copy so retries never wrap a previous session callback and reused configs stay clean.
+    merged_callback = session.session_input_callback(run_config.session_input_callback)
+    run_config = replace(run_config, session_input_callback=merged_callback)
     with agency_system_reminder_run(master_context_for_run):
         return Runner.run_streamed(
             starting_agent=agent,
-            input=history_for_runner,
+            input=input_items,
             context=master_context_for_run,
             hooks=hooks_override,
-            run_config=with_codex_model_input_role_rewrite(run_config_override or RunConfig()),
+            run_config=run_config,
             max_turns=kwargs.get("max_turns", 1000000),
+            session=session,
         )
 
 
 def run_stream_with_guardrails(
     *,
     agent: "Agent",
-    initial_history_for_runner: list[TResponseInputItem],
+    initial_input_items: list[TResponseInputItem],
+    session: AgencySession,
     master_context_for_run: MasterContext,
     sender_name: str | None,
     agency_context: "AgencyContext | None",
@@ -170,7 +179,7 @@ def run_stream_with_guardrails(
         nonlocal wrapper
         nonlocal current_agent_run_id
         attempts_remaining = int(validation_attempts or 0)
-        history_for_runner = initial_history_for_runner
+        input_items = initial_input_items
 
         while True:
             if cancel_state.get("user_requested"):
@@ -208,7 +217,7 @@ def run_stream_with_guardrails(
                     initial_saved_count = 0
 
             async def _streaming_worker(
-                history_for_runner=history_for_runner,
+                input_items=input_items,
                 master_context_for_run=master_context_for_run,
                 event_queue=event_queue,
                 cancel_requested=cancel_requested,
@@ -233,7 +242,8 @@ def run_stream_with_guardrails(
 
                         local_result = perform_streamed_run(
                             agent=agent,
-                            history_for_runner=history_for_runner,
+                            input_items=input_items,
+                            session=session,
                             master_context_for_run=master_context_for_run,
                             hooks_override=hooks_override,
                             run_config_override=run_config_override,
@@ -326,7 +336,6 @@ def run_stream_with_guardrails(
                             current_agent_run_id=current_agent_run_id,
                             exception=e,
                             include_assistant=False,
-                            run_config_override=run_config_override,
                         )
                         exception_guardrail_guidance = guidance_text
                     except Exception:
@@ -442,6 +451,7 @@ def run_stream_with_guardrails(
                         current_agent_run_id=current_agent_run_id,
                         agency_context=agency_context,
                         metadata_store=metadata_store,
+                        session=session,
                     )
 
                     yield event
@@ -517,7 +527,7 @@ def run_stream_with_guardrails(
                     raise guardrail_exception
                 attempts_remaining -= 1
 
-                history_for_runner = append_guardrail_feedback(
+                append_guardrail_feedback(
                     agent=agent,
                     agency_context=agency_context,
                     sender_name=sender_name,
@@ -526,8 +536,10 @@ def run_stream_with_guardrails(
                     current_agent_run_id=current_agent_run_id,
                     exception=guardrail_exception,
                     include_assistant=False,
-                    run_config_override=run_config_override,
                 )
+                # Retry with no new input: the session replays the store slice,
+                # which now includes the persisted guardrail feedback.
+                input_items = []
                 continue
             except asyncio.CancelledError:
                 wrapper._resolve_final_result(None)
