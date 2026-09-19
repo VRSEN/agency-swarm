@@ -128,7 +128,7 @@ def run_realtime(
     provider: Literal["openai", "xai"] = "openai",
     provider_options: dict[str, Any] | None = None,
     voice: str | None = None,
-    host: str = "0.0.0.0",
+    host: str = "127.0.0.1",
     port: int = 8000,
     turn_detection: dict[str, Any] | None = None,
     input_audio_format: str | None = None,

@@ -230,7 +230,7 @@ if __name__ == "__main__":
 
     app = run_fastapi(
         agencies={"notion_hosted_mcp": create_agency},
-        host="0.0.0.0",
+        host="127.0.0.1",
         port=PORT,
         return_app=True,
         oauth_registry=oauth_registry,
@@ -246,4 +246,4 @@ if __name__ == "__main__":
 
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=PORT)
+    uvicorn.run(app, host="127.0.0.1", port=PORT)

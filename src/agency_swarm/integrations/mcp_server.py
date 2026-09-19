@@ -66,7 +66,7 @@ def _load_tools_from_directory(tools_dir: str) -> list[type[BaseTool] | Function
 
 def run_mcp(
     tools: list[type[BaseTool] | FunctionTool] | str,
-    host: str = "0.0.0.0",
+    host: str = "127.0.0.1",
     port: int = 8000,
     app_token_env: str | None = "APP_TOKEN",
     server_name: str = "mcp-tools-server",
@@ -78,7 +78,8 @@ def run_mcp(
     Launch a FastMCP server exposing BaseTool and FunctionTool instances.
     Args:
         tools: List of BaseTool/FunctionTool classes or path to directory containing tools.
-        host: Host to bind the server to.
+        host: Host to bind the server to. Defaults to loopback (127.0.0.1);
+            pass "0.0.0.0" explicitly to bind all interfaces.
         port: Port to bind the server to.
         app_token_env: Environment variable name for authentication token. Provide None to disable authentication.
         server_name: Name identifier for the MCP server
