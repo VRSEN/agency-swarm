@@ -192,6 +192,44 @@ def _build_file_citation(annotation: AnnotationFileCitation) -> dict:
     }
 
 
+def extract_file_citations_from_input_item(item: dict) -> list[dict]:
+    """Extract direct-file citations from a serialized input item.
+
+    Dict-level counterpart of ``extract_direct_file_annotations``: SDK ``Session``
+    implementations persist ``TResponseInputItem`` dicts rather than ``RunItem``
+    objects, so annotations are read from the item's ``content`` parts.
+
+    Args:
+        item: A TResponseInputItem-shaped message dict (typically an assistant message).
+
+    Returns:
+        List of citation dicts, empty when the item carries no file citations.
+    """
+    content = item.get("content")
+    if not isinstance(content, list):
+        return []
+
+    citations: list[dict] = []
+    for part in content:
+        if not isinstance(part, dict):
+            continue
+        annotations = part.get("annotations")
+        if not isinstance(annotations, list):
+            continue
+        for annotation in annotations:
+            if isinstance(annotation, dict) and annotation.get("type") == "file_citation":
+                citations.append(
+                    {
+                        "file_id": annotation.get("file_id"),
+                        "filename": annotation.get("filename"),
+                        "index": annotation.get("index"),
+                        "type": "file_citation",
+                        "method": "direct_file",
+                    }
+                )
+    return citations
+
+
 def _resolve_file_search_result(result: ResponseFileSearchResult) -> tuple[str, str]:
     file_id_value = result.file_id
     if isinstance(file_id_value, str) and file_id_value:
