@@ -16,11 +16,13 @@ def test_dependency_constraints_exclude_incompatible_releases() -> None:
     extras = project["project"]["optional-dependencies"]
     extra = Requirement(extras["litellm"][0])
 
-    # The httpx2-generation core: OpenAI 3.x, Agents SDK 0.22.x, MCP 2.x, httpx2.
+    # The httpx2-generation core: OpenAI 3.x, Agents SDK 0.22.3 (exact pin — the
+    # package patches private SDK seams), MCP 2.x, httpx2.
     assert Version("3.0.0") in openai.specifier
     assert Version("2.99.0") not in openai.specifier
     assert Version("4.0.0") not in openai.specifier
-    assert Version("0.22.0") in agents.specifier
+    assert Version("0.22.3") in agents.specifier
+    assert Version("0.22.4") not in agents.specifier
     assert Version("0.23.0") not in agents.specifier
     assert Version("2.0.0") in mcp.specifier
     assert Version("3.0.0") not in mcp.specifier
