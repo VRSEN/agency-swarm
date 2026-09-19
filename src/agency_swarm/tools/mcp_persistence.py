@@ -1,4 +1,14 @@
-"""Process-level registry of persistent MCP server connections."""
+"""Process-level registry of persistent MCP server connections.
+
+The Agents SDK owns the connect/cleanup lifecycle: every registered server is bound to a
+dedicated :class:`agents.mcp.MCPServerManager` running ``connect_in_parallel=True``, so an
+SDK worker task owns each server's ``connect``/``cleanup`` pair with in-task timeouts on the
+background loop (the AnyIO cancel-scope affinity MCP transports require).
+
+What stays custom is what the SDK does not cover: the persistence registry and its keys, the
+background-loop bridging used by :class:`LoopAffineAsyncProxy`, per-call OAuth context
+propagation into the worker task, OAuth on-demand connection, and OAuth-aware timeouts.
+"""
 
 import asyncio
 import inspect
@@ -6,33 +16,118 @@ import logging
 import threading
 from concurrent.futures import Future
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
+
+from agents.mcp import MCPServer, MCPServerManager
 
 from agency_swarm.tools.mcp_oauth_bridge import (
     _OAUTH_AVAILABLE,
     _get_oauth_runtime_context,
     _get_oauth_user_id,
-    _MCPServerOAuth,
     _MCPServerOAuthClient,
     _set_oauth_runtime_context,
     _set_oauth_user_id,
-    apply_managed_oauth_cache_dir,
+    apply_oauth_cache_dir,
 )
-
-if TYPE_CHECKING:
-    from agency_swarm.mcp.oauth import MCPServerOAuth
 
 logger = logging.getLogger(__name__)
 
 _OAUTH_LIST_TOOLS_TIMEOUT_SECONDS = 620.0
 _OAUTH_LIST_TOOLS_TIMEOUT_GRACE_SECONDS = 20.0
+# Extra caller-side wait so the SDK's in-task lifecycle timeout fires first.
+_LIFECYCLE_AWAIT_GRACE_SECONDS = 5.0
+
+
+class _BoundMCPServer:
+    """Adapter handed to ``MCPServerManager`` in place of the real server.
+
+    The SDK worker task only runs ``connect`` and ``cleanup``. This adapter forwards them to
+    the real server and replays a requested ``__aenter__``/``__aexit__`` pair inside the
+    worker task, so ``async with proxy`` keeps its semantics and AnyIO cancel scopes stay
+    affine. OAuth contextvars do not cross threads and are replayed where token storage
+    reads them. Servers without ``cleanup`` are tolerated, matching the previous manager.
+    """
+
+    def __init__(self, server: Any) -> None:
+        self._server = server
+        self._oauth_user_id: str | None = None
+        self._oauth_runtime_context: Any | None = None
+        self._enter_requested = False
+        self._exit_requested = False
+        self.exit_args: tuple[Any, Any, Any] = (None, None, None)
+        self.enter_result: Any = server
+        self.exit_result: Any = None
+
+    @property
+    def name(self) -> str:
+        return getattr(self._server, "name", "<unnamed>")
+
+    def bind_oauth_context(self, user_id: str | None, runtime_context: Any | None) -> None:
+        """Capture OAuth contextvars to replay inside the worker task."""
+        self._oauth_user_id = user_id
+        self._oauth_runtime_context = runtime_context
+
+    def request_enter(self) -> None:
+        self._enter_requested = True
+
+    def request_exit(self, args: tuple[Any, Any, Any]) -> None:
+        self._exit_requested = True
+        self.exit_args = args
+
+    def _set_oauth_context(self, user_id: str | None, runtime_context: Any | None) -> None:
+        if _set_oauth_user_id is not None:
+            _set_oauth_user_id(user_id)
+        if _set_oauth_runtime_context is not None:
+            _set_oauth_runtime_context(runtime_context)
+
+    def _apply_oauth_context(self) -> None:
+        self._set_oauth_context(self._oauth_user_id, self._oauth_runtime_context)
+
+    def _clear_oauth_context(self) -> None:
+        self._set_oauth_context(None, None)
+
+    async def connect(self) -> None:
+        """Runs inside the SDK worker task."""
+        self._apply_oauth_context()
+        try:
+            if self._enter_requested:
+                self._enter_requested = False
+                enter = getattr(self._server, "__aenter__", None) or self._server.connect
+                result = enter()
+                result = await result if inspect.isawaitable(result) else result
+                self.enter_result = result if result is not None else self._server
+            else:
+                await self._server.connect()
+        finally:
+            self._clear_oauth_context()
+
+    async def cleanup(self) -> None:
+        """Runs inside the SDK worker task."""
+        self._apply_oauth_context()
+        try:
+            if self._exit_requested:
+                self._exit_requested = False
+                exit_fn = getattr(self._server, "__aexit__", None)
+                if exit_fn is not None:
+                    result = exit_fn(*self.exit_args)
+                    self.exit_result = await result if inspect.isawaitable(result) else result
+                    return
+            cleanup = getattr(self._server, "cleanup", None)
+            if not callable(cleanup):
+                return
+            result = cleanup()
+            self.exit_result = await result if inspect.isawaitable(result) else result
+        finally:
+            self._clear_oauth_context()
 
 
 class PersistentMCPServerManager:
     """Process-level registry for MCP servers with persistent connections.
-    Servers are keyed by their readable `name` attribute. New agencies/agents
-    should reuse these instances instead of creating new ones to preserve a
-    single connection per process.
+
+    Servers are keyed by their readable `name` attribute (or OAuth persistence key).
+    New agencies/agents should reuse these instances instead of creating new ones to
+    preserve a single connection per process. Connect/cleanup/reconnect are delegated to
+    a per-server ``agents.mcp.MCPServerManager`` driven on a shared background loop.
     """
 
     def __init__(self) -> None:
@@ -54,8 +149,8 @@ class PersistentMCPServerManager:
             "__aenter__": 15.0,
             "__aexit__": 15.0,
         }
-        # Server -> driver mapping (driver runs on background loop in a single task)
-        self._drivers: dict[Any, dict[str, Any]] = {}
+        # real server -> {"manager": MCPServerManager, "bound": _BoundMCPServer, "real": server}
+        self._bindings: dict[Any, dict[str, Any]] = {}
 
     def _resolve_method_timeout(self, server: Any, method_name: str) -> float:
         """Resolve timeout for a method call, extending OAuth discovery waits only when needed."""
@@ -76,187 +171,132 @@ class PersistentMCPServerManager:
             return float(runtime_timeout) + _OAUTH_LIST_TOOLS_TIMEOUT_GRACE_SECONDS
         return _OAUTH_LIST_TOOLS_TIMEOUT_SECONDS
 
-    def _ensure_driver(self, server: Any) -> None:
-        # Create a per-server driver task with a command queue if missing
+    @staticmethod
+    def _is_oauth_client(server: Any) -> bool:
+        return _MCPServerOAuthClient is not None and isinstance(server, _MCPServerOAuthClient)
+
+    def _ensure_binding(self, server: Any) -> dict[str, Any]:
+        """Create the per-server SDK manager binding if missing (no connection yet)."""
         real_server = getattr(server, "_server", server)
-        if real_server in self._drivers:
+        if real_server in self._bindings:
+            return self._bindings[real_server]
+        bound = _BoundMCPServer(real_server)
+        sdk_manager = MCPServerManager(
+            [cast("MCPServer", bound)],
+            connect_timeout_seconds=self._timeouts.get("connect", 20.0),
+            cleanup_timeout_seconds=self._timeouts.get("cleanup", 10.0),
+            drop_failed_servers=False,
+            strict=False,
+            connect_in_parallel=True,
+        )
+        state = {"manager": sdk_manager, "bound": bound, "real": real_server}
+        self._bindings[real_server] = state
+        return state
+
+    def _sync_lifecycle_timeouts(self, sdk_manager: MCPServerManager) -> None:
+        sdk_manager.connect_timeout_seconds = self._timeouts.get("connect", 20.0)
+        sdk_manager.cleanup_timeout_seconds = self._timeouts.get("cleanup", 10.0)
+
+    def _submit_connect(self, state: dict[str, Any], *, propagate_errors: bool = False) -> Future:
+        """Schedule ``connect_all`` on the background loop.
+
+        Only ``TimeoutError`` propagates by default (matching the previous ready-event
+        wait); ``propagate_errors`` also re-raises recorded failures, matching a direct
+        ``server.connect()`` call.
+        """
+        sdk_manager: MCPServerManager = state["manager"]
+        bound: _BoundMCPServer = state["bound"]
+        self._sync_lifecycle_timeouts(sdk_manager)
+
+        async def _connect() -> None:
+            await sdk_manager.connect_all()
+            error = sdk_manager.errors.get(cast("MCPServer", bound))
+            if error is not None and (propagate_errors or isinstance(error, TimeoutError)):
+                raise error
+
+        return self._submit_to_loop(_connect())
+
+    def _submit_cleanup(self, state: dict[str, Any]) -> Future:
+        """Schedule ``cleanup_all`` on the background loop, re-raising recorded failures."""
+        sdk_manager: MCPServerManager = state["manager"]
+        bound: _BoundMCPServer = state["bound"]
+        self._sync_lifecycle_timeouts(sdk_manager)
+
+        async def _cleanup() -> None:
+            await sdk_manager.cleanup_all()
+            error = sdk_manager.errors.get(cast("MCPServer", bound))
+            if error is not None:
+                raise error
+
+        return self._submit_to_loop(_cleanup())
+
+    async def _await_cleanup(self, state: dict[str, Any], server_name: str) -> None:
+        try:
+            await self._await_future(
+                self._submit_cleanup(state),
+                timeout=self._timeouts.get("cleanup", 10.0) + _LIFECYCLE_AWAIT_GRACE_SECONDS,
+            )
+        except TimeoutError:
+            logger.warning("Timed out waiting for MCP server '%s' cleanup; forcing shutdown", server_name)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Error during MCP server '%s' shutdown: %s", server_name, exc)
+
+    def _ensure_driver(self, server: Any) -> None:
+        """Ensure the per-server worker exists and non-OAuth servers are connected.
+
+        Synchronous facade used from agent init and tool conversion; blocks the caller
+        thread until connect finishes, like the previous ready-event wait.
+        """
+        real_server = getattr(server, "_server", server)
+        state = self._ensure_binding(real_server)
+        if self._is_oauth_client(real_server):
+            # Two-phase auth: defer all connections to on-demand calls.
             return
-        loop = self._ensure_bg_loop()
-        queue: asyncio.Queue = asyncio.Queue()
-        # Readiness event
-        ready_evt = threading.Event()
-        # Unwrap proxy to operate on the real server inside the driver (same task)
-
-        # Check if this is an OAuth client (two-phase auth)
-        is_oauth_client = _MCPServerOAuthClient is not None and isinstance(real_server, _MCPServerOAuthClient)
-
-        async def _driver():
-            # Connect once in this driver task to bind cancel scope and session
-            try:
-                if getattr(real_server, "session", None) is None and not getattr(
-                    real_server, "_discovery_session", None
-                ):
-                    server_name = getattr(real_server, "name", "<unnamed>")
-                    if is_oauth_client:
-                        # Two-phase auth: defer all connections to on-demand calls
-                        logger.info(
-                            f"Skipping eager discovery connect for OAuth server {server_name}; will connect on demand."
-                        )
-                    else:
-                        # Regular server: full connection
-                        logger.info(f"Connecting server {server_name}")
-                        await real_server.connect()
-            except Exception as conn_err:
-                # Log but don't crash - allow driver to start for retry/recovery
-                logger.error(f"Connection failed for {getattr(real_server, 'name', '<unnamed>')}: {conn_err}")
-            finally:
-                ready_evt.set()
-
-            while True:
-                cmd = await queue.get()
-                if cmd is None:
-                    continue
-                typ = cmd.get("type")
-                if typ == "call":
-                    method_name = cmd["method"]
-                    args = cmd.get("args", ())
-                    kwargs = cmd.get("kwargs", {})
-                    result_fut: Future = cmd["result_fut"]
-                    if _set_oauth_user_id is not None:
-                        _set_oauth_user_id(cast("str | None", cmd.get("oauth_user_id")))
-                    if _set_oauth_runtime_context is not None:
-                        _set_oauth_runtime_context(cmd.get("oauth_runtime_context"))
-                    try:
-                        method = getattr(real_server, method_name)
-                        res = await method(*args, **kwargs)
-                        result_fut.set_result(res)
-                    except BaseException as e:  # noqa: BLE001
-                        result_fut.set_exception(e)
-                    finally:
-                        if _set_oauth_runtime_context is not None:
-                            _set_oauth_runtime_context(None)
-                        if _set_oauth_user_id is not None:
-                            _set_oauth_user_id(None)
-                elif typ == "shutdown":
-                    result_fut: Future = cmd["result_fut"]
-                    try:
-                        cleanup = getattr(real_server, "cleanup", None)
-                        if callable(cleanup):
-                            cleanup_result = cleanup()
-                            if inspect.isawaitable(cleanup_result):
-                                await cleanup_result
-                        result_fut.set_result(True)
-                    except BaseException as e:  # noqa: BLE001
-                        result_fut.set_exception(e)
-                    break
-                elif typ == "force_stop":
-                    result_fut = cmd.get("result_fut")
-                    if isinstance(result_fut, Future) and not result_fut.done():
-                        result_fut.set_result(False)
-                    break
-
-        # Start driver
-        driver_future = asyncio.run_coroutine_threadsafe(_driver(), loop)
-        # Wait until driver has connected
-        if not ready_evt.wait(timeout=self._timeouts.get("connect", 20.0)):
-            # Handle timeout explicitly
-            raise TimeoutError(f"Server {getattr(server, 'name', '<unnamed>')} failed to connect within timeout")
-        # Track whether this driver created a session (regular or discovery)
-        has_session = getattr(real_server, "session", None) is not None
-        has_discovery = getattr(real_server, "_discovery_session", None) is not None
-        created_by_driver = has_session or has_discovery
-        self._drivers[real_server] = {
-            "queue": queue,
-            "real": real_server,
-            "created_by_driver": created_by_driver,
-            "driver_future": driver_future,
-        }
+        fut = self._submit_connect(state)
+        fut.result(timeout=self._timeouts.get("connect", 20.0) + _LIFECYCLE_AWAIT_GRACE_SECONDS)
 
     async def ensure_connected(self, server: Any) -> None:
-        # Ensure the per-server driver is running and connected
+        """Ensure the per-server worker exists and non-OAuth servers are connected."""
+        real_server = getattr(server, "_server", server)
         async with self._lock:
-            self._ensure_driver(server)
+            state = self._ensure_binding(real_server)
+            if self._is_oauth_client(real_server):
+                logger.info(
+                    f"Skipping eager discovery connect for OAuth server "
+                    f"{getattr(real_server, 'name', '<unnamed>')}; will connect on demand."
+                )
+                return
+            fut = self._submit_connect(state)
+            await self._await_future(fut, timeout=self._timeouts.get("connect", 20.0) + _LIFECYCLE_AWAIT_GRACE_SECONDS)
 
     async def reconnect(self, server: Any) -> None:
-        """Force reconnection by clearing the existing driver and creating a new one.
+        """Force reconnection by replacing the server binding.
 
-        Args:
-            server: The MCP server to reconnect (can be proxy or real server)
+        Non-OAuth servers reconnect eagerly; OAuth clients stay lazy and reconnect on the
+        next call, matching the previous driver behavior.
         """
-        # Unwrap proxy to get real server
         real_server = getattr(server, "_server", server)
+        server_name = getattr(real_server, "name", "<unnamed>")
 
         async with self._lock:
-            # Clear the existing driver if present
-            if real_server in self._drivers:
-                server_name = getattr(real_server, "name", "<unnamed>")
-                logger.info(f"Clearing stale driver for {server_name}")
-                driver_state = self._drivers.pop(real_server)
+            state = self._bindings.pop(real_server, None)
+            if state is not None:
+                logger.info(f"Clearing stale binding for {server_name}")
+                await self._await_cleanup(state, server_name)
 
-                # Try to cleanup the old driver gracefully
-                try:
-                    queue = driver_state.get("queue")
-                    if queue:
-                        # Send shutdown command
-                        from concurrent.futures import Future
-
-                        fut: Future = Future()
-                        queue.put_nowait({"type": "shutdown", "result_fut": fut})
-                        # Don't wait for it, just move on
-                except Exception:
-                    pass  # Ignore cleanup errors
-
-            # Clear session to force reconnection
-            if hasattr(real_server, "session"):
-                real_server.session = None
-
-            # Re-create the driver (this will reconnect)
-            self._ensure_driver(real_server)
-
-    async def connect_all(self) -> None:
-        for server in self._servers.values():
-            await self.ensure_connected(server)
+            state = self._ensure_binding(real_server)
+            if not self._is_oauth_client(real_server):
+                fut = self._submit_connect(state)
+                await self._await_future(
+                    fut, timeout=self._timeouts.get("connect", 20.0) + _LIFECYCLE_AWAIT_GRACE_SECONDS
+                )
 
     async def shutdown(self) -> None:
         """Cleanup all persistent servers and clear the registry."""
         async with self._lock:
-            # Drive shutdown via driver queues to guarantee same-task cleanup
-            for _, state in list(self._drivers.items()):
-                queue: asyncio.Queue = state["queue"]
-                fut: Future = Future()
-
-                def _post(queue=queue, fut=fut):
-                    queue.put_nowait({"type": "shutdown", "result_fut": fut})
-
-                loop = self._ensure_bg_loop()
-                loop.call_soon_threadsafe(_post)
-                server_name = getattr(state.get("real"), "name", "<unnamed>")
-                try:
-                    fut.result(timeout=self._timeouts.get("cleanup", 10.0))
-                except TimeoutError:
-                    logger.warning(
-                        "Timed out waiting for MCP server '%s' cleanup; forcing shutdown",
-                        server_name,
-                    )
-
-                    def _force_stop(queue=queue, fut=fut):
-                        queue.put_nowait({"type": "force_stop", "result_fut": fut})
-
-                    loop.call_soon_threadsafe(_force_stop)
-                    try:
-                        fut.result(timeout=0.5)
-                    except TimeoutError:
-                        logger.warning(
-                            "Force-stop for MCP server '%s' did not complete in time",
-                            server_name,
-                        )
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning(
-                        "Error during MCP server '%s' shutdown: %s",
-                        server_name,
-                        exc,
-                    )
-            self._drivers.clear()
+            for state in list(self._bindings.values()):
+                await self._await_cleanup(state, getattr(state.get("real"), "name", "<unnamed>"))
+            self._bindings.clear()
             self._servers.clear()
             if self._bg_loop is not None:
                 try:
@@ -300,54 +340,16 @@ class PersistentMCPServerManager:
         """Update cache_dir for all OAuth-enabled servers registered with this manager."""
         if not _OAUTH_AVAILABLE:
             return
-        normalized = None
-        if cache_dir is not None:
-            normalized = cache_dir.expanduser()
-        for server in self._servers.values():
-            self._apply_cache_dir_to_server(server, normalized)
-        # Update drivers as well (LoopAffineAsyncProxy->real server)
-        for entry in self._drivers.values():
-            real_server = entry.get("real")
-            if real_server is not None:
-                self._apply_cache_dir_to_server(real_server, normalized)
-
-    def _apply_cache_dir_to_server(self, server: Any, cache_dir: Path | None) -> None:
-        """Internal helper to apply cache_dir to both configs and instantiated clients."""
-        if server is None:
-            return
-        actual = getattr(server, "_server", server)
-        if _MCPServerOAuth is not None and isinstance(actual, _MCPServerOAuth):
-            oauth_config = cast("MCPServerOAuth", actual)
-            apply_managed_oauth_cache_dir(oauth_config, cache_dir)
-            return
-        try:
-            from agency_swarm.mcp.oauth_client import MCPServerOAuthClient
-        except ImportError:  # pragma: no cover - optional dependency missing
-            return
-
-        if isinstance(actual, MCPServerOAuthClient):
-            config = actual.oauth_config
-            apply_managed_oauth_cache_dir(config, cache_dir)
-            oauth_provider = getattr(actual, "_oauth_provider", None)
-            storage = getattr(oauth_provider, "storage", None) if oauth_provider else None
-            if storage and hasattr(storage, "base_cache_dir") and cache_dir is not None:
-                storage.base_cache_dir = cache_dir
+        servers = list(self._servers.values())
+        # Bound servers as well (LoopAffineAsyncProxy->real server)
+        servers.extend(entry["real"] for entry in self._bindings.values() if entry.get("real") is not None)
+        apply_oauth_cache_dir(servers, cache_dir)
 
     async def _shutdown_server_unlocked(self, server: Any) -> None:
         real_server = getattr(server, "_server", server)
-        state = self._drivers.pop(real_server, None)
+        state = self._bindings.pop(real_server, None)
         if state is not None:
-            queue: asyncio.Queue = state["queue"]
-            fut: Future = Future()
-            loop = self._ensure_bg_loop()
-            loop.call_soon_threadsafe(lambda: queue.put_nowait({"type": "shutdown", "result_fut": fut}))
-            running_loop = asyncio.get_running_loop()
-            try:
-                await running_loop.run_in_executor(None, fut.result, self._timeouts.get("cleanup", 10.0))
-            except TimeoutError:
-                driver_future = state.get("driver_future")
-                if isinstance(driver_future, Future):
-                    driver_future.cancel()
+            await self._await_cleanup(state, getattr(real_server, "name", "<unnamed>"))
             return
 
         cleanup = getattr(real_server, "cleanup", None)
@@ -375,35 +377,78 @@ class PersistentMCPServerManager:
         loop = self._ensure_bg_loop()
         return asyncio.run_coroutine_threadsafe(coro, loop)
 
-    def _submit_driver_call(self, server: Any, method: str, args: tuple[Any, ...], kwargs: dict[str, Any]) -> Future:
-        """Schedule a coroutine method call on the server's long-lived driver task."""
+    @staticmethod
+    def _current_oauth_context() -> tuple[str | None, Any | None]:
+        user = _get_oauth_user_id() if _get_oauth_user_id is not None else None
+        context = _get_oauth_runtime_context() if _get_oauth_runtime_context is not None else None
+        return user, context
+
+    def _submit_call(self, server: Any, method: str, args: tuple[Any, ...], kwargs: dict[str, Any]) -> Future:
+        """Schedule a coroutine method call on the server's background loop."""
         real_server = getattr(server, "_server", server)
-        self._ensure_driver(real_server)
-        state = self._drivers.get(real_server)
-        if state is None:
-            raise RuntimeError(f"Driver not initialized for server {getattr(real_server, 'name', '<unnamed>')}")
+        state = self._ensure_binding(real_server)
+        sdk_manager: MCPServerManager = state["manager"]
+        bound: _BoundMCPServer = state["bound"]
+        oauth_user_id, oauth_runtime_context = self._current_oauth_context()
 
-        queue: asyncio.Queue = state["queue"]
-        fut: Future = Future()
+        if method == "connect":
+            bound.bind_oauth_context(oauth_user_id, oauth_runtime_context)
+            return self._submit_connect(state, propagate_errors=True)
+        if method == "cleanup":
+            return self._submit_cleanup(state)
 
-        def _post_call() -> None:
-            oauth_user_id = _get_oauth_user_id() if _get_oauth_user_id is not None else None
-            oauth_runtime_context = _get_oauth_runtime_context() if _get_oauth_runtime_context is not None else None
-            queue.put_nowait(
-                {
-                    "type": "call",
-                    "method": method,
-                    "args": args,
-                    "kwargs": kwargs,
-                    "oauth_user_id": oauth_user_id,
-                    "oauth_runtime_context": oauth_runtime_context,
-                    "result_fut": fut,
-                }
-            )
+        async def _invoke() -> Any:  # noqa: ANN401
+            if self._is_oauth_client(real_server) and getattr(real_server, "session", None) is None:
+                # OAuth clients connect on demand. Run the connect inside the SDK worker
+                # task so the session's cancel scopes stay affine with cleanup. If it
+                # fails, still run the method: the client's lazy connect surfaces its own
+                # error, matching the previous driver's call semantics.
+                bound.bind_oauth_context(oauth_user_id, oauth_runtime_context)
+                self._sync_lifecycle_timeouts(sdk_manager)
+                await sdk_manager.connect_all()
+            bound._set_oauth_context(oauth_user_id, oauth_runtime_context)
+            try:
+                method_fn = getattr(real_server, method)
+                return await method_fn(*args, **kwargs)
+            finally:
+                bound._clear_oauth_context()
 
-        loop = self._ensure_bg_loop()
-        loop.call_soon_threadsafe(_post_call)
-        return fut
+        return self._submit_to_loop(_invoke())
+
+    def _submit_enter(self, server: Any) -> Future:
+        """Run the real ``__aenter__`` inside the SDK worker task; resolves to its result."""
+        return self._submit_context(server, None)
+
+    def _submit_exit(self, server: Any, args: tuple[Any, Any, Any]) -> Future:
+        """Run the real ``__aexit__`` inside the SDK worker task; resolves to its result."""
+        return self._submit_context(server, args)
+
+    def _submit_context(self, server: Any, exit_args: tuple[Any, Any, Any] | None) -> Future:
+        state = self._ensure_binding(getattr(server, "_server", server))
+        sdk_manager: MCPServerManager = state["manager"]
+        bound: _BoundMCPServer = state["bound"]
+        if exit_args is not None:
+            bound.request_exit(exit_args)
+            inner = self._submit_cleanup(state)
+
+            async def _run() -> Any:  # noqa: ANN401
+                await asyncio.wrap_future(inner)
+                return bound.exit_result
+        else:
+            bound.bind_oauth_context(*self._current_oauth_context())
+            bound.request_enter()
+            self._sync_lifecycle_timeouts(sdk_manager)
+
+            async def _run() -> Any:  # noqa: ANN401
+                # reconnect() forces a fresh attempt even when the SDK still considers
+                # the server connected (e.g. a session reset outside the manager's view).
+                await sdk_manager.reconnect(failed_only=False)
+                error = sdk_manager.errors.get(cast("MCPServer", bound))
+                if error is not None:
+                    raise error
+                return bound.enter_result
+
+        return self._submit_to_loop(_run())
 
     async def _await_future(self, fut: Future, timeout: float | None = None) -> Any:  # noqa: ANN401
         loop = asyncio.get_running_loop()
@@ -427,19 +472,13 @@ class PersistentMCPServerManager:
             try:
                 asyncio.run(self.shutdown())
             except RuntimeError as exc:
-                message = str(exc)
-                if "asyncio.run() cannot be called from a running event loop" not in message:
+                if "asyncio.run() cannot be called from a running event loop" not in str(exc):
                     logger.warning("Error during persistent MCP manager shutdown: %s", exc)
                     return
                 try:
-                    loop = asyncio.get_running_loop()
+                    asyncio.get_running_loop().create_task(self.shutdown())
                 except RuntimeError as loop_error:
-                    logger.warning(
-                        "Error during persistent MCP manager shutdown: %s",
-                        loop_error,
-                    )
-                    return
-                loop.create_task(self.shutdown())
+                    logger.warning("Error during persistent MCP manager shutdown: %s", loop_error)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Error during persistent MCP manager shutdown: %s", exc)
         finally:

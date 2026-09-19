@@ -2,7 +2,6 @@
 
 import asyncio
 import contextvars
-import functools
 import logging
 import threading
 from collections.abc import Awaitable, Callable
@@ -12,41 +11,14 @@ from agents import Agent as SDKAgent, FunctionTool, default_tool_error_function,
 from agents.mcp.server import MCPServer
 from agents.mcp.util import MCPUtil
 from agents.run_context import RunContextWrapper
-from agents.tool import ToolContext
 
-from agency_swarm.tools.mcp_manager import (
-    LoopAffineAsyncProxy,
-    _build_persistence_key,
-    _clone_oauth_candidate,
-    _get_oauth_user_id,
-    _sync_oauth_client_handlers,
-    default_mcp_manager,
-)
+from agency_swarm.tools import mcp_manager as _mcp_manager
+from agency_swarm.tools.mcp_manager import _bind_persistent_servers
 
 if TYPE_CHECKING:
     from agency_swarm.agent.core import Agent as AgencyAgent
 
 logger = logging.getLogger(__name__)
-
-
-def _with_error_handling(tool: FunctionTool) -> FunctionTool:
-    """Wrap an MCP FunctionTool to catch exceptions and return error strings.
-
-    This makes MCP tools behave like @function_tool decorated functions,
-    which return error messages to the agent instead of propagating exceptions.
-    """
-    original_invoke = tool.on_invoke_tool
-
-    @functools.wraps(original_invoke)
-    async def wrapped_invoke(ctx: ToolContext[Any], input_json: str) -> Any:
-        try:
-            return await original_invoke(ctx, input_json)
-        except Exception as e:
-            logger.warning(f"MCP tool '{tool.name}' failed: {e}")
-            return default_tool_error_function(ctx, e)
-
-    tool.on_invoke_tool = wrapped_invoke
-    return tool
 
 
 def _run_coroutine_from_factory(factory: Callable[[], Awaitable[Any]]) -> Any:
@@ -81,6 +53,10 @@ def from_mcp(
     """
     Convert MCP servers into FunctionTool instances.
 
+    Tool discovery and error formatting are delegated to the Agents SDK
+    (``MCPUtil.get_function_tools`` with ``failure_error_function``); what stays custom is
+    persistence-key registration, loop-affine proxies, and the sync facade.
+
     Args:
         mcp_servers: List of MCP servers to convert
         convert_schemas_to_strict: Whether to convert schemas to strict mode
@@ -93,7 +69,7 @@ def from_mcp(
     if not mcp_servers:
         return []
 
-    servers = list(mcp_servers)
+    servers = _bind_persistent_servers(list(mcp_servers))
     run_context = context or RunContextWrapper(context=None)
     agent_for_fetch: SDKAgent
     if isinstance(agent, SDKAgent):
@@ -101,41 +77,9 @@ def from_mcp(
     else:
         agent_for_fetch = SDKAgent(name="mcp_tool_loader")
 
-    # Register servers
-    server_names = []
-    oauth_user_id = _get_oauth_user_id() if _get_oauth_user_id is not None else None
-    for i, srv in enumerate(list(servers)):
-        name = getattr(srv, "name", None)
-        if isinstance(name, str) and name != "" and name not in server_names:
-            server_names.append(name)
-            candidate = _clone_oauth_candidate(srv)
-            key = _build_persistence_key(candidate, oauth_user_id)
-            persistent = default_mcp_manager.get(key)
-            if persistent is None:
-                persistent = default_mcp_manager.register(candidate, key=key)
-            else:
-                _sync_oauth_client_handlers(persistent, candidate)
-            if persistent is not servers[i]:
-                servers[i] = persistent
-        elif name in server_names:
-            raise ValueError(
-                f"Server {srv} has duplicate name: {name}. "
-                "Please provide server with unique names by explicitly specifying the name attribute."
-            )
-        else:
-            raise ValueError(f"Server {srv} has no name provided")
-
-    # Wrap servers in LoopAffineAsyncProxy and ensure drivers are created
-    for idx, srv in enumerate(list(servers)):
-        if not isinstance(srv, LoopAffineAsyncProxy):
-            proxy = LoopAffineAsyncProxy(srv, default_mcp_manager)
-            servers[idx] = proxy  # type: ignore[assignment,call-overload]
-            srv = proxy  # type: ignore[assignment]
-
-        # Ensure driver is created and connected on the background loop (synchronous)
-        default_mcp_manager._ensure_driver(getattr(srv, "_server", srv))
-
-    converted_tools: list[FunctionTool] = []
+    # Ensure each server's worker exists and non-OAuth servers are connected (synchronous)
+    for srv in servers:
+        _mcp_manager.default_mcp_manager._ensure_driver(getattr(srv, "_server", srv))
 
     # Save the current tracing state before disabling it
     # The SDK doesn't expose a public getter, so we access the internal provider state
@@ -148,23 +92,21 @@ def from_mcp(
     # Temporarily disable tracing to avoid sdk logging a non-existent error
     set_tracing_disabled(True)
     try:
-        for server in servers:
 
-            async def _fetch_tools(current_server: MCPServer = server) -> list[FunctionTool]:
-                tools = await MCPUtil.get_function_tools(
-                    current_server,
+        async def _fetch_tools() -> list[FunctionTool]:
+            tools: list[FunctionTool] = []
+            for server in servers:
+                server_tools = await MCPUtil.get_function_tools(
+                    server,
                     convert_schemas_to_strict,
                     run_context,
                     agent_for_fetch,
+                    failure_error_function=default_tool_error_function,
                 )
-                return [t for t in tools if isinstance(t, FunctionTool)]
+                tools.extend(t for t in server_tools if isinstance(t, FunctionTool))
+            return tools
 
-            function_tools: list[FunctionTool] = _run_coroutine_from_factory(_fetch_tools)
-            # Wrap each tool with error handling so exceptions return as strings to the agent
-            wrapped_tools = [_with_error_handling(t) for t in function_tools]
-            converted_tools.extend(wrapped_tools)
+        return _run_coroutine_from_factory(_fetch_tools)
     finally:
         # Restore the original tracing state instead of unconditionally enabling it
         set_tracing_disabled(original_tracing_disabled)
-
-    return converted_tools

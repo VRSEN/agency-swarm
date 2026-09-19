@@ -156,6 +156,31 @@ def bind_managed_oauth_cache_dir(config: Any, cache_dir: Path | None) -> Any:  #
     return config
 
 
+def apply_oauth_cache_dir(servers: list[Any], cache_dir: Path | None) -> None:
+    """Update cache_dir on OAuth server configs and instantiated OAuth clients."""
+    normalized = cache_dir.expanduser() if cache_dir is not None else None
+    for server in servers:
+        _apply_cache_dir_to_server(server, normalized)
+
+
+def _apply_cache_dir_to_server(server: Any, cache_dir: Path | None) -> None:
+    """Apply cache_dir to both OAuth configs and instantiated OAuth clients."""
+    if server is None:
+        return
+    actual = getattr(server, "_server", server)
+    if _MCPServerOAuth is not None and isinstance(actual, _MCPServerOAuth):
+        apply_managed_oauth_cache_dir(cast("MCPServerOAuth", actual), cache_dir)
+        return
+    if _MCPServerOAuthClient is None or not isinstance(actual, _MCPServerOAuthClient):
+        return
+    client = cast(Any, actual)
+    apply_managed_oauth_cache_dir(client.oauth_config, cache_dir)
+    oauth_provider = getattr(client, "_oauth_provider", None)
+    storage = getattr(oauth_provider, "storage", None) if oauth_provider else None
+    if storage and hasattr(storage, "base_cache_dir") and cache_dir is not None:
+        storage.base_cache_dir = cache_dir
+
+
 def _clone_oauth_candidate(server: Any) -> Any:
     """Return a fresh OAuth client when the current object is already user-bound."""
     if not _OAUTH_AVAILABLE or _MCPServerOAuthClient is None:

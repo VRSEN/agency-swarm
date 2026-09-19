@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from concurrent.futures import Future
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -90,16 +89,16 @@ class _SyncContextServer(_DummyServer):
         return f"pong:{payload}"
 
 
-class _TaskAffinityServer(_DummyServer):
+class _LoopAffinityServer(_DummyServer):
     def __init__(self) -> None:
         super().__init__()
-        self.task_ids: list[int] = []
+        self.loop_ids: list[int] = []
 
-    async def get_task_id(self) -> int:
-        task = asyncio.current_task()
-        task_id = id(task)
-        self.task_ids.append(task_id)
-        return task_id
+    async def get_loop_id(self) -> int:
+        loop = asyncio.get_running_loop()
+        loop_id = id(loop)
+        self.loop_ids.append(loop_id)
+        return loop_id
 
 
 class _ContextAwareServer(_DummyServer):
@@ -133,7 +132,7 @@ async def test_ensure_connected_reuses_driver_for_proxy() -> None:
     await manager.ensure_connected(proxy)
 
     try:
-        assert len(manager._drivers) == 1
+        assert len(manager._bindings) == 1
     finally:
         await manager.shutdown()
 
@@ -143,14 +142,14 @@ async def test_reconnect_replaces_driver_and_resets_session() -> None:
     manager = PersistentMCPServerManager()
     server = _DummyServer()
     await manager.ensure_connected(server)
-    old_state = manager._drivers[server]
+    old_state = manager._bindings[server]
 
     try:
         proxy = LoopAffineAsyncProxy(server, manager)
         await manager.reconnect(proxy)
 
         assert server.session is not None
-        assert manager._drivers[server] is not old_state
+        assert manager._bindings[server] is not old_state
     finally:
         await manager.shutdown()
 
@@ -169,7 +168,7 @@ async def test_shutdown_handles_cleanup_timeout() -> None:
     except TimeoutError as exc:  # pragma: no cover - current behavior under test
         pytest.fail(f"shutdown should not propagate TimeoutError: {exc}")
 
-    assert manager._drivers == {}
+    assert manager._bindings == {}
 
 
 @pytest.mark.asyncio
@@ -251,21 +250,23 @@ async def test_proxy_supports_sync_context_and_method_proxying() -> None:
 
 
 @pytest.mark.asyncio
-async def test_proxy_coroutine_calls_stay_on_driver_task() -> None:
+async def test_proxy_coroutine_calls_stay_on_background_loop() -> None:
+    """Method calls run on the manager's background loop; lifecycle calls run in the
+    server's SDK worker task (asserted separately via session affinity)."""
     manager = PersistentMCPServerManager()
-    server = _TaskAffinityServer()
+    server = _LoopAffinityServer()
 
     await manager.ensure_connected(server)
     proxy = LoopAffineAsyncProxy(server, manager)
 
     try:
-        first = await proxy.get_task_id()
-        second = await proxy.get_task_id()
+        first = await proxy.get_loop_id()
+        second = await proxy.get_loop_id()
     finally:
         await manager.shutdown()
 
     assert first == second
-    assert len(set(server.task_ids)) == 1
+    assert len(set(server.loop_ids)) == 1
 
 
 def test_register_get_all_and_mark_atexit() -> None:
@@ -589,7 +590,7 @@ def test_update_oauth_cache_dir_updates_clients(tmp_path: Path) -> None:
     client._oauth_provider = SimpleNamespace(storage=SimpleNamespace(base_cache_dir=Path("/default-cache")))
 
     manager.register(server)
-    manager._drivers[client] = {"real": client}
+    manager._bindings[client] = {"real": client}
 
     manager.update_oauth_cache_dir(tmp_path)
 
@@ -997,24 +998,19 @@ async def test_cleanup_oauth_runtime_mcp_servers_removes_request_scoped_clients(
 
 
 @pytest.mark.asyncio
-async def test_unregister_keys_ending_with_cancels_busy_request_scoped_driver() -> None:
+async def test_unregister_keys_ending_with_cleans_up_bound_server() -> None:
     manager = PersistentMCPServerManager()
     server = _DummyServer("busy")
     key = "busy::oauth::url::user::store::request_suffix"
-    driver_future: Future = Future()
-    manager._timeouts["cleanup"] = 0.01
     manager._servers[key] = server
-    manager._drivers[server] = {
-        "queue": asyncio.Queue(),
-        "real": server,
-        "created_by_driver": False,
-        "driver_future": driver_future,
-    }
+    await manager.ensure_connected(server)
+    assert server.session is not None
 
     await manager.unregister_keys_ending_with("::request_suffix")
 
     assert manager.get(key) is None
-    assert driver_future.cancelled()
+    assert server.session is None
+    assert server not in manager._bindings
 
 
 def test_build_persistence_key_separates_custom_storage(tmp_path: Path) -> None:
