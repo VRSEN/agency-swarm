@@ -355,8 +355,8 @@ def test_agentswarm_cli_tui_downloads_platform_cli(monkeypatch, tmp_path):
         calls.append(url)
         return Response(chunks=[data])
 
-    monkeypatch.setattr(agentswarm_cli_demo.httpx, "get", fake_get)
-    monkeypatch.setattr(agentswarm_cli_demo.httpx, "stream", fake_stream)
+    monkeypatch.setattr(agentswarm_cli_demo.httpx2, "get", fake_get)
+    monkeypatch.setattr(agentswarm_cli_demo.httpx2, "stream", fake_stream)
     monkeypatch.setattr(agentswarm_cli_demo, "_cache", lambda: root)
     monkeypatch.setattr(
         agentswarm_cli_demo,
