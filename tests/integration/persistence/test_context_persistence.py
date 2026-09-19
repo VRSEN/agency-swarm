@@ -74,6 +74,37 @@ async def test_context_persistence_between_calls():
     assert agency.user_context.get("initial") == "value"  # Original value still there
 
 
+def test_context_persistence_between_sync_calls():
+    """Sequential ``get_response_sync`` calls must not share dead event-loop state.
+
+    Regression coverage: each ``get_response_sync`` runs on its own
+    ``asyncio.run`` loop. httpx2 binds pooled keep-alive connections to the
+    loop that created them, so reusing one process-wide client crashed the
+    second call with ``RuntimeError: Event loop is closed``.
+    """
+    agent = Agent(
+        name="ContextAgent",
+        instructions="You store and retrieve data using the provided tools.",
+        tools=[StoreValueTool, ReadValueTool],
+        model="gpt-5.6-luna",
+    )
+
+    agency = Agency(
+        agent,
+        user_context={"initial": "value"},
+    )
+
+    response1 = agency.get_response_sync("Store the value 'test_data' with key 'stored_key' using StoreValueTool")
+    tool_outputs = [item.output for item in response1.new_items if hasattr(item, "output")]
+    assert any("Stored stored_key=test_data" in str(output) for output in tool_outputs)
+
+    response2 = agency.get_response_sync("Read the value for key 'stored_key' using ReadValueTool")
+    tool_outputs2 = [item.output for item in response2.new_items if hasattr(item, "output")]
+    assert any("Value for stored_key: test_data" in str(output) for output in tool_outputs2)
+
+    assert agency.user_context.get("stored_key") == "test_data"
+
+
 @pytest.mark.asyncio
 async def test_context_override_does_not_affect_agency():
     """Test that context_override doesn't modify the agency's user_context."""
