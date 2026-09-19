@@ -113,16 +113,20 @@ EXPECTED_FLOW_DEFAULT: list[tuple[str, str, str | None]] = [
 
 ANTHROPIC_MODEL_NAME = "anthropic/claude-sonnet-5"
 
+# Starting with openai-agents 0.22, the litellm/chat-completions stream adapter
+# preserves the provider's content-block order in the completed response output:
+# an assistant text block emitted before a tool call now surfaces as a
+# message_output_item before the tool_call_item. Previously the completed output
+# always listed function calls first, so the ACK text the model sends before its
+# first tool call appeared after that call in the stream.
 EXPECTED_FLOW_ANTHROPIC: list[tuple[str, str, str | None]] = [
-    ("tool_call_item", "MainAgent", "get_market_data"),
     ("message_output_item", "MainAgent", None),
+    ("tool_call_item", "MainAgent", "get_market_data"),
     ("tool_call_output_item", "MainAgent", None),
     ("tool_call_item", "MainAgent", "send_message"),
     ("tool_call_item", "SubAgent", "analyze_risk"),
-    ("message_output_item", "SubAgent", None),
     ("tool_call_output_item", "SubAgent", None),
     ("message_output_item", "SubAgent", None),
-    ("message_output_item", "MainAgent", None),
     ("tool_call_output_item", "MainAgent", None),
     ("message_output_item", "MainAgent", None),
 ]
