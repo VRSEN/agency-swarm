@@ -89,8 +89,6 @@ def _bind_persistent_servers(servers: list[Any]) -> list[Any]:
 
         candidate = _clone_oauth_candidate(srv)
         key = _build_persistence_key(candidate, oauth_user_id)
-        if key == "":
-            raise ValueError(f"Server {srv} has no valid persistence key")
         persistent = default_mcp_manager.get(key)
         if persistent is None:
             persistent = default_mcp_manager.register(candidate, key=key)

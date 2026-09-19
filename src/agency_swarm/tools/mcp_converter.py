@@ -12,8 +12,7 @@ from agents.mcp.server import MCPServer
 from agents.mcp.util import MCPUtil
 from agents.run_context import RunContextWrapper
 
-from agency_swarm.tools import mcp_manager as _mcp_manager
-from agency_swarm.tools.mcp_manager import _bind_persistent_servers
+from agency_swarm.tools.mcp_manager import _bind_persistent_servers, default_mcp_manager
 
 if TYPE_CHECKING:
     from agency_swarm.agent.core import Agent as AgencyAgent
@@ -79,7 +78,7 @@ def from_mcp(
 
     # Ensure each server's worker exists and non-OAuth servers are connected (synchronous)
     for srv in servers:
-        _mcp_manager.default_mcp_manager._ensure_driver(getattr(srv, "_server", srv))
+        default_mcp_manager._ensure_driver(getattr(srv, "_server", srv))
 
     # Save the current tracing state before disabling it
     # The SDK doesn't expose a public getter, so we access the internal provider state
