@@ -17,6 +17,7 @@ from agents.run_config import CallModelData, ModelInputData
 from openai.types.responses.response_prompt_param import ResponsePromptParam
 
 from agency_swarm import AfterEveryUserMessage, Agency, Agent, EveryNToolCalls, MasterContext, Runner, SystemReminder
+from agency_swarm.agent.runner import run_state_from_json, run_state_to_json
 from agency_swarm.utils.thread import ThreadManager
 from tests.deterministic_model import _build_tool_call_response
 from tests.test_agent_modules.test_system_reminders_review_regressions import (
@@ -314,8 +315,8 @@ async def test_direct_runner_preserves_reminder_state_across_serialized_resume()
 
     interrupted = await Runner.run(agent, "next")
     state = interrupted.to_state()
-    restored_once = await type(state).from_json(agent, state.to_json())
-    restored = await type(state).from_json(agent, restored_once.to_json())
+    restored_once = await run_state_from_json(agent, run_state_to_json(state))
+    restored = await run_state_from_json(agent, run_state_to_json(restored_once))
     restored.approve(restored.get_interruptions()[0])
 
     resumed = await Runner.run(agent, restored)
@@ -429,29 +430,33 @@ async def test_callable_tool_reminder_receives_live_run_wrapper() -> None:
 
 
 def test_bare_import_leaves_sdk_runner_unpatched() -> None:
-    """Importing agency_swarm alone must not install the Runner boundary."""
+    """Importing agency_swarm must never replace the upstream Runner methods."""
     probe = (
         "import agency_swarm\n"
+        "agency_swarm.Agent(name='Patched', instructions='x', system_reminders='remember')\n"
         "from agents import Runner\n"
-        "print(getattr(Runner, '_agency_swarm_model_input_boundary_installed', False))\n"
+        "print(Runner.__dict__['run'].__func__.__module__)\n"
     )
-    # A subprocess is required: reminder-bearing agents in this session already installed the boundary.
+    # A subprocess is required: this session's Runner is the framework subclass,
+    # so only a fresh interpreter proves the SDK class is untouched.
     completed = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True, check=False)
 
     assert completed.returncode == 0, completed.stderr
-    assert completed.stdout.strip() == "False"
+    assert completed.stdout.strip() == "agents.run"
 
 
-def test_reminder_agent_installs_runner_boundary_once() -> None:
-    """The first reminder-bearing agent installs the boundary and later agents reuse it."""
-    Agent(name="BoundaryInstaller", instructions="x", system_reminders="remember this")
-    installed_run = Runner.__dict__["run"]
+def test_reminder_agent_leaves_sdk_runner_unpatched() -> None:
+    """Reminder-bearing agents rely on the framework Runner subclass without mutating the SDK."""
+    from agents import Runner as SDKRunner
 
-    assert getattr(Runner, "_agency_swarm_model_input_boundary_installed", False) is True
+    sdk_run = SDKRunner.__dict__["run"]
 
-    Agent(name="BoundaryReuser", instructions="x", system_reminders="remember this too")
+    Agent(name="BoundaryFree", instructions="x", system_reminders="remember this")
+    Agent(name="BoundaryFreeAgain", instructions="x", system_reminders="remember this too")
 
-    assert Runner.__dict__["run"] is installed_run
+    assert SDKRunner.__dict__["run"] is sdk_run
+    assert issubclass(Runner, SDKRunner)
+    assert Runner.__dict__["run"] is not sdk_run
 
 
 def test_unsupported_system_reminder_subclass_is_rejected() -> None:

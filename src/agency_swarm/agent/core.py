@@ -47,7 +47,6 @@ from agency_swarm.agent.conversation_starters_cache import (
 from agency_swarm.agent.execution_streaming import StreamingRunResponse
 from agency_swarm.agent.file_manager import AgentFileManager
 from agency_swarm.agent.openai_client import install_loop_scoped_http_client, loop_scoped_openai_client
-from agency_swarm.agent.runner import install_runner_boundary
 from agency_swarm.agent.system_reminders import (
     prepare_agent_hooks,
     without_system_reminder_hooks,
@@ -249,10 +248,6 @@ class Agent(BaseAgent[MasterContext]):
         # Remove description from base_agent_params if it was added for Swarm Agent
         base_agent_params.pop("description", None)
         system_reminders = normalize_system_reminders(current_agent_params.get("system_reminders"))
-        if system_reminders:
-            # Reminders rely on the Runner boundary to stay transient on direct SDK runs.
-            # Install it lazily so importing agency_swarm never patches the SDK Runner.
-            install_runner_boundary()
         prepared_hooks = prepare_agent_hooks(base_agent_params.get("hooks"), system_reminders)
         if prepared_hooks is None:
             base_agent_params.pop("hooks", None)

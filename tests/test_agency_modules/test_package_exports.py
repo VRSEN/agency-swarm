@@ -6,7 +6,6 @@ import agency_swarm.tools as agency_tools
 REQUIRED_TOP_LEVEL_AGENTS_EXPORTS = {
     "SDKAgent": "Agent",
     "SDKHandoff": "Handoff",
-    "Runner": "Runner",
     "RunConfig": "RunConfig",
     "Tool": "Tool",
     "TResponseInputItem": "TResponseInputItem",
@@ -56,6 +55,10 @@ def test_tools_required_agents_exports_match_sdk() -> None:
 def test_local_agent_and_handoff_keep_sdk_aliases() -> None:
     assert agency_swarm.SDKAgent is agents.Agent
     assert agency_swarm.Agent is not agents.Agent
+    # The framework Runner subclasses the SDK facade to add the reminder
+    # boundary locally; the upstream class itself is never mutated.
+    assert agency_swarm.Runner is not agents.Runner
+    assert issubclass(agency_swarm.Runner, agents.Runner)
     assert agency_swarm.SDKHandoff is agents.Handoff
     assert agency_swarm.Handoff is agency_tools.Handoff
     assert agency_swarm.Handoff is not agents.Handoff

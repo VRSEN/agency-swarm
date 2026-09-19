@@ -30,7 +30,6 @@ from agents import (  # noqa: E402
     RunConfig,
     RunContextWrapper,
     RunHooks,
-    Runner,
     RunResult,
     RunResultStreaming,
     StopAtTools,
@@ -67,6 +66,7 @@ from .agency.core import Agency  # noqa: E402
 from .agent.core import AgencyContext, Agent  # noqa: E402
 from .agent.execution_streaming import StreamingRunResponse  # noqa: E402
 from .agent.openai_client import loop_scoped_http_client  # noqa: E402
+from .agent.runner import Runner  # noqa: E402
 from .context import MasterContext  # noqa: E402
 from .hooks import PersistenceHooks  # noqa: E402
 from .integrations.fastapi import run_fastapi  # noqa: E402

@@ -10,7 +10,6 @@ from agents import (
     OutputGuardrailTripwireTriggered,
     RunConfig,
     RunHooks,
-    Runner,
     RunResult,
     RunResultStreaming,
     TResponseInputItem,
@@ -25,6 +24,7 @@ from openai.types.responses import (
 
 from agency_swarm.agent.codex_model_input import with_codex_model_input_role_rewrite
 from agency_swarm.agent.context_types import AgentRuntimeState
+from agency_swarm.agent.runner import Runner
 from agency_swarm.agent.system_reminder_state import agency_system_reminder_run
 from agency_swarm.agent.system_reminders import (
     clear_system_reminder_run_state,

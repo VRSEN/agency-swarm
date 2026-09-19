@@ -6,7 +6,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Any, Literal, Protocol
-from weakref import WeakKeyDictionary, finalize
+from weakref import finalize
 
 from agents import Agent as SDKAgent, RunContextWrapper, TResponseInputItem
 from agents.handoffs import Handoff as SDKHandoff
@@ -23,6 +23,12 @@ class _TransientReminderMarker(Enum):
 
 
 TRANSIENT_REMINDER_MARKER = _TransientReminderMarker.INSTANCE
+
+# Suspended reminder state rides on the run's context wrapper so SDK-made
+# copies of the wrapper (``RunResult.to_state`` and nested agent-tool
+# checkpoints use ``RunContextWrapper._copy_for_run_state``, a ``copy.copy``
+# that carries instance attributes) inherit it without any patching.
+_SUSPENDED_REMINDERS_ATTR = "_agency_swarm_suspended_reminders"
 
 
 @dataclass(slots=True)
@@ -68,19 +74,21 @@ class _DirectReminderRun:
                 state.turn_reminders.clear()
                 states.append((hook, state))
         if states:
-            _SUSPENDED_DIRECT_RUNS[context] = states
+            setattr(context, _SUSPENDED_REMINDERS_ATTR, states)
         self.hooks.clear()
         self.live_context = None
 
     def restore(self, context: RunContextWrapper[Any]) -> None:
-        states = _SUSPENDED_DIRECT_RUNS.pop(context, [])
-        if states:
-            # Copied context wrappers alias the same suspended state; once one
-            # checkpoint consumes it, stale aliases must not resurrect it.
-            for key in [key for key, value in _SUSPENDED_DIRECT_RUNS.items() if value is states]:
-                _SUSPENDED_DIRECT_RUNS.pop(key, None)
+        states = getattr(context, _SUSPENDED_REMINDERS_ATTR, None)
+        if not isinstance(states, list) or not states:
+            return
+        delattr(context, _SUSPENDED_REMINDERS_ATTR)
+        entries = list(states)
+        # Copied context wrappers alias the same suspended state list; once one
+        # checkpoint consumes it, stale aliases must not resurrect it.
+        states.clear()
         run_key = (id(self), "direct")
-        for hook, state in states:
+        for hook, state in entries:
             hook._run_state[run_key] = state
             self.hooks.append(hook)
 
@@ -177,35 +185,19 @@ def suspend_agency_run_hooks(
             state.turn_reminders.clear()
             states.append((hook, state))
     if states:
-        _SUSPENDED_DIRECT_RUNS[target] = states
-
-
-def alias_suspended_direct_run(
-    source: RunContextWrapper[Any],
-    target: RunContextWrapper[Any] | None,
-) -> None:
-    """Let a copied context wrapper resume reminder state suspended on the original.
-
-    Agents SDK 0.22 gives every resumable checkpoint its own context wrapper via
-    ``RunContextWrapper._copy_for_run_state`` (``RunResult.to_state`` and nested
-    agent-tool checkpoints), so the suspended entry must be reachable under the
-    copied wrapper as well. Every alias shares one state list; the first resume
-    consumes it for all of them.
-    """
-    if target is None or target is source:
-        return
-    states = _SUSPENDED_DIRECT_RUNS.get(source)
-    if states is not None:
-        _SUSPENDED_DIRECT_RUNS[target] = states
+        setattr(target, _SUSPENDED_REMINDERS_ATTR, states)
 
 
 def serialize_suspended_direct_run(context: RunContextWrapper[Any] | None) -> list[dict[str, object]]:
     """Return JSON-safe reminder state held at an interrupted direct run boundary."""
     if context is None:
         return []
+    states = getattr(context, _SUSPENDED_REMINDERS_ATTR, None)
+    if not isinstance(states, list):
+        return []
     payloads: list[dict[str, object]] = []
     hook_indexes: dict[str, int] = {}
-    for hook, state in _SUSPENDED_DIRECT_RUNS.get(context, []):
+    for hook, state in states:
         agent_name = state.agent_name
         if agent_name is None:
             continue
@@ -260,10 +252,5 @@ def build_system_message(
     """Build one transient reminder input item."""
     return {"role": role, "content": text}
 
-
-_SUSPENDED_DIRECT_RUNS: WeakKeyDictionary[
-    RunContextWrapper[Any],
-    list[tuple[_ReminderHook, _RunReminderState]],
-] = WeakKeyDictionary()
 
 _AGENCY_RUN_HOOKS: dict[int, list[_ReminderHook]] = {}
