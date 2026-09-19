@@ -64,14 +64,22 @@ tests-fast: test-env
 tests-verbose: test-env
 	uv run pytest -v
 
+# The coverage gate is calibrated for the full extras set: `make sync` keeps the
+# dev env litellm-free, but litellm-only modules and tests must run under
+# coverage for the total to clear fail-under=90.
+.PHONY: coverage-env
+coverage-env:
+	uv sync --all-extras --dev
+	uv run python -c "import agency_swarm"
+
 .PHONY: coverage
-coverage: test-env
+coverage: coverage-env
 	uv run coverage run -m pytest
 	uv run coverage xml -o coverage.xml
 	uv run coverage report -m --fail-under=90
 
 .PHONY: coverage-html
-coverage-html: test-env
+coverage-html: coverage-env
 	uv run coverage run -m pytest
 	uv run coverage html
 	@echo "Coverage report generated in htmlcov/index.html"
@@ -110,8 +118,9 @@ help:
 	@echo "  tests        - Sync/verify test env and run all tests"
 	@echo "  tests-fast   - Sync/verify test env and run tests with fail-fast and last-failed"
 	@echo "  tests-verbose- Sync/verify test env and run tests with verbose output"
-	@echo "  coverage     - Sync/verify test env and run tests with coverage reporting"
-	@echo "  coverage-html- Sync/verify test env and generate HTML coverage report"
+	@echo "  coverage-env - Sync deps with all extras and verify agency_swarm imports"
+	@echo "  coverage     - Sync all extras and run tests with coverage reporting"
+	@echo "  coverage-html- Sync all extras and generate HTML coverage report"
 	@echo "  clean        - Clean cache files and artifacts"
 	@echo "  check        - Run lint and mypy"
 	@echo "  ci           - Run full CI pipeline (sync, check, base-install import, coverage)"
