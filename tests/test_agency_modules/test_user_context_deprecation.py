@@ -121,3 +121,23 @@ async def test_runs_do_not_emit_deprecation_warnings_without_deprecated_use() ->
         await agency.get_response("Store key with value val")
 
     assert not [w for w in caught if issubclass(w.category, DeprecationWarning)]
+
+
+@pytest.mark.asyncio
+async def test_fastapi_rebuild_does_not_warn_after_run_accumulated_context() -> None:
+    """A clean agency that only accumulated context at runtime must rebuild for
+    FastAPI without tripping ``Agency(user_context=...)`` — the user never
+    passed the deprecated argument."""
+    from agency_swarm.agency.helpers import build_fastapi_agencies
+
+    agency = Agency(_context_agent())
+    await agency.get_response("Store key with value val")
+    assert agency._initial_user_context  # run-synced keys landed in the store
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        rebuilt = next(iter(build_fastapi_agencies(agency).values()))()
+
+    assert not [w for w in caught if issubclass(w.category, DeprecationWarning)]
+    assert rebuilt._initial_user_context == agency._initial_user_context
+    assert rebuilt._initial_user_context is not agency._initial_user_context
