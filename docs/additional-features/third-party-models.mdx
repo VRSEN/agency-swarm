@@ -145,6 +145,20 @@ gemini_agent = Agent(
     )
 )
 ```
+
+<Note>
+A custom `AsyncOpenAI` stored on a model outlives a single event loop — each `get_response`/`get_response_sync` run can use a new one, and httpx2 binds pooled connections to the loop that created them. Pass `http_client=loop_scoped_http_client()` (from `agency_swarm`) when building the client so every request runs on the caller's loop instead of crashing on the second run:
+
+```python
+from agency_swarm import loop_scoped_http_client
+
+custom_client = AsyncOpenAI(
+    api_key="xxx",
+    base_url="http://localhost:4000",
+    http_client=loop_scoped_http_client(),
+)
+```
+</Note>
 </Step>
 
 <Step title="Create and Run Agency">
