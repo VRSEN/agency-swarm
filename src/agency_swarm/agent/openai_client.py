@@ -22,7 +22,6 @@ from typing import Any
 
 import httpx2
 from agents.models import openai_provider as _agents_openai_provider
-from agents.voice.models import openai_model_provider as _agents_voice_provider
 from openai import AsyncOpenAI, DefaultAsyncHttpx2Client
 
 _http_clients_by_loop: dict[asyncio.AbstractEventLoop, httpx2.AsyncClient] = {}
@@ -89,7 +88,16 @@ def install_loop_scoped_http_client() -> None:
             return
         # Both SDK providers share the same process-wide client pattern.
         _agents_openai_provider.shared_http_client = shared_http_client
-        _agents_voice_provider.shared_http_client = shared_http_client
+        try:
+            # Local import: ``agents.voice`` transitively requires numpy and
+            # websockets, which only ship with the ``voice`` extra. Skip the
+            # patch when they are absent so base installs can import and
+            # construct agents without them.
+            from agents.voice.models import openai_model_provider as agents_voice_provider
+        except ImportError:
+            pass
+        else:
+            agents_voice_provider.shared_http_client = shared_http_client
         _patch_installed = True
 
 

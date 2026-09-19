@@ -6,6 +6,13 @@ sync:
 test-env: sync
 	uv run python -c "import agency_swarm"
 
+# Base install ships neither extras nor dev deps; `agents.voice` pulls numpy
+# and websockets from the `voice` extra, so a top-level voice import in the
+# package crashes plain `pip install agency-swarm`. Keep this check in `ci`.
+.PHONY: test-base-install
+test-base-install:
+	uv run --isolated --no-dev python -c "import agency_swarm"
+
 .PHONY: prime
 prime:
 	@echo "[prime] Context priming: building structure and reviewing diffs"
@@ -79,7 +86,7 @@ clean:
 check: lint mypy
 
 .PHONY: ci
-ci: sync check coverage
+ci: sync check test-base-install coverage
 
 .PHONY: serve-docs
 serve-docs:
@@ -95,6 +102,7 @@ help:
 	@echo "Available commands:"
 	@echo "  sync         - Install dependencies (all extras except litellm + dev)"
 	@echo "  test-env     - Sync deps and verify agency_swarm imports"
+	@echo "  test-base-install - Verify agency_swarm imports without extras or dev deps"
 	@echo "  format       - Format code and apply safe fixes"
 	@echo "  lint         - Run linting checks"
 	@echo "  lint-unsafe  - Run linting with unsafe fixes"
@@ -106,7 +114,7 @@ help:
 	@echo "  coverage-html- Sync/verify test env and generate HTML coverage report"
 	@echo "  clean        - Clean cache files and artifacts"
 	@echo "  check        - Run lint and mypy"
-	@echo "  ci           - Run full CI pipeline (sync, check, coverage)"
+	@echo "  ci           - Run full CI pipeline (sync, check, base-install import, coverage)"
 	@echo "  serve-docs   - Serve documentation locally"
 	@echo "  build        - Build the package"
 	@echo "  help         - Show this help message"
