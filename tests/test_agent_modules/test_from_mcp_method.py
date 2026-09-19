@@ -4,6 +4,7 @@ import pytest
 from agents import Agent as SDKAgent, FunctionTool, ToolOutputImage
 from agents.mcp.util import MCPUtil
 from agents.run_context import RunContextWrapper
+from agents.tool_context import ToolContext
 from mcp.shared.auth import AuthorizationCodeResult
 from mcp.types import Tool as MCPTool
 
@@ -50,12 +51,13 @@ async def test_from_mcp_connects_once_and_reuses_connection(mock_manager, mock_g
     )
     mock_get_function_tools.return_value = [function_tool]
 
-    mock_manager.register.side_effect = lambda srv: srv
+    mock_manager.register.side_effect = lambda srv, key=None: srv
 
-    async def fake_ensure(srv):
-        await srv.connect()
+    def _ensure_driver(srv) -> None:  # noqa: ANN001, ANN202
+        srv.connect_calls += 1
+        srv.session = object()
 
-    mock_manager.ensure_connected = AsyncMock(side_effect=fake_ensure)
+    mock_manager._ensure_driver.side_effect = _ensure_driver
     mock_manager.get.return_value = server
 
     # Test that from_mcp returns FunctionTool instances
@@ -157,44 +159,51 @@ async def test_from_mcp_function_tools_preserve_structured_outputs(
     assert result is image_output
 
 
+class _FailingCallServer(_DummyServer):
+    """Minimal MCPServer surface for the real SDK tool-conversion pipeline."""
+
+    tool_input_guardrails = None
+    tool_output_guardrails = None
+
+    async def list_tools(self, run_context=None, agent=None):  # noqa: ANN001, ANN201
+        return [MCPTool(name="failing_tool", inputSchema={"type": "object", "properties": {}})]
+
+    async def call_tool(self, tool_name, arguments, meta=None):  # noqa: ANN001, ANN201
+        raise RuntimeError("Connection timed out after 5 seconds")
+
+    def _get_failure_error_function(self, failure_error_function):  # noqa: ANN001, ANN201
+        return failure_error_function
+
+    def _get_needs_approval_for_tool(self, tool, agent):  # noqa: ANN001, ANN202
+        return False
+
+
 @pytest.mark.asyncio
-@patch("agents.mcp.util.MCPUtil.get_function_tools", new_callable=AsyncMock)
-@patch("agency_swarm.tools.mcp_manager.default_mcp_manager")
-async def test_from_mcp_tools_catch_exceptions_and_return_error_strings(
-    mock_manager, mock_get_function_tools: AsyncMock
-) -> None:
-    """MCP tools should catch exceptions and return error strings instead of propagating."""
+async def test_from_mcp_tools_catch_exceptions_and_return_error_strings() -> None:
+    """MCP tools must return error strings through the real SDK failure_error_function path."""
+    from agency_swarm.tools.mcp_persistence import PersistentMCPServerManager
 
-    async def mock_invoke_that_raises(ctx, input_json: str):
-        raise TimeoutError("Connection timed out after 5 seconds")
+    manager = PersistentMCPServerManager()
+    server = _FailingCallServer()
+    try:
+        with patch("agency_swarm.tools.mcp_manager.default_mcp_manager", manager):
+            tools = ToolFactory.from_mcp([server])
+        assert len(tools) == 1
 
-    function_tool = FunctionTool(
-        name="failing_tool",
-        description="a tool that fails",
-        params_json_schema={"type": "object", "properties": {}},
-        on_invoke_tool=mock_invoke_that_raises,
-        strict_json_schema=False,
-    )
-    mock_get_function_tools.return_value = [function_tool]
+        ctx = ToolContext(
+            context=None,
+            tool_name="failing_tool",
+            tool_call_id="call-1",
+            tool_arguments="{}",
+        )
+        result = await tools[0].on_invoke_tool(ctx, "{}")
 
-    server = _DummyServer()
-    mock_manager.register.return_value = server
-    mock_manager.ensure_connected = AsyncMock()
-    mock_manager.get.return_value = server
-
-    # Get FunctionTool instances from MCP
-    tools = ToolFactory.from_mcp([server])
-    assert len(tools) == 1
-    tool = tools[0]
-
-    # Invoke the tool - should NOT raise, instead return error string
-    ctx = RunContextWrapper(context=None)
-    result = await tool.on_invoke_tool(ctx, "{}")
-
-    # Verify error is returned as string (using SDK's default_tool_error_function format)
-    assert isinstance(result, str)
-    assert "error" in result.lower()
-    assert "Connection timed out after 5 seconds" in result
+        # SDK's default_tool_error_function formats failures as strings for the agent
+        assert isinstance(result, str)
+        assert "error" in result.lower()
+        assert "Connection timed out after 5 seconds" in result
+    finally:
+        await manager.shutdown()
 
 
 async def test_oauth_client_converts_with_real_agents_mcp_util(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -220,7 +229,7 @@ async def test_oauth_client_converts_with_real_agents_mcp_util(monkeypatch: pyte
 
 
 @patch("agents.mcp.util.MCPUtil.get_function_tools", new_callable=AsyncMock)
-@patch("agency_swarm.tools.mcp_converter.default_mcp_manager")
+@patch("agency_swarm.tools.mcp_manager.default_mcp_manager")
 async def test_from_mcp_uses_user_scoped_persistence_keys(mock_manager, mock_get_function_tools: AsyncMock) -> None:
     function_tool = FunctionTool(
         name="echo",
@@ -262,7 +271,7 @@ async def test_from_mcp_uses_user_scoped_persistence_keys(mock_manager, mock_get
 
 
 @patch("agents.mcp.util.MCPUtil.get_function_tools", new_callable=AsyncMock)
-@patch("agency_swarm.tools.mcp_converter.default_mcp_manager")
+@patch("agency_swarm.tools.mcp_manager.default_mcp_manager")
 async def test_from_mcp_rebuilds_oauth_client_when_same_server_object_is_reused_across_users(
     mock_manager, mock_get_function_tools: AsyncMock
 ) -> None:
@@ -304,7 +313,7 @@ async def test_from_mcp_rebuilds_oauth_client_when_same_server_object_is_reused_
 
 
 @patch("agents.mcp.util.MCPUtil.get_function_tools", new_callable=AsyncMock)
-@patch("agency_swarm.tools.mcp_converter.default_mcp_manager")
+@patch("agency_swarm.tools.mcp_manager.default_mcp_manager")
 async def test_from_mcp_refreshes_static_handlers_when_reusing_oauth_client(
     mock_manager, mock_get_function_tools: AsyncMock
 ) -> None:
@@ -349,7 +358,7 @@ async def test_from_mcp_refreshes_static_handlers_when_reusing_oauth_client(
 
 
 @patch("agency_swarm.tools.mcp_converter.MCPUtil.get_function_tools", new_callable=AsyncMock)
-@patch("agency_swarm.tools.mcp_converter.default_mcp_manager")
+@patch("agency_swarm.tools.mcp_manager.default_mcp_manager")
 async def test_from_mcp_preserves_oauth_context_in_discovery_thread(
     mock_manager, mock_get_function_tools: AsyncMock
 ) -> None:

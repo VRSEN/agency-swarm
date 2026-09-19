@@ -66,6 +66,42 @@ if TYPE_CHECKING:
 default_mcp_manager = PersistentMCPServerManager()
 
 
+def _bind_persistent_servers(servers: list[Any]) -> list[Any]:
+    """Register servers in the persistent manager and return loop-affine proxies.
+
+    Each named server is registered (or reused) under its persistence key — the same key
+    shape and OAuth clone/handler-sync rules the manager always applied — then wrapped in
+    a :class:`LoopAffineAsyncProxy` so every coroutine call runs on the background loop.
+    """
+    oauth_user_id = _get_oauth_user_id() if _get_oauth_user_id is not None else None
+    prepared = list(servers)
+    seen_names: set[str] = set()
+    for i, srv in enumerate(prepared):
+        name = getattr(srv, "name", None)
+        if not isinstance(name, str) or name == "":
+            raise ValueError(f"Server {srv} has no name provided")
+        if name in seen_names:
+            raise ValueError(
+                f"Server {srv} has duplicate name: {name}. "
+                "Please provide server with unique names by explicitly specifying the name attribute."
+            )
+        seen_names.add(name)
+
+        candidate = _clone_oauth_candidate(srv)
+        key = _build_persistence_key(candidate, oauth_user_id)
+        persistent = default_mcp_manager.get(key)
+        if persistent is None:
+            persistent = default_mcp_manager.register(candidate, key=key)
+        elif persistent is not candidate:
+            _sync_oauth_client_handlers(persistent, candidate)
+        prepared[i] = (
+            persistent
+            if isinstance(persistent, LoopAffineAsyncProxy)
+            else LoopAffineAsyncProxy(persistent, default_mcp_manager)
+        )
+    return prepared
+
+
 async def attach_persistent_mcp_servers(agency: Any) -> None:
     """Attach and connect persistent MCP servers to all agents in an agency.
 
@@ -80,7 +116,6 @@ async def attach_persistent_mcp_servers(agency: Any) -> None:
     oauth_token_path = getattr(agency, "oauth_token_path", None)
     if isinstance(oauth_token_path, str) and oauth_token_path != "":
         cache_dir = Path(oauth_token_path).expanduser()
-    oauth_user_id = _get_oauth_user_id() if _get_oauth_user_id is not None else None
     for agent in agents_map.values():
         ensure_mcp_tools = getattr(agent, "ensure_mcp_tools", None)
         if callable(ensure_mcp_tools):
@@ -91,29 +126,7 @@ async def attach_persistent_mcp_servers(agency: Any) -> None:
             continue
         if _OAUTH_AVAILABLE:
             _process_oauth_servers(agent, servers)
-        for i, srv in enumerate(list(servers)):
-            name = getattr(srv, "name", None)
-            if not isinstance(name, str) or name == "":
-                raise ValueError(f"Server {srv} has no name provided")
-
-            candidate = _clone_oauth_candidate(srv)
-            key = _build_persistence_key(candidate, oauth_user_id)
-            if key == "":
-                raise ValueError(f"Server {srv} has no valid persistence key")
-
-            persistent = default_mcp_manager.get(key)
-            if persistent is None:
-                persistent = default_mcp_manager.register(candidate, key=key)
-            else:
-                _sync_oauth_client_handlers(persistent, candidate)
-            # Replace the reference so future runs reuse the same object and ensure loop‑affine proxy
-            replacement = (
-                persistent
-                if isinstance(persistent, LoopAffineAsyncProxy)
-                else LoopAffineAsyncProxy(persistent, default_mcp_manager)
-            )
-            if replacement is not servers[i]:
-                servers[i] = replacement
+        servers[:] = _bind_persistent_servers(servers)
         # After replacing, ensure all are connected once
         for srv in servers:
             await default_mcp_manager.ensure_connected(srv)
@@ -144,37 +157,11 @@ def register_and_connect_agent_servers(agent: Any) -> None:
     if _OAUTH_AVAILABLE:
         _process_oauth_servers(agent, servers)
 
-    server_names = []
-    oauth_user_id = _get_oauth_user_id() if _get_oauth_user_id is not None else None
-    # Replace each server with the persistent instance (by name) if available
-    for i, srv in enumerate(list(servers)):
-        name = getattr(srv, "name", None)
-        if isinstance(name, str) and name != "" and name not in server_names:
-            server_names.append(name)
-            candidate = _clone_oauth_candidate(srv)
-            key = _build_persistence_key(candidate, oauth_user_id)
-            persistent = default_mcp_manager.get(key) or default_mcp_manager.register(candidate, key=key)
-            if persistent is not candidate:
-                _sync_oauth_client_handlers(persistent, candidate)
-            if persistent is not servers[i]:
-                servers[i] = persistent
-        elif name in server_names:
-            raise ValueError(
-                f"Server {srv} has duplicate name: {name}. "
-                "Please provide server with unique names by explicitly specifying the name attribute."
-            )
-        else:
-            raise ValueError(f"Server {srv} has no name provided")
+    # Replace each server with the persistent instance (by name) wrapped in a loop-affine proxy
+    servers[:] = _bind_persistent_servers(servers)
 
-    # Establish connections during Agent init and bind all ops to background loop
-    for idx, srv in enumerate(list(servers)):
-        # Always use loop‑affine proxy for MCP servers
-        if not isinstance(srv, LoopAffineAsyncProxy):
-            proxy = LoopAffineAsyncProxy(srv, default_mcp_manager)
-            servers[idx] = proxy
-            srv = proxy
-
-        # Ensure driver is created and connected on the background loop (synchronous)
+    # Establish connections during Agent init on the background loop (synchronous)
+    for srv in servers:
         default_mcp_manager._ensure_driver(getattr(srv, "_server", srv))
 
 

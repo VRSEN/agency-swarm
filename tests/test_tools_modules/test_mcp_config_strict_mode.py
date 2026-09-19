@@ -22,7 +22,7 @@ class _DummyServer:
     ],
 )
 @patch("agents.mcp.util.MCPUtil.get_function_tools")
-@patch("agency_swarm.tools.mcp_converter.default_mcp_manager")
+@patch("agency_swarm.tools.mcp_manager.default_mcp_manager")
 async def test_mcp_config_convert_schemas_to_strict_is_propagated(
     mock_manager,
     mock_get_function_tools: AsyncMock,
@@ -41,7 +41,7 @@ async def test_mcp_config_convert_schemas_to_strict_is_propagated(
 
     observed_convert_values: list[bool] = []
 
-    async def capture_convert_schemas_to_strict(server, strict, context, agent):
+    async def capture_convert_schemas_to_strict(server, strict, context, agent, **_kwargs):
         observed_convert_values.append(strict)
         return [test_tool]
 

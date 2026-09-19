@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from concurrent.futures import Future
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -90,16 +89,16 @@ class _SyncContextServer(_DummyServer):
         return f"pong:{payload}"
 
 
-class _TaskAffinityServer(_DummyServer):
+class _LoopAffinityServer(_DummyServer):
     def __init__(self) -> None:
         super().__init__()
-        self.task_ids: list[int] = []
+        self.loop_ids: list[int] = []
 
-    async def get_task_id(self) -> int:
-        task = asyncio.current_task()
-        task_id = id(task)
-        self.task_ids.append(task_id)
-        return task_id
+    async def get_loop_id(self) -> int:
+        loop = asyncio.get_running_loop()
+        loop_id = id(loop)
+        self.loop_ids.append(loop_id)
+        return loop_id
 
 
 class _ContextAwareServer(_DummyServer):
@@ -133,7 +132,7 @@ async def test_ensure_connected_reuses_driver_for_proxy() -> None:
     await manager.ensure_connected(proxy)
 
     try:
-        assert len(manager._drivers) == 1
+        assert len(manager._bindings) == 1
     finally:
         await manager.shutdown()
 
@@ -143,14 +142,14 @@ async def test_reconnect_replaces_driver_and_resets_session() -> None:
     manager = PersistentMCPServerManager()
     server = _DummyServer()
     await manager.ensure_connected(server)
-    old_state = manager._drivers[server]
+    old_state = manager._bindings[server]
 
     try:
         proxy = LoopAffineAsyncProxy(server, manager)
         await manager.reconnect(proxy)
 
         assert server.session is not None
-        assert manager._drivers[server] is not old_state
+        assert manager._bindings[server] is not old_state
     finally:
         await manager.shutdown()
 
@@ -169,7 +168,7 @@ async def test_shutdown_handles_cleanup_timeout() -> None:
     except TimeoutError as exc:  # pragma: no cover - current behavior under test
         pytest.fail(f"shutdown should not propagate TimeoutError: {exc}")
 
-    assert manager._drivers == {}
+    assert manager._bindings == {}
 
 
 @pytest.mark.asyncio
@@ -251,21 +250,150 @@ async def test_proxy_supports_sync_context_and_method_proxying() -> None:
 
 
 @pytest.mark.asyncio
-async def test_proxy_coroutine_calls_stay_on_driver_task() -> None:
+async def test_proxy_coroutine_calls_stay_on_background_loop() -> None:
+    """Method calls run on the manager's background loop; lifecycle calls run in the
+    server's SDK worker task (see test_oauth_lazy_connect_and_cleanup_share_worker_task
+    for the same-task connect/cleanup assertion)."""
     manager = PersistentMCPServerManager()
-    server = _TaskAffinityServer()
+    server = _LoopAffinityServer()
 
     await manager.ensure_connected(server)
     proxy = LoopAffineAsyncProxy(server, manager)
 
     try:
-        first = await proxy.get_task_id()
-        second = await proxy.get_task_id()
+        first = await proxy.get_loop_id()
+        second = await proxy.get_loop_id()
     finally:
         await manager.shutdown()
 
     assert first == second
-    assert len(set(server.task_ids)) == 1
+    assert len(set(server.loop_ids)) == 1
+
+
+@pytest.mark.asyncio
+async def test_oauth_lazy_connect_and_cleanup_share_worker_task() -> None:
+    """OAuth consent may outlast the connect timeout; the session must still be created
+    and cleaned up inside the same SDK worker task (cancel-scope affinity), and the
+    connect must run exactly once — a capped connect would force a second consent."""
+
+    class _SlowConsentOAuthClient(MCPServerOAuthClient):
+        def __init__(self, config: Any) -> None:
+            super().__init__(config)
+            self.connect_attempts = 0
+            self.connect_tasks: list[int] = []
+            self.cleanup_tasks: list[int] = []
+
+        async def connect(self) -> None:
+            self.connect_attempts += 1
+            self.connect_tasks.append(id(asyncio.current_task()))
+            if self.session is not None:
+                return
+            await asyncio.sleep(0.2)  # slower than the connect timeout below
+            self.session = object()
+
+        async def list_tools(self, run_context: object | None = None) -> list[str]:
+            if self.session is None:
+                await self.connect()
+            return ["tool"]
+
+        async def cleanup(self) -> None:
+            self.cleanup_tasks.append(id(asyncio.current_task()))
+            self.session = None
+
+    manager = PersistentMCPServerManager()
+    manager._timeouts["connect"] = 0.05  # must not cap the OAuth-bound connect
+    client = _SlowConsentOAuthClient(MCPServerOAuth(url="http://localhost:8001/mcp", name="github"))
+    proxy = LoopAffineAsyncProxy(client, manager)
+    try:
+        assert await proxy.list_tools() == ["tool"]
+    finally:
+        await manager.shutdown()
+
+    assert client.connect_attempts == 1
+    assert client.connect_tasks
+    assert client.cleanup_tasks
+    assert client.connect_tasks[0] == client.cleanup_tasks[0]
+
+
+@pytest.mark.asyncio
+async def test_cleanup_does_not_reraise_stale_connect_error() -> None:
+    """A recorded connect failure must not propagate out of a later cleanup."""
+
+    class _FailingConnectServer(_DummyServer):
+        def __init__(self) -> None:
+            super().__init__()
+            self.cleanup_calls = 0
+
+        async def connect(self) -> None:
+            raise RuntimeError("boom during connect")
+
+        async def cleanup(self) -> None:
+            self.cleanup_calls += 1
+            self.session = None
+
+    manager = PersistentMCPServerManager()
+    server = _FailingConnectServer()
+    proxy = LoopAffineAsyncProxy(server, manager)
+    try:
+        manager._ensure_driver(server)  # connect fails; recorded, not raised
+        await proxy.cleanup()
+        assert server.cleanup_calls == 1
+    finally:
+        await manager.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_ensure_driver_does_not_reconnect_caller_connected_server() -> None:
+    """A server the caller connected before registration must not be connected twice,
+    but the binding must still release its session on cleanup."""
+    manager = PersistentMCPServerManager()
+    server = _DummyServer()
+    server.session = object()  # connected by the caller before registration
+    try:
+        manager._ensure_driver(server)
+        assert server.connect_calls == 0
+    finally:
+        await manager.shutdown()
+    assert server.session is None
+
+
+@pytest.mark.asyncio
+async def test_proxy_aenter_does_not_tear_down_live_connection() -> None:
+    """Entering the proxy context runs ``__aenter__`` in the worker without forcing a
+    cleanup+reconnect that would tear down the live persistent connection."""
+
+    class _SessionlessContextServer:
+        name = "sessionless"
+
+        def __init__(self) -> None:
+            self.events: list[str] = []
+
+        async def connect(self) -> None:
+            self.events.append("connect")
+
+        async def cleanup(self) -> None:
+            self.events.append("cleanup")
+
+        async def __aenter__(self) -> _SessionlessContextServer:
+            self.events.append("aenter")
+            await self.connect()
+            return self
+
+        async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+            self.events.append("aexit")
+            await self.cleanup()
+            return None
+
+    manager = PersistentMCPServerManager()
+    server = _SessionlessContextServer()
+    proxy = LoopAffineAsyncProxy(server, manager)
+    try:
+        await manager.ensure_connected(server)
+        acquired = await proxy.__aenter__()
+        assert acquired is server
+        assert server.events == ["connect", "aenter", "connect"]
+    finally:
+        await manager.shutdown()
 
 
 def test_register_get_all_and_mark_atexit() -> None:
@@ -589,7 +717,7 @@ def test_update_oauth_cache_dir_updates_clients(tmp_path: Path) -> None:
     client._oauth_provider = SimpleNamespace(storage=SimpleNamespace(base_cache_dir=Path("/default-cache")))
 
     manager.register(server)
-    manager._drivers[client] = {"real": client}
+    manager._ensure_binding(client)
 
     manager.update_oauth_cache_dir(tmp_path)
 
@@ -661,6 +789,9 @@ def test_resolve_method_timeout_prefers_runtime_timeout_for_oauth_servers() -> N
 @pytest.mark.asyncio
 async def test_oauth_list_tools_outer_timeout_allows_inner_timeout_to_surface() -> None:
     class _InnerTimeoutOAuthClient(MCPServerOAuthClient):
+        async def connect(self) -> None:
+            self.session = object()
+
         async def list_tools(self, run_context: object | None = None) -> None:
             await asyncio.sleep(0.05)
             raise RuntimeError("inner OAuth callback timeout")
@@ -997,24 +1128,19 @@ async def test_cleanup_oauth_runtime_mcp_servers_removes_request_scoped_clients(
 
 
 @pytest.mark.asyncio
-async def test_unregister_keys_ending_with_cancels_busy_request_scoped_driver() -> None:
+async def test_unregister_keys_ending_with_cleans_up_bound_server() -> None:
     manager = PersistentMCPServerManager()
     server = _DummyServer("busy")
     key = "busy::oauth::url::user::store::request_suffix"
-    driver_future: Future = Future()
-    manager._timeouts["cleanup"] = 0.01
     manager._servers[key] = server
-    manager._drivers[server] = {
-        "queue": asyncio.Queue(),
-        "real": server,
-        "created_by_driver": False,
-        "driver_future": driver_future,
-    }
+    await manager.ensure_connected(server)
+    assert server.session is not None
 
     await manager.unregister_keys_ending_with("::request_suffix")
 
     assert manager.get(key) is None
-    assert driver_future.cancelled()
+    assert server.session is None
+    assert server not in manager._bindings
 
 
 def test_build_persistence_key_separates_custom_storage(tmp_path: Path) -> None:
