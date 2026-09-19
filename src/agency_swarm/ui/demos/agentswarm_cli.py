@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Protocol, TextIO, TypedDict, cast
 from urllib.parse import quote
 
-import requests
+import httpx
 
 from agency_swarm.agency.helpers import build_fastapi_agencies
 from agency_swarm.integrations.fastapi import run_fastapi
@@ -278,7 +278,7 @@ def _install(pkg: _Package, root: Path, path: Path) -> None:
 
 
 def _metadata(name: str) -> _Meta:
-    response = requests.get(f"{_CLI_REGISTRY}/{quote(name, safe='')}/{_CLI_VERSION}", timeout=30)
+    response = httpx.get(f"{_CLI_REGISTRY}/{quote(name, safe='')}/{_CLI_VERSION}", timeout=30, follow_redirects=True)
     response.raise_for_status()
     data = response.json()
     dist = data.get("dist") if isinstance(data, dict) else None
@@ -293,10 +293,10 @@ def _metadata(name: str) -> _Meta:
 
 
 def _download(url: str, path: Path) -> None:
-    with requests.get(url, stream=True, timeout=60) as response:
+    with httpx.stream("GET", url, timeout=60, follow_redirects=True) as response:
         response.raise_for_status()
         with path.open("wb") as file:
-            for chunk in response.iter_content(chunk_size=1 << 20):
+            for chunk in response.iter_bytes(chunk_size=1 << 20):
                 if chunk:
                     file.write(chunk)
 

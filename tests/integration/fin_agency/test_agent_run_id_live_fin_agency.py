@@ -4,8 +4,8 @@ import subprocess
 import sys
 import time
 
+import httpx
 import pytest
-import requests
 
 SERVER_START_TIMEOUT = 20
 SERVER_PORT = 3088
@@ -35,7 +35,7 @@ def fin_agency_server():
     up = False
     while time.time() - start < SERVER_START_TIMEOUT:
         try:
-            r = requests.get(f"{SERVER_URL}/my-agency/get_metadata", timeout=1)
+            r = httpx.get(f"{SERVER_URL}/my-agency/get_metadata", timeout=1, follow_redirects=True)
             if r.status_code == 200:
                 up = True
                 break
@@ -75,15 +75,12 @@ async def test_fin_agency_send_message_agent_run_ids(fin_agency_server):
     }
 
     # Post and stream events; set read timeout longer than our read loop to avoid
-    # urllib3 raising inside iter_lines. Use a tuple (connect_timeout, read_timeout).
+    # the transport raising inside iter_lines. Connect timeout stays at 10s.
     max_seconds = 30
-    resp = requests.post(url, json=payload, stream=True, timeout=(10, max_seconds + 5))
-    assert resp.status_code == 200
 
     send_message_occurrences = []
     runtime_like = []
     start = time.time()
-    max_seconds = 30
     agent_updates = []
     saved_messages = []
 
@@ -100,8 +97,13 @@ async def test_fin_agency_send_message_agent_run_ids(fin_agency_server):
                 recurse(v, (path or []) + [f"[{i}]"], obj, results, top)
         return results
 
+    resp: httpx.Response | None = None
+    client: httpx.Client | None = None
     try:
-        for raw in resp.iter_lines(decode_unicode=True):
+        client = httpx.Client(timeout=httpx.Timeout(max_seconds + 5, connect=10), follow_redirects=True)
+        resp = client.send(client.build_request("POST", url, json=payload), stream=True)
+        assert resp.status_code == 200
+        for raw in resp.iter_lines():
             if time.time() - start > max_seconds:
                 break
             if not raw:
@@ -156,16 +158,16 @@ async def test_fin_agency_send_message_agent_run_ids(fin_agency_server):
                             saved_messages.append(m)
             if line.startswith("event:") and line.endswith("end"):
                 break
-    except requests.exceptions.RequestException as e:
+    except httpx.HTTPError as e:
         # Treat stream read errors (timeouts, resets) as end-of-stream; we will
         # validate whatever we collected so far. This makes the test resilient to
         # network timing differences while still asserting agent_run_id presence.
         print("stream read error, proceeding with collected events:", e)
     finally:
-        try:
+        if resp is not None:
             resp.close()
-        except Exception:
-            pass
+        if client is not None:
+            client.close()
 
     assert len(send_message_occurrences) >= 1, "No send_message occurrences found in stream"
     assert len(runtime_like) >= 1, "No runtime-like send_message function calls found in stream"
@@ -210,17 +212,19 @@ async def test_no_duplicate_function_calls_in_stream(fin_agency_server):
 
     payload = {"message": "Please analyze TESLA (TSLA), SPY (SPY), and AMZN (AMZN)"}
 
-    stream_resp = requests.post(stream_url, json=payload, stream=True, timeout=(10, 45))
-    assert stream_resp.status_code == 200
-
     function_calls_by_id = {}
     function_call_outputs_by_id = {}
     error_found = None
     max_time = 45  # Maximum time to wait for response
 
+    stream_resp: httpx.Response | None = None
+    stream_client: httpx.Client | None = None
     try:
+        stream_client = httpx.Client(timeout=httpx.Timeout(45, connect=10), follow_redirects=True)
+        stream_resp = stream_client.send(stream_client.build_request("POST", stream_url, json=payload), stream=True)
+        assert stream_resp.status_code == 200
         start_time = time.time()
-        for raw in stream_resp.iter_lines(decode_unicode=True):
+        for raw in stream_resp.iter_lines():
             if time.time() - start_time > max_time:
                 break  # Timeout protection
             if not raw:
@@ -264,13 +268,13 @@ async def test_no_duplicate_function_calls_in_stream(fin_agency_server):
             if line.startswith("event:") and line.endswith("end"):
                 break
 
-    except requests.exceptions.RequestException:
+    except httpx.HTTPError:
         pass  # Stream ended, proceed with validation
     finally:
-        try:
+        if stream_resp is not None:
             stream_resp.close()
-        except Exception:
-            pass
+        if stream_client is not None:
+            stream_client.close()
 
     # Check if we found the specific error
     if error_found:
