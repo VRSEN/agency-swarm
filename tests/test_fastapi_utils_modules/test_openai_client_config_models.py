@@ -270,7 +270,7 @@ def test_default_headers_only_without_baseline_client_falls_back_to_model_settin
 def test_default_headers_only_does_not_override_litellm_model_settings() -> None:
     """default_headers-only should not rebuild LitellmModel, and should add headers to model_settings."""
     pytest.importorskip("agents")
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     from agents.extensions.models.litellm_model import LitellmModel
 
@@ -300,7 +300,7 @@ def test_default_headers_only_does_not_override_litellm_model_settings() -> None
 def test_litellm_anthropic_does_not_use_generic_api_key_fallback() -> None:
     """config.api_key should not override Anthropic auth unless litellm_keys is provided."""
     pytest.importorskip("agents")
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     from agents.extensions.models.litellm_model import LitellmModel
 
@@ -329,7 +329,7 @@ def test_litellm_anthropic_does_not_use_generic_api_key_fallback() -> None:
 def test_litellm_anthropic_does_not_use_codex_base_url_fallback() -> None:
     """Codex browser-auth base_url must not override non-OpenAI LiteLLM providers."""
     pytest.importorskip("agents")
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     from agents.extensions.models.litellm_model import LitellmModel
 
@@ -363,7 +363,7 @@ def test_litellm_anthropic_does_not_use_codex_base_url_fallback() -> None:
 def test_litellm_google_wrapper_uses_gemini_request_key() -> None:
     """Existing Google Gemini LiteLLM wrappers should resolve keys against Gemini."""
     pytest.importorskip("agents")
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     from agents.extensions.models.litellm_model import LitellmModel
 
@@ -389,7 +389,7 @@ def test_litellm_google_wrapper_uses_gemini_request_key() -> None:
 def test_litellm_google_wrapper_uses_gemini_request_proxy_base_url() -> None:
     """Explicit LiteLLM proxy base_url should still reach Gemini wrappers."""
     pytest.importorskip("agents")
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     from agents.extensions.models.litellm_model import LitellmModel
 
@@ -419,7 +419,7 @@ def test_litellm_google_wrapper_uses_gemini_request_proxy_base_url() -> None:
 def test_litellm_ollama_uses_explicit_request_base_url() -> None:
     """Non-TUI callers may route local LiteLLM providers to a remote Ollama endpoint."""
     pytest.importorskip("agents")
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     from agents.extensions.models.litellm_model import LitellmModel
 
@@ -446,7 +446,7 @@ def test_litellm_ollama_uses_explicit_request_base_url() -> None:
 def test_agency_swarm_default_model_override_reaches_litellm_agent_model() -> None:
     """Outside the TUI stream bridge, the sentinel remains a normal model override."""
     pytest.importorskip("agents")
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     from agents.extensions.models.litellm_model import LitellmModel
 
@@ -473,7 +473,7 @@ def test_agency_swarm_default_model_override_reaches_litellm_agent_model() -> No
 def test_litellm_openai_provider_can_use_generic_api_key_fallback() -> None:
     """For openai-ish LiteLLM providers, config.api_key remains a valid fallback."""
     pytest.importorskip("agents")
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     from agents.extensions.models.litellm_model import LitellmModel
 
@@ -620,7 +620,7 @@ def test_model_override_preserves_chat_completions_transport() -> None:
 def test_model_override_preserves_litellm_credentials() -> None:
     """config.model on a LitellmModel agent keeps the existing base_url + api_key."""
     pytest.importorskip("agents")
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     from agents.extensions.models.litellm_model import LitellmModel
 
@@ -643,7 +643,7 @@ def test_model_override_preserves_litellm_credentials() -> None:
 def test_litellm_provider_model_override_does_not_add_reasoning_settings() -> None:
     """Provider model overrides must not manufacture reasoning request parameters."""
     pytest.importorskip("agents")
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     from agents import ModelSettings
     from agents.extensions.models.litellm_model import LitellmModel
@@ -667,7 +667,7 @@ def test_litellm_provider_model_override_does_not_add_reasoning_settings() -> No
 def test_xai_model_override_does_not_add_reasoning_settings() -> None:
     """xAI Grok models reject LiteLLM reasoningEffort, so do not manufacture it."""
     pytest.importorskip("agents")
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     from agents.extensions.models.litellm_model import LitellmModel
 
@@ -688,7 +688,7 @@ def test_xai_model_override_does_not_add_reasoning_settings() -> None:
 def test_litellm_model_override_applies_explicit_variant_extra_args() -> None:
     """User-selected model variants should pass provider settings without backend defaults."""
     pytest.importorskip("agents")
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     from agents.extensions.models.litellm_model import LitellmModel
 
@@ -723,7 +723,7 @@ def test_litellm_model_override_applies_explicit_variant_extra_args() -> None:
 def test_litellm_anthropic_variant_maps_effort_without_leaking_provider_field() -> None:
     """Anthropic UI variants use effort, but LiteLLM expects reasoning_effort."""
     pytest.importorskip("agents")
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     from agents.extensions.models.litellm_model import LitellmModel
 
@@ -757,7 +757,7 @@ def test_litellm_anthropic_variant_maps_effort_without_leaking_provider_field() 
 def test_litellm_gemini_variant_maps_thinking_config() -> None:
     """Gemini UI variants use thinkingConfig, but LiteLLM expects thinking or reasoning_effort."""
     pytest.importorskip("agents")
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     from agents.extensions.models.litellm_model import LitellmModel
 
@@ -790,7 +790,7 @@ async def test_litellm_gemini_budget_forwards_only_thinking_payload(monkeypatch)
     """Budget-based Gemini variants should not also send LiteLLM reasoning_effort."""
     pytest.importorskip("agents")
     litellm = pytest.importorskip("litellm")
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     from agents.extensions.models.litellm_model import LitellmModel
     from agents.models.interface import ModelTracing
@@ -846,7 +846,7 @@ async def test_litellm_anthropic_budget_variant_preserves_reasoning_for_tool_rep
     """Anthropic budget-only thinking variants should replay signed thinking blocks across tool calls."""
     pytest.importorskip("agents")
     litellm = pytest.importorskip("litellm")
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     from agents.extensions.models.litellm_model import LitellmModel
     from agents.models.interface import ModelTracing
@@ -925,7 +925,7 @@ async def test_litellm_anthropic_budget_variant_preserves_reasoning_for_tool_rep
 def test_litellm_gemini_variant_maps_top_level_thinking_level() -> None:
     """Gemini 3 UI variants may arrive as top-level thinkingLevel/includeThoughts."""
     pytest.importorskip("agents")
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     from agents.extensions.models.litellm_model import LitellmModel
 
@@ -1014,7 +1014,7 @@ def test_openai_model_override_applies_summary_without_effort() -> None:
 
 def test_litellm_extra_arg_reasoning_effort_clears_stale_reasoning() -> None:
     """LiteLLM extra-arg providers should not keep stale template reasoning."""
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     from agents import ModelSettings
     from agents.extensions.models.litellm_model import LitellmModel
@@ -1111,7 +1111,7 @@ def test_openai_model_override_maps_variant_include_to_response_include() -> Non
 def test_litellm_openai_variant_sets_reasoning_without_forcing_other_providers(model_name: str) -> None:
     """OpenAI LiteLLM variants should enable Agents reasoning state only from explicit UI settings."""
     pytest.importorskip("agents")
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     from agents.extensions.models.litellm_model import LitellmModel
 
@@ -1140,7 +1140,7 @@ async def test_litellm_openai_variant_forwards_reasoning_summary_to_litellm(monk
     """OpenAI LiteLLM summaries must reach the SDK chat-completions call payload."""
     pytest.importorskip("agents")
     litellm = pytest.importorskip("litellm")
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     from agents.extensions.models.litellm_model import LitellmModel
     from agents.models.interface import ModelTracing
@@ -1211,7 +1211,7 @@ def test_litellm_prefixed_string_model_normalizes_variant_extra_args_without_mod
 def test_litellm_prefixed_wrapper_model_normalizes_variant_extra_args_without_model_override() -> None:
     """Existing LiteLLM wrappers with a prefixed model should still get provider-specific variant mapping."""
     pytest.importorskip("agents")
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     from agents.extensions.models.litellm_model import LitellmModel
 
@@ -1238,7 +1238,7 @@ def test_litellm_prefixed_wrapper_model_normalizes_variant_extra_args_without_mo
 def test_xai_grok_variant_forwards_selected_reasoning_effort(model_name: str) -> None:
     """Selected xAI Grok variants should reach LiteLLM as explicit extra args."""
     pytest.importorskip("agents")
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     from agents.extensions.models.litellm_model import LitellmModel
 
@@ -1270,7 +1270,7 @@ def test_xai_grok_variant_forwards_selected_reasoning_effort(model_name: str) ->
 def test_xai_grok_variant_drops_unsupported_reasoning_effort(model_name: str) -> None:
     """xAI Grok variants without configurable reasoning should not receive LiteLLM reasoning args."""
     pytest.importorskip("agents")
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     from agents.extensions.models.litellm_model import LitellmModel
 
@@ -1303,7 +1303,7 @@ def test_xai_grok_fallback_keeps_configurable_reasoning_effort(monkeypatch, mode
     """If LiteLLM metadata is unavailable, configurable Grok variants should keep effort."""
     pytest.importorskip("agents")
     litellm = pytest.importorskip("litellm")
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     from agents.extensions.models.litellm_model import LitellmModel
 
@@ -1335,7 +1335,7 @@ def test_xai_grok_fallback_drops_fixed_reasoning_effort(monkeypatch) -> None:
     """If LiteLLM metadata is unavailable, fixed-reasoning Grok variants should stay stripped."""
     pytest.importorskip("agents")
     litellm = pytest.importorskip("litellm")
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     from agents.extensions.models.litellm_model import LitellmModel
 

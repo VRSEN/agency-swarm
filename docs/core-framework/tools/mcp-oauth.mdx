@@ -198,8 +198,8 @@ Use this when you are running locally (developer machine) and can open a browser
   Custom async handler for OAuth redirect. Receives the authorization URL to display to users. By default, opens the browser.
 </ParamField>
 
-<ParamField param="callback_handler" type="Callable[[], Awaitable[tuple[str, str | None]]]">
-  Custom async handler to receive the OAuth callback code. Returns a tuple of (code, state). By default, starts a local HTTP server (or prompts for manual paste) to capture the redirect. In FastAPI deployments you typically do **not** set this—`run_fastapi` wires callback handling through `/auth/callback`.
+<ParamField param="callback_handler" type="Callable[[], Awaitable[AuthorizationCodeResult]]">
+  Custom async handler to receive the OAuth callback. Returns an `AuthorizationCodeResult` from `mcp.shared.auth` with `code`, `state`, and `iss` fields. By default, starts a local HTTP server (or prompts for manual paste) to capture the redirect. In FastAPI deployments you typically do **not** set this—`run_fastapi` wires callback handling through `/auth/callback`.
 </ParamField>
 
 ### Token storage and isolation
@@ -277,14 +277,17 @@ agent = Agent(name="MultiServiceAgent", mcp_servers=[github, notion])
 If you are building your own UI/server (not using `run_fastapi`), you can send the auth URL to your frontend and wait for the callback code there:
 
 ```python
+from mcp.shared.auth import AuthorizationCodeResult
+
 from agency_swarm import Agent
 from agency_swarm.mcp import MCPServerOAuth
 
 async def send_redirect(auth_url: str) -> None:
     emit_sse("oauth_redirect", {"auth_url": auth_url})
 
-async def wait_for_code() -> tuple[str, str | None]:
-    return await poll_frontend()
+async def wait_for_code() -> AuthorizationCodeResult:
+    code, state, iss = await poll_frontend()
+    return AuthorizationCodeResult(code=code, state=state, iss=iss)
 
 # OAuth handlers are configured on MCPServerOAuth
 oauth_server = MCPServerOAuth(

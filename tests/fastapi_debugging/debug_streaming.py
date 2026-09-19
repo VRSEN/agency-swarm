@@ -9,7 +9,7 @@ Run this after starting the server to see raw event data.
 
 import json
 
-import httpx
+import httpx2
 
 
 def debug_streaming() -> None:
@@ -23,9 +23,9 @@ def debug_streaming() -> None:
 
     print(f"📤 Request: {payload['message']}\n")
 
-    # timeout=None: the SSE stream is long-lived; httpx's default 5s read
+    # timeout=None: the SSE stream is long-lived; httpx2's default 5s read
     # timeout would kill healthy streams.
-    with httpx.Client(follow_redirects=True, timeout=None) as client:
+    with httpx2.Client(follow_redirects=True, timeout=None) as client:
         response = client.send(client.build_request("POST", url, json=payload), stream=True)
 
         if response.status_code == 200:
@@ -152,7 +152,7 @@ def debug_streaming() -> None:
 if __name__ == "__main__":
     try:
         debug_streaming()
-    except httpx.ConnectError:
+    except httpx2.ConnectError:
         print("❌ Could not connect to server. Make sure it's running:")
         print("   python server.py")
     except Exception as e:

@@ -10,6 +10,7 @@ from openai.types.chat.chat_completion_chunk import Choice as ChunkChoice, Choic
 from openai.types.completion_usage import CompletionUsage
 
 from agency_swarm import Agent, Runner, set_tracing_disabled
+from agency_swarm.agent.openai_client import _LoopScopedHttpClient
 from agency_swarm.utils.openrouter import (
     _OPENROUTER_REPLAY_DETAILS,
     OPENROUTER_REASONING_DETAILS_KEY,
@@ -405,6 +406,13 @@ class _MutationClient:
     def __init__(self) -> None:
         self.chat = _MutationChat()
         self.base_url = "https://openrouter.ai/api/v1"
+
+
+def test_build_openrouter_chat_model_uses_loop_scoped_http_client() -> None:
+    """The stored client resolves its pool per loop so sync calls survive ``asyncio.run`` reuse."""
+    model = build_openrouter_chat_model("openrouter/openai/gpt-5", api_key="test-key")
+
+    assert isinstance(model._client._client, _LoopScopedHttpClient)
 
 
 @pytest.mark.asyncio

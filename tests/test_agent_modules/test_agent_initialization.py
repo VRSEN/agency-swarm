@@ -46,6 +46,23 @@ def test_agent_initialization_invalid_voice() -> None:
         Agent(name="VoiceInvalid", instructions="Talk", voice="invalid")
 
 
+def test_agent_init_patches_sdk_providers_with_loop_scoped_client() -> None:
+    """Agent construction installs the loop-scoped shared HTTP client on the SDK providers."""
+    import agents.models.openai_provider as agents_openai_provider
+
+    from agency_swarm.agent import openai_client
+
+    Agent(name="PatchCheck", instructions="Test")
+
+    assert agents_openai_provider.shared_http_client is openai_client.shared_http_client
+    try:
+        from agents.voice.models import openai_model_provider as agents_voice_provider
+    except ImportError:
+        # voice extra not installed; the guarded patch is skipped by design
+        return
+    assert agents_voice_provider.shared_http_client is openai_client.shared_http_client
+
+
 def test_agent_initialization_core_configuration_variants():
     """Core initialization should preserve baseline defaults and explicit tool/model/output settings."""
     minimal = Agent(name="Agent1", instructions="Be helpful")

@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from agents import FunctionTool, ToolOutputImage
+from agents.tool_context import ToolContext
 from pydantic import field_validator
 
 from agency_swarm import function_tool
@@ -297,7 +298,7 @@ class TestAdaptBaseTool:
 
         adapted_tool = ToolFactory.adapt_base_tool(IntTool)
         payload = '{"value": "not-a-number"}'
-        ctx = MagicMock()
+        ctx = ToolContext(context=None, tool_name="IntTool", tool_call_id="call_1", tool_arguments=payload)
 
         base_result = await adapted_tool.on_invoke_tool(ctx, payload)
         func_result = await int_function.on_invoke_tool(ctx, payload)
@@ -373,8 +374,9 @@ class TestAdaptBaseTool:
 
         adapted_tool = ToolFactory.adapt_base_tool(MixedTool)
         payload = '{"allowed": -5, "count": "not-a-number"}'
+        ctx = ToolContext(context=None, tool_name="MixedTool", tool_call_id="call_1", tool_arguments=payload)
 
-        base_result = await adapted_tool.on_invoke_tool(None, payload)
-        func_result = await mixed_function.on_invoke_tool(None, payload)
+        base_result = await adapted_tool.on_invoke_tool(ctx, payload)
+        func_result = await mixed_function.on_invoke_tool(ctx, payload)
 
         assert base_result == func_result

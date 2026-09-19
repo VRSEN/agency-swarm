@@ -63,7 +63,7 @@ from agents import (
 from agents.exceptions import OutputGuardrailTripwireTriggered
 from agents.models._openai_shared import get_default_openai_client
 
-# LiteLLM is optional - only available if openai-agents[litellm] is installed
+# LiteLLM is optional - only available if the `litellm` extra is installed
 try:
     from agents.extensions.models.litellm_model import LitellmModel
 

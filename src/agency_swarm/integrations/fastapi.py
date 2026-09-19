@@ -433,6 +433,7 @@ def run_fastapi(
         async def oauth_callback(
             state: str,
             code: str | None = None,
+            iss: str | None = None,
             error: str | None = None,
             error_description: str | None = None,
             callback_user_id: str | None = Depends(callback_user_id_dependency),
@@ -451,7 +452,7 @@ def run_fastapi(
             if verify_oauth_callback_user and (not isinstance(callback_user_id, str) or callback_user_id.strip() == ""):
                 raise HTTPException(status_code=401, detail="OAuth callback did not resolve a user ID")
             try:
-                flow = await shared_oauth_registry.set_code(state=state, code=code, user_id=callback_user_id)
+                flow = await shared_oauth_registry.set_code(state=state, code=code, user_id=callback_user_id, iss=iss)
             except OAuthFlowError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
             if flow.error:

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Literal, Optional, Union
 from urllib.parse import urlparse
 
-import httpx
+import httpx2
 import jsonref
 from agents import FunctionTool, ToolOutputFileContent, ToolOutputImage
 from agents.run_context import RunContextWrapper
@@ -116,7 +116,7 @@ def _is_pdf_content_type(content_type: str | None) -> bool:
     return normalized_content_type == PDF_MIME_TYPE
 
 
-def _resolve_redirect_target(response: httpx.Response) -> str:
+def _resolve_redirect_target(response: httpx2.Response) -> str:
     location = response.headers.get("location")
     if not location:
         raise ValueError("Redirect response missing Location header")
@@ -126,10 +126,10 @@ def _resolve_redirect_target(response: httpx.Response) -> str:
     return str(request_url.url.join(location))
 
 
-def _fetch_remote_headers(url: str) -> httpx.Headers:
+def _fetch_remote_headers(url: str) -> httpx2.Headers:
     current_url = url
     for _ in range(MAX_FETCH_REDIRECTS + 1):
-        response = httpx.head(current_url, follow_redirects=False, timeout=URL_FETCH_TIMEOUT_SECONDS)
+        response = httpx2.head(current_url, follow_redirects=False, timeout=URL_FETCH_TIMEOUT_SECONDS)
         if response.status_code in REDIRECT_STATUS_CODES:
             next_url = _resolve_redirect_target(response)
             if not _is_remote_host_safe_for_fetch(next_url):
@@ -146,7 +146,7 @@ def _download_with_size_limit(url: str, *, max_bytes: int) -> bytes:
     current_url = url
     for _ in range(MAX_FETCH_REDIRECTS + 1):
         buffer = bytearray()
-        with httpx.stream("GET", current_url, follow_redirects=False, timeout=URL_FETCH_TIMEOUT_SECONDS) as response:
+        with httpx2.stream("GET", current_url, follow_redirects=False, timeout=URL_FETCH_TIMEOUT_SECONDS) as response:
             if response.status_code in REDIRECT_STATUS_CODES:
                 next_url = _resolve_redirect_target(response)
                 if not _is_remote_host_safe_for_fetch(next_url):
@@ -369,7 +369,7 @@ def from_openapi_schema(
 
                 logger.info(f"Calling URL: {url}\nQuery Params: {query_params}\nJSON Body: {json_body}")
 
-                async with httpx.AsyncClient(timeout=timeout) as client:
+                async with httpx2.AsyncClient(timeout=timeout) as client:
                     resp = await client.request(
                         verb_.upper(),
                         url,

@@ -11,7 +11,7 @@ from urllib.parse import unquote, urlparse
 
 import aiofiles
 import filetype
-import httpx
+import httpx2
 from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
@@ -220,7 +220,7 @@ async def download_file(url: str, name: str, save_dir: str) -> str:
         ),
     }
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx2.AsyncClient(timeout=30.0) as client:
             async with client.stream("GET", url, headers=headers) as r:
                 r.raise_for_status()
                 async with aiofiles.open(tmp_path, "wb") as f:

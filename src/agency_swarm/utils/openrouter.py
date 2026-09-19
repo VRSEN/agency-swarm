@@ -9,6 +9,7 @@ from agents.models.openai_chatcompletions import OpenAIChatCompletionsModel
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletion
 
+from agency_swarm.agent.openai_client import loop_scoped_http_client
 from agency_swarm.utils.openrouter_reasoning import (
     _OPENROUTER_OUTPUT_DETAILS,
     _OPENROUTER_REPLAY_DETAILS,
@@ -135,10 +136,15 @@ def build_openrouter_chat_model(
         resolved_api_key = api_key or os.getenv(OPENROUTER_API_KEY_ENV)
         if not resolved_api_key:
             raise ValueError("OPENROUTER_API_KEY is required for openrouter/... models")
+        # The model is stored on the agent and reused across event loops
+        # (``get_response_sync`` runs ``asyncio.run`` per call), so the HTTP
+        # client must resolve its pool on the running loop rather than bind
+        # to one.
         client = AsyncOpenAI(
             api_key=resolved_api_key,
             base_url=base_url or OPENROUTER_BASE_URL,
             default_headers=default_headers,
+            http_client=loop_scoped_http_client(),
         )
     model = OpenRouterChatCompletionsModel(
         model=actual_model,

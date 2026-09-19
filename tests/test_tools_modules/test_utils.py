@@ -6,7 +6,7 @@ import base64
 from pathlib import Path
 from unittest.mock import Mock
 
-import httpx
+import httpx2
 import pytest
 
 from agency_swarm import ToolOutputFileContent, ToolOutputImage
@@ -78,12 +78,12 @@ def test_tool_output_file_from_url_returns_remote_reference():
 
 
 def test_tool_output_file_from_url_keeps_remote_pdf_when_content_type_is_pdf(monkeypatch):
-    def _fake_head(url: str, *, follow_redirects: bool, timeout: float) -> httpx.Response:
+    def _fake_head(url: str, *, follow_redirects: bool, timeout: float) -> httpx2.Response:
         assert url == "https://1.1.1.1/doc.pdf"
-        request = httpx.Request("HEAD", url)
-        return httpx.Response(200, headers={"content-type": "application/pdf"}, request=request)
+        request = httpx2.Request("HEAD", url)
+        return httpx2.Response(200, headers={"content-type": "application/pdf"}, request=request)
 
-    monkeypatch.setattr("agency_swarm.tools.utils.httpx.head", _fake_head)
+    monkeypatch.setattr("agency_swarm.tools.utils.httpx2.head", _fake_head)
 
     result = tool_output_file_from_url("https://1.1.1.1/doc.pdf")
 
@@ -95,17 +95,17 @@ def test_tool_output_file_from_url_keeps_remote_pdf_when_content_type_is_pdf(mon
 def test_tool_output_file_from_url_falls_back_to_data_url_for_pdf_served_as_octet_stream(monkeypatch):
     pdf_bytes = b"%PDF-1.4 test-pdf-data"
 
-    def _fake_head(url: str, *, follow_redirects: bool, timeout: float) -> httpx.Response:
+    def _fake_head(url: str, *, follow_redirects: bool, timeout: float) -> httpx2.Response:
         assert url == "https://1.1.1.1/doc.pdf"
-        request = httpx.Request("HEAD", url)
-        return httpx.Response(200, headers={"content-type": "application/octet-stream"}, request=request)
+        request = httpx2.Request("HEAD", url)
+        return httpx2.Response(200, headers={"content-type": "application/octet-stream"}, request=request)
 
     class _StreamResponse:
         status_code = 200
         headers: dict[str, str] = {}
 
         def __init__(self) -> None:
-            self.request = httpx.Request("GET", "https://1.1.1.1/doc.pdf")
+            self.request = httpx2.Request("GET", "https://1.1.1.1/doc.pdf")
 
         def __enter__(self) -> "_StreamResponse":
             return self
@@ -124,8 +124,8 @@ def test_tool_output_file_from_url_falls_back_to_data_url_for_pdf_served_as_octe
         assert url == "https://1.1.1.1/doc.pdf"
         return _StreamResponse()
 
-    monkeypatch.setattr("agency_swarm.tools.utils.httpx.head", _fake_head)
-    monkeypatch.setattr("agency_swarm.tools.utils.httpx.stream", _fake_stream)
+    monkeypatch.setattr("agency_swarm.tools.utils.httpx2.head", _fake_head)
+    monkeypatch.setattr("agency_swarm.tools.utils.httpx2.stream", _fake_stream)
 
     result = tool_output_file_from_url("https://1.1.1.1/doc.pdf")
 
@@ -139,7 +139,7 @@ def test_tool_output_file_from_url_falls_back_to_data_url_for_pdf_served_as_octe
 
 def test_tool_output_file_from_url_skips_local_fetch_for_unsafe_host(monkeypatch):
     head_mock = Mock()
-    monkeypatch.setattr("agency_swarm.tools.utils.httpx.head", head_mock)
+    monkeypatch.setattr("agency_swarm.tools.utils.httpx2.head", head_mock)
 
     result = tool_output_file_from_url("http://127.0.0.1/doc.pdf")
 
@@ -149,16 +149,16 @@ def test_tool_output_file_from_url_skips_local_fetch_for_unsafe_host(monkeypatch
 
 
 def test_tool_output_file_from_url_falls_back_to_file_url_when_pdf_exceeds_inline_limit(monkeypatch):
-    def _fake_head(url: str, *, follow_redirects: bool, timeout: float) -> httpx.Response:
-        request = httpx.Request("HEAD", url)
-        return httpx.Response(200, headers={"content-type": "application/octet-stream"}, request=request)
+    def _fake_head(url: str, *, follow_redirects: bool, timeout: float) -> httpx2.Response:
+        request = httpx2.Request("HEAD", url)
+        return httpx2.Response(200, headers={"content-type": "application/octet-stream"}, request=request)
 
     class _StreamResponse:
         status_code = 200
         headers: dict[str, str] = {}
 
         def __init__(self) -> None:
-            self.request = httpx.Request("GET", "https://1.1.1.1/doc.pdf")
+            self.request = httpx2.Request("GET", "https://1.1.1.1/doc.pdf")
 
         def __enter__(self) -> "_StreamResponse":
             return self
@@ -176,8 +176,8 @@ def test_tool_output_file_from_url_falls_back_to_file_url_when_pdf_exceeds_inlin
     def _fake_stream(method: str, url: str, *, follow_redirects: bool, timeout: float) -> _StreamResponse:
         return _StreamResponse()
 
-    monkeypatch.setattr("agency_swarm.tools.utils.httpx.head", _fake_head)
-    monkeypatch.setattr("agency_swarm.tools.utils.httpx.stream", _fake_stream)
+    monkeypatch.setattr("agency_swarm.tools.utils.httpx2.head", _fake_head)
+    monkeypatch.setattr("agency_swarm.tools.utils.httpx2.stream", _fake_stream)
     monkeypatch.setattr("agency_swarm.tools.utils.MAX_INLINE_PDF_BYTES", 6)
 
     result = tool_output_file_from_url("https://1.1.1.1/doc.pdf")
@@ -201,15 +201,15 @@ def test_tool_output_file_from_url_preserves_file_url_for_invalid_ipv6_host():
 
 
 def test_tool_output_file_from_url_blocks_unsafe_redirect_targets(monkeypatch):
-    def _fake_head(url: str, *, follow_redirects: bool, timeout: float) -> httpx.Response:
-        request = httpx.Request("HEAD", url)
-        return httpx.Response(200, headers={"content-type": "application/octet-stream"}, request=request)
+    def _fake_head(url: str, *, follow_redirects: bool, timeout: float) -> httpx2.Response:
+        request = httpx2.Request("HEAD", url)
+        return httpx2.Response(200, headers={"content-type": "application/octet-stream"}, request=request)
 
     class _StreamResponse:
         status_code = 302
 
         def __init__(self) -> None:
-            self.request = httpx.Request("GET", "https://1.1.1.1/doc.pdf")
+            self.request = httpx2.Request("GET", "https://1.1.1.1/doc.pdf")
             self.headers = {"location": "http://127.0.0.1/secret.pdf"}
 
         def __enter__(self) -> "_StreamResponse":
@@ -228,8 +228,8 @@ def test_tool_output_file_from_url_blocks_unsafe_redirect_targets(monkeypatch):
     def _fake_stream(method: str, url: str, *, follow_redirects: bool, timeout: float) -> _StreamResponse:
         return _StreamResponse()
 
-    monkeypatch.setattr("agency_swarm.tools.utils.httpx.head", _fake_head)
-    monkeypatch.setattr("agency_swarm.tools.utils.httpx.stream", _fake_stream)
+    monkeypatch.setattr("agency_swarm.tools.utils.httpx2.head", _fake_head)
+    monkeypatch.setattr("agency_swarm.tools.utils.httpx2.stream", _fake_stream)
 
     result = tool_output_file_from_url("https://1.1.1.1/doc.pdf")
 

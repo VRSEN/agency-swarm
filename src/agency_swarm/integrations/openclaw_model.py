@@ -6,9 +6,11 @@ import re
 from dataclasses import dataclass
 from typing import Protocol, cast
 
-import httpx
+import httpx2
 from agents import OpenAIResponsesModel
 from openai import AsyncOpenAI
+
+from agency_swarm.agent.openai_client import loop_scoped_http_client
 
 DEFAULT_OPENCLAW_MODEL = "openclaw:main"
 DEFAULT_OPENCLAW_PROXY_API_PATH = "/openclaw/v1"
@@ -52,7 +54,14 @@ def build_openclaw_responses_model(
     resolved_usage_model = _resolve_openclaw_usage_model(resolved_model, resolved_base_url)
     resolved_api_key = _resolve_openclaw_responses_api_key(resolved_base_url, api_key)
 
-    client = AsyncOpenAI(base_url=resolved_base_url, api_key=resolved_api_key)
+    # The model is stored on the agent and reused across event loops
+    # (``get_response_sync`` runs ``asyncio.run`` per call), so the HTTP client
+    # must resolve its pool on the running loop rather than bind to one.
+    client = AsyncOpenAI(
+        base_url=resolved_base_url,
+        api_key=resolved_api_key,
+        http_client=loop_scoped_http_client(),
+    )
     responses_model = OpenAIResponsesModel(model=resolved_model, openai_client=client)
     if resolved_usage_model is not None:
         cast(_ResponsesModelWithUsageName, responses_model)._agency_swarm_usage_model_name = resolved_usage_model
@@ -224,13 +233,13 @@ def _has_explicit_openclaw_proxy_base_url() -> bool:
 
 
 def _uses_raw_openclaw_gateway(base_url: str) -> bool:
-    parsed = httpx.URL(base_url)
+    parsed = httpx2.URL(base_url)
     normalized_path = parsed.path.rstrip("/")
     return normalized_path == "/v1"
 
 
 def _normalize_openclaw_proxy_url(base_url: str) -> tuple[str, str, int, str]:
-    parsed = httpx.URL(base_url)
+    parsed = httpx2.URL(base_url)
     hostname = parsed.host or ""
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
     normalized_path = parsed.path.rstrip("/")
@@ -240,7 +249,7 @@ def _normalize_openclaw_proxy_url(base_url: str) -> tuple[str, str, int, str]:
 def _normalize_current_app_openclaw_proxy_matcher(
     base_url: str,
 ) -> tuple[str, str, int, str] | _CurrentAppOpenClawDefaultsPattern:
-    parsed = httpx.URL(base_url)
+    parsed = httpx2.URL(base_url)
     normalized_path = parsed.path.rstrip("/")
     host = parsed.host or None
     path_has_template = _has_openclaw_proxy_url_template(normalized_path)

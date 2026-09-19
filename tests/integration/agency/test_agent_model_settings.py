@@ -1,5 +1,6 @@
 import pytest
 from agents import ModelSettings
+from agents.exceptions import AgentsException
 from pydantic import BaseModel, Field
 
 from agency_swarm import Agent
@@ -47,8 +48,10 @@ async def test_agent_structured_response_output_type():
 async def test_max_tokens_limits_output_length():
     """Agent should respect max_tokens by producing a very short response.
 
-    We request a ~500-word poem but set max_tokens=16 and verify the output
-    is significantly shorter than the requested length.
+    We request a ~500-word poem but set max_tokens=16. The Responses API then
+    ends the turn as ``response.incomplete`` with reason ``max_output_tokens``,
+    and the Agents SDK raises that terminal event as a ModelBehaviorError
+    (wrapped in AgentsException) instead of returning partial text.
     """
     agent = Agent(
         name="TokenLimitAgent",
@@ -61,12 +64,7 @@ async def test_max_tokens_limits_output_length():
         "and vivid emotions. Avoid bullet points; produce continuous verse."
     )
 
-    result = await agent.get_response(prompt)
-    assert result is not None and isinstance(result.final_output, str)
-
-    text = result.final_output.strip()
-    # Ensure we got something back
-    assert len(text) > 0
-    # Heuristic: with max_tokens=16, response should be very short compared to 500 words
-    word_count = len(text.split())
-    assert word_count < 80, f"Expected a truncated response due to low max_tokens; got ~{word_count} words"
+    with pytest.raises(AgentsException) as exc_info:
+        await agent.get_response(prompt)
+    cause = exc_info.value.__cause__ or exc_info.value
+    assert "max_output_tokens" in str(cause)

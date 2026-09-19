@@ -79,7 +79,7 @@ def test_extract_usage_from_run_result_reads_requests_and_tokens() -> None:
         input_tokens=10,
         output_tokens=20,
         total_tokens=30,
-        input_tokens_details=InputTokensDetails(cached_tokens=3),
+        input_tokens_details=InputTokensDetails(cache_write_tokens=0, cached_tokens=3),
         output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
     )
     run_result = _make_run_result(usage=usage)
@@ -103,7 +103,7 @@ def test_extract_usage_from_run_result_extracts_reasoning_and_sums_subagent_reas
         input_tokens=10,
         output_tokens=20,
         total_tokens=30,
-        input_tokens_details=InputTokensDetails(cached_tokens=0),
+        input_tokens_details=InputTokensDetails(cache_write_tokens=0, cached_tokens=0),
         output_tokens_details=OutputTokensDetails(reasoning_tokens=5),
     )
 
@@ -112,7 +112,7 @@ def test_extract_usage_from_run_result_extracts_reasoning_and_sums_subagent_reas
         input_tokens=1,
         output_tokens=2,
         total_tokens=3,
-        input_tokens_details=InputTokensDetails(cached_tokens=0),
+        input_tokens_details=InputTokensDetails(cache_write_tokens=0, cached_tokens=0),
         output_tokens_details=OutputTokensDetails(reasoning_tokens=7),
     )
 
@@ -159,7 +159,7 @@ def test_calculate_usage_with_cost_per_response_costs_all_token_types() -> None:
         input_tokens=10,
         output_tokens=3,
         total_tokens=13,
-        input_tokens_details=InputTokensDetails(cached_tokens=4),
+        input_tokens_details=InputTokensDetails(cache_write_tokens=0, cached_tokens=4),
         output_tokens_details=OutputTokensDetails(reasoning_tokens=5),
     )
     response = ModelResponse(output=[], usage=response_usage, response_id=None)
@@ -211,7 +211,7 @@ async def test_calculate_usage_with_cost_uses_model_name_from_model_instance() -
                 input_tokens=2,
                 output_tokens=1,
                 total_tokens=3,
-                input_tokens_details=InputTokensDetails(cached_tokens=0),
+                input_tokens_details=InputTokensDetails(cache_write_tokens=0, cached_tokens=0),
                 output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
             )
             msg = ResponseOutputMessage(
@@ -292,7 +292,7 @@ async def test_calculate_usage_with_cost_prefers_usage_tracking_model_name() -> 
                 input_tokens=2,
                 output_tokens=1,
                 total_tokens=3,
-                input_tokens_details=InputTokensDetails(cached_tokens=0),
+                input_tokens_details=InputTokensDetails(cache_write_tokens=0, cached_tokens=0),
                 output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
             )
             msg = ResponseOutputMessage(
@@ -489,7 +489,7 @@ def test_extract_usage_from_run_result_skips_malformed_subagent_entries() -> Non
         input_tokens=5,
         output_tokens=3,
         total_tokens=8,
-        input_tokens_details=InputTokensDetails(cached_tokens=1),
+        input_tokens_details=InputTokensDetails(cache_write_tokens=0, cached_tokens=1),
         output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
     )
     run_result = _make_run_result(usage=usage)
@@ -542,7 +542,7 @@ def test_calculate_usage_with_cost_handles_run_result_without_model_name() -> No
         input_tokens=2,
         output_tokens=1,
         total_tokens=3,
-        input_tokens_details=InputTokensDetails(cached_tokens=0),
+        input_tokens_details=InputTokensDetails(cache_write_tokens=0, cached_tokens=0),
         output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
     )
     response = ModelResponse(output=[], usage=usage, response_id=None)

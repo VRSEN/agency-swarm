@@ -15,7 +15,7 @@ import threading
 import time
 from typing import Literal
 
-import requests
+import httpx2
 
 # Set to False to print raw SSE stream
 PARSE_STREAM = True
@@ -37,7 +37,7 @@ def test_regular_endpoint():
     }
 
     print(f"\n📤 Request: {payload['message']}")
-    response = requests.post(url, json=payload)
+    response = httpx2.post(url, json=payload)
 
     if response.status_code == 200:
         data = response.json()
@@ -79,7 +79,7 @@ def cancel_stream(run_id: str, cancel_mode: str | None = None):
         payload = {"run_id": run_id}
         if cancel_mode is not None:
             payload["cancel_mode"] = cancel_mode
-        response = requests.post(cancel_url, json=payload)
+        response = httpx2.post(cancel_url, json=payload)
         if response.status_code == 200:
             data = response.json()
             print(f"✅ Cancel response: ok={data.get('ok')}, cancelled={data.get('cancelled')}")
@@ -119,62 +119,63 @@ def test_streaming_endpoint(message: str):
     print(f"\n📤 Request: {payload['message']}")
     print("\nStreaming events:")
 
-    response = requests.post(url, json=payload, stream=True)
+    # The SSE stream is long-lived, so keep the connection open for the
+    # duration of the response instead of using a plain httpx2.post call.
+    with httpx2.stream("POST", url, json=payload) as response:
+        if response.status_code == 200:
+            print("Streaming response:")
+            accumulated_text = ""
+            add_newline = False
 
-    if response.status_code == 200:
-        print("Streaming response:")
-        accumulated_text = ""
-        add_newline = False
+            for line_str in response.iter_lines():
+                if line_str:
+                    if not PARSE_STREAM:
+                        print(line_str)
+                    else:
+                        if line_str.startswith("event: meta"):
+                            continue
 
-        for line in response.iter_lines():
-            if line:
-                line_str = line.decode("utf-8")
-                if not PARSE_STREAM:
-                    print(line_str)
-                else:
-                    if line_str.startswith("event: meta"):
-                        continue
+                        if line_str.startswith("data: "):
+                            data_str = line_str[6:]
 
-                    if line_str.startswith("data: "):
-                        data_str = line_str[6:]
+                            if data_str == "[DONE]":
+                                print("\n\n✅ Stream complete")
+                                break
 
-                        if data_str == "[DONE]":
-                            print("\n\n✅ Stream complete")
-                            break
+                            try:
+                                data = json.loads(data_str)
 
-                        try:
-                            data = json.loads(data_str)
+                                if "run_id" in data:
+                                    streaming_state["run_id"] = data["run_id"]
+                                    continue
 
-                            if "run_id" in data:
-                                streaming_state["run_id"] = data["run_id"]
-                                continue
+                                if "new_messages" in data:
+                                    print(f"\n📨 Final messages: {len(data.get('new_messages', []))} messages")
+                                    continue
 
-                            if "new_messages" in data:
-                                print(f"\n📨 Final messages: {len(data.get('new_messages', []))} messages")
-                                continue
+                                if "data" in data and isinstance(data["data"], dict):
+                                    nested_data = data["data"]
+                                    if "data" in nested_data and isinstance(nested_data["data"], dict):
+                                        inner_data = nested_data["data"]
+                                        if "type" in inner_data and ".done" in inner_data["type"]:
+                                            add_newline = True
+                                        elif "delta" in inner_data:
+                                            delta_text = inner_data["delta"]
+                                            if isinstance(delta_text, str):
+                                                if add_newline:
+                                                    print("\n")
+                                                print(delta_text, end="", flush=True)
+                                                accumulated_text += delta_text
+                                                add_newline = False
 
-                            if "data" in data and isinstance(data["data"], dict):
-                                nested_data = data["data"]
-                                if "data" in nested_data and isinstance(nested_data["data"], dict):
-                                    inner_data = nested_data["data"]
-                                    if "type" in inner_data and ".done" in inner_data["type"]:
-                                        add_newline = True
-                                    elif "delta" in inner_data:
-                                        delta_text = inner_data["delta"]
-                                        if isinstance(delta_text, str):
-                                            if add_newline:
-                                                print("\n")
-                                            print(delta_text, end="", flush=True)
-                                            accumulated_text += delta_text
-                                            add_newline = False
+                            except json.JSONDecodeError:
+                                pass
 
-                        except json.JSONDecodeError:
-                            pass
-
-        print(f"\nSummary: Received {len(accumulated_text)} characters")
-    else:
-        print(f"❌ Error: {response.status_code}")
-        print(response.text)
+            print(f"\nSummary: Received {len(accumulated_text)} characters")
+        else:
+            print(f"❌ Error: {response.status_code}")
+            response.read()
+            print(response.text)
 
 
 def test_cancel_endpoint(cancel_mode: Literal["immediate", "after_turn"] | None = None):
@@ -217,7 +218,7 @@ def test_cancel_endpoint(cancel_mode: Literal["immediate", "after_turn"] | None 
     time.sleep(3)
 
     print(f"\n📤 Attempting to cancel run {run_id} (mode={cancel_mode or 'immediate'})")
-    response = requests.post(cancel_url, json=payload)
+    response = httpx2.post(cancel_url, json=payload)
 
     if response.status_code == 404:
         print(f"✅ Correctly returned 404: {response.json()}")
@@ -242,7 +243,7 @@ def test_metadata_endpoint():
 
     url = "http://localhost:8080/my-agency/get_metadata"
 
-    response = requests.get(url)
+    response = httpx2.get(url)
 
     if response.status_code == 200:
         metadata = response.json()
@@ -273,7 +274,7 @@ def main():
 
         print("\nDemo completed!")
 
-    except requests.exceptions.ConnectionError:
+    except httpx2.ConnectError:
         print("\n❌ Could not connect to server. Make sure it's running:")
         print("   python server.py")
     except Exception as e:

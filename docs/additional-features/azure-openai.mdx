@@ -62,6 +62,10 @@ azure_agent = Agent(
 Model deployment name might be different from the standard OpenAI model names. It is set by you when you deploy a model to Azure.
 </Note>
 
+<Note>
+A client stored on a model outlives a single event loop: httpx2 binds pooled connections to the loop that created them, so a fixed client can crash on the next `get_response_sync`. Pass `http_client=loop_scoped_http_client()` (from `agency_swarm`) when building `azure_agent` so its requests run on the caller's loop. See [Third-party models](/additional-features/third-party-models).
+</Note>
+
 </Step>
 
 <Step title="Run Your Agency">

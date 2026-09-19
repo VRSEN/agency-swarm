@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import httpx
+import httpx2
 import pytest
 
 os.environ.setdefault("OPENAI_AGENTS_DISABLE_TRACING", "1")
@@ -413,10 +413,10 @@ class TestRequestTracker:
             enable_logging=True,  # Enable logging to test the middleware
         )
 
-        transport = httpx.ASGITransport(app=app)
+        transport = httpx2.ASGITransport(app=app)
         try:
             # Make request with log ID header against in-process app
-            async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            async with httpx2.AsyncClient(transport=transport, base_url="http://testserver") as client:
                 response = await client.post(
                     "/test_agency/get_response",
                     json={"message": "Test logging middleware"},

@@ -4,7 +4,7 @@ import logging
 
 from agents import Model, OpenAIChatCompletionsModel, OpenAIResponsesModel
 
-# LiteLLM is optional - only available if openai-agents[litellm] is installed
+# LiteLLM is optional - only available if the `litellm` extra is installed
 try:
     from agents.extensions.models.litellm_model import LitellmModel
 
@@ -311,7 +311,9 @@ def _apply_litellm_config(agent: Agent, model_name: str, config: ClientConfig) -
     if not _LITELLM_AVAILABLE or LitellmModel is None:
         logger.warning(
             f"Cannot apply client config to agent '{agent.name}': LiteLLM model "
-            f"('{model_name}') requires openai-agents[litellm] to be installed"
+            f"('{model_name}') requires the `litellm` extra — install with "
+            f"`uv add 'agency-swarm[litellm]'` or `pip install litellm --no-deps` "
+            f"after `pip install agency-swarm`"
         )
         return
 

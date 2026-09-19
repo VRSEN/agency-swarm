@@ -14,9 +14,10 @@ from types import SimpleNamespace
 from typing import cast
 from urllib.parse import parse_qs, urlencode, urlsplit
 
-import httpx
+import httpx2
 import pytest
 from agents.tool_context import ToolContext
+from mcp.shared.auth import AuthorizationCodeResult
 
 from agency_swarm import Agency, Agent
 from agency_swarm.mcp.oauth import (
@@ -260,17 +261,21 @@ def _headless_handlers(
 
     async def redirect_handler(auth_url: str) -> None:
         nonlocal callback_url
-        async with httpx.AsyncClient(follow_redirects=False) as client:
+        async with httpx2.AsyncClient(follow_redirects=False) as client:
             response = await client.get(auth_url)
         if not response.is_redirect:
             response.raise_for_status()
         callback_url = response.headers["Location"]
 
-    async def callback_handler() -> tuple[str, str | None]:
+    async def callback_handler() -> AuthorizationCodeResult:
         if callback_url is None:
             raise RuntimeError("Authorization redirect did not produce a callback URL")
         query = parse_qs(urlsplit(callback_url).query)
-        return query["code"][0], query.get("state", [None])[0]
+        return AuthorizationCodeResult(
+            code=query["code"][0],
+            state=query.get("state", [None])[0],
+            iss=query.get("iss", [None])[0],
+        )
 
     return redirect_handler, callback_handler
 

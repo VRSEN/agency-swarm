@@ -14,26 +14,28 @@ requires-python = ">=3.12"
 license = "MIT"
 authors = [{ name = "Vrsen AI Solutions", email = "me@vrsen.ai" }]
 dependencies = [
-    "openai>=2.2,<2.45",
-    "openai-agents==0.18.1",
+    "openai>=3,<4",
+    # Exact pin: we patch private SDK seams (shared_http_client,
+    # RunContextWrapper._copy_for_run_state, agents._debug), so any upstream
+    # release must be reviewed before the pin moves.
+    "openai-agents==0.22.3",
     "datamodel-code-generator>=0.56.0,<0.83.0",
     "docstring-parser>=0.16,<1.0.0",
-    "fastmcp>=3.2.0,<4",
+    "fastmcp>=4.0.5,<5",
     "jsonref>=1.1.0,<2.0.0",
-    "litellm>=1.83.0,!=1.92.*,!=1.93.*,!=1.94.*,!=1.95.*,<1.98",
-    "mcp>=1.23.0,<2.0.0",
+    "mcp>=2,<3",
     "pydantic>=2.11,<3",
     "python-dotenv>=1.1.1,<2.0.0",
     "rich>=13.9.4,<16.0.0",
     "prompt-toolkit>=3.0.0,<4.0.0",
     "typing-extensions>=4.13,<5",
     "watchfiles>=1.0.0,<2.0.0",
-    "fastapi>=0.115.0",
+    "fastapi>=0.141.0",
     "uvicorn[standard]>=0.35.0",
     "ag-ui-protocol>=0.1.18,<1",
     "aiofiles>=23.2.1",
     "filetype>=1.2.0",
-    "httpx>=0.28.0",
+    "httpx2>=2.13,<3",
 ]
 classifiers = [
     "Typing :: Typed",
@@ -58,16 +60,16 @@ agency-swarm = "agency_swarm.cli.main:main"
 [project.optional-dependencies]
 voice = ["numpy>=2.2.0, <3; python_version>='3.10'", "websockets>=15.0,<17"]
 viz = ["graphviz>=0.17"]
-litellm = ["litellm>=1.83.0,!=1.92.*,!=1.93.*,!=1.94.*,!=1.95.*,<1.98"]
+litellm = ["litellm>=1.83.0,!=1.92.*,!=1.93.*,!=1.94.*,!=1.95.*"]
 jupyter = ["ipykernel>=6.29.0,<8.0.0", "jupyter_client>=8.0.0,<9.0.0", "nest_asyncio>=1.6.0,<2.0.0"]
 
 fastapi = [
-    "fastapi>=0.115.0",
+    "fastapi>=0.141.0",
     "uvicorn[standard]>=0.35.0",
     "ag-ui-protocol>=0.1.18,<1",
     "aiofiles>=23.2.1",
     "filetype>=1.2.0",
-    "httpx>=0.28.0",
+    "httpx2>=2.13,<3",
 ]
 
 [dependency-groups]
@@ -87,10 +89,16 @@ dev = [
     "ag-ui-protocol>=0.1.18,<1",
     "aiofiles>=23.2.1",
     "filetype>=1.2.0",
-    "httpx>=0.28.0",
+    "httpx2>=2.13,<3",
     "ipykernel>=6.29.0,<8.0.0",
     "jupyter_client>=8.0.0,<9.0.0",
 ]
+
+[tool.uv]
+# Every litellm release still pins `openai<3` (and `httpx<1`) even though the code
+# runs fine against openai 3.x. Force openai>=3 through the stale pin so the
+# optional `litellm` extra stays installable next to the httpx2-generation core.
+override-dependencies = ["openai>=3,<4"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agency_swarm"]

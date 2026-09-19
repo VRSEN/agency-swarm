@@ -10,17 +10,28 @@ While OpenAI is generally recommended, there are situations where you might pref
 
 Since Agents SDK no longer uses assistants, most of the previously available frameworks became incompatible with it. One of the few frameworks that has been ported for the new SDK is [LiteLLM](https://docs.litellm.ai/docs/response_api), which you can use to connect your agent to various providers (Anthropic, Google Vertex AI, AWS Bedrock, Azure) as well as self-hosted open-source models via Ollama, vLLM, and other local serving solutions.
 
+<Warning>
+**LiteLLM cannot be installed with pip.** Every LiteLLM release still declares `openai<3` in its package metadata, while Agency Swarm requires `openai>=3`. The pin is stale — LiteLLM runs fine on openai 3.x — but pip refuses to install both packages together. Install with **uv** and the override shown in the steps below, or run LiteLLM in a separate environment.
+</Warning>
 
 <Tabs>
 <Tab title="Using OpenAI's LiteLLM model">
 <Steps>
 
 <Step title="Install LiteLLM">
-Install LiteLLM to get started with open-source model support:
+Install Agency Swarm with the `litellm` extra. With uv, add the override to your `pyproject.toml` first so the stale `openai<3` pin is ignored during resolution:
+
+```toml
+# pyproject.toml
+[tool.uv]
+override-dependencies = ["openai>=3,<4"]
+```
 
 ```bash
-pip install "openai-agents[litellm]"
+uv add "agency-swarm[litellm]"
 ```
+
+On pip, `pip install "agency-swarm[litellm]"` fails on the pin conflict. Running `pip install agency-swarm` and then `pip install litellm --no-deps` works around it but skips LiteLLM's own dependencies, so it is fragile and unsupported.
 </Step>
 
 <Step title="Configure Agency Swarm Agent">
@@ -61,10 +72,11 @@ The first terminal run downloads the matching terminal app automatically.
 <Steps>
 
 <Step title="Install LiteLLM">
-Install LiteLLM to get started with open-source model support:
+The LiteLLM proxy is a standalone server — install it in its own environment so its `openai<3` pin never touches your Agency Swarm install:
 
 ```bash
-pip install "litellm[proxy]"
+uv tool install "litellm[proxy]"
+# or: pipx install "litellm[proxy]"
 ```
 </Step>
 
@@ -133,6 +145,20 @@ gemini_agent = Agent(
     )
 )
 ```
+
+<Note>
+A custom `AsyncOpenAI` stored on a model outlives a single event loop — each `get_response`/`get_response_sync` run can use a new one, and httpx2 binds pooled connections to the loop that created them. Pass `http_client=loop_scoped_http_client()` (from `agency_swarm`) when building the client so every request runs on the caller's loop instead of crashing on the second run:
+
+```python
+from agency_swarm import loop_scoped_http_client
+
+custom_client = AsyncOpenAI(
+    api_key="xxx",
+    base_url="http://localhost:4000",
+    http_client=loop_scoped_http_client(),
+)
+```
+</Note>
 </Step>
 
 <Step title="Create and Run Agency">

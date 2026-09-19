@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from inspect import signature
+from inspect import Parameter, signature
 from typing import Any
 
 
@@ -17,22 +17,29 @@ def patch_litellm_thinking_blocks() -> None:
         return
 
     original = handler_cls.handle_stream.__func__
-    forwards_strict_feature_validation = "strict_feature_validation" in signature(original).parameters
+    parameters = signature(original).parameters
+    accepts_extra_kwargs = any(parameter.kind is Parameter.VAR_KEYWORD for parameter in parameters.values())
 
     async def handle_stream(
         cls,
         response: Any,
         stream: AsyncIterator[Any],
         model: str | None = None,
-        strict_feature_validation: bool = False,
+        *args: Any,
+        **kwargs: Any,
     ) -> AsyncIterator[Any]:
         async def normalized_stream() -> AsyncIterator[Any]:
             async for chunk in stream:
                 _copy_thinking_blocks_to_reasoning_content(chunk)
                 yield chunk
 
-        kwargs = {"strict_feature_validation": strict_feature_validation} if forwards_strict_feature_validation else {}
-        async for event in original(cls, response, normalized_stream(), model, **kwargs):
+        # Forward only the kwargs the installed handler accepts so the wrapper
+        # stays compatible with Agents SDK versions older and newer than the one
+        # this patch was written against.
+        forwarded = (
+            kwargs if accepts_extra_kwargs else {key: value for key, value in kwargs.items() if key in parameters}
+        )
+        async for event in original(cls, response, normalized_stream(), model, *args, **forwarded):
             yield event
 
     handler_cls.handle_stream = classmethod(handle_stream)

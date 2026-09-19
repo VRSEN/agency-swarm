@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-import httpx
+import httpx2
 
 from agency_swarm.agent.core import Agent
 from agency_swarm.integrations.openclaw_model import build_openclaw_responses_model
@@ -82,7 +82,7 @@ def _resolve_openclaw_base_url(
     if env_base_url:
         if host is None and port is None and api_path == DEFAULT_OPENCLAW_API_PATH:
             return env_base_url.rstrip("/")
-        parsed_env_base_url = httpx.URL(env_base_url.rstrip("/"))
+        parsed_env_base_url = httpx2.URL(env_base_url.rstrip("/"))
         normalized_api_path = api_path if api_path.startswith("/") else f"/{api_path}"
         resolved_base_url = parsed_env_base_url.copy_with(
             host=host or parsed_env_base_url.host,

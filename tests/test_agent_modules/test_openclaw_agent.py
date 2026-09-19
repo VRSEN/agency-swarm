@@ -6,6 +6,7 @@ import pytest
 from agents.models.openai_responses import OpenAIResponsesModel
 
 from agency_swarm import Agency, Agent, OpenClawAgent
+from agency_swarm.agent.openai_client import _LoopScopedHttpClient
 from agency_swarm.integrations.openclaw_model import (
     build_openclaw_responses_model,
     register_current_app_openclaw_defaults,
@@ -132,6 +133,13 @@ def test_openclaw_agent_preserves_model_alias_override_for_external_servers(base
 
     assert str(agent.model._client.base_url) == f"{base_url}/"
     assert agent.model.model == "openclaw:custom"
+
+
+def test_build_openclaw_responses_model_uses_loop_scoped_http_client() -> None:
+    """The stored client resolves its pool per loop so sync calls survive ``asyncio.run`` reuse."""
+    model = build_openclaw_responses_model(base_url="http://127.0.0.1:18789/v1", api_key="test-key")
+
+    assert isinstance(model._client._client, _LoopScopedHttpClient)
 
 
 def test_build_openclaw_responses_model_preserves_explicit_alias_for_direct_gateway_urls() -> None:

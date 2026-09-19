@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from mcp.client.auth.oauth2 import OAuthContext
-from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
+from mcp.shared.auth import AuthorizationCodeResult, OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
 from pydantic import AnyUrl
 
 from agency_swarm.mcp.oauth import (
@@ -564,10 +564,10 @@ class TestOAuthHandlers:
         callback_url = "http://localhost:8000/auth/callback?code=test_code&state=test_state"
         monkeypatch.setattr("builtins.input", lambda _: callback_url)
 
-        code, state = await default_callback_handler("https://example.com/auth/callback")
+        result = await default_callback_handler("https://example.com/auth/callback")
 
-        assert code == "test_code"
-        assert state == "test_state"
+        assert result.code == "test_code"
+        assert result.state == "test_state"
 
     async def test_callback_handler_handles_error_response(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """default_callback_handler raises ValueError for OAuth errors."""
@@ -602,15 +602,15 @@ class TestOAuthHandlers:
     ) -> None:
         """default_callback_handler should not prompt when local listener succeeds."""
 
-        async def fake_listen(_: str, timeout: float = 300.0) -> tuple[str, str | None]:
-            return "server_code", "server_state"
+        async def fake_listen(_: str, timeout: float = 300.0) -> "AuthorizationCodeResult":
+            return AuthorizationCodeResult(code="server_code", state="server_state")
 
         mock_listen.side_effect = fake_listen
         monkeypatch.setattr("agency_swarm.mcp.oauth_flow._can_poll_stdin_for_callback", lambda: False)
 
-        code, state = await default_callback_handler("http://localhost:8000/auth/callback")
+        result = await default_callback_handler("http://localhost:8000/auth/callback")
 
-        assert (code, state) == ("server_code", "server_state")
+        assert (result.code, result.state) == ("server_code", "server_state")
         assert mock_listen.await_count == 1
 
     @patch("agency_swarm.mcp.oauth_flow._listen_for_callback_once")
@@ -621,20 +621,20 @@ class TestOAuthHandlers:
     ) -> None:
         """default_callback_handler should accept manual input without waiting full listener timeout."""
 
-        async def slow_listen(_: str, timeout: float = 300.0) -> tuple[str, str | None]:
+        async def slow_listen(_: str, timeout: float = 300.0) -> "AuthorizationCodeResult":
             await asyncio.sleep(1.0)
-            return "server_code", "server_state"
+            return AuthorizationCodeResult(code="server_code", state="server_state")
 
-        async def fake_poll() -> tuple[str, str | None]:
-            return "manual_code", "manual_state"
+        async def fake_poll() -> "AuthorizationCodeResult":
+            return AuthorizationCodeResult(code="manual_code", state="manual_state")
 
         mock_listen.side_effect = slow_listen
         monkeypatch.setattr("agency_swarm.mcp.oauth_flow._can_poll_stdin_for_callback", lambda: True)
         monkeypatch.setattr("agency_swarm.mcp.oauth_flow._prompt_for_callback_url_polling", fake_poll)
 
-        code, state = await default_callback_handler("http://localhost:8000/auth/callback")
+        result = await default_callback_handler("http://localhost:8000/auth/callback")
 
-        assert (code, state) == ("manual_code", "manual_state")
+        assert (result.code, result.state) == ("manual_code", "manual_state")
         assert mock_listen.await_count == 1
 
     @patch("agency_swarm.mcp.oauth_flow._listen_for_callback_once")
@@ -646,25 +646,25 @@ class TestOAuthHandlers:
     ) -> None:
         """default_callback_handler should not abort if the first manual URL is invalid."""
 
-        async def slow_listen(_: str, timeout: float = 300.0) -> tuple[str, str | None]:
+        async def slow_listen(_: str, timeout: float = 300.0) -> "AuthorizationCodeResult":
             await asyncio.sleep(1.0)
-            return "server_code", "server_state"
+            return AuthorizationCodeResult(code="server_code", state="server_state")
 
         attempts = {"count": 0}
 
-        async def flaky_poll() -> tuple[str, str | None]:
+        async def flaky_poll() -> "AuthorizationCodeResult":
             attempts["count"] += 1
             if attempts["count"] == 1:
                 raise ValueError("No authorization code found in callback URL")
-            return "manual_code", "manual_state"
+            return AuthorizationCodeResult(code="manual_code", state="manual_state")
 
         mock_listen.side_effect = slow_listen
         monkeypatch.setattr("agency_swarm.mcp.oauth_flow._can_poll_stdin_for_callback", lambda: True)
         monkeypatch.setattr("agency_swarm.mcp.oauth_flow._prompt_for_callback_url_polling", flaky_poll)
 
-        code, state = await default_callback_handler("http://localhost:8000/auth/callback")
+        result = await default_callback_handler("http://localhost:8000/auth/callback")
 
-        assert (code, state) == ("manual_code", "manual_state")
+        assert (result.code, result.state) == ("manual_code", "manual_state")
         assert attempts["count"] == 2
         assert "Invalid callback URL" in capsys.readouterr().out
 
@@ -676,15 +676,15 @@ class TestOAuthHandlers:
     ) -> None:
         """default_callback_handler should continue with listener-only flow when polling is unavailable."""
 
-        async def fake_listen(_: str, timeout: float = 300.0) -> tuple[str, str | None]:
-            return "server_code", "server_state"
+        async def fake_listen(_: str, timeout: float = 300.0) -> "AuthorizationCodeResult":
+            return AuthorizationCodeResult(code="server_code", state="server_state")
 
         mock_listen.side_effect = fake_listen
         monkeypatch.setattr("agency_swarm.mcp.oauth_flow._can_poll_stdin_for_callback", lambda: False)
 
-        code, state = await default_callback_handler("http://localhost:8000/auth/callback")
+        result = await default_callback_handler("http://localhost:8000/auth/callback")
 
-        assert (code, state) == ("server_code", "server_state")
+        assert (result.code, result.state) == ("server_code", "server_state")
         assert mock_listen.await_count == 1
 
     async def test_prompt_for_callback_url_polling_raises_eof_when_stdin_closes(
@@ -718,16 +718,16 @@ class TestOAuthHandlers:
 
         mock_listen.side_effect = OSError("port already in use")
 
-        async def fake_prompt() -> tuple[str, str | None]:
+        async def fake_prompt() -> "AuthorizationCodeResult":
             # Delay prompt so the listener task finishes (and fails) first.
             await asyncio.sleep(0.05)
-            return "manual_code", "manual_state"
+            return AuthorizationCodeResult(code="manual_code", state="manual_state")
 
         monkeypatch.setattr("agency_swarm.mcp.oauth_flow._prompt_for_callback_url", fake_prompt)
 
-        code, state = await default_callback_handler("http://localhost:9999/callback")
+        result = await default_callback_handler("http://localhost:9999/callback")
 
-        assert (code, state) == ("manual_code", "manual_state")
+        assert (result.code, result.state) == ("manual_code", "manual_state")
 
     @patch("agency_swarm.mcp.oauth_flow._listen_for_callback_once")
     async def test_callback_handler_falls_back_when_listener_times_out(
@@ -739,14 +739,14 @@ class TestOAuthHandlers:
 
         mock_listen.side_effect = TimeoutError()
 
-        async def fake_prompt() -> tuple[str, str | None]:
-            return "manual_code", "manual_state"
+        async def fake_prompt() -> "AuthorizationCodeResult":
+            return AuthorizationCodeResult(code="manual_code", state="manual_state")
 
         monkeypatch.setattr("agency_swarm.mcp.oauth_flow._prompt_for_callback_url", fake_prompt)
 
-        code, state = await default_callback_handler("http://localhost:8000/auth/callback")
+        result = await default_callback_handler("http://localhost:8000/auth/callback")
 
-        assert (code, state) == ("manual_code", "manual_state")
+        assert (result.code, result.state) == ("manual_code", "manual_state")
 
     async def test_listen_for_callback_once_escapes_oauth_error_html(self) -> None:
         """Provider errors are escaped and use the encoded response length."""
@@ -793,8 +793,8 @@ class TestCreateOAuthProvider:
         async def server_redirect_handler(auth_url: str) -> None:
             _ = auth_url
 
-        async def server_callback_handler() -> tuple[str, str | None]:
-            return "server-code", "server-state"
+        async def server_callback_handler() -> "AuthorizationCodeResult":
+            return AuthorizationCodeResult(code="server-code", state="server-state")
 
         server = MCPServerOAuth(
             url=TEST_SERVER_URL,
@@ -816,14 +816,14 @@ class TestCreateOAuthProvider:
         async def server_redirect_handler(auth_url: str) -> None:
             _ = auth_url
 
-        async def server_callback_handler() -> tuple[str, str | None]:
-            return "server-code", "server-state"
+        async def server_callback_handler() -> "AuthorizationCodeResult":
+            return AuthorizationCodeResult(code="server-code", state="server-state")
 
         async def explicit_redirect_handler(auth_url: str) -> None:
             _ = auth_url
 
-        async def explicit_callback_handler() -> tuple[str, str | None]:
-            return "explicit-code", "explicit-state"
+        async def explicit_callback_handler() -> "AuthorizationCodeResult":
+            return AuthorizationCodeResult(code="explicit-code", state="explicit-state")
 
         server = MCPServerOAuth(
             url=TEST_SERVER_URL,
@@ -849,14 +849,14 @@ class TestCreateOAuthProvider:
         async def server_redirect_handler(auth_url: str) -> None:
             _ = auth_url
 
-        async def server_callback_handler() -> tuple[str, str | None]:
-            return "server-code", "server-state"
+        async def server_callback_handler() -> "AuthorizationCodeResult":
+            return AuthorizationCodeResult(code="server-code", state="server-state")
 
         async def runtime_redirect_handler(auth_url: str) -> None:
             _ = auth_url
 
-        async def runtime_callback_handler() -> tuple[str, str | None]:
-            return "runtime-code", "runtime-state"
+        async def runtime_callback_handler() -> "AuthorizationCodeResult":
+            return AuthorizationCodeResult(code="runtime-code", state="runtime-state")
 
         server = MCPServerOAuth(
             url=TEST_SERVER_URL,

@@ -264,7 +264,7 @@ class SystemReminderHooks(AgentHooks[MasterContext]):
                 if any(reminder is pending for pending in state.pending_reminders)
             ],
             "pending_tool_reminder_indexes": sorted(state.pending_tool_reminder_indexes),
-            "tool_call_counts": dict(state.tool_call_counts),
+            "tool_call_counts": {str(index): count for index, count in state.tool_call_counts.items()},
             "user_message_reminders_staged": state.user_message_reminders_staged,
         }
 

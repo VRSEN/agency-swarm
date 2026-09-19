@@ -4,7 +4,7 @@ import json
 import logging
 from typing import Any
 
-import httpx
+import httpx2
 import jsonref
 from agents import FunctionTool
 from agents.exceptions import ModelBehaviorError
@@ -143,7 +143,7 @@ def _create_invoke_for_path(path, verb, openapi, tool_schema, function_name, hea
         json_body = body_payload if verb_.lower() in {"post", "put", "patch", "delete"} else None
         logger.info("Calling URL: %s\nQuery Params: %s\nJSON Body: %s", url, query_params, json_body)
 
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        async with httpx2.AsyncClient(timeout=timeout) as client:
             resp = await client.request(
                 verb_.upper(),
                 url,

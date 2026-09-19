@@ -36,6 +36,8 @@ import asyncio
 import os
 from pathlib import Path
 
+from mcp.shared.auth import AuthorizationCodeResult
+
 from agency_swarm import Agency, Agent
 from agency_swarm.mcp.oauth import FileTokenStorage, MCPServerOAuth, _listen_for_callback_once
 
@@ -46,7 +48,7 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # Dedicated callback handler that only uses the local HTTP listener.
-async def local_callback_handler() -> tuple[str, str | None]:
+async def local_callback_handler() -> AuthorizationCodeResult:
     """Capture GitHub redirect via the built-in local HTTP server."""
     return await _listen_for_callback_once("http://localhost:8000/auth/callback")
 

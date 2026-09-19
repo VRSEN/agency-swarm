@@ -7,7 +7,7 @@ from typing import Any, cast
 
 from agents import ModelSettings, OpenAIChatCompletionsModel, OpenAIResponsesModel
 
-# LiteLLM is optional - only available if openai-agents[litellm] is installed
+# LiteLLM is optional - only available if the `litellm` extra is installed
 try:
     from agents.extensions.models.litellm_model import LitellmModel
 
@@ -310,7 +310,8 @@ def _apply_request_litellm_model(agent: Agent, model_name: str) -> None:
     if not _LITELLM_AVAILABLE or LitellmModel is None:
         logger.warning(
             "Cannot apply client_config.model to agent '%s': model %r requires litellm "
-            "(install openai-agents[litellm])",
+            "(install the `litellm` extra: `uv add 'agency-swarm[litellm]'` or "
+            "`pip install litellm --no-deps` after `pip install agency-swarm`)",
             agent.name,
             model_name,
         )

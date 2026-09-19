@@ -1,11 +1,17 @@
 .PHONY: sync
 sync:
-	uv sync --all-extras --dev
+	uv sync --all-extras --no-extra litellm --dev
 
 .PHONY: test-env
 test-env: sync
-	uv run python -c "import litellm"
-	uv run python -c "from agents.extensions.models.litellm_model import LitellmModel"
+	uv run python -c "import agency_swarm"
+
+# Base install ships neither extras nor dev deps; `agents.voice` pulls numpy
+# and websockets from the `voice` extra, so a top-level voice import in the
+# package crashes plain `pip install agency-swarm`. Keep this check in `ci`.
+.PHONY: test-base-install
+test-base-install:
+	uv run --isolated --no-dev python -c "import agency_swarm"
 
 .PHONY: prime
 prime:
@@ -58,14 +64,22 @@ tests-fast: test-env
 tests-verbose: test-env
 	uv run pytest -v
 
+# The coverage gate is calibrated for the full extras set: `make sync` keeps the
+# dev env litellm-free, but litellm-only modules and tests must run under
+# coverage for the total to clear fail-under=90.
+.PHONY: coverage-env
+coverage-env:
+	uv sync --all-extras --dev
+	uv run python -c "import agency_swarm"
+
 .PHONY: coverage
-coverage: test-env
+coverage: coverage-env
 	uv run coverage run -m pytest
 	uv run coverage xml -o coverage.xml
 	uv run coverage report -m --fail-under=90
 
 .PHONY: coverage-html
-coverage-html: test-env
+coverage-html: coverage-env
 	uv run coverage run -m pytest
 	uv run coverage html
 	@echo "Coverage report generated in htmlcov/index.html"
@@ -80,7 +94,7 @@ clean:
 check: lint mypy
 
 .PHONY: ci
-ci: sync check coverage
+ci: sync check test-base-install coverage
 
 .PHONY: serve-docs
 serve-docs:
@@ -94,8 +108,9 @@ build:
 .PHONY: help
 help:
 	@echo "Available commands:"
-	@echo "  sync         - Install dependencies (all extras + dev)"
-	@echo "  test-env     - Sync deps and verify LiteLLM test imports"
+	@echo "  sync         - Install dependencies (all extras except litellm + dev)"
+	@echo "  test-env     - Sync deps and verify agency_swarm imports"
+	@echo "  test-base-install - Verify agency_swarm imports without extras or dev deps"
 	@echo "  format       - Format code and apply safe fixes"
 	@echo "  lint         - Run linting checks"
 	@echo "  lint-unsafe  - Run linting with unsafe fixes"
@@ -103,11 +118,12 @@ help:
 	@echo "  tests        - Sync/verify test env and run all tests"
 	@echo "  tests-fast   - Sync/verify test env and run tests with fail-fast and last-failed"
 	@echo "  tests-verbose- Sync/verify test env and run tests with verbose output"
-	@echo "  coverage     - Sync/verify test env and run tests with coverage reporting"
-	@echo "  coverage-html- Sync/verify test env and generate HTML coverage report"
+	@echo "  coverage-env - Sync deps with all extras and verify agency_swarm imports"
+	@echo "  coverage     - Sync all extras and run tests with coverage reporting"
+	@echo "  coverage-html- Sync all extras and generate HTML coverage report"
 	@echo "  clean        - Clean cache files and artifacts"
 	@echo "  check        - Run lint and mypy"
-	@echo "  ci           - Run full CI pipeline (sync, check, coverage)"
+	@echo "  ci           - Run full CI pipeline (sync, check, base-install import, coverage)"
 	@echo "  serve-docs   - Serve documentation locally"
 	@echo "  build        - Build the package"
 	@echo "  help         - Show this help message"

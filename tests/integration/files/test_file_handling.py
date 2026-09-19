@@ -17,8 +17,11 @@ from agency_swarm import Agency, Agent
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 async def real_openai_client():
+    # Function scope is required: pytest-asyncio gives each test its own event
+    # loop, and httpx2 binds pooled connections to the loop that created them.
+    # A module-scoped client would hand dead-loop transports to later tests.
     return AsyncOpenAI(api_key=OPENAI_API_KEY)
 
 

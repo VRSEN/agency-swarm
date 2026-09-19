@@ -4,7 +4,7 @@ import contextlib
 import logging
 from collections.abc import AsyncGenerator
 
-import httpx
+import httpx2
 from mcp.client.auth import OAuthClientProvider
 from mcp.client.auth.utils import create_client_registration_request
 from mcp.shared.auth import OAuthClientMetadata
@@ -73,7 +73,7 @@ class ErrorCapturingOAuthClientProvider(OAuthClientProvider):
         self._last_flow_error = None
         return error
 
-    def _registration_for_server(self, request: httpx.Request) -> httpx.Request:
+    def _registration_for_server(self, request: httpx2.Request) -> httpx2.Request:
         """Register as a public PKCE client when no auth method is set and the server supports it.
 
         Servers such as Notion otherwise issue client_secret_basic, and the MCP SDK then sends two
@@ -99,8 +99,8 @@ class ErrorCapturingOAuthClientProvider(OAuthClientProvider):
 
     async def async_auth_flow(
         self,
-        request: httpx.Request,
-    ) -> AsyncGenerator[httpx.Request, httpx.Response]:
+        request: httpx2.Request,
+    ) -> AsyncGenerator[httpx2.Request, httpx2.Response]:
         """Proxy the SDK flow while retaining its original exception."""
         self._last_flow_error = None
         flow = super().async_auth_flow(request)

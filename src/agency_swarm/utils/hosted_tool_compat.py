@@ -20,7 +20,7 @@ from agents import (
 )
 from agents.model_settings import MCPToolChoice
 from agents.tool import get_function_tool_responses_only_features
-from httpx import URL
+from httpx2 import URL
 
 from agency_swarm.messages.codex_input import is_codex_base_url
 from agency_swarm.utils import hosted_tool_replacements

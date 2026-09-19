@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from agency_swarm import Agent
@@ -26,7 +26,7 @@ async def test_agent_calls_pastebin_tool(monkeypatch):
 
         return Response()
 
-    monkeypatch.setattr(httpx.AsyncClient, "request", fake_request, raising=False)
+    monkeypatch.setattr(httpx2.AsyncClient, "request", fake_request, raising=False)
 
     agent = Agent(
         name="PasteAgent",

@@ -9,6 +9,7 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+from mcp.shared.auth import AuthorizationCodeResult
 
 import agency_swarm.tools.mcp_manager as mcp_manager
 import agency_swarm.tools.mcp_persistence as mcp_persistence
@@ -692,14 +693,14 @@ def test_sync_oauth_client_handlers_refreshes_runtime_handlers() -> None:
     async def first_redirect(_auth_url: str) -> None:
         return None
 
-    async def first_callback() -> tuple[str, str | None]:
-        return ("code-1", None)
+    async def first_callback() -> AuthorizationCodeResult:
+        return AuthorizationCodeResult(code="code-1", state=None)
 
     async def second_redirect(_auth_url: str) -> None:
         return None
 
-    async def second_callback() -> tuple[str, str | None]:
-        return ("code-2", None)
+    async def second_callback() -> AuthorizationCodeResult:
+        return AuthorizationCodeResult(code="code-2", state=None)
 
     persistent = MCPServerOAuthClient(
         oauth_config,
@@ -741,14 +742,14 @@ def test_sync_oauth_client_handlers_allows_static_server_handlers() -> None:
     async def first_redirect(_auth_url: str) -> None:
         return None
 
-    async def first_callback() -> tuple[str, str | None]:
-        return ("code-1", None)
+    async def first_callback() -> AuthorizationCodeResult:
+        return AuthorizationCodeResult(code="code-1", state=None)
 
     async def second_redirect(_auth_url: str) -> None:
         return None
 
-    async def second_callback() -> tuple[str, str | None]:
-        return ("code-2", None)
+    async def second_callback() -> AuthorizationCodeResult:
+        return AuthorizationCodeResult(code="code-2", state=None)
 
     persistent = MCPServerOAuthClient(
         MCPServerOAuth(

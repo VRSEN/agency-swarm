@@ -7,7 +7,7 @@ import pytest
 @pytest.mark.asyncio
 async def test_litellm_thinking_blocks_emit_reasoning_events() -> None:
     """LiteLLM thinking_blocks should be visible as reasoning stream deltas."""
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     patch = importlib.import_module("agency_swarm.streaming.litellm_reasoning")
     patch.patch_litellm_thinking_blocks()
@@ -23,6 +23,7 @@ async def test_litellm_thinking_blocks_emit_reasoning_events() -> None:
                 SimpleNamespace(
                     index=0,
                     logprobs=None,
+                    finish_reason=None,
                     delta=SimpleNamespace(
                         content=None,
                         refusal=None,
@@ -62,7 +63,7 @@ async def test_litellm_thinking_blocks_emit_reasoning_events() -> None:
 @pytest.mark.asyncio
 async def test_litellm_model_extra_reasoning_content_emits_reasoning_events() -> None:
     """Gemini can expose reasoning fields through provider/model extras instead of attributes."""
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     patch = importlib.import_module("agency_swarm.streaming.litellm_reasoning")
     patch.patch_litellm_thinking_blocks()
@@ -78,6 +79,7 @@ async def test_litellm_model_extra_reasoning_content_emits_reasoning_events() ->
                 SimpleNamespace(
                     index=0,
                     logprobs=None,
+                    finish_reason=None,
                     delta=SimpleNamespace(
                         content=None,
                         refusal=None,
@@ -117,7 +119,7 @@ async def test_litellm_model_extra_reasoning_content_emits_reasoning_events() ->
 @pytest.mark.asyncio
 async def test_litellm_reasoning_field_emits_reasoning_events() -> None:
     """LiteLLM reasoning fields should be visible as reasoning stream deltas."""
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     patch = importlib.import_module("agency_swarm.streaming.litellm_reasoning")
     patch.patch_litellm_thinking_blocks()
@@ -133,6 +135,7 @@ async def test_litellm_reasoning_field_emits_reasoning_events() -> None:
                 SimpleNamespace(
                     index=0,
                     logprobs=None,
+                    finish_reason=None,
                     delta=SimpleNamespace(
                         content=None,
                         refusal=None,
@@ -172,7 +175,7 @@ async def test_litellm_reasoning_field_emits_reasoning_events() -> None:
 @pytest.mark.asyncio
 async def test_litellm_stream_patch_forwards_strict_feature_validation(monkeypatch: pytest.MonkeyPatch) -> None:
     """The wrapper should preserve newer Agents SDK stream-handler keyword args."""
-    litellm_model = pytest.importorskip("agents.extensions.models.litellm_model")
+    litellm_model = pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
     patch = importlib.import_module("agency_swarm.streaming.litellm_reasoning")
     seen: dict[str, object] = {}
     chunk = SimpleNamespace(choices=[])
@@ -214,6 +217,87 @@ async def test_litellm_stream_patch_forwards_strict_feature_validation(monkeypat
         "model": "model",
         "strict_feature_validation": True,
     }
+
+
+@pytest.mark.asyncio
+async def test_litellm_stream_patch_forwards_future_sdk_kwargs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Newer Agents SDK stream-handler kwargs like raise_on_length_truncation pass through."""
+    litellm_model = pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
+    patch = importlib.import_module("agency_swarm.streaming.litellm_reasoning")
+    seen: dict[str, object] = {}
+    chunk = SimpleNamespace(choices=[])
+
+    class Handler:
+        @classmethod
+        async def handle_stream(cls, response, stream, model=None, **kwargs):
+            seen["response"] = response
+            seen["model"] = model
+            seen.update(kwargs)
+            async for item in stream:
+                yield item
+
+    monkeypatch.setattr(litellm_model, "ChatCmplStreamHandler", Handler)
+    patch.patch_litellm_thinking_blocks()
+
+    async def stream():
+        yield chunk
+
+    events = [
+        event
+        async for event in Handler.handle_stream(
+            "response",
+            stream(),
+            "model",
+            strict_feature_validation=True,
+            preserve_raw_usage=True,
+            raise_on_length_truncation=True,
+        )
+    ]
+
+    assert events == [chunk]
+    assert seen == {
+        "response": "response",
+        "model": "model",
+        "strict_feature_validation": True,
+        "preserve_raw_usage": True,
+        "raise_on_length_truncation": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_litellm_stream_patch_drops_kwargs_unknown_to_handler(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Kwargs the installed handler does not declare are dropped for backward compatibility."""
+    litellm_model = pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
+    patch = importlib.import_module("agency_swarm.streaming.litellm_reasoning")
+    seen: dict[str, object] = {}
+    chunk = SimpleNamespace(choices=[])
+
+    class Handler:
+        @classmethod
+        async def handle_stream(cls, response, stream, model=None, strict_feature_validation: bool = False):
+            seen["strict_feature_validation"] = strict_feature_validation
+            async for item in stream:
+                yield item
+
+    monkeypatch.setattr(litellm_model, "ChatCmplStreamHandler", Handler)
+    patch.patch_litellm_thinking_blocks()
+
+    async def stream():
+        yield chunk
+
+    events = [
+        event
+        async for event in Handler.handle_stream(
+            "response",
+            stream(),
+            "model",
+            strict_feature_validation=True,
+            future_sdk_kwarg="dropped",
+        )
+    ]
+
+    assert events == [chunk]
+    assert seen == {"strict_feature_validation": True}
 
 
 def test_litellm_patch_skips_already_normalized_chunks() -> None:

@@ -46,6 +46,7 @@ from agency_swarm.agent.conversation_starters_cache import (
 )
 from agency_swarm.agent.execution_streaming import StreamingRunResponse
 from agency_swarm.agent.file_manager import AgentFileManager
+from agency_swarm.agent.openai_client import install_loop_scoped_http_client, loop_scoped_openai_client
 from agency_swarm.agent.runner import install_runner_boundary
 from agency_swarm.agent.system_reminders import (
     prepare_agent_hooks,
@@ -81,6 +82,29 @@ def _resolve_oauth_owner_id(master_context: MasterContext | None) -> str | None:
         return None
     context_user_id = master_context.user_context.get("user_id")
     return context_user_id if isinstance(context_user_id, str) else None
+
+
+def _actionable_failure_message(exc: BaseException) -> str:
+    """Return the actionable leaf error inside nested exception groups.
+
+    MCP 2.x transports wrap OAuth failures in ``BaseExceptionGroup`` containers
+    whose own message is only "unhandled errors in a TaskGroup". Surfacing the
+    first non-cancellation leaf keeps authentication errors diagnosable.
+    """
+    pending: list[BaseException] = [exc]
+    fallback: BaseException | None = None
+    while pending:
+        current = pending.pop(0)
+        if isinstance(current, BaseExceptionGroup):
+            pending.extend(current.exceptions)
+            continue
+        if isinstance(current, asyncio.CancelledError):
+            fallback = current if fallback is None else fallback
+            continue
+        return str(current)
+    if fallback is not None:
+        return str(fallback)
+    return str(exc)
 
 
 """Constants moved to agency_swarm.agent.constants (no behavior change)."""
@@ -194,6 +218,10 @@ class Agent(BaseAgent[MasterContext]):
                     calls result in a final output.
             reset_tool_choice (bool | None): Whether to reset tool choice after tool calls.
         """
+        # httpx2 binds pooled connections to their event loop; scope the SDK's
+        # shared HTTP client to the running loop before any run can use it.
+        install_loop_scoped_http_client()
+
         normalize_input_guardrail_error_kwargs(kwargs)
         validate_no_deprecated_agent_kwargs(kwargs)
         normalize_agent_tool_definitions(kwargs)
@@ -351,10 +379,18 @@ class Agent(BaseAgent[MasterContext]):
 
     @property
     def client(self) -> AsyncOpenAI:
-        """Provides access to an initialized AsyncOpenAI client instance."""
-        if not hasattr(self, "_openai_client") or self._openai_client is None:
-            self._openai_client = AsyncOpenAI()
-        return self._openai_client
+        """Provides access to an initialized AsyncOpenAI client instance.
+
+        An explicitly assigned client (``_openai_client``) always wins.
+        Otherwise a client pooled per running event loop is returned, because
+        httpx2 binds pooled keep-alive connections to the loop that created
+        them and crashes when a later loop reuses them.
+        """
+        if not hasattr(self, "_openai_client"):
+            self._openai_client = None
+        if self._openai_client is not None:
+            return self._openai_client
+        return loop_scoped_openai_client()
 
     @property
     def client_sync(self) -> OpenAI:
@@ -624,7 +660,7 @@ class Agent(BaseAgent[MasterContext]):
                 )
             except Exception as exc:
                 self.mcp_servers = original_servers
-                return f"Failed to authenticate MCP server '{server_name}': {exc}"
+                return f"Failed to authenticate MCP server '{server_name}': {_actionable_failure_message(exc)}"
             finally:
                 self.mcp_servers = original_servers
 

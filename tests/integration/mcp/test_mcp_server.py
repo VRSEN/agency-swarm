@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
+import httpx2
 import pytest
 from agents import ModelSettings, ToolOriginType
 from agents.items import ToolCallItem, ToolCallOutputItem
@@ -76,7 +76,7 @@ def mcp_http_server():
     for i in range(max_retries):
         try:
             # Any response indicates the server is listening; endpoint may not be GET-able
-            resp = httpx.get(server_url + "/mcp", timeout=2.0)
+            resp = httpx2.get(server_url + "/mcp", timeout=2.0)
             if resp.status_code in (200, 400, 404, 405):
                 # Give it a brief moment more to fully initialize
                 time.sleep(0.5)
