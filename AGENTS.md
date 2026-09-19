@@ -10,6 +10,7 @@ This file contains only repository-specific addenda to the controlling machine-g
 1.4 If an active pull request duplicates an open Dependabot dependency update, close the Dependabot pull request through the normal public-mutation approval path.
 1.5 Commits and pull requests carry no AI attribution: no AI `Co-Authored-By` trailers and no "Generated with" footers in commit messages, pull request titles, or pull request descriptions.
 1.6 If functionality is now implemented upstream, remove the custom implementation unless there is a concrete reason to keep it. If the custom implementation differs from upstream in a way that looks artificial, incorrect, or non-standard, escalate to the user with a recommendation to delete it and reuse upstream behavior.
+1.7 Third-party or vendor integrations live outside this repository: decline vendor-pitch issues and pull requests with a pointer to the existing extension seam, and ship at most a docs recipe.
 
 ## 2. Repository Commands And Review Artifacts
 
