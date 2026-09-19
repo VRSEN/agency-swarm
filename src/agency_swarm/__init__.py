@@ -30,7 +30,6 @@ from agents import (  # noqa: E402
     RunConfig,
     RunContextWrapper,
     RunHooks,
-    Runner,
     RunResult,
     RunResultStreaming,
     StopAtTools,
@@ -67,6 +66,7 @@ from .agency.core import Agency  # noqa: E402
 from .agent.core import AgencyContext, Agent  # noqa: E402
 from .agent.execution_streaming import StreamingRunResponse  # noqa: E402
 from .agent.openai_client import loop_scoped_http_client  # noqa: E402
+from .agent.runner import Runner, run_state_from_json, run_state_to_json  # noqa: E402
 from .context import MasterContext  # noqa: E402
 from .hooks import PersistenceHooks  # noqa: E402
 from .integrations.fastapi import run_fastapi  # noqa: E402
@@ -128,6 +128,8 @@ __all__ = [
     "run_fastapi",
     "run_realtime",
     "run_mcp",
+    "run_state_to_json",
+    "run_state_from_json",
     # Re-exports from Agents SDK
     "SDKAgent",
     "Runner",
