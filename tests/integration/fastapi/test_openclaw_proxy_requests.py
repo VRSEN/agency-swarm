@@ -4,7 +4,7 @@ import gzip
 from pathlib import Path
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 
 pytest.importorskip("fastapi.testclient")
@@ -123,11 +123,11 @@ def test_openclaw_proxy_filters_request_keys_and_normalizes_payload(
         async def __aexit__(self, exc_type, exc, tb) -> None:
             return None
 
-        async def post(self, url: str, *, headers: dict[str, str], json: dict[str, Any]) -> httpx.Response:
+        async def post(self, url: str, *, headers: dict[str, str], json: dict[str, Any]) -> httpx2.Response:
             captured["url"] = url
             captured["headers"] = headers
             captured["json"] = json
-            return httpx.Response(
+            return httpx2.Response(
                 status_code=200,
                 content=gzip.compress(b'{"ok": true}'),
                 headers={
@@ -138,7 +138,7 @@ def test_openclaw_proxy_filters_request_keys_and_normalizes_payload(
                 },
             )
 
-    monkeypatch.setattr("agency_swarm.integrations.openclaw.httpx.AsyncClient", _FakeAsyncClient)
+    monkeypatch.setattr("agency_swarm.integrations.openclaw.httpx2.AsyncClient", _FakeAsyncClient)
 
     app = FastAPI()
     attach_openclaw_to_fastapi(app, _build_openclaw_config(tmp_path))
@@ -230,11 +230,11 @@ def test_openclaw_proxy_forwards_encrypted_reasoning_include(
         async def __aexit__(self, exc_type, exc, tb) -> None:
             return None
 
-        async def post(self, url: str, *, headers: dict[str, str], json: dict[str, Any]) -> httpx.Response:
+        async def post(self, url: str, *, headers: dict[str, str], json: dict[str, Any]) -> httpx2.Response:
             captured["json"] = json
-            return httpx.Response(status_code=200, json={"ok": True})
+            return httpx2.Response(status_code=200, json={"ok": True})
 
-    monkeypatch.setattr("agency_swarm.integrations.openclaw.httpx.AsyncClient", _FakeAsyncClient)
+    monkeypatch.setattr("agency_swarm.integrations.openclaw.httpx2.AsyncClient", _FakeAsyncClient)
 
     app = FastAPI()
     attach_openclaw_to_fastapi(app, _build_openclaw_config(tmp_path))
@@ -271,11 +271,11 @@ def test_openclaw_proxy_preserves_full_history_without_synthesizing_session_fiel
         async def __aexit__(self, exc_type, exc, tb) -> None:
             return None
 
-        async def post(self, url: str, *, headers: dict[str, str], json: dict[str, Any]) -> httpx.Response:
+        async def post(self, url: str, *, headers: dict[str, str], json: dict[str, Any]) -> httpx2.Response:
             captured["json"] = json
-            return httpx.Response(status_code=200, json={"ok": True})
+            return httpx2.Response(status_code=200, json={"ok": True})
 
-    monkeypatch.setattr("agency_swarm.integrations.openclaw.httpx.AsyncClient", _FakeAsyncClient)
+    monkeypatch.setattr("agency_swarm.integrations.openclaw.httpx2.AsyncClient", _FakeAsyncClient)
 
     app = FastAPI()
     attach_openclaw_to_fastapi(app, _build_openclaw_config(tmp_path))
@@ -318,11 +318,11 @@ def test_openclaw_proxy_rejects_unsupported_tool_types(monkeypatch: pytest.Monke
         async def __aexit__(self, exc_type, exc, tb) -> None:
             return None
 
-        async def post(self, url: str, *, headers: dict[str, str], json: dict[str, Any]) -> httpx.Response:
+        async def post(self, url: str, *, headers: dict[str, str], json: dict[str, Any]) -> httpx2.Response:
             called["upstream"] = True
-            return httpx.Response(status_code=200, json={"ok": True})
+            return httpx2.Response(status_code=200, json={"ok": True})
 
-    monkeypatch.setattr("agency_swarm.integrations.openclaw.httpx.AsyncClient", _FakeAsyncClient)
+    monkeypatch.setattr("agency_swarm.integrations.openclaw.httpx2.AsyncClient", _FakeAsyncClient)
 
     app = FastAPI()
     attach_openclaw_to_fastapi(app, _build_openclaw_config(tmp_path))
@@ -355,11 +355,11 @@ def test_openclaw_proxy_rejects_non_list_tools(monkeypatch: pytest.MonkeyPatch, 
         async def __aexit__(self, exc_type, exc, tb) -> None:
             return None
 
-        async def post(self, url: str, *, headers: dict[str, str], json: dict[str, Any]) -> httpx.Response:
+        async def post(self, url: str, *, headers: dict[str, str], json: dict[str, Any]) -> httpx2.Response:
             called["upstream"] = True
-            return httpx.Response(status_code=200, json={"ok": True})
+            return httpx2.Response(status_code=200, json={"ok": True})
 
-    monkeypatch.setattr("agency_swarm.integrations.openclaw.httpx.AsyncClient", _FakeAsyncClient)
+    monkeypatch.setattr("agency_swarm.integrations.openclaw.httpx2.AsyncClient", _FakeAsyncClient)
 
     app = FastAPI()
     attach_openclaw_to_fastapi(app, _build_openclaw_config(tmp_path))
@@ -414,14 +414,14 @@ def test_openclaw_proxy_uses_app_token_auth_when_attached_to_run_fastapi(
         async def __aexit__(self, exc_type, exc, tb) -> None:
             return None
 
-        async def post(self, url: str, *, headers: dict[str, str], json: dict[str, Any]) -> httpx.Response:
-            return httpx.Response(
+        async def post(self, url: str, *, headers: dict[str, str], json: dict[str, Any]) -> httpx2.Response:
+            return httpx2.Response(
                 status_code=200,
                 content=b'{"ok": true}',
                 headers={"content-type": "application/json"},
             )
 
-    monkeypatch.setattr("agency_swarm.integrations.openclaw.httpx.AsyncClient", _FakeAsyncClient)
+    monkeypatch.setattr("agency_swarm.integrations.openclaw.httpx2.AsyncClient", _FakeAsyncClient)
 
     app = run_fastapi(agencies={"secure": agency_factory}, return_app=True, app_token_env="APP_TOKEN")
     assert app is not None
@@ -485,7 +485,7 @@ def test_openclaw_header_helpers() -> None:
         "Authorization": "Bearer token",
     }
 
-    upstream = httpx.Response(
+    upstream = httpx2.Response(
         status_code=200,
         content=gzip.compress(b"ok"),
         headers={

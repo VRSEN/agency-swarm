@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from typing import Protocol, cast
 
-import httpx
+import httpx2
 from agents import OpenAIResponsesModel
 from openai import AsyncOpenAI
 
@@ -224,13 +224,13 @@ def _has_explicit_openclaw_proxy_base_url() -> bool:
 
 
 def _uses_raw_openclaw_gateway(base_url: str) -> bool:
-    parsed = httpx.URL(base_url)
+    parsed = httpx2.URL(base_url)
     normalized_path = parsed.path.rstrip("/")
     return normalized_path == "/v1"
 
 
 def _normalize_openclaw_proxy_url(base_url: str) -> tuple[str, str, int, str]:
-    parsed = httpx.URL(base_url)
+    parsed = httpx2.URL(base_url)
     hostname = parsed.host or ""
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
     normalized_path = parsed.path.rstrip("/")
@@ -240,7 +240,7 @@ def _normalize_openclaw_proxy_url(base_url: str) -> tuple[str, str, int, str]:
 def _normalize_current_app_openclaw_proxy_matcher(
     base_url: str,
 ) -> tuple[str, str, int, str] | _CurrentAppOpenClawDefaultsPattern:
-    parsed = httpx.URL(base_url)
+    parsed = httpx2.URL(base_url)
     normalized_path = parsed.path.rstrip("/")
     host = parsed.host or None
     path_has_template = _has_openclaw_proxy_url_template(normalized_path)

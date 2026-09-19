@@ -123,7 +123,7 @@ def test_cache_write_tokens_use_loaded_creation_price_when_reported(tmp_path, mo
         input_tokens=150_000,
         output_tokens=0,
         total_tokens=150_000,
-        input_tokens_details=InputTokensDetails(cached_tokens=0),
+        input_tokens_details=InputTokensDetails(cache_write_tokens=0, cached_tokens=0),
         output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
     )
     unreported = calculate_usage_with_cost(

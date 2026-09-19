@@ -13,8 +13,7 @@ from fastmcp.exceptions import McpError
 from fastmcp.server.dependencies import get_http_headers
 from fastmcp.server.middleware import Middleware, MiddlewareContext
 from fastmcp.server.server import Transport
-from fastmcp.tools.tool import Tool, ToolResult
-from mcp.types import ErrorData
+from fastmcp.tools import Tool, ToolResult
 
 from agency_swarm.tools import BaseTool, ToolFactory
 
@@ -121,15 +120,13 @@ def run_mcp(
                 async def on_request(self, ctx: MiddlewareContext, call_next):
                     hdrs = get_http_headers()
                     if hdrs.get("authorization") != self.expected:
-                        error = ErrorData(code=401, message="Unauthorized")
-                        raise McpError(error)
+                        raise McpError(401, "Unauthorized")
                     return await call_next(ctx)
 
                 async def on_read_resource(self, ctx: MiddlewareContext, call_next):
                     hdrs = get_http_headers()
                     if hdrs.get("authorization") != self.expected:
-                        error = ErrorData(code=401, message="Unauthorized")
-                        raise McpError(error)
+                        raise McpError(401, "Unauthorized")
                     return await call_next(ctx)
 
             mcp.add_middleware(StaticBearer(app_token))

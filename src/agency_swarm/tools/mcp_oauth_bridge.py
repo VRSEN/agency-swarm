@@ -15,13 +15,14 @@ from agency_swarm.mcp.oauth_user import build_oauth_user_segment
 
 if TYPE_CHECKING:
     from mcp.client.auth import OAuthClientProvider
+    from mcp.shared.auth import AuthorizationCodeResult
 
     from agency_swarm.mcp.oauth import MCPServerOAuth
 
 logger = logging.getLogger(__name__)
 
 OAuthRedirectHandler = Callable[[str], Awaitable[None]]
-OAuthCallbackHandler = Callable[[], Awaitable[tuple[str, str | None]]]
+OAuthCallbackHandler = Callable[[], Awaitable["AuthorizationCodeResult"]]
 
 
 class OAuthHandlerMap(TypedDict, total=False):

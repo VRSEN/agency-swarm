@@ -222,7 +222,7 @@ def _build_model_response(*, text: str, response_id: str) -> ModelResponse:
         input_tokens=0,
         output_tokens=1,
         total_tokens=1,
-        input_tokens_details=InputTokensDetails(cached_tokens=0),
+        input_tokens_details=InputTokensDetails(cache_write_tokens=0, cached_tokens=0),
         output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
     )
     return ModelResponse(output=[message], usage=usage, response_id=response_id)

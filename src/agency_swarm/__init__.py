@@ -50,9 +50,9 @@ from agents import (  # noqa: E402
 
 _JUPYTER_AVAILABLE = importlib.util.find_spec("jupyter_client") is not None
 _OPENCLAW_DEPS_AVAILABLE = (
-    importlib.util.find_spec("fastapi") is not None and importlib.util.find_spec("httpx") is not None
+    importlib.util.find_spec("fastapi") is not None and importlib.util.find_spec("httpx2") is not None
 )
-_OPENCLAW_AGENT_DEPS_AVAILABLE = importlib.util.find_spec("httpx") is not None
+_OPENCLAW_AGENT_DEPS_AVAILABLE = importlib.util.find_spec("httpx2") is not None
 _LITELLM_EXPORT_AVAILABLE = (
     importlib.util.find_spec("litellm") is not None
     and importlib.util.find_spec("agents.extensions.models.litellm_model") is not None

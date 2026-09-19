@@ -9,6 +9,7 @@ import pytest
 from agents import FunctionTool, HostedMCPTool
 from agents.tool_context import ToolContext
 from fastapi import HTTPException
+from mcp.shared.auth import AuthorizationCodeResult
 from openai.types.responses.tool_param import Mcp
 
 from agency_swarm import Agent, enable_hosted_mcp_tool_oauth
@@ -107,10 +108,10 @@ async def test_runtime_records_redirect_and_completes_on_callback() -> None:
 
     wait_task = asyncio.create_task(runtime.wait_for_code("github"))
     await registry.set_code(state="test-state", code="code-123", user_id="user-1")
-    code, state = await asyncio.wait_for(wait_task, timeout=0.25)
+    result = await asyncio.wait_for(wait_task, timeout=0.25)
 
-    assert code == "code-123"
-    assert state == "test-state"
+    assert result.code == "code-123"
+    assert result.state == "test-state"
 
     status_event = await asyncio.wait_for(runtime.next_event(), timeout=0.1)
     assert status_event["type"] == "oauth_status"
@@ -144,7 +145,7 @@ async def test_registry_callback_wakes_background_loop_waiter() -> None:
     """FastAPI callback handlers must release MCP background-loop code waiters."""
     registry = OAuthStateRegistry()
     ready = threading.Event()
-    result_queue: Queue[tuple[str, str | None] | BaseException] = Queue()
+    result_queue: Queue[AuthorizationCodeResult | BaseException] = Queue()
 
     async def wait_in_background_loop() -> None:
         await registry.record_redirect(
@@ -172,7 +173,8 @@ async def test_registry_callback_wakes_background_loop_waiter() -> None:
         raise AssertionError("OAuth callback waiter was not released") from exc
     if isinstance(result, BaseException):
         raise result
-    assert result == ("code-123", "thread-state")
+    assert result.code == "code-123"
+    assert result.state == "thread-state"
 
 
 @pytest.mark.asyncio

@@ -74,6 +74,11 @@ class _DirectReminderRun:
 
     def restore(self, context: RunContextWrapper[Any]) -> None:
         states = _SUSPENDED_DIRECT_RUNS.pop(context, [])
+        if states:
+            # Copied context wrappers alias the same suspended state; once one
+            # checkpoint consumes it, stale aliases must not resurrect it.
+            for key in [key for key, value in _SUSPENDED_DIRECT_RUNS.items() if value is states]:
+                _SUSPENDED_DIRECT_RUNS.pop(key, None)
         run_key = (id(self), "direct")
         for hook, state in states:
             hook._run_state[run_key] = state
@@ -172,6 +177,25 @@ def suspend_agency_run_hooks(
             state.turn_reminders.clear()
             states.append((hook, state))
     if states:
+        _SUSPENDED_DIRECT_RUNS[target] = states
+
+
+def alias_suspended_direct_run(
+    source: RunContextWrapper[Any],
+    target: RunContextWrapper[Any] | None,
+) -> None:
+    """Let a copied context wrapper resume reminder state suspended on the original.
+
+    Agents SDK 0.22 gives every resumable checkpoint its own context wrapper via
+    ``RunContextWrapper._copy_for_run_state`` (``RunResult.to_state`` and nested
+    agent-tool checkpoints), so the suspended entry must be reachable under the
+    copied wrapper as well. Every alias shares one state list; the first resume
+    consumes it for all of them.
+    """
+    if target is None or target is source:
+        return
+    states = _SUSPENDED_DIRECT_RUNS.get(source)
+    if states is not None:
         _SUSPENDED_DIRECT_RUNS[target] = states
 
 

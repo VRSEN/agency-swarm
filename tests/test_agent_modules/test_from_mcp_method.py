@@ -4,6 +4,7 @@ import pytest
 from agents import Agent as SDKAgent, FunctionTool, ToolOutputImage
 from agents.mcp.util import MCPUtil
 from agents.run_context import RunContextWrapper
+from mcp.shared.auth import AuthorizationCodeResult
 from mcp.types import Tool as MCPTool
 
 from agency_swarm.mcp.oauth import (
@@ -322,14 +323,14 @@ async def test_from_mcp_refreshes_static_handlers_when_reusing_oauth_client(
     async def first_redirect(_auth_url: str) -> None:
         return None
 
-    async def first_callback() -> tuple[str, str | None]:
-        return ("code-1", None)
+    async def first_callback() -> AuthorizationCodeResult:
+        return AuthorizationCodeResult(code="code-1", state=None)
 
     async def second_redirect(_auth_url: str) -> None:
         return None
 
-    async def second_callback() -> tuple[str, str | None]:
-        return ("code-2", None)
+    async def second_callback() -> AuthorizationCodeResult:
+        return AuthorizationCodeResult(code="code-2", state=None)
 
     persistent = MCPServerOAuthClient(
         oauth_config,

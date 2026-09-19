@@ -386,7 +386,7 @@ def test_client_config_does_not_leak_codex_base_url_into_anthropic_litellm(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Anthropic LiteLLM runs must ignore a forwarded Codex OAuth base_url."""
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
     from agents.extensions.models.litellm_model import LitellmModel
 
     captured: dict[str, object] = {}

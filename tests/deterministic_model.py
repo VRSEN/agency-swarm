@@ -137,7 +137,7 @@ def _build_message_response(text: str, model_name: str) -> ModelResponse:
         input_tokens=0,
         output_tokens=tokens,
         total_tokens=tokens,
-        input_tokens_details=InputTokensDetails(cached_tokens=0),
+        input_tokens_details=InputTokensDetails(cache_write_tokens=0, cached_tokens=0),
         output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
     )
     message = ResponseOutputMessage(
@@ -165,7 +165,7 @@ def _build_tool_call_response(tool_name: str, arguments: dict[str, Any]) -> Mode
         input_tokens=0,
         output_tokens=0,
         total_tokens=0,
-        input_tokens_details=InputTokensDetails(cached_tokens=0),
+        input_tokens_details=InputTokensDetails(cache_write_tokens=0, cached_tokens=0),
         output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
     )
     return ModelResponse(output=[tool_call], usage=usage, response_id=f"resp_{uuid.uuid4().hex}")
@@ -282,7 +282,7 @@ async def _stream_text_events(text: str, model_name: str) -> AsyncIterator[TResp
     tokens = max(1, len(text.split()))
     usage = ResponseUsage(
         input_tokens=0,
-        input_tokens_details=InputTokensDetails(cached_tokens=0),
+        input_tokens_details=InputTokensDetails(cache_write_tokens=0, cached_tokens=0),
         output_tokens=tokens,
         output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
         total_tokens=tokens,
@@ -348,7 +348,7 @@ async def _stream_output_item_events(
 
     usage = ResponseUsage(
         input_tokens=0,
-        input_tokens_details=InputTokensDetails(cached_tokens=0),
+        input_tokens_details=InputTokensDetails(cache_write_tokens=0, cached_tokens=0),
         output_tokens=1,
         output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
         total_tokens=1,

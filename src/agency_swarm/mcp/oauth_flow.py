@@ -16,6 +16,8 @@ from collections.abc import Callable, Coroutine
 from html import escape
 from urllib.parse import parse_qs, urlparse
 
+from mcp.shared.auth import AuthorizationCodeResult
+
 logger = logging.getLogger(__name__)
 
 
@@ -39,7 +41,7 @@ async def default_redirect_handler(auth_url: str) -> None:
         logger.exception("Failed to open browser")
 
 
-def _parse_callback_response(callback_url: str) -> tuple[str, str | None]:
+def _parse_callback_response(callback_url: str) -> AuthorizationCodeResult:
     """Parse authorization code and state from a callback URL."""
     parsed = urlparse(callback_url)
     params = parse_qs(parsed.query)
@@ -52,12 +54,14 @@ def _parse_callback_response(callback_url: str) -> tuple[str, str | None]:
     if "code" not in params:
         raise ValueError("No authorization code found in callback URL")
 
-    code = params["code"][0]
-    state = params.get("state", [None])[0]
-    return code, state
+    return AuthorizationCodeResult(
+        code=params["code"][0],
+        state=params.get("state", [None])[0],
+        iss=params.get("iss", [None])[0],
+    )
 
 
-async def _prompt_for_callback_url() -> tuple[str, str | None]:
+async def _prompt_for_callback_url() -> AuthorizationCodeResult:
     """Prompt the user to paste the callback URL."""
     print("\nAfter authorizing, you will be redirected to a callback URL.")
     print("Paste the full URL here if automatic capture does not complete.\n")
@@ -86,7 +90,7 @@ def _can_poll_stdin_for_callback() -> bool:
     return True
 
 
-async def _prompt_for_callback_url_polling(poll_interval: float = 0.5) -> tuple[str, str | None]:
+async def _prompt_for_callback_url_polling(poll_interval: float = 0.5) -> AuthorizationCodeResult:
     """Prompt for callback URL using poll-based stdin reads that cancel cleanly."""
     print("\nAfter authorizing, you will be redirected to a callback URL.")
     print("Paste the full URL here if automatic capture does not complete.\n")
@@ -156,14 +160,14 @@ def _can_use_local_callback_server(redirect_uri: str) -> bool:
     return host in {"localhost", "127.0.0.1"}
 
 
-async def _listen_for_callback_once(redirect_uri: str, timeout: float = 300.0) -> tuple[str, str | None]:
+async def _listen_for_callback_once(redirect_uri: str, timeout: float = 300.0) -> AuthorizationCodeResult:
     """Start a local HTTP server and capture the first callback request."""
     parsed = urlparse(redirect_uri)
     host = parsed.hostname or "localhost"
     port = parsed.port or 80
     path = parsed.path or "/auth/callback"
     loop = asyncio.get_event_loop()
-    result: asyncio.Future[tuple[str, str | None]] = loop.create_future()
+    result: asyncio.Future[AuthorizationCodeResult] = loop.create_future()
 
     async def _handle_connection(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
@@ -232,9 +236,13 @@ async def _listen_for_callback_once(redirect_uri: str, timeout: float = 300.0) -
                 return
 
             if not result.done():
-                code = params["code"][0]
-                state = params.get("state", [None])[0]
-                result.set_result((code, state))
+                result.set_result(
+                    AuthorizationCodeResult(
+                        code=params["code"][0],
+                        state=params.get("state", [None])[0],
+                        iss=params.get("iss", [None])[0],
+                    )
+                )
 
             writer.write(f"{status_line}Content-Type: text/html\r\nContent-Length: {len(body)}\r\n\r\n{body}".encode())
             await writer.drain()
@@ -252,26 +260,26 @@ async def _listen_for_callback_once(redirect_uri: str, timeout: float = 300.0) -
         await server.wait_closed()
 
 
-async def default_callback_handler(redirect_uri: str | None = None, timeout: float = 300.0) -> tuple[str, str | None]:
+async def default_callback_handler(redirect_uri: str | None = None, timeout: float = 300.0) -> AuthorizationCodeResult:
     """Default handler for OAuth callback.
 
     Tries to capture the callback automatically using a local HTTP server and falls
     back to a manual prompt when automatic capture is not possible.
 
     Returns:
-        Tuple of (authorization_code, state)
+        Authorization code result with the captured code, state, and issuer.
     """
     redirect_target = redirect_uri or "http://localhost:8000/auth/callback"
 
     if _can_use_local_callback_server(redirect_target):
         listener_task = asyncio.create_task(_listen_for_callback_once(redirect_target, timeout=timeout))
-        prompt_factory: Callable[[], Coroutine[object, object, tuple[str, str | None]]] | None = None
+        prompt_factory: Callable[[], Coroutine[object, object, AuthorizationCodeResult]] | None = None
         if _can_poll_stdin_for_callback():
             prompt_factory = _prompt_for_callback_url_polling
-        prompt_task: asyncio.Task[tuple[str, str | None]] | None = None
+        prompt_task: asyncio.Task[AuthorizationCodeResult] | None = None
         if prompt_factory is not None:
             prompt_task = asyncio.create_task(prompt_factory())
-        tasks: list[asyncio.Task[tuple[str, str | None]]] = [listener_task]
+        tasks: list[asyncio.Task[AuthorizationCodeResult]] = [listener_task]
         if prompt_task is not None:
             tasks.append(prompt_task)
         try:

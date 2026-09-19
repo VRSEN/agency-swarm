@@ -1,11 +1,10 @@
 .PHONY: sync
 sync:
-	uv sync --all-extras --dev
+	uv sync --all-extras --no-extra litellm --dev
 
 .PHONY: test-env
 test-env: sync
-	uv run python -c "import litellm"
-	uv run python -c "from agents.extensions.models.litellm_model import LitellmModel"
+	uv run python -c "import agency_swarm"
 
 .PHONY: prime
 prime:

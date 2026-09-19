@@ -84,7 +84,7 @@ class TestFromOpenAPISchema:
             }
         }
 
-        with patch("agency_swarm.tools.utils.httpx.AsyncClient") as mock_client_cls:
+        with patch("agency_swarm.tools.utils.httpx2.AsyncClient") as mock_client_cls:
             client = AsyncMock()
             response = MagicMock()
             response.json.return_value = {"id": "123"}
@@ -112,7 +112,7 @@ class TestFromOpenAPISchema:
             }
         }
 
-        with patch("agency_swarm.tools.utils.httpx.AsyncClient") as mock_client_cls:
+        with patch("agency_swarm.tools.utils.httpx2.AsyncClient") as mock_client_cls:
             client = AsyncMock()
             mock_response = MagicMock()
             mock_response.json.return_value = {"id": "456"}
@@ -133,7 +133,7 @@ class TestFromOpenAPISchema:
         mock_func, _ = mock_tool_setup
         base_spec["paths"]["/text"] = {"get": {"operationId": "getText", "description": "Get text"}}
 
-        with patch("agency_swarm.tools.utils.httpx.AsyncClient") as mock_client_cls:
+        with patch("agency_swarm.tools.utils.httpx2.AsyncClient") as mock_client_cls:
             client = AsyncMock()
             response = MagicMock()
             response.json.side_effect = Exception("Not JSON")

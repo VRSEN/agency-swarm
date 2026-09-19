@@ -14,7 +14,7 @@ from agents import (
 )
 from agents.memory import Session
 from agents.run import DEFAULT_MAX_TURNS
-from agents.run_context import TContext
+from agents.run_context import RunContextWrapper, TContext
 from agents.run_error_handlers import RunErrorHandlers
 from agents.run_state import ContextDeserializer, ContextOverride, ContextSerializer, RunState
 
@@ -22,6 +22,7 @@ from agency_swarm.agent.codex_model_input import with_codex_model_input_role_rew
 from agency_swarm.agent.system_reminder_state import (
     _DIRECT_REMINDER_RUN,
     _DirectReminderRun,
+    alias_suspended_direct_run,
     direct_system_reminder_run,
     is_active_agency_run,
     serialize_suspended_direct_run,
@@ -47,6 +48,7 @@ def install_runner_boundary() -> None:
     sdk_run_streamed = SDKRunner.run_streamed
     sdk_state_to_json = RunState.to_json
     sdk_state_from_json = RunState.from_json
+    sdk_copy_for_run_state = RunContextWrapper._copy_for_run_state
 
     async def run(
         cls: type[SDKRunner],
@@ -320,11 +322,17 @@ def install_runner_boundary() -> None:
                 ]
         return run_state
 
+    def _copy_for_run_state(self: RunContextWrapper[Any]) -> RunContextWrapper[Any]:
+        copied = sdk_copy_for_run_state(self)
+        alias_suspended_direct_run(self, copied)
+        return copied
+
     type.__setattr__(SDKRunner, "run", classmethod(run))
     type.__setattr__(SDKRunner, "run_sync", classmethod(run_sync))
     type.__setattr__(SDKRunner, "run_streamed", classmethod(run_streamed))
     type.__setattr__(RunState, "to_json", to_json)
     type.__setattr__(RunState, "from_json", staticmethod(from_json))
+    type.__setattr__(RunContextWrapper, "_copy_for_run_state", _copy_for_run_state)
     setattr(SDKRunner, _BOUNDARY_INSTALLED, True)
 
 

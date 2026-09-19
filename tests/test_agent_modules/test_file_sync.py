@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-import httpx
+import httpx2
 from openai import NotFoundError
 
 from agency_swarm.agent.file_sync import FileSync
@@ -25,7 +25,7 @@ class _FakeFilesClient:
     def retrieve(self, file_id: str) -> None:  # pragma: no cover - not used in these tests
         raise NotFoundError(
             "not found",
-            response=httpx.Response(404, request=httpx.Request("GET", "https://example.test")),
+            response=httpx2.Response(404, request=httpx2.Request("GET", "https://example.test")),
             body=None,
         )
 
@@ -45,7 +45,7 @@ class _FakeVectorStoreFilesClient:
         if file_id not in self._attached_file_ids:
             raise NotFoundError(
                 "not found",
-                response=httpx.Response(404, request=httpx.Request("GET", "https://example.test")),
+                response=httpx2.Response(404, request=httpx2.Request("GET", "https://example.test")),
                 body=None,
             )
         return None

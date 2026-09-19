@@ -17,7 +17,7 @@ import threading
 import time
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 import uvicorn
 
@@ -46,11 +46,11 @@ class TestFastAPIFileProcessing:
         max_retries = 15
         for i in range(max_retries):
             try:
-                response = httpx.get(f"{base_url}/docs", timeout=10.0)
+                response = httpx2.get(f"{base_url}/docs", timeout=10.0)
                 if response.status_code == 200:
                     time.sleep(1)
                     break
-            except (httpx.ConnectTimeout, httpx.ReadTimeout):
+            except (httpx2.ConnectTimeout, httpx2.ReadTimeout):
                 time.sleep(1.5)
                 if i == max_retries - 1:
                     pytest.skip("Could not start FastAPI server after multiple retries")
@@ -60,16 +60,16 @@ class TestFastAPIFileProcessing:
                     pytest.skip(f"Could not start FastAPI server: {e}")
 
     @staticmethod
-    def get_http_client(timeout_seconds: int = 120) -> httpx.AsyncClient:
+    def get_http_client(timeout_seconds: int = 120) -> httpx2.AsyncClient:
         """Create an HTTP client with proper timeout configuration."""
-        timeout_config = httpx.Timeout(
+        timeout_config = httpx2.Timeout(
             timeout_seconds,  # Total timeout (first positional arg)
             connect=10.0,  # Connection timeout
             read=timeout_seconds,  # Read timeout for the entire response
             write=10.0,  # Write timeout for sending request
             pool=5.0,  # Pool connection timeout
         )
-        return httpx.AsyncClient(timeout=timeout_config)
+        return httpx2.AsyncClient(timeout=timeout_config)
 
     @pytest.fixture(scope="class")
     def agency_factory(self):
@@ -115,7 +115,7 @@ class TestFastAPIFileProcessing:
         time.sleep(2)
 
         try:
-            response = httpx.get(f"{base_url}/", timeout=5)
+            response = httpx2.get(f"{base_url}/", timeout=5)
             assert response.status_code == 200
         except Exception as e:
             server_process.terminate()

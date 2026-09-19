@@ -83,6 +83,29 @@ def _resolve_oauth_owner_id(master_context: MasterContext | None) -> str | None:
     return context_user_id if isinstance(context_user_id, str) else None
 
 
+def _actionable_failure_message(exc: BaseException) -> str:
+    """Return the actionable leaf error inside nested exception groups.
+
+    MCP 2.x transports wrap OAuth failures in ``BaseExceptionGroup`` containers
+    whose own message is only "unhandled errors in a TaskGroup". Surfacing the
+    first non-cancellation leaf keeps authentication errors diagnosable.
+    """
+    pending: list[BaseException] = [exc]
+    fallback: BaseException | None = None
+    while pending:
+        current = pending.pop(0)
+        if isinstance(current, BaseExceptionGroup):
+            pending.extend(current.exceptions)
+            continue
+        if isinstance(current, asyncio.CancelledError):
+            fallback = current if fallback is None else fallback
+            continue
+        return str(current)
+    if fallback is not None:
+        return str(fallback)
+    return str(exc)
+
+
 """Constants moved to agency_swarm.agent.constants (no behavior change)."""
 
 T = TypeVar("T", bound="Agent")
@@ -624,7 +647,7 @@ class Agent(BaseAgent[MasterContext]):
                 )
             except Exception as exc:
                 self.mcp_servers = original_servers
-                return f"Failed to authenticate MCP server '{server_name}': {exc}"
+                return f"Failed to authenticate MCP server '{server_name}': {_actionable_failure_message(exc)}"
             finally:
                 self.mcp_servers = original_servers
 

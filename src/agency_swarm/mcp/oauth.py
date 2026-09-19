@@ -26,6 +26,7 @@ from typing import Literal, TypedDict, cast
 
 from mcp.client.auth import OAuthClientProvider  # noqa: F401 - re-exported for existing imports
 from mcp.shared.auth import (
+    AuthorizationCodeResult,
     OAuthClientInformationFull,
     OAuthToken,
 )
@@ -75,7 +76,7 @@ class TokenPayload(TypedDict, total=False):
 
 
 OAuthRedirectHandler = Callable[[str], Awaitable[None]]
-OAuthCallbackHandler = Callable[[], Awaitable[tuple[str, str | None]]]
+OAuthCallbackHandler = Callable[[], Awaitable[AuthorizationCodeResult]]
 OAuthRedirectHandlerFactory = Callable[[str | None], OAuthRedirectHandler]
 OAuthCallbackHandlerFactory = Callable[[str | None], OAuthCallbackHandler]
 
@@ -456,7 +457,7 @@ async def create_oauth_provider(
     if callback_handler is None:
         callback_timeout = runtime_context.timeout if runtime_context and runtime_context.timeout is not None else 300.0
 
-        async def _wrapped_callback_handler() -> tuple[str, str | None]:
+        async def _wrapped_callback_handler() -> AuthorizationCodeResult:
             redirect_uri = server.get_callback_redirect_uri(client_metadata)
             return await default_callback_handler(redirect_uri, timeout=callback_timeout)
 

@@ -31,13 +31,13 @@ async def test_download_file_cleans_up_tmp_on_http_error(tmp_path: Path) -> None
     client_cm.__aenter__ = AsyncMock(return_value=client_obj)
     client_cm.__aexit__ = AsyncMock(return_value=False)
 
-    original_client = fh.httpx.AsyncClient
-    fh.httpx.AsyncClient = MagicMock(return_value=client_cm)
+    original_client = fh.httpx2.AsyncClient
+    fh.httpx2.AsyncClient = MagicMock(return_value=client_cm)
     try:
         with pytest.raises(Exception, match="HTTP 500"):
             await fh.download_file("https://example.com/file.pdf", "file.pdf", str(tmp_path))
     finally:
-        fh.httpx.AsyncClient = original_client
+        fh.httpx2.AsyncClient = original_client
 
     gc.collect()
 
@@ -136,7 +136,7 @@ async def test_download_file_concurrent_same_base_name(tmp_path: Path) -> None:
 
     call_count = 0
     contents = [fake_content_1, fake_content_2]
-    original_client = fh.httpx.AsyncClient
+    original_client = fh.httpx2.AsyncClient
 
     def patched_client(**kwargs):
         nonlocal call_count
@@ -144,14 +144,14 @@ async def test_download_file_concurrent_same_base_name(tmp_path: Path) -> None:
         call_count += 1
         return mock
 
-    fh.httpx.AsyncClient = patched_client
+    fh.httpx2.AsyncClient = patched_client
     try:
         result1, result2 = await asyncio.gather(
             fh.download_file("https://example.com/f1", "DASDA", str(tmp_path)),
             fh.download_file("https://example.com/f2", "DASDA.pdf", str(tmp_path)),
         )
     finally:
-        fh.httpx.AsyncClient = original_client
+        fh.httpx2.AsyncClient = original_client
 
     assert result1 != result2, "Each download must produce a unique output path"
     assert Path(result1).exists(), "First download result must exist"
@@ -185,7 +185,7 @@ async def test_download_file_uses_shutil_move_for_cross_device_rename(tmp_path: 
     client_cm.__aenter__ = AsyncMock(return_value=client_obj)
     client_cm.__aexit__ = AsyncMock(return_value=False)
 
-    original_client = fh.httpx.AsyncClient
+    original_client = fh.httpx2.AsyncClient
     original_move = fh.shutil.move
     move_was_called = []
 
@@ -193,12 +193,12 @@ async def test_download_file_uses_shutil_move_for_cross_device_rename(tmp_path: 
         move_was_called.append((src, dst))
         return original_move(src, dst)
 
-    fh.httpx.AsyncClient = MagicMock(return_value=client_cm)
+    fh.httpx2.AsyncClient = MagicMock(return_value=client_cm)
     fh.shutil.move = tracking_move
     try:
         result = await fh.download_file("https://example.com/DASDA.pdf", pdf_name, str(tmp_path))
     finally:
-        fh.httpx.AsyncClient = original_client
+        fh.httpx2.AsyncClient = original_client
         fh.shutil.move = original_move
 
     assert Path(result).suffix == ".pdf"
@@ -237,12 +237,12 @@ async def test_download_file_long_filename_does_not_crash(tmp_path: Path) -> Non
     client_cm.__aenter__ = AsyncMock(return_value=client_obj)
     client_cm.__aexit__ = AsyncMock(return_value=False)
 
-    original_client = fh.httpx.AsyncClient
-    fh.httpx.AsyncClient = MagicMock(return_value=client_cm)
+    original_client = fh.httpx2.AsyncClient
+    fh.httpx2.AsyncClient = MagicMock(return_value=client_cm)
     try:
         result = await fh.download_file("https://example.com/long.pdf", long_name, str(tmp_path))
     finally:
-        fh.httpx.AsyncClient = original_client
+        fh.httpx2.AsyncClient = original_client
 
     assert Path(result).exists()
     assert Path(result).suffix == ".pdf"

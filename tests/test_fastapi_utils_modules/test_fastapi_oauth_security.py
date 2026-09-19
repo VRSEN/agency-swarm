@@ -330,7 +330,9 @@ async def test_wait_for_code_returns_callback_that_wins_timeout_race(monkeypatch
 
     monkeypatch.setattr(registry, "set_timeout", authorize_then_set_timeout)
 
-    assert await registry.wait_for_code(state="callback-wins", timeout=0) == ("code-123", "callback-wins")
+    result = await registry.wait_for_code(state="callback-wins", timeout=0)
+    assert result.code == "code-123"
+    assert result.state == "callback-wins"
 
 
 @pytest.mark.asyncio

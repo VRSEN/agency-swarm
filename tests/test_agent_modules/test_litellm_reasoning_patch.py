@@ -7,7 +7,7 @@ import pytest
 @pytest.mark.asyncio
 async def test_litellm_thinking_blocks_emit_reasoning_events() -> None:
     """LiteLLM thinking_blocks should be visible as reasoning stream deltas."""
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     patch = importlib.import_module("agency_swarm.streaming.litellm_reasoning")
     patch.patch_litellm_thinking_blocks()
@@ -23,6 +23,7 @@ async def test_litellm_thinking_blocks_emit_reasoning_events() -> None:
                 SimpleNamespace(
                     index=0,
                     logprobs=None,
+                    finish_reason=None,
                     delta=SimpleNamespace(
                         content=None,
                         refusal=None,
@@ -62,7 +63,7 @@ async def test_litellm_thinking_blocks_emit_reasoning_events() -> None:
 @pytest.mark.asyncio
 async def test_litellm_model_extra_reasoning_content_emits_reasoning_events() -> None:
     """Gemini can expose reasoning fields through provider/model extras instead of attributes."""
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     patch = importlib.import_module("agency_swarm.streaming.litellm_reasoning")
     patch.patch_litellm_thinking_blocks()
@@ -78,6 +79,7 @@ async def test_litellm_model_extra_reasoning_content_emits_reasoning_events() ->
                 SimpleNamespace(
                     index=0,
                     logprobs=None,
+                    finish_reason=None,
                     delta=SimpleNamespace(
                         content=None,
                         refusal=None,
@@ -117,7 +119,7 @@ async def test_litellm_model_extra_reasoning_content_emits_reasoning_events() ->
 @pytest.mark.asyncio
 async def test_litellm_reasoning_field_emits_reasoning_events() -> None:
     """LiteLLM reasoning fields should be visible as reasoning stream deltas."""
-    pytest.importorskip("agents.extensions.models.litellm_model")
+    pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     patch = importlib.import_module("agency_swarm.streaming.litellm_reasoning")
     patch.patch_litellm_thinking_blocks()
@@ -133,6 +135,7 @@ async def test_litellm_reasoning_field_emits_reasoning_events() -> None:
                 SimpleNamespace(
                     index=0,
                     logprobs=None,
+                    finish_reason=None,
                     delta=SimpleNamespace(
                         content=None,
                         refusal=None,
@@ -172,7 +175,7 @@ async def test_litellm_reasoning_field_emits_reasoning_events() -> None:
 @pytest.mark.asyncio
 async def test_litellm_stream_patch_forwards_strict_feature_validation(monkeypatch: pytest.MonkeyPatch) -> None:
     """The wrapper should preserve newer Agents SDK stream-handler keyword args."""
-    litellm_model = pytest.importorskip("agents.extensions.models.litellm_model")
+    litellm_model = pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
     patch = importlib.import_module("agency_swarm.streaming.litellm_reasoning")
     seen: dict[str, object] = {}
     chunk = SimpleNamespace(choices=[])

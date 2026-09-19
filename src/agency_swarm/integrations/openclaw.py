@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import httpx
+import httpx2
 from agents import OpenAIResponsesModel
 from dotenv import dotenv_values
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
@@ -856,12 +856,12 @@ def _make_upstream_headers(token: str) -> dict[str, str]:
     return headers
 
 
-def _passthrough_response_headers(upstream: httpx.Response, *, decoded_body: bool = False) -> dict[str, str]:
+def _passthrough_response_headers(upstream: httpx2.Response, *, decoded_body: bool = False) -> dict[str, str]:
     blocked = _RESPONSE_HEADER_BLOCKLIST_DECODED if decoded_body else _RESPONSE_HEADER_BLOCKLIST
     return {key: value for key, value in upstream.headers.items() if key.lower() not in blocked}
 
 
-def _forward_response_passthrough(upstream: httpx.Response) -> Response:
+def _forward_response_passthrough(upstream: httpx2.Response) -> Response:
     headers = _passthrough_response_headers(upstream, decoded_body=True)
     content_type = headers.pop("content-type", "application/json")
     return Response(
@@ -1108,7 +1108,7 @@ def _is_upstream_port_open(config: OpenClawIntegrationConfig, timeout: float = 0
     return False
 
 
-async def _close_stream_resources(stream_context: Any, client: httpx.AsyncClient) -> None:
+async def _close_stream_resources(stream_context: Any, client: httpx2.AsyncClient) -> None:
     try:
         await stream_context.__aexit__(None, None, None)
     except Exception:
@@ -1121,7 +1121,7 @@ async def _close_stream_resources(stream_context: Any, client: httpx.AsyncClient
 
 
 async def _stream_upstream(
-    upstream: httpx.Response, stream_context: Any, client: httpx.AsyncClient
+    upstream: httpx2.Response, stream_context: Any, client: httpx2.AsyncClient
 ) -> AsyncIterator[bytes]:
     try:
         async for chunk in upstream.aiter_raw():
@@ -1163,23 +1163,23 @@ def create_openclaw_proxy_router(
 
         if not normalized_payload.get("stream"):
             try:
-                async with httpx.AsyncClient(timeout=config.proxy_timeout_seconds) as client:
+                async with httpx2.AsyncClient(timeout=config.proxy_timeout_seconds) as client:
                     upstream = await client.post(upstream_url, headers=upstream_headers, json=normalized_payload)
-            except httpx.HTTPError as exc:
+            except httpx2.HTTPError as exc:
                 raise HTTPException(status_code=502, detail=f"OpenClaw request failed: {exc}") from exc
             return _forward_response_passthrough(upstream)
 
-        stream_timeout = httpx.Timeout(
+        stream_timeout = httpx2.Timeout(
             connect=config.proxy_timeout_seconds,
             read=None,
             write=config.proxy_timeout_seconds,
             pool=config.proxy_timeout_seconds,
         )
-        client = httpx.AsyncClient(timeout=stream_timeout)
+        client = httpx2.AsyncClient(timeout=stream_timeout)
         stream_context = client.stream("POST", upstream_url, headers=upstream_headers, json=normalized_payload)
         try:
             upstream = await stream_context.__aenter__()
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             try:
                 await client.aclose()
             except Exception:

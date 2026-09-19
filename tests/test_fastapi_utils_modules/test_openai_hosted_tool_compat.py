@@ -21,6 +21,8 @@ def _agency(agent: object) -> SimpleNamespace:
 def test_non_openai_model_override_stubs_openai_hosted_tools(model: str) -> None:
     """Non-OpenAI request model overrides should replace OpenAI hosted tools with stubs."""
     pytest.importorskip("agents")
+    if model.startswith("litellm/"):
+        pytest.importorskip("litellm")
 
     from agents import FunctionTool, ToolSearchTool, WebSearchTool, function_tool
 
@@ -228,6 +230,7 @@ def test_non_openai_model_override_stubs_incompatible_same_name_hosted_tool_repl
 def test_non_openai_model_override_clears_hosted_mcp_tool_choice() -> None:
     """Hosted MCP tool choices should not reach Chat Completions after stubbing."""
     pytest.importorskip("agents")
+    pytest.importorskip("litellm")
 
     from agents import FunctionTool, HostedMCPTool, ModelSettings
     from agents.model_settings import MCPToolChoice
@@ -315,6 +318,7 @@ def test_openai_chat_completions_model_stubs_openai_hosted_tools() -> None:
 def test_snapshot_restore_preserves_tools_after_non_openai_model_override() -> None:
     """Request cleanup should restore hosted tools stubbed from non-OpenAI runs."""
     pytest.importorskip("agents")
+    pytest.importorskip("litellm")
 
     from agents import FunctionTool, ToolSearchTool, WebSearchTool, function_tool
 
@@ -352,6 +356,7 @@ def test_attachment_code_interpreter_tool_added_after_override_is_replaced(monke
     """Attachment-added CodeInterpreterTool should use the existing IPython replacement before non-OpenAI runs."""
     pytest.importorskip("agents")
     pytest.importorskip("jupyter_client")
+    pytest.importorskip("litellm")
 
     from agents import CodeInterpreterTool, FunctionTool
 
@@ -416,6 +421,7 @@ async def test_response_endpoint_stubs_and_restores_hosted_tools_for_non_openai_
 ) -> None:
     """Request-scoped non-OpenAI model overrides should stub and restore hosted tools."""
     pytest.importorskip("agents")
+    pytest.importorskip("litellm")
 
     from agents import FunctionTool, ToolSearchTool, WebSearchTool, function_tool
 

@@ -250,7 +250,7 @@ async def stream_text_response_events(
     if emit_response_events:
         usage = ResponseUsage(
             input_tokens=0,
-            input_tokens_details=InputTokensDetails(cached_tokens=0),
+            input_tokens_details=InputTokensDetails(cache_write_tokens=0, cached_tokens=0),
             output_tokens=len(tokens),
             output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
             total_tokens=len(tokens),
@@ -340,11 +340,8 @@ async def stream_cached_items_events(
         if msg_type in MessageFilter.CALL_ID_CALL_TYPES:
             call_id = item_dict.get("call_id")
             arguments = item_dict.get("arguments")
-            tool_name = item_dict.get("name")
             if not isinstance(arguments, str):
                 arguments = ""
-            if not isinstance(tool_name, str):
-                tool_name = ""
             added_event = ResponseOutputItemAddedEvent(
                 item=cast(Any, item_dict),
                 output_index=output_index,
@@ -387,7 +384,6 @@ async def stream_cached_items_events(
                     item_id=call_id,
                     output_index=output_index,
                     arguments=arguments,
-                    name=tool_name,
                     sequence_number=sequence_number,
                 )
                 sequence_number += 1

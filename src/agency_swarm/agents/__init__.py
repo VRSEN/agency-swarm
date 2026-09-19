@@ -3,7 +3,7 @@ import importlib.util
 
 from agency_swarm.agent.core import Agent
 
-_OPENCLAW_AGENT_DEPS_AVAILABLE = importlib.util.find_spec("httpx") is not None
+_OPENCLAW_AGENT_DEPS_AVAILABLE = importlib.util.find_spec("httpx2") is not None
 
 __all__ = ["Agent"]
 if _OPENCLAW_AGENT_DEPS_AVAILABLE:

@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from mcp.shared.auth import AuthorizationCodeResult
+
 from agency_swarm.tools.hosted_mcp_oauth import is_hosted_mcp_tool_oauth_enabled
 
 MCPServerOAuthRuntime: type[Any] | None
@@ -161,7 +163,7 @@ class OAuthStateRegistry:
             _notify_oauth_flow(flow)
             return flow
 
-    async def wait_for_code(self, *, state: str, timeout: float | None = 300.0) -> tuple[str, str | None]:
+    async def wait_for_code(self, *, state: str, timeout: float | None = 300.0) -> AuthorizationCodeResult:
         """Wait for the callback to supply an authorization code."""
         flow = await self._get_or_raise(state)
         if flow.loop is None:
@@ -179,7 +181,7 @@ class OAuthStateRegistry:
             raise OAuthFlowError(f"OAuth callback missing code for state={state}")
         with self._lock:
             self._prune_expired_locked()
-        return flow.code, flow.state
+        return AuthorizationCodeResult(code=flow.code, state=flow.state)
 
     async def get_status(self, state: str) -> dict[str, Any]:
         """Return a serializable snapshot for status endpoint."""
@@ -313,14 +315,14 @@ class FastAPIOAuthRuntime:
         await self._put_event({"type": "oauth_redirect", "state": state, "auth_url": auth_url, "server": server_name})
         await self._put_event({"type": "oauth_status", "state": state, "status": "pending", "server": server_name})
 
-    async def wait_for_code(self, server_name: str | None) -> tuple[str, str | None]:
+    async def wait_for_code(self, server_name: str | None) -> AuthorizationCodeResult:
         """Block until the callback delivers code/state for the provided server."""
         key = server_name or next(iter(self._state_by_server), None)
         if key is None or key not in self._state_by_server:
             raise OAuthFlowError("OAuth state not initialized before callback wait")
         state = self._state_by_server[key]
         try:
-            code, resolved_state = await self.registry.wait_for_code(state=state, timeout=self.timeout)
+            result = await self.registry.wait_for_code(state=state, timeout=self.timeout)
         except OAuthFlowError:
             snapshot = await self.registry.get_status(state)
             await self._put_event(
@@ -333,9 +335,9 @@ class FastAPIOAuthRuntime:
             )
             raise
         await self._put_event(
-            {"type": "oauth_status", "state": resolved_state, "status": "authorized", "server": server_name}
+            {"type": "oauth_status", "state": result.state, "status": "authorized", "server": server_name}
         )
-        return code, resolved_state
+        return result
 
     async def next_event(self) -> dict[str, Any]:
         """Return the next OAuth event destined for the SSE stream."""
