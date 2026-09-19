@@ -11,7 +11,7 @@ class RealtimeDemoLauncher:
     def start(
         agency: Agency,
         *,
-        host: str = "0.0.0.0",
+        host: str = "127.0.0.1",
         port: int = 8000,
         provider: str = "openai",
         model: str = "gpt-realtime-2",

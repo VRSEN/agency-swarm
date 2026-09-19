@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 def run_fastapi(
     agencies: Mapping[str, Callable[..., Agency]] | None = None,
     tools: list[type[FunctionTool]] | None = None,
-    host: str = "0.0.0.0",
+    host: str = "127.0.0.1",
     port: int = 8000,
     server_url: str | None = None,
     app_token_env: str = "APP_TOKEN",
@@ -55,7 +55,8 @@ def run_fastapi(
     tools : list[type[FunctionTool]] | None
         Optional tools to expose under ``/tool`` routes.
     host, port, app_token_env, return_app, cors_origins :
-        Standard FastAPI configuration options.
+        Standard FastAPI configuration options. ``host`` defaults to loopback
+        (``127.0.0.1``); pass ``"0.0.0.0"`` explicitly to bind all interfaces.
     server_url : str | None
         Optional base URL to be included in the server OpenAPI schema.
         Defaults to ``http://{host}:{port}``
