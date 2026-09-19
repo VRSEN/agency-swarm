@@ -219,6 +219,87 @@ async def test_litellm_stream_patch_forwards_strict_feature_validation(monkeypat
     }
 
 
+@pytest.mark.asyncio
+async def test_litellm_stream_patch_forwards_future_sdk_kwargs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Newer Agents SDK stream-handler kwargs like raise_on_length_truncation pass through."""
+    litellm_model = pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
+    patch = importlib.import_module("agency_swarm.streaming.litellm_reasoning")
+    seen: dict[str, object] = {}
+    chunk = SimpleNamespace(choices=[])
+
+    class Handler:
+        @classmethod
+        async def handle_stream(cls, response, stream, model=None, **kwargs):
+            seen["response"] = response
+            seen["model"] = model
+            seen.update(kwargs)
+            async for item in stream:
+                yield item
+
+    monkeypatch.setattr(litellm_model, "ChatCmplStreamHandler", Handler)
+    patch.patch_litellm_thinking_blocks()
+
+    async def stream():
+        yield chunk
+
+    events = [
+        event
+        async for event in Handler.handle_stream(
+            "response",
+            stream(),
+            "model",
+            strict_feature_validation=True,
+            preserve_raw_usage=True,
+            raise_on_length_truncation=True,
+        )
+    ]
+
+    assert events == [chunk]
+    assert seen == {
+        "response": "response",
+        "model": "model",
+        "strict_feature_validation": True,
+        "preserve_raw_usage": True,
+        "raise_on_length_truncation": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_litellm_stream_patch_drops_kwargs_unknown_to_handler(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Kwargs the installed handler does not declare are dropped for backward compatibility."""
+    litellm_model = pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
+    patch = importlib.import_module("agency_swarm.streaming.litellm_reasoning")
+    seen: dict[str, object] = {}
+    chunk = SimpleNamespace(choices=[])
+
+    class Handler:
+        @classmethod
+        async def handle_stream(cls, response, stream, model=None, strict_feature_validation: bool = False):
+            seen["strict_feature_validation"] = strict_feature_validation
+            async for item in stream:
+                yield item
+
+    monkeypatch.setattr(litellm_model, "ChatCmplStreamHandler", Handler)
+    patch.patch_litellm_thinking_blocks()
+
+    async def stream():
+        yield chunk
+
+    events = [
+        event
+        async for event in Handler.handle_stream(
+            "response",
+            stream(),
+            "model",
+            strict_feature_validation=True,
+            future_sdk_kwarg="dropped",
+        )
+    ]
+
+    assert events == [chunk]
+    assert seen == {"strict_feature_validation": True}
+
+
 def test_litellm_patch_skips_already_normalized_chunks() -> None:
     patch = importlib.import_module("agency_swarm.streaming.litellm_reasoning")
     delta = SimpleNamespace(
