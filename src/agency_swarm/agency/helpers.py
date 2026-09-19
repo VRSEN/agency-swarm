@@ -133,7 +133,7 @@ def build_fastapi_agencies(agency: "Agency") -> dict[str, Callable[..., "Agency"
             elif pair_key not in agency._default_communication_tool_pairs:
                 flows.append((sender, receiver))
 
-        return agency_cls(
+        rebuilt = agency_cls(
             *agency.entry_points,
             communication_flows=flows,
             name=agency.name,
@@ -145,11 +145,17 @@ def build_fastapi_agencies(agency: "Agency") -> dict[str, Callable[..., "Agency"
             send_message_tool_class=agency.send_message_tool_class,
             load_threads_callback=load_threads_callback,
             save_threads_callback=save_threads_callback,
-            user_context=deepcopy(agency.user_context),
             randomize_agent_voices=bool(getattr(agency, "_randomize_agent_voices", False)),
             voice_random_seed=getattr(agency, "_voice_random_seed", None),
             oauth_token_path=agency.oauth_token_path,
         )
+        # Carry the context store forward without the deprecated public argument:
+        # the store also accumulates run-synced keys, so routing it through
+        # ``user_context=`` would warn agencies that never used the deprecated API.
+        initial_user_context = deepcopy(getattr(agency, "_initial_user_context", {}))
+        if initial_user_context:
+            rebuilt._initial_user_context = initial_user_context
+        return rebuilt
 
     return {agency.name or "agency": agency_factory}
 

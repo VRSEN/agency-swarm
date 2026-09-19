@@ -67,13 +67,14 @@ def agency1(shared_agent):
     """Create the first agency."""
     assistant1 = Agent(name="Assistant1", instructions="You are Assistant1 in Agency1")
 
-    agency = Agency(
-        shared_agent,
-        assistant1,
-        communication_flows=[shared_agent > assistant1],
-        name="Agency1",
-        user_context={"agency_name": "Agency1", "test_data": "agency1_data"},
-    )
+    with pytest.warns(DeprecationWarning, match="Agency\\(user_context=...\\)"):
+        agency = Agency(
+            shared_agent,
+            assistant1,
+            communication_flows=[shared_agent > assistant1],
+            name="Agency1",
+            user_context={"agency_name": "Agency1", "test_data": "agency1_data"},
+        )
     return agency
 
 
@@ -82,13 +83,14 @@ def agency2(shared_agent):
     """Create the second agency using the same shared agent."""
     assistant2 = Agent(name="Assistant2", instructions="You are Assistant2 in Agency2")
 
-    agency = Agency(
-        shared_agent,
-        assistant2,
-        communication_flows=[shared_agent > assistant2],
-        name="Agency2",
-        user_context={"agency_name": "Agency2", "test_data": "agency2_data"},
-    )
+    with pytest.warns(DeprecationWarning, match="Agency\\(user_context=...\\)"):
+        agency = Agency(
+            shared_agent,
+            assistant2,
+            communication_flows=[shared_agent > assistant2],
+            name="Agency2",
+            user_context={"agency_name": "Agency2", "test_data": "agency2_data"},
+        )
     return agency
 
 
@@ -179,16 +181,17 @@ class TestMultiAgencySupport:
 
     @pytest.mark.asyncio
     async def test_user_context_isolation(self, shared_agent, agency1, agency2):
-        """Test that user context is isolated between agencies."""
+        """Test that user context is isolated between agencies (deprecated path kept working)."""
         # Verify each agency has its own user context
-        assert agency1.user_context["agency_name"] == "Agency1"
-        assert agency1.user_context["test_data"] == "agency1_data"
+        with pytest.warns(DeprecationWarning, match="Agency.user_context"):
+            assert agency1.user_context["agency_name"] == "Agency1"
+            assert agency1.user_context["test_data"] == "agency1_data"
 
-        assert agency2.user_context["agency_name"] == "Agency2"
-        assert agency2.user_context["test_data"] == "agency2_data"
+            assert agency2.user_context["agency_name"] == "Agency2"
+            assert agency2.user_context["test_data"] == "agency2_data"
 
-        # User contexts should be different
-        assert agency1.user_context != agency2.user_context
+            # User contexts should be different
+            assert agency1.user_context != agency2.user_context
 
     @pytest.mark.asyncio
     async def test_concurrent_agency_operations(self, shared_agent, agency1, agency2):
@@ -207,8 +210,9 @@ class TestMultiAgencySupport:
         assert response2.final_output is not None
 
         # Each context should have its own value without relying on live-model phrasing.
-        assert agency1.user_context["test_value"] == "concurrent1"
-        assert agency2.user_context["test_value"] == "concurrent2"
+        with pytest.warns(DeprecationWarning, match="Agency.user_context"):
+            assert agency1.user_context["test_value"] == "concurrent1"
+            assert agency2.user_context["test_value"] == "concurrent2"
 
     @pytest.mark.asyncio
     async def test_streaming_context_isolation(self, shared_agent, agency1, agency2):

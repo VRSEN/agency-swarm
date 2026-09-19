@@ -229,7 +229,7 @@ run_fastapi(
 
 Do not read the user ID directly from a request header or body. If browsers reach your app with a cookie or session, also pass `verify_oauth_callback_user=True` so `/auth/callback` rejects a code whose pending flow belongs to a different user. See [Binding the callback to a user](/additional-features/fastapi-integration#binding-the-callback-to-a-user).
 
-For local or other non-FastAPI runs, either provide `oauth_token_path` with `user_context`, or call `set_oauth_user_id()` before the run:
+For local or other non-FastAPI runs, either provide `oauth_token_path` and pass `user_id` through `context_override`, or call `set_oauth_user_id()` before the run:
 
 ```python
 from agency_swarm import Agency, Agent
@@ -244,7 +244,11 @@ oauth_server = MCPServerOAuth(
 agency = Agency(
     Agent(name="GitHubAgent", mcp_servers=[oauth_server]),
     oauth_token_path="./data/oauth-tokens",
-    user_context={"user_id": "user_123"},
+)
+
+response = await agency.get_response(
+    "List my repositories.",
+    context_override={"user_id": "user_123"},
 )
 ```
 
@@ -257,7 +261,7 @@ Per-user layout (conceptual):
 Access tokens refresh automatically via the MCP SDK; if a refresh token expires, the flow will prompt for authorization again.
 
 <Note>
-Tools activated by `authenticate_mcp_server` hold a live authenticated session, not just a token file. When one shared Agency serves several users, the activated tools are dropped as soon as the OAuth user changes, so the next user's agent starts from `authenticate_mcp_server` against its own token bucket instead of reusing the previous user's session. Identify every run: call `set_oauth_user_id()` before it, or pass `user_id` through `user_context` (or `context_override`).
+Tools activated by `authenticate_mcp_server` hold a live authenticated session, not just a token file. When one shared Agency serves several users, the activated tools are dropped as soon as the OAuth user changes, so the next user's agent starts from `authenticate_mcp_server` against its own token bucket instead of reusing the previous user's session. Identify every run: call `set_oauth_user_id()` before it, or pass `user_id` through `context_override`.
 </Note>
 
 ### Multiple OAuth servers

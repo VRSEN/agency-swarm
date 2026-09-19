@@ -49,11 +49,12 @@ async def test_context_persistence_between_calls():
         model="gpt-5.6-luna",
     )
 
-    # Create agency with initial context
-    agency = Agency(
-        agent,
-        user_context={"initial": "value"},
-    )
+    # Create agency with initial context (deprecated seed kept working until next major)
+    with pytest.warns(DeprecationWarning, match="Agency\\(user_context=...\\)"):
+        agency = Agency(
+            agent,
+            user_context={"initial": "value"},
+        )
 
     # First call: Store a value
     response1 = await agency.get_response("Store the value 'test_data' with key 'stored_key' using StoreValueTool")
@@ -69,9 +70,11 @@ async def test_context_persistence_between_calls():
     tool_outputs2 = [item.output for item in response2.new_items if hasattr(item, "output")]
     assert any("Value for stored_key: test_data" in str(output) for output in tool_outputs2)
 
-    # Verify agency context was updated
-    assert agency.user_context.get("stored_key") == "test_data"
-    assert agency.user_context.get("initial") == "value"  # Original value still there
+    # Verify agency context was updated (deprecated attribute still reflects the store)
+    with pytest.warns(DeprecationWarning, match="Agency.user_context"):
+        assert agency.user_context.get("stored_key") == "test_data"
+    with pytest.warns(DeprecationWarning, match="Agency.user_context"):
+        assert agency.user_context.get("initial") == "value"  # Original value still there
 
 
 def test_context_persistence_between_sync_calls():
@@ -89,10 +92,11 @@ def test_context_persistence_between_sync_calls():
         model="gpt-5.6-luna",
     )
 
-    agency = Agency(
-        agent,
-        user_context={"initial": "value"},
-    )
+    with pytest.warns(DeprecationWarning, match="Agency\\(user_context=...\\)"):
+        agency = Agency(
+            agent,
+            user_context={"initial": "value"},
+        )
 
     response1 = agency.get_response_sync("Store the value 'test_data' with key 'stored_key' using StoreValueTool")
     tool_outputs = [item.output for item in response1.new_items if hasattr(item, "output")]
@@ -102,7 +106,8 @@ def test_context_persistence_between_sync_calls():
     tool_outputs2 = [item.output for item in response2.new_items if hasattr(item, "output")]
     assert any("Value for stored_key: test_data" in str(output) for output in tool_outputs2)
 
-    assert agency.user_context.get("stored_key") == "test_data"
+    with pytest.warns(DeprecationWarning, match="Agency.user_context"):
+        assert agency.user_context.get("stored_key") == "test_data"
 
 
 @pytest.mark.asyncio
@@ -116,10 +121,11 @@ async def test_context_override_does_not_affect_agency():
         model="gpt-5.6-luna",
     )
 
-    agency = Agency(
-        agent,
-        user_context={"agency_key": "agency_value"},
-    )
+    with pytest.warns(DeprecationWarning, match="Agency\\(user_context=...\\)"):
+        agency = Agency(
+            agent,
+            user_context={"agency_key": "agency_value"},
+        )
 
     # Call with context override
     response = await agency.get_response(
@@ -131,5 +137,6 @@ async def test_context_override_does_not_affect_agency():
     assert any("Value for override_key: override_value" in str(output) for output in tool_outputs)
 
     # Verify agency context was NOT modified
-    assert "override_key" not in agency.user_context
-    assert agency.user_context == {"agency_key": "agency_value"}
+    with pytest.warns(DeprecationWarning, match="Agency.user_context"):
+        assert "override_key" not in agency.user_context
+        assert agency.user_context == {"agency_key": "agency_value"}

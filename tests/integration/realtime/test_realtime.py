@@ -5,6 +5,7 @@ from agents import RunContextWrapper
 
 from agency_swarm import Agency, Agent, Handoff, run_fastapi
 from agency_swarm.agent.constants import AGENT_XAI_REALTIME_VOICES
+from agency_swarm.agent.run_context import get_agency_user_context_store
 from agency_swarm.context import MasterContext
 from agency_swarm.integrations import run_realtime
 from agency_swarm.tools import SendMessageHandoff
@@ -28,7 +29,7 @@ def _make_context(agency: Agency) -> RunContextWrapper[MasterContext]:
     master = MasterContext(
         thread_manager=ThreadManager(),
         agents=agency.agents,
-        user_context=dict(agency.user_context),
+        user_context=dict(get_agency_user_context_store(agency) or {}),
         agent_runtime_state=agency._agent_runtime_state,
     )
     return RunContextWrapper(master)
@@ -45,7 +46,8 @@ def test_realtime_agency_wraps_handoffs_and_agents() -> None:
     assert realtime_agency.source_agents["Concierge"] is agency.agents["Concierge"]
     assert realtime_agency.agents["Concierge"] is concierge_rt
     assert realtime_agency.shared_instructions is None
-    assert realtime_agency.user_context == {}
+    with pytest.warns(DeprecationWarning, match="Agency.user_context"):
+        assert realtime_agency.user_context == {}
     assert realtime_agency.runtime_state_map["Concierge"] is agency._agent_runtime_state["Concierge"]
     assert len(handoffs) == 1
     assert handoffs[0].agent_name == "Billing"
