@@ -9,6 +9,7 @@ This file contains only repository-specific addenda to the controlling machine-g
 1.3 Shared policy from `VRSEN/agentswarm-cli` may appear here only as a strict subset or a necessary Python/Agency adaptation; omit CLI, TUI, OpenCode, Bun, npm, and package-layout rules without a Python or Agency equivalent.
 1.4 If an active pull request duplicates an open Dependabot dependency update, close the Dependabot pull request through the normal public-mutation approval path.
 1.5 Commits and pull requests carry no AI attribution: no AI `Co-Authored-By` trailers and no "Generated with" footers in commit messages, pull request titles, or pull request descriptions.
+1.6 If functionality is now implemented upstream, remove the custom implementation unless there is a concrete reason to keep it. If the custom implementation differs from upstream in a way that looks artificial, incorrect, or non-standard, escalate to the user with a recommendation to delete it and reuse upstream behavior.
 
 ## 2. Repository Commands And Review Artifacts
 
@@ -17,13 +18,13 @@ This file contains only repository-specific addenda to the controlling machine-g
 2.3 Run `make check` before staging or committing runtime, interface, or integration changes.
 2.4 Run `make ci` before a release, a broad or risky merge-readiness claim, a repository-wide health claim, or when focused proof cannot bound risk.
 2.5 Use project virtual environments and repository task runners, not global interpreters or absolute paths.
-2.6 The general Codex review command is `codex review --base origin/main -c model_reasoning_effort="high"`.
-2.7 The policy Codex review command is `codex review --base origin/main -c model_reasoning_effort="xhigh"`.
-2.8 The pre-release Codex review command is `codex review --base origin/main -c model_reasoning_effort="xhigh"`.
-2.9 Broad, public, high-risk, or low-confidence repository-policy edits require a clean policy Codex review before shipping; that review uses `gpt-5.6-sol` (the Codex CLI default) or an approved substitute with `xhigh` reasoning; `high` is insufficient.
-2.10 When the review command cannot be used, fall back only to an equivalent `codex exec` diff review with the same `origin/main` base and reasoning class.
-2.11 Save pre-release and fallback review output to `/tmp/codex_review_<short_sha>.txt`.
-2.12 Supporting reviews may supplement but never replace a required Codex review.
+2.6 The general review gate is an independent review by a different live model through the currently allowed route in the global worker-model-routing allowlist, at `high` reasoning effort, against `origin/main`.
+2.7 The policy review gate uses the same route at `xhigh` reasoning effort.
+2.8 The pre-release review gate uses the same route at `xhigh` reasoning effort against the exact release commit.
+2.9 Broad, public, high-risk, or low-confidence repository-policy edits require a clean policy review before shipping; `high` is insufficient.
+2.10 When the primary review route cannot be used, fall back only to another currently-allowed route with the same `origin/main` base and reasoning class.
+2.11 Save pre-release and fallback review output to the owning task's artifacts directory, never `/tmp`.
+2.12 Supporting reviews may supplement but never replace a required independent review.
 
 ## 3. Documentation
 
@@ -56,9 +57,12 @@ This file contains only repository-specific addenda to the controlling machine-g
 
 ## 6. Release Specifics
 
-6.1 A release or safety claim requires a clean pre-release Codex review against the exact release commit.
+6.1 A release or safety claim requires a clean pre-release review (2.8) against the exact release commit.
 6.2 Before a release or safety claim, send a real first message through the installed interface to the maintained local test agency and observe a non-empty streamed response through that interface.
 6.3 Automated authentication smoke tests do not satisfy the installed-interface proof in 6.2.
 6.4 A launch, credential, dependency, or interface failure in that proof blocks the release claim until it is reproduced and root-caused.
 6.5 Keep user-facing bugfix release cuts minimal and exclude repository-policy edits and tooling churn.
 6.6 Ship repository-policy edits directly to the default branch after exact approval, never inside a public product pull request or user-facing release.
+6.7 A release claim requires per-commit evidence on the release page: every change since the previous release names its test evidence and confidence level.
+6.8 Existing behavior affected by a change must be regression-tested end-to-end, and the previous and new releases compared, before merge or release.
+6.9 No test may be skipped in the final pre-release suite; tests requiring real API keys run with real keys. A single skipped test blocks the release claim.
