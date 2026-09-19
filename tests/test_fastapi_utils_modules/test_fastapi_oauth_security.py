@@ -189,6 +189,40 @@ def test_oauth_callback_uses_state_and_status_requires_owner() -> None:
     assert other_status.status_code == 404
 
 
+def test_oauth_callback_forwards_iss_to_wait_for_code() -> None:
+    """RFC 9207 ``iss`` from the provider redirect must reach AuthorizationCodeResult."""
+    registry = OAuthStateRegistry()
+    asyncio.run(
+        registry.record_redirect(
+            state="iss-state",
+            auth_url="https://idp.example.com/authorize?state=iss-state",
+            server_name="oauth-demo",
+            user_id="owner-user",
+        )
+    )
+
+    async def authenticated_user_id() -> str:
+        return "owner-user"
+
+    app = run_fastapi(
+        agencies={"test_agency": _oauth_agency},
+        return_app=True,
+        app_token_env="",
+        oauth_registry=registry,
+        oauth_user_id_dependency=authenticated_user_id,
+    )
+    assert app is not None
+    client = TestClient(app)
+
+    callback = client.get("/auth/callback?state=iss-state&code=code-123&iss=https://idp.example.com")
+    assert callback.status_code == 200
+
+    result = asyncio.run(registry.wait_for_code(state="iss-state", timeout=1))
+    assert result.code == "code-123"
+    assert result.state == "iss-state"
+    assert result.iss == "https://idp.example.com"
+
+
 def _cookie_session_user_id(session_user: str | None = Cookie(default=None)) -> str:
     """Resolve the browser's user from a session cookie the provider redirect carries."""
     if not session_user:

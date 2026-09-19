@@ -43,6 +43,7 @@ class OAuthFlowState:
     server_name: str | None
     user_id: str | None
     code: str | None = None
+    iss: str | None = None
     error: str | None = None
     status: str = "pending"
     event: asyncio.Event = field(default_factory=asyncio.Event)
@@ -110,11 +111,12 @@ class OAuthStateRegistry:
                 flow.user_id = user_id or flow.user_id
                 flow.error = None
                 flow.code = None
+                flow.iss = None
                 flow.status = "pending"
                 flow.loop = flow_loop or flow.loop
             return flow
 
-    async def set_code(self, *, state: str, code: str, user_id: str | None) -> OAuthFlowState:
+    async def set_code(self, *, state: str, code: str, user_id: str | None, iss: str | None = None) -> OAuthFlowState:
         """Persist the authorization code and release any waiters."""
         with self._lock:
             self._prune_expired_locked()
@@ -130,6 +132,7 @@ class OAuthStateRegistry:
                 flow.error = None
                 flow.status = "authorized"
             flow.code = code
+            flow.iss = iss
             _notify_oauth_flow(flow)
             return flow
 
@@ -181,7 +184,7 @@ class OAuthStateRegistry:
             raise OAuthFlowError(f"OAuth callback missing code for state={state}")
         with self._lock:
             self._prune_expired_locked()
-        return AuthorizationCodeResult(code=flow.code, state=flow.state)
+        return AuthorizationCodeResult(code=flow.code, state=flow.state, iss=flow.iss)
 
     async def get_status(self, state: str) -> dict[str, Any]:
         """Return a serializable snapshot for status endpoint."""
