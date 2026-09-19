@@ -1,5 +1,5 @@
 from collections.abc import AsyncGenerator
-from typing import Any, cast
+from typing import Any
 
 import pytest
 from openai import AsyncOpenAI
@@ -21,6 +21,7 @@ from tests.test_fastapi_utils_modules._codex_input_role_boundary_helpers import 
     _filtered_roles,
     _history,
     _HttpRequest,
+    _prepared_runner_input,
     _roles,
     _RunResult,
     _StreamedResult,
@@ -47,7 +48,7 @@ async def test_response_endpoint_keeps_runner_input_and_filters_model_call_bound
     captured: dict[str, Any] = {}
 
     async def _run(**kwargs: Any) -> _RunResult:
-        captured["input"] = cast(list[dict[str, Any]], kwargs["input"])
+        captured["input"] = _prepared_runner_input(kwargs)
         captured["run_config"] = kwargs["run_config"]
         captured["starting_agent"] = kwargs["starting_agent"]
         captured["model_roles"] = await _filtered_roles(
@@ -92,7 +93,7 @@ async def test_response_endpoint_keeps_system_replay_for_custom_model_with_codex
 
     async def _run(**kwargs: Any) -> _RunResult:
         starting_agent = kwargs["starting_agent"]
-        captured["input"] = cast(list[dict[str, Any]], kwargs["input"])
+        captured["input"] = _prepared_runner_input(kwargs)
         captured["run_config"] = kwargs["run_config"]
         captured["starting_agent"] = starting_agent
         captured["model_roles"] = await _filtered_roles(
@@ -147,7 +148,7 @@ async def test_stream_endpoint_keeps_runner_input_and_filters_model_call_boundar
     captured: dict[str, Any] = {}
 
     def _run_streamed(**kwargs: Any) -> _StreamedResult:
-        captured["input"] = cast(list[dict[str, Any]], kwargs["input"])
+        captured["input"] = _prepared_runner_input(kwargs)
         captured["run_config"] = kwargs["run_config"]
         captured["starting_agent"] = kwargs["starting_agent"]
         assert kwargs["starting_agent"].instructions == "normal agent instructions"
@@ -192,7 +193,7 @@ async def test_response_endpoint_rewrites_codex_system_replay_for_default_openai
     captured: dict[str, Any] = {}
 
     async def _run(**kwargs: Any) -> _RunResult:
-        captured["input"] = cast(list[dict[str, Any]], kwargs["input"])
+        captured["input"] = _prepared_runner_input(kwargs)
         captured["run_config"] = kwargs["run_config"]
         captured["starting_agent"] = kwargs["starting_agent"]
         captured["model_roles"] = await _filtered_roles(
@@ -230,7 +231,7 @@ async def test_agui_endpoint_keeps_runner_input_and_filters_model_call_boundary(
     captured: dict[str, Any] = {}
 
     def _run_streamed(**kwargs: Any) -> _StreamedResult:
-        captured["input"] = cast(list[dict[str, Any]], kwargs["input"])
+        captured["input"] = _prepared_runner_input(kwargs)
         captured["run_config"] = kwargs["run_config"]
         captured["starting_agent"] = kwargs["starting_agent"]
         assert kwargs["starting_agent"].instructions == "normal agent instructions"

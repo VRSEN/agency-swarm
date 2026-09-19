@@ -26,7 +26,6 @@ from openai.types.responses.response_file_search_tool_call import Result as Resp
 from agency_swarm.messages.response_input_sanitizer import (
     REASONING_ENCRYPTED_CONTENT_INCLUDE,
     ensure_store_false_reasoning_encrypted_content,
-    sanitize_store_false_responses_input,
 )
 
 if TYPE_CHECKING:
@@ -172,7 +171,7 @@ class MessageFormatter:
         return None
 
     @staticmethod
-    def _ensure_history_protocol_compatibility(
+    def ensure_history_protocol_compatibility(
         history: list[TResponseInputItem],
         *,
         expected_protocol: str,
@@ -264,63 +263,31 @@ class MessageFormatter:
         run_trace_id: str | None = None,
         run_config_override: "RunConfig | None" = None,
     ) -> list[TResponseInputItem]:
-        """Prepare conversation history for the runner."""
-        # Get thread manager from context (required)
-        if not agency_context or not agency_context.thread_manager:
-            raise RuntimeError(f"Agent '{agent.name}' missing ThreadManager in agency context.")
+        """Prepare conversation history for the runner.
 
-        thread_manager = agency_context.thread_manager
-        history_protocol = MessageFormatter.resolve_history_protocol(agent)
+        Compatibility shim: the SDK ``Session`` adapter now owns history reads and
+        persistence; this delegates to it so existing callers keep working.
+        """
+        # Local import: agency_session lives in the agent package and importing it at
+        # module level would create a messages <-> agent import cycle.
+        from agency_swarm.agent.agency_session import create_agency_session
 
-        existing_history = thread_manager.get_conversation_history(agent.name, sender_name)
-        compatibility_history = existing_history + [
-            msg for msg in processed_current_message_items if isinstance(msg, dict)
-        ]
-        MessageFormatter._ensure_history_protocol_compatibility(
-            compatibility_history,
-            expected_protocol=history_protocol,
-            agent_name=agent.name,
+        session = create_agency_session(
+            agent=agent,
+            sender_name=sender_name,
+            agency_context=agency_context,
+            new_input_items=processed_current_message_items,
+            agent_run_id=agent_run_id,
+            parent_run_id=parent_run_id,
+            run_trace_id=run_trace_id,
+            run_config_override=run_config_override,
         )
-
-        # Add agency metadata to incoming messages
-        messages_to_save: list[TResponseInputItem] = []
-        messages_for_runner: list[TResponseInputItem] = []
-        for msg in processed_current_message_items:
-            formatted_msg = MessageFormatter.add_agency_metadata(
-                msg,  # type: ignore[arg-type]
-                agent=agent.name,
-                caller_agent=sender_name,
-                agent_run_id=agent_run_id,
-                parent_run_id=parent_run_id,
-                run_trace_id=run_trace_id,
-                history_protocol=history_protocol,
-            )
-            messages_for_runner.append(
-                cast(TResponseInputItem, MessageFormatter._strip_ephemeral_content(formatted_msg, drop_parts=False))
-            )
-            save_message = MessageFormatter._strip_ephemeral_content(formatted_msg, drop_parts=True)
-            if save_message is not None:
-                messages_to_save.append(save_message)
-
-        # Save messages to flat storage
-        thread_manager.add_messages(messages_to_save)
-        logger.debug(f"Added {len(messages_to_save)} messages to storage.")
-
-        # Get relevant conversation history for this agent pair
-        full_history = existing_history + messages_for_runner
-
-        # Prepare history for runner (sanitize and ensure content safety)
-        history_for_runner = MessageFormatter.sanitize_tool_calls_in_history(full_history)  # type: ignore[arg-type]
-        history_for_runner = MessageFormatter.ensure_tool_calls_content_safety(history_for_runner)
-        # Strip agency metadata before sending to OpenAI
-        history_for_runner = MessageFormatter.strip_agency_metadata(history_for_runner)
-        history_for_runner = MessageFormatter.sanitize_replayed_tool_item_ids(history_for_runner)
-        if MessageFormatter._ensure_store_false_replay_settings(agent, run_config_override):
-            history_for_runner = sanitize_store_false_responses_input(history_for_runner)
-        return history_for_runner  # type: ignore[return-value]
+        # New input was persisted at session creation; while pending it is kept
+        # out of the history view so the model sees it exactly once.
+        return session.prepared_input()
 
     @staticmethod
-    def _strip_ephemeral_content(message: TResponseInputItem, *, drop_parts: bool) -> TResponseInputItem | None:
+    def strip_ephemeral_content(message: TResponseInputItem, *, drop_parts: bool) -> TResponseInputItem | None:
         if not isinstance(message, dict):
             return message
         content = message.get("content")
@@ -447,7 +414,7 @@ class MessageFormatter:
         return sanitized
 
     @staticmethod
-    def _ensure_store_false_replay_settings(agent: "Agent", run_config_override: "RunConfig | None") -> bool:
+    def ensure_store_false_replay_settings(agent: "Agent", run_config_override: "RunConfig | None") -> bool:
         agent_settings = getattr(agent, "model_settings", None)
         run_settings = getattr(run_config_override, "model_settings", None) if run_config_override else None
         effective_settings = agent_settings.resolve(run_settings) if agent_settings is not None else run_settings

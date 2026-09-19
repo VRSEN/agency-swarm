@@ -31,8 +31,14 @@ async def test_output_guardrail_auto_retry(mock_runner_run, minimal_agent, mock_
 
     assert result.final_output == "ok"
     assert mock_runner_run.call_count == 2
+    # Retries pass no new input; the persisted guidance reaches the model through
+    # the session's history instead of a rebuilt input list.
+    second_session = mock_runner_run.call_args_list[1].kwargs["session"]
+    assert second_session is not None
     second_input = mock_runner_run.call_args_list[1].kwargs["input"]
-    assert second_input[-1]["content"] == "fix it"
+    assert second_input == []
+    session_items = await second_session.get_items()
+    assert session_items[-1]["content"] == "fix it"
 
 
 @pytest.mark.asyncio
