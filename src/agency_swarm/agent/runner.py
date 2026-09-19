@@ -30,6 +30,8 @@ from agents import (
 )
 from agents.memory import Session
 from agents.run import DEFAULT_MAX_TURNS
+
+# SDK-private helper; pinned to openai-agents==0.22.3 — re-check on bump
 from agents.run_config import _coerce_run_config
 from agents.run_context import TContext
 from agents.run_error_handlers import RunErrorHandlers

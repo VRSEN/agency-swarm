@@ -74,7 +74,7 @@ agent = Agent(
 )
 ```
 
-`EveryNToolCalls` counts local function tools and hosted tools (such as `WebSearchTool` and `FileSearchTool`) separately for each agent within one logical run. A logical run starts with a user request to an agency or a direct `Runner` call. Handoffs and resumed interruptions stay in that run. The count resets when the run completes, fails, or is cancelled.
+`EveryNToolCalls` counts local function tools and hosted tools (such as `WebSearchTool` and `FileSearchTool`) separately for each agent within one logical run. A logical run starts with a user request to an agency or a direct call to `Runner` imported from `agency_swarm`. Handoffs and resumed interruptions stay in that run. The count resets when the run completes, fails, or is cancelled.
 
 For each configured `EveryNToolCalls`, if parallel tool calls cross several of its thresholds before the next model call, Agency Swarm produces exactly one reminder for that model call. It keeps the modulo remainder—the calls left after dividing by `n`—toward the next threshold.
 
@@ -99,8 +99,22 @@ Use `system_reminders` for normal reminders. Use `hooks` only when you need cust
 </Note>
 
 <Note>
-Creating your first agent with `system_reminders` installs a process-wide boundary around `Runner.run`, `Runner.run_sync`, `Runner.run_streamed`, and `RunState` serialization. That boundary is what keeps reminders out of saved history when you call `Runner` directly instead of going through an `Agency`. It stays in place for the rest of the process and applies to every agent in it, including SDK agents without reminders. Agents that never use `system_reminders` leave the SDK `Runner` untouched.
+The reminder boundary lives on `agency_swarm.Runner` — import `Runner` from `agency_swarm`, not `agents`, when you run an agent directly. It keeps reminders out of saved history just like an `Agency` does. Calling `agents.Runner` directly gives you stock SDK behavior with no reminder handling.
 </Note>
+
+If you save a run state to resume an interrupted run later, serialize it with `run_state_to_json` and restore it with `run_state_from_json`:
+
+```python
+from agency_swarm import Runner, run_state_from_json, run_state_to_json
+
+result = await Runner.run(agent, "next")
+state_json = run_state_to_json(result.to_state())
+
+restored = await run_state_from_json(agent, state_json)
+result = await Runner.run(agent, restored)
+```
+
+Use these instead of the SDK's `RunState.to_json()` / `RunState.from_json()`. The plain SDK methods drop the reminder state, so reminder counts restart on resume.
 
 ### Conversation starters cache
 
