@@ -2,6 +2,7 @@
 Tests for UI metadata payloads and demo launcher configuration.
 """
 
+import inspect
 import os
 from pathlib import Path
 from unittest.mock import patch
@@ -147,3 +148,31 @@ def test_copilot_demo_launcher_sets_client_facing_backend_url():
         assert os.environ["NEXT_PUBLIC_AG_UI_BACKEND_URL"] == expected
         _args, kwargs = popen.call_args
         assert "stdout" not in kwargs and "stderr" not in kwargs
+
+
+def test_server_helpers_default_to_loopback_host():
+    """Dev/demo servers must bind loopback by default; 0.0.0.0 stays an explicit opt-in."""
+    from agency_swarm.agency.helpers import run_fastapi as run_fastapi_helper
+    from agency_swarm.agency.visualization import copilot_demo as copilot_demo_helper
+    from agency_swarm.integrations.fastapi import run_fastapi
+    from agency_swarm.integrations.mcp_server import run_mcp
+    from agency_swarm.integrations.realtime import run_realtime
+    from agency_swarm.ui.demos.copilot import CopilotDemoLauncher
+    from agency_swarm.ui.demos.realtime import RealtimeDemoLauncher
+
+    agency = Agency(Agent(name="CEO", instructions="test"))
+
+    callables = [
+        run_fastapi,
+        run_fastapi_helper,
+        run_mcp,
+        run_realtime,
+        CopilotDemoLauncher.start,
+        RealtimeDemoLauncher.start,
+        agency.run_fastapi,
+        agency.copilot_demo,
+        copilot_demo_helper,
+    ]
+    for fn in callables:
+        host_param = inspect.signature(fn).parameters["host"]
+        assert host_param.default == "127.0.0.1", f"{fn} must default host to 127.0.0.1"

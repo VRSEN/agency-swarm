@@ -74,4 +74,4 @@ def test_auth() -> str:
 if __name__ == "__main__":
     print(f"Google OAuth MCP Server: {BASE_URL}/mcp")
     print(f"Callback: {BASE_URL}/auth/callback")
-    mcp.run(transport="http", host="0.0.0.0", port=SERVER_PORT)
+    mcp.run(transport="http", host="127.0.0.1", port=SERVER_PORT)
