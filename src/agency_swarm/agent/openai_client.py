@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from typing import Any
 
 import httpx2
 from agents.models import openai_provider as _agents_openai_provider
@@ -73,6 +74,12 @@ def install_loop_scoped_http_client() -> None:
 
     The SDK only calls ``shared_http_client()`` when a provider has no explicit
     ``openai_client``, so caller-supplied clients keep their own lifecycle.
+
+    Remaining SDK-level gaps are intentionally left alone: ``Model._get_client``
+    builds a bare ``AsyncOpenAI()`` when a model is constructed with
+    ``openai_client=None``, and ``set_default_openai_client`` accepts a fixed
+    client. Both keep their own (loop-bound) lifecycle; Agency Swarm model
+    builders always pass a ``loop_scoped_http_client()`` instead.
     """
     global _patch_installed
     with _registry_lock:
@@ -82,3 +89,37 @@ def install_loop_scoped_http_client() -> None:
         _agents_openai_provider.shared_http_client = shared_http_client
         _agents_voice_provider.shared_http_client = shared_http_client
         _patch_installed = True
+
+
+class _LoopScopedHttpClient(httpx2.AsyncClient):
+    """HTTP client that routes each request through the running loop's pool.
+
+    ``AsyncOpenAI`` instances stored on long-lived objects — a model built at
+    agent construction time — outlive the event loop that issues their first
+    request. A fixed ``AsyncClient`` pools connections bound to that first loop
+    and crashes on the next ``asyncio.run``. This client holds no pool of its
+    own: every ``send`` resolves ``shared_http_client()`` for the loop running
+    it, so requests always run on the caller's loop.
+    """
+
+    async def send(
+        self,
+        request: httpx2.Request,
+        *,
+        stream: bool = False,
+        **kwargs: Any,
+    ) -> httpx2.Response:
+        if self.is_closed:
+            raise RuntimeError("Cannot send a request, as the client has been closed.")
+        return await shared_http_client().send(request, stream=stream, **kwargs)
+
+
+def loop_scoped_http_client() -> httpx2.AsyncClient:
+    """Return an ``httpx2.AsyncClient`` whose requests run on the caller's loop.
+
+    Safe to store on ``AsyncOpenAI`` instances kept across event loops, such as
+    a model object cached on an ``Agent``. Each call returns a new client so the
+    owning ``AsyncOpenAI`` keeps its own close semantics; the pooled transports
+    live in the per-loop shared registry, not on this client.
+    """
+    return _LoopScopedHttpClient()
