@@ -307,7 +307,8 @@ async def test_after_every_user_message_is_transient_in_thread_history() -> None
             AfterEveryUserMessage(lambda ctx, _agent: f"Task state: {ctx.context.user_context['task_state']}")
         ],
     )
-    agency = Agency(agent, user_context={"task_state": "ready"})
+    with pytest.warns(DeprecationWarning, match="Agency\\(user_context=...\\)"):
+        agency = Agency(agent, user_context={"task_state": "ready"})
 
     await agency.get_response("What is next?")
 
@@ -329,7 +330,8 @@ async def test_after_every_user_message_repeats_on_post_tool_calls() -> None:
         tools=[check_task_state],
         system_reminders="End every reply with DONE.",
     )
-    agency = Agency(agent, user_context={"task_state": "ready"})
+    with pytest.warns(DeprecationWarning, match="Agency\\(user_context=...\\)"):
+        agency = Agency(agent, user_context={"task_state": "ready"})
 
     await agency.get_response("Handle task-1")
     await agency.get_response("Handle task-2")
@@ -372,7 +374,8 @@ async def test_every_n_tool_calls_injects_on_next_llm_call_and_resets() -> None:
         tools=[check_task_state],
         system_reminders=[EveryNToolCalls(2, "Checkpoint reminder")],
     )
-    agency = Agency(agent, user_context={"task_state": "ready"})
+    with pytest.warns(DeprecationWarning, match="Agency\\(user_context=...\\)"):
+        agency = Agency(agent, user_context={"task_state": "ready"})
 
     await agency.get_response("Handle task-1")
     await agency.get_response("Handle task-2")

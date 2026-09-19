@@ -321,11 +321,12 @@ def test_documented_agency_oauth_wiring_runs(tmp_path: Path) -> None:
         instructions="Use OAuth MCP tools.",
         mcp_servers=[MCPServerOAuth(url="http://127.0.0.1:8001/mcp", name="treasury")],
     )
-    agency = Agency(
-        agent,
-        oauth_token_path=str(tmp_path),
-        user_context={"user_id": "user_123"},
-    )
+    with pytest.warns(DeprecationWarning, match="Agency\\(user_context=...\\)"):
+        agency = Agency(
+            agent,
+            oauth_token_path=str(tmp_path),
+            user_context={"user_id": "user_123"},
+        )
 
     assert agency.default_run_hooks is not None
 

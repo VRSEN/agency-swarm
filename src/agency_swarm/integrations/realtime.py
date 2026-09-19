@@ -15,6 +15,7 @@ from starlette.websockets import WebSocket as StarletteWebSocket, WebSocketDisco
 
 from agency_swarm.agency.core import Agency
 from agency_swarm.agent.core import Agent
+from agency_swarm.agent.run_context import get_agency_user_context_store
 from agency_swarm.context import MasterContext
 from agency_swarm.integrations.realtime_config import (
     _normalize_provider,
@@ -112,7 +113,7 @@ class RealtimeSessionFactory:
                 thread_manager=ThreadManager(),
                 agents=self._agency.source_agents,
                 shared_instructions=self._agency.shared_instructions,
-                user_context=dict(self._agency.user_context),
+                user_context=dict(get_agency_user_context_store(self._agency.source) or {}),
                 agent_runtime_state=self._agency.runtime_state_map,
             ),
             model_config=model_config,

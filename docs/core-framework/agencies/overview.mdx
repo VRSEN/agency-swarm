@@ -48,7 +48,6 @@ Overview of parameters in the new `Agency` class:
 | Send Message Tool Class *(optional)* | `send_message_tool_class` | Fallback SendMessage tool class when a `communication_flows` entry does not specify its own tool. Prefer configuring SendMessage variants directly through `communication_flows`. Default: `None` |
 | Load Threads Callback *(optional)* | `load_threads_callback` | A callable to load conversation threads for persistence. Default: `None` |
 | Save Threads Callback *(optional)* | `save_threads_callback` | A callable to save conversation threads for persistence. Default: `None` |
-| User Context *(optional)* | `user_context` | Initial shared context accessible to all agents during runs. Default: `None` |
 
 ## Example
 
@@ -80,7 +79,6 @@ agency = Agency(
     ],
     shared_instructions="./shared_instructions.md",
     shared_tools=[get_current_time],  # Available to all agents
-    user_context={"project_type": "web_application"}
 )
 ```
 

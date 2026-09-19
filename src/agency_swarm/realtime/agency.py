@@ -53,6 +53,11 @@ class RealtimeAgency:
 
     @property
     def user_context(self) -> dict[str, Any]:
+        """Deprecated proxy for the source agency's initial context seed.
+
+        Accessing this property emits the ``Agency.user_context`` deprecation
+        warning. Pass per-run context through the run call instead.
+        """
         return self._source.user_context
 
     @property

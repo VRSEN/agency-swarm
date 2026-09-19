@@ -51,13 +51,14 @@ async def test_context_sharing_between_agents():
         tool_use_behavior="stop_on_first_tool",
     )
 
-    # Create agency with both agents as entry points
-    agency = Agency(
-        agent1,
-        agent2,
-        communication_flows=[agent1 > agent2],
-        user_context={"initial": "test"},
-    )
+    # Create agency with both agents as entry points (deprecated context seed kept working)
+    with pytest.warns(DeprecationWarning, match="Agency\\(user_context=...\\)"):
+        agency = Agency(
+            agent1,
+            agent2,
+            communication_flows=[agent1 > agent2],
+            user_context={"initial": "test"},
+        )
 
     # Agent1 stores data
     response1 = await agency.get_response(
@@ -67,9 +68,10 @@ async def test_context_sharing_between_agents():
     tool_outputs_1 = [item.output for item in response1.new_items if hasattr(item, "output")]
     assert any("Stored shared_key=shared_value" in str(output) for output in tool_outputs_1)
 
-    # Verify data is in agency context
-    assert agency.user_context.get("shared_key") == "shared_value"
-    assert agency.user_context.get("initial") == "test"  # Original value preserved
+    # Verify data is in agency context (deprecated attribute still reflects the store)
+    with pytest.warns(DeprecationWarning, match="Agency.user_context"):
+        assert agency.user_context.get("shared_key") == "shared_value"
+        assert agency.user_context.get("initial") == "test"  # Original value preserved
 
     # Directly ask Agent2 to retrieve the data
     response2 = await agency.get_response(
@@ -86,8 +88,9 @@ async def test_context_sharing_between_agents():
     )
 
     # Verify Agent2's data is in agency context
-    assert agency.user_context.get("agent2_key") == "agent2_value"
-    assert agency.user_context.get("shared_key") == "shared_value"  # Previous data preserved
+    with pytest.warns(DeprecationWarning, match="Agency.user_context"):
+        assert agency.user_context.get("agent2_key") == "agent2_value"
+        assert agency.user_context.get("shared_key") == "shared_value"  # Previous data preserved
 
     # Retrieve Agent2's data directly from Agent2
     response4 = await agency.get_response(

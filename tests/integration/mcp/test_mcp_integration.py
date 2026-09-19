@@ -37,12 +37,13 @@ def _agency_factory() -> Agency:
         mcp_servers=[stdio_server],
     )
 
-    return Agency(
-        agent,
-        name="mcp_stdio_agency",
-        user_context={"session_id": "mcp_stdio_session"},
-        shared_instructions="Test MCP StdIO Integration",
-    )
+    with pytest.warns(DeprecationWarning, match="Agency\\(user_context=...\\)"):
+        return Agency(
+            agent,
+            name="mcp_stdio_agency",
+            user_context={"session_id": "mcp_stdio_session"},
+            shared_instructions="Test MCP StdIO Integration",
+        )
 
 
 @pytest.mark.asyncio

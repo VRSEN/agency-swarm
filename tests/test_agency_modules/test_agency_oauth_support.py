@@ -128,7 +128,8 @@ def test_agency_enables_oauth_storage_hooks_by_default(tmp_path: Path) -> None:
     server = MCPServerOAuth(url="http://localhost:8001/mcp", name="github")
     agent = _build_agent_with_oauth_server(server)
 
-    agency = Agency(agent, oauth_token_path=str(tmp_path), user_context={"user_id": "user-123"})
+    with pytest.warns(DeprecationWarning, match="Agency\\(user_context=...\\)"):
+        agency = Agency(agent, oauth_token_path=str(tmp_path), user_context={"user_id": "user-123"})
 
     hooks = agency.default_run_hooks
     if hooks is None:
@@ -141,13 +142,14 @@ def test_agency_composes_persistence_and_oauth_hooks(tmp_path: Path) -> None:
     server = MCPServerOAuth(url="http://localhost:8001/mcp", name="github")
     agent = _build_agent_with_oauth_server(server)
 
-    agency = Agency(
-        agent,
-        oauth_token_path=str(tmp_path),
-        user_context={"user_id": "user-123"},
-        load_threads_callback=lambda: [],
-        save_threads_callback=lambda _messages: None,
-    )
+    with pytest.warns(DeprecationWarning, match="Agency\\(user_context=...\\)"):
+        agency = Agency(
+            agent,
+            oauth_token_path=str(tmp_path),
+            user_context={"user_id": "user-123"},
+            load_threads_callback=lambda: [],
+            save_threads_callback=lambda _messages: None,
+        )
 
     hooks = agency.default_run_hooks
     if hooks is None:

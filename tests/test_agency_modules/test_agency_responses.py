@@ -149,7 +149,8 @@ async def test_agency_get_response_preserves_oauth_hooks_with_hooks_override() -
         "OAuthAgent",
         mcp_servers=[MCPServerOAuth(url="http://localhost:8001/mcp", name="github")],
     )
-    agency = Agency(oauth_agent, user_context={"user_id": "agency-user"})
+    with pytest.warns(DeprecationWarning, match="Agency\\(user_context=...\\)"):
+        agency = Agency(oauth_agent, user_context={"user_id": "agency-user"})
     hooks_override = OAuthContextRecordingHooks()
 
     result = await agency.get_response("Test message", "OAuthAgent", hooks_override=hooks_override)
@@ -245,7 +246,8 @@ async def test_agency_get_response_stream_preserves_oauth_hooks_with_hooks_overr
         "OAuthAgent",
         mcp_servers=[MCPServerOAuth(url="http://localhost:8001/mcp", name="github")],
     )
-    agency = Agency(oauth_agent, user_context={"user_id": "agency-user"})
+    with pytest.warns(DeprecationWarning, match="Agency\\(user_context=...\\)"):
+        agency = Agency(oauth_agent, user_context={"user_id": "agency-user"})
     hooks_override = OAuthContextRecordingHooks()
 
     stream = agency.get_response_stream("Test message", "OAuthAgent", hooks_override=hooks_override)
@@ -281,7 +283,8 @@ async def test_agency_user_context_isolates_oauth_tokens_through_tool_driver(tmp
                 tools=[store_data],
                 mcp_servers=[MCPServerOAuth(url="http://127.0.0.1:1/mcp", name="oauth")],
             )
-            agency = Agency(agent, oauth_token_path=str(tmp_path), user_context={"user_id": user_id})
+            with pytest.warns(DeprecationWarning, match="Agency\\(user_context=...\\)"):
+                agency = Agency(agent, oauth_token_path=str(tmp_path), user_context={"user_id": user_id})
 
             result = await agency.get_response(f"store token with value {token}")
             bucket_names.append(result.final_output)
@@ -416,7 +419,8 @@ async def test_agency_get_response_sets_oauth_user_context_before_persistent_att
 
     monkeypatch.setattr("agency_swarm.agency.responses.attach_persistent_mcp_servers", _capture_attach)
 
-    agency = Agency(mock_agent, user_context={"user_id": "agency-user"})
+    with pytest.warns(DeprecationWarning, match="Agency\\(user_context=...\\)"):
+        agency = Agency(mock_agent, user_context={"user_id": "agency-user"})
     await agency.get_response("Test message", "MockAgent")
 
     assert observed == ["agency-user"]
@@ -433,7 +437,8 @@ async def test_agency_get_response_stream_sets_oauth_user_context_before_persist
 
     monkeypatch.setattr("agency_swarm.agency.responses.attach_persistent_mcp_servers", _capture_attach)
 
-    agency = Agency(mock_agent, user_context={"user_id": "stream-user"})
+    with pytest.warns(DeprecationWarning, match="Agency\\(user_context=...\\)"):
+        agency = Agency(mock_agent, user_context={"user_id": "stream-user"})
     stream = agency.get_response_stream("Test message", "MockAgent")
     async for _event in stream:
         pass
@@ -454,7 +459,8 @@ async def test_agency_get_response_restores_existing_oauth_user_context(monkeypa
 
     set_oauth_user_id("request-user")
     try:
-        agency = Agency(mock_agent, user_context={"user_id": "agency-user"})
+        with pytest.warns(DeprecationWarning, match="Agency\\(user_context=...\\)"):
+            agency = Agency(mock_agent, user_context={"user_id": "agency-user"})
         await agency.get_response("Test message", "MockAgent")
         assert get_oauth_user_id() == "request-user"
     finally:
@@ -475,7 +481,8 @@ async def test_agency_get_response_stream_restores_existing_oauth_user_context(m
 
     set_oauth_user_id("request-user")
     try:
-        agency = Agency(mock_agent, user_context={"user_id": "stream-user"})
+        with pytest.warns(DeprecationWarning, match="Agency\\(user_context=...\\)"):
+            agency = Agency(mock_agent, user_context={"user_id": "stream-user"})
         stream = agency.get_response_stream("Test message", "MockAgent")
         async for _event in stream:
             pass

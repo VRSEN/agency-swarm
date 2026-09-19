@@ -281,7 +281,9 @@ class SendMessage(FunctionTool):
         class MinimalAgency:
             def __init__(self, agents_dict, user_context, runtime_state_map):
                 self.agents = agents_dict
-                self.user_context = user_context
+                # Live run context shared with the recipient; named to match the
+                # store lookup used by prepare_master_context.
+                self._shared_run_user_context = user_context
                 self._agent_runtime_state = runtime_state_map
                 self.shared_instructions = shared_instructions_from_context
 

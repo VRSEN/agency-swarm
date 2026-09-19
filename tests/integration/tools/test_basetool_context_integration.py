@@ -30,11 +30,12 @@ async def test_basetool_context_integration():
         model="gpt-5.6-luna",
     )
 
-    # Create agency with initial context
-    agency = Agency(
-        agent,
-        user_context={"test_key": "test_value", "another_key": "another_value"},
-    )
+    # Create agency with initial context (deprecated seed kept working until next major)
+    with pytest.warns(DeprecationWarning, match="Agency\\(user_context=...\\)"):
+        agency = Agency(
+            agent,
+            user_context={"test_key": "test_value", "another_key": "another_value"},
+        )
 
     # Test reading from context
     response = await agency.get_response("Read the value of test_key using ContextReaderTool", recipient_agent=agent)
@@ -67,10 +68,11 @@ async def test_basetool_async_context():
         model="gpt-5.6-luna",
     )
 
-    agency = Agency(
-        agent,
-        user_context={"async_key": "async_value"},
-    )
+    with pytest.warns(DeprecationWarning, match="Agency\\(user_context=...\\)"):
+        agency = Agency(
+            agent,
+            user_context={"async_key": "async_value"},
+        )
 
     response = await agency.get_response("Process 'test_data' using AsyncContextTool")
     # Check that the tool was called with context

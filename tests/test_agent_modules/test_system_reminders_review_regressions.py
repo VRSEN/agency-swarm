@@ -272,31 +272,33 @@ def test_callable_reminders_bypass_conversation_starter_cache(
         return f"Customer:{ctx.context.user_context['customer']}"
 
     alice_model = _ReminderEchoModel()
-    alice = Agency(
-        Agent(
-            name="SharedAgent",
-            instructions="x",
-            model=alice_model,
-            system_reminders=customer_reminder,
-            conversation_starters=["Hello"],
-            cache_conversation_starters=True,
-        ),
-        user_context={"customer": "Alice"},
-    )
+    with pytest.warns(DeprecationWarning, match="Agency\\(user_context=...\\)"):
+        alice = Agency(
+            Agent(
+                name="SharedAgent",
+                instructions="x",
+                model=alice_model,
+                system_reminders=customer_reminder,
+                conversation_starters=["Hello"],
+                cache_conversation_starters=True,
+            ),
+            user_context={"customer": "Alice"},
+        )
     alice_result = asyncio.run(alice.get_response("Hello"))
 
     bob_model = _ReminderEchoModel()
-    bob = Agency(
-        Agent(
-            name="SharedAgent",
-            instructions="x",
-            model=bob_model,
-            system_reminders=customer_reminder,
-            conversation_starters=["Hello"],
-            cache_conversation_starters=True,
-        ),
-        user_context={"customer": "Bob"},
-    )
+    with pytest.warns(DeprecationWarning, match="Agency\\(user_context=...\\)"):
+        bob = Agency(
+            Agent(
+                name="SharedAgent",
+                instructions="x",
+                model=bob_model,
+                system_reminders=customer_reminder,
+                conversation_starters=["Hello"],
+                cache_conversation_starters=True,
+            ),
+            user_context={"customer": "Bob"},
+        )
     bob_result = asyncio.run(bob.get_response("Hello"))
 
     assert alice_model.calls == 1
