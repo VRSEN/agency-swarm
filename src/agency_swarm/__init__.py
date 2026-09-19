@@ -235,8 +235,12 @@ def __getattr__(name: str):
         except ImportError as exc:
             raise ImportError(
                 "`litellm` is required to use the LitellmModel. "
-                "You can install it via the optional dependency group: "
-                "`pip install 'agency-swarm[litellm]'`."
+                "Install it with uv: `uv add 'agency-swarm[litellm]'` after adding "
+                '`override-dependencies = ["openai>=3,<4"]` under `[tool.uv]` in '
+                "pyproject.toml (litellm still pins `openai<3`). On pip, run "
+                "`pip install agency-swarm` then `pip install litellm --no-deps` — "
+                "a fragile workaround that skips litellm's own dependencies. "
+                "See https://agency-swarm.ai/additional-features/third-party-models"
             ) from exc
         from .streaming.litellm_reasoning import patch_litellm_thinking_blocks
 

@@ -5,7 +5,7 @@ from typing import Any, Literal, cast
 
 from agents import Model, ModelSettings, OpenAIChatCompletionsModel, OpenAIResponsesModel
 
-# LiteLLM is optional - only available if openai-agents[litellm] is installed
+# LiteLLM is optional - only available if the `litellm` extra is installed
 try:
     from agents.extensions.models.litellm_model import LitellmModel
 

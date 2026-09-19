@@ -10,7 +10,10 @@ Pre-requisites:
     - GOOGLE_API_KEY for gemini models
     - XAI_API_KEY for grok models
     - OPENAI_API_KEY for openai models
-2. Install openai-agents optional litellm package by running `pip install 'openai-agents[litellm]'`
+2. Install the litellm extra: `uv add 'agency-swarm[litellm]'` (needs
+   `override-dependencies = ["openai>=3,<4"]` under `[tool.uv]` in pyproject.toml
+   since litellm pins `openai<3`), or `pip install litellm --no-deps` after
+   `pip install agency-swarm` (fragile workaround)
 3. Install litellm[proxy] separatelly by running `pip install 'litellm[proxy]'`
 
 Run the agency by running `python examples/interactive/third_party_models.py`
