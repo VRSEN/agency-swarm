@@ -203,11 +203,14 @@ def _persist_run_item_if_needed(
     )
 
     # Skip per-event persistence for forwarded items (they're persisted by their originating agent)
-    # but continue to capture metadata below for final persistence matching. Also skip when the
-    # SDK already saved this item through the session (turn-end saves can race the event queue).
-    already_persisted = session is not None and session.is_already_persisted(item_dict)
-    if not is_forwarded and not already_persisted and not MessageFilter.should_filter(formatted_item):
-        agency_context.thread_manager.add_messages([formatted_item])  # type: ignore[arg-type]
+    # but continue to capture metadata below for final persistence matching. claim_streamed_item
+    # decides which writer stores this turn item: False means the session already saved it
+    # (turn-end saves can race the event queue); True records the claim so a later session
+    # save of the same item skips it. Claim only when about to write so filtered items never
+    # consume the counters.
+    if not is_forwarded and not MessageFilter.should_filter(formatted_item):
+        if session is None or session.claim_streamed_item(item_dict):
+            agency_context.thread_manager.add_messages([formatted_item])  # type: ignore[arg-type]
 
     # Capture the timestamp that was just generated for this item
     _ts = formatted_item.get("timestamp")

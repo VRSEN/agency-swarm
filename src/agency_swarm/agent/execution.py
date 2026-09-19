@@ -137,7 +137,12 @@ class Execution:
                 run_trace_id=run_trace_id,
                 run_config_override=run_config_override,
             )
-            logger.debug(f"Running agent '{self.agent.name}' with history length {len(session.prepared_input())}")
+            logger.debug(
+                "Running agent '%s' with %d history items and %d new input items.",
+                self.agent.name,
+                session.raw_history_count(),
+                len(processed_current_message_items),
+            )
 
             # Prepare context and store reference for potential sync-back
             master_context_for_run = prepare_master_context(self.agent, context_override, agency_context)
@@ -439,9 +444,10 @@ class Execution:
                 )
 
                 logger.debug(
-                    "Starting streaming run for agent '%s' with %d history items.",
+                    "Starting streaming run for agent '%s' with %d history items and %d new input items.",
                     self.agent.name,
-                    len(session.prepared_input()),
+                    session.raw_history_count(),
+                    len(processed_current_message_items),
                 )
 
                 matched_starter: str | None = None

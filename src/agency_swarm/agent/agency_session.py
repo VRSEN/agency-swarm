@@ -14,16 +14,19 @@ linear per-conversation contract onto Agency Swarm's semantics:
   ``get_items`` strips it and applies the model-facing sanitizers, while
   ``add_items`` enriches items before they are stored, tracking handoffs so
   items generated after a transfer are attributed to the target agent.
-- ``persist_items`` dedupes against items appended since session creation, so
-  the per-stream-event writer (``execution_stream_persistence``) and the SDK's
-  own session saves never double-store the same item.
+- ``persist_items`` reconciles against this session's own write counters
+  (bounded, sequence-based — never a store scan): input persisted at
+  construction, items the per-stream-event writer
+  (``execution_stream_persistence``) already claimed this run, and session
+  writes the stream writer must skip when a turn-end save races the event
+  queue. Identical items from other slices, turns or runs always persist.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from collections import Counter, deque
+from collections import Counter
 from collections.abc import Awaitable
 from typing import TYPE_CHECKING, Any, cast
 
@@ -103,26 +106,32 @@ class AgencySession(SessionABC):
         self._run_trace_id = run_trace_id
         self._new_input_items = list(new_input_items)
         self._sanitize_store_false = sanitize_store_false
-        self._baseline_count = len(thread_manager.get_all_messages())
         self._current_agent_name = agent.name
         self._normalize_seq: dict[str, int] = {}
         self._model_new_items: list[TResponseInputItem] | None = None
         # The SDK fingerprints session items for retry rewinds; our store normalizes
         # ids, so matching must ignore them (see session_persistence._ignore_ids_for_matching).
         self._ignore_ids_for_matching = True
-        # Map from the model-facing form of each new-input item back to its raw
-        # form. The SDK persists whatever the session_input_callback returned, i.e.
-        # items whose ephemeral markers were already stripped for the model; the raw
-        # form is needed so persist_items can drop the marked parts before storing.
-        self._raw_input_by_key: dict[str, deque[TResponseInputItem]] = {}
+        # Identities of the raw input objects persisted at construction: that write
+        # must bypass the suppression counters below (it *is* the write they guard).
+        self._own_input_ids: set[int] = {id(item) for item in self._new_input_items}
+        # Per-session, sequence-bounded reconciliation — never a store scan. The SDK
+        # only passes genuinely new items to add_items (it tracks
+        # _current_turn_persisted_item_count), so the only copies suppressed are:
+        # - _new_input_fps: the new input already persisted at construction, which
+        #   the SDK re-passes as normalized callback-output copies (bounded by the
+        #   number of input items — identical model output is never suppressed);
+        # - _stream_written_fps: items the per-event writer already claimed this
+        #   run (consumed one-for-one);
+        # - _session_written_fps: items this session stored (consumed one-for-one
+        #   by stream-writer claims when a turn-end save races the event queue).
+        self._new_input_fps: Counter[str] = Counter()
         for raw_item in self._new_input_items:
             key = _canonical_fingerprint(raw_item)
             if key is not None:
-                self._raw_input_by_key.setdefault(key, deque()).append(raw_item)
-        # Model-form fingerprints of items already stored this run, so repeated
-        # SDK saves (e.g. input re-persisted on a guardrail trip) dedupe against
-        # the stored save-form even when the two differ by ephemeral parts.
-        self._persisted_model_fps: Counter[str] = Counter()
+                self._new_input_fps[key] += 1
+        self._stream_written_fps: Counter[str] = Counter()
+        self._session_written_fps: Counter[str] = Counter()
         # New input is persisted up front (legacy prepare-time semantics). While
         # it is still pending as this run's fresh input it is excluded from the
         # history view so the model never sees it twice; the first session_input
@@ -135,9 +144,10 @@ class AgencySession(SessionABC):
 
     async def get_items(self, limit: int | None = None) -> list[TResponseInputItem]:
         history = self._history_for_model()
-        if limit is not None:
-            return history[-limit:]
-        return history
+        if limit is None:
+            return history
+        # history[-0:] would slice from index 0 and return everything.
+        return history[-limit:] if limit > 0 else []
 
     async def add_items(self, items: list[TResponseInputItem]) -> None:
         self.persist_items(items)
@@ -146,6 +156,14 @@ class AgencySession(SessionABC):
         popped = self._thread_manager.pop_message_for_pair(self._agent.name, self._sender_name)
         if popped is None:
             return None
+        # Keep the write counters honest so a rewind/restore re-save of the same
+        # item is not suppressed by the write that was just undone.
+        fingerprint = _canonical_fingerprint(popped)
+        if fingerprint is not None:
+            if self._session_written_fps.get(fingerprint, 0) > 0:
+                self._session_written_fps[fingerprint] -= 1
+            elif self._stream_written_fps.get(fingerprint, 0) > 0:
+                self._stream_written_fps[fingerprint] -= 1
         stripped = MessageFormatter.strip_agency_metadata([cast(dict[str, Any], popped)])
         return cast(TResponseInputItem, stripped[0])
 
@@ -168,6 +186,17 @@ class AgencySession(SessionABC):
     def current_history_for_model(self) -> list[TResponseInputItem]:
         """Live conversation slice sanitized for the model (no new items appended)."""
         return self._history_for_model()
+
+    def raw_history_count(self) -> int:
+        """Stored item count for this slice — cheap, for logging (no sanitization).
+
+        Excludes the still-pending new input so the number matches the model's
+        history view; once the first callback consumes it, it counts as history.
+        """
+        count = len(self._thread_manager.get_conversation_history(self._agent.name, self._sender_name))
+        if self._pending_new_input:
+            count -= len(self._new_input_stored_ids)
+        return count
 
     def session_input_callback(self, user_callback: SessionInputCallback | None = None) -> SessionInputCallback:
         """Build the RunConfig ``session_input_callback`` for this run.
@@ -192,19 +221,22 @@ class AgencySession(SessionABC):
 
         return _merge
 
-    def is_already_persisted(self, item: TResponseInputItem) -> bool:
-        """True when an equal item already sits in the store tail appended since creation.
+    def claim_streamed_item(self, item: TResponseInputItem) -> bool:
+        """Decide whether the per-event stream writer should persist ``item`` itself.
 
-        Used by the per-stream-event writer so it does not double-store an item the
-        SDK already saved through the session (or vice versa). Equality is the
-        model-form fingerprint: agency metadata and volatile ids are ignored.
+        Returns False when this session already stored an equivalent item this run,
+        consuming that recorded write one-for-one; otherwise records the pending
+        stream write so a later ``persist_items`` call for the same turn item skips
+        it. Both directions are matched only against this session's own counters,
+        so identical items written by other slices or earlier runs never suppress.
         """
         fingerprint = _canonical_fingerprint(item)
-        if fingerprint is None:
+        if fingerprint is not None and self._session_written_fps.get(fingerprint, 0) > 0:
+            self._session_written_fps[fingerprint] -= 1
             return False
-        messages = self._thread_manager.get_all_messages()
-        tail = messages[self._baseline_count :] if self._baseline_count <= len(messages) else []
-        return any(_canonical_fingerprint(message) == fingerprint for message in tail)
+        if fingerprint is not None:
+            self._stream_written_fps[fingerprint] += 1
+        return True
 
     def persist_new_input(self) -> None:
         """Persist this run's new input immediately, like the legacy prepare step.
@@ -217,35 +249,39 @@ class AgencySession(SessionABC):
         self._new_input_stored_ids.update(id(message) for message in stored)
 
     def persist_items(self, items: list[TResponseInputItem]) -> list[TResponseInputItem]:
-        """Store items with agency metadata, skipping anything already persisted.
+        """Store items with agency metadata.
 
-        Dedupe is scoped to messages appended since session construction so the
-        SDK's saves and the per-stream-event writer cannot double-store items,
-        while repeated-but-distinct earlier history never blocks a write.
+        Reconciliation is per-session and sequence-bounded rather than a store
+        scan: the SDK never re-passes items it already saved, so suppression only
+        applies to (a) the new input persisted at construction when the SDK
+        re-passes its normalized copies, and (b) items the per-event stream
+        writer already claimed this run — each consumed one-for-one. Identical
+        items that are genuinely new (another turn, another slice, another run)
+        always persist.
 
         Returns the list of stored message dicts.
         """
-        dedupe = self._tail_fingerprints()
-        dedupe.update(self._persisted_model_fps)
         to_store: list[TResponseInputItem] = []
         for item in items:
             fingerprint = _canonical_fingerprint(item)
-            if fingerprint is not None and dedupe.get(fingerprint, 0) > 0:
-                dedupe[fingerprint] -= 1
-                continue
-            # The SDK persists the model-facing form of new input; swap back to
-            # the raw item so ephemeral parts are dropped before storing.
-            source = item
-            if fingerprint is not None:
-                raw_queue = self._raw_input_by_key.get(fingerprint)
-                if raw_queue:
-                    source = raw_queue.popleft()
-            save_item = MessageFormatter.strip_ephemeral_content(source, drop_parts=True)
+            is_own_input = id(item) in self._own_input_ids
+            if fingerprint is not None and not is_own_input:
+                if self._new_input_fps.get(fingerprint, 0) > 0:
+                    self._new_input_fps[fingerprint] -= 1
+                    continue
+                if self._stream_written_fps.get(fingerprint, 0) > 0:
+                    self._stream_written_fps[fingerprint] -= 1
+                    continue
+            # The SDK may persist the model-facing form of items; the stored copy
+            # always drops ephemeral content parts entirely.
+            save_item = MessageFormatter.strip_ephemeral_content(item, drop_parts=True)
             if save_item is None or (isinstance(save_item, dict) and MessageFilter.should_filter(save_item)):
                 continue
-            if fingerprint is not None:
-                self._persisted_model_fps[fingerprint] += 1
-                dedupe[fingerprint] += 1
+            # The construction write is already covered by _new_input_fps; only
+            # later writes register as coverage for stream-writer claims, so an
+            # assistant item echoing the user's input text is never suppressed.
+            if fingerprint is not None and not is_own_input:
+                self._session_written_fps[fingerprint] += 1
             enriched = MessageFormatter.add_agency_metadata(
                 save_item,
                 agent=self._current_agent_name,
@@ -324,16 +360,6 @@ class AgencySession(SessionABC):
         item.pop(_HISTORY_TAG, None)
         return cast(TResponseInputItem, item)
 
-    def _tail_fingerprints(self) -> Counter[str]:
-        messages = self._thread_manager.get_all_messages()
-        tail = messages[self._baseline_count :] if self._baseline_count <= len(messages) else []
-        counts: Counter[str] = Counter()
-        for message in tail:
-            fingerprint = _canonical_fingerprint(message)
-            if fingerprint is not None:
-                counts[fingerprint] += 1
-        return counts
-
     def _handoff_target(self, item: TResponseInputItem) -> str | None:
         """Detect a completed handoff in a serialized output item.
 
@@ -360,7 +386,9 @@ class AgencySession(SessionABC):
         name = name.strip()
         agency_instance = getattr(self._agency_context, "agency_instance", None) if self._agency_context else None
         agents = getattr(agency_instance, "agents", None)
-        if isinstance(agents, dict) and agents and name not in agents:
+        # Without a roster to validate against (standalone agent use) there is no
+        # legitimate handoff target — never trust the raw tool output.
+        if not isinstance(agents, dict) or name not in agents:
             return None
         return name
 

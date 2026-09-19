@@ -1,5 +1,6 @@
 """Tests for AgencySession: the SDK Session adapter over the shared flat store."""
 
+import json
 from typing import Any
 
 import pytest
@@ -138,12 +139,99 @@ async def test_ephemeral_parts_never_persist() -> None:
 
 
 @pytest.mark.asyncio
-async def test_repeated_saves_dedupe() -> None:
+async def test_persist_items_does_not_collide_with_other_slices() -> None:
+    """A foreign-slice write of identical content must not suppress ours.
+
+    Non-streamed CEO→Worker shape: the worker's session persists its answer
+    mid run; when the caller relays the same text verbatim into the user
+    thread, both copies must land.
+    """
+    thread_manager = ThreadManager()
+    context = AgencyContext(agency_instance=None, thread_manager=thread_manager, subagents={})
+    outer = _make_session(agent_name="CallerAgent", thread_manager=thread_manager, agency_context=context)
+    inner = _make_session(
+        agent_name="ResponderAgent",
+        sender_name="CallerAgent",
+        thread_manager=thread_manager,
+        agency_context=context,
+    )
+
+    inner.persist_items([_assistant_item("Done.")])
+    outer.persist_items([_assistant_item("Done.")])
+
+    assert len(thread_manager.get_all_messages()) == 2
+    assert len(thread_manager.get_conversation_history("CallerAgent", None)) == 1
+
+
+@pytest.mark.asyncio
+async def test_identical_items_in_one_run_all_persist() -> None:
+    """Two turns emitting the same assistant text in one run must both land."""
     session = _make_session()
-    item = _assistant_item("same reply")
+    session.persist_items([_assistant_item("Checking...")])
+    session.persist_items([_assistant_item("Checking...")])
+    assert len(session._thread_manager.get_all_messages()) == 2
+
+
+@pytest.mark.asyncio
+async def test_stream_claim_reconciles_writes_one_for_one() -> None:
+    """Session saves and per-event claims cover each other exactly once each."""
+    session = _make_session()
+    thread_manager = session._thread_manager
+
+    # Stream writer claims first and stores; the SDK's save then skips its copy.
+    first = _assistant_item("same reply")
+    if session.claim_streamed_item(first):
+        thread_manager.add_messages([first])
+    session.persist_items([first])
+    assert len(thread_manager.get_all_messages()) == 1
+
+    # A genuinely new identical item (no matching stream claim) still stores.
+    session.persist_items([_assistant_item("same reply")])
+    assert len(thread_manager.get_all_messages()) == 2
+
+    # Reverse direction: a session write covers exactly one stream claim.
+    session.persist_items([_assistant_item("pair")])
+    assert not session.claim_streamed_item(_assistant_item("pair"))
+    assert session.claim_streamed_item(_assistant_item("pair"))
+
+
+@pytest.mark.asyncio
+async def test_pop_then_readd_restores_item() -> None:
+    """SDK rewind/restore: re-adding a popped item must not be suppressed."""
+    session = _make_session()
+    item = _assistant_item("turn output")
     await session.add_items([item])
+    popped = await session.pop_item()
+    assert popped is not None
     await session.add_items([item])
     assert len(session._thread_manager.get_all_messages()) == 1
+
+
+@pytest.mark.asyncio
+async def test_get_items_limit_zero_returns_empty() -> None:
+    session = _make_session()
+    await session.add_items([_assistant_item("x"), _assistant_item("y")])
+    assert await session.get_items(limit=0) == []
+    assert len(await session.get_items(limit=1)) == 1
+
+
+@pytest.mark.asyncio
+async def test_unverified_handoff_output_keeps_attribution() -> None:
+    """Without an agency roster, {"assistant": name} tool output cannot flip attribution."""
+    session = _make_session()
+    session.persist_items(
+        [
+            {
+                "type": "function_call_output",
+                "call_id": "call-1",
+                "output": json.dumps({"assistant": "GhostAgent"}),
+            },  # type: ignore[list-item]
+            _assistant_item("after"),
+        ]
+    )
+    stored = session._thread_manager.get_all_messages()
+    assert len(stored) == 2
+    assert all(message["agent"] == "MainAgent" for message in stored)
 
 
 @pytest.mark.asyncio
