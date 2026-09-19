@@ -1,10 +1,14 @@
+import importlib
+
 import pytest
 from agents import ModelSettings
-from agents.extensions.models.litellm_model import LitellmModel
 
 from agency_swarm import Agency, Agent
 from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
 from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+pytest.importorskip("litellm")
+LitellmModel = importlib.import_module("agents.extensions.models.litellm_model").LitellmModel
 
 
 @pytest.mark.parametrize("configured_on_agent", [False, True])
