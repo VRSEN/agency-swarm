@@ -437,6 +437,11 @@ def generate_model_from_schema(schema: dict, class_name: str, strict: bool) -> t
         validation=False,
         class_name=class_name,
         strip_default_none=strict,
+        # Generated code is only exec'd in memory, so formatting is cosmetic;
+        # an explicit empty list also silences datamodel-code-generator's
+        # "default formatters will change" FutureWarning on every supported
+        # version without depending on version-specific Formatter members.
+        formatters=[],
     )
     result = parser.parse()
     imports_str = "from typing import List, Dict, Any, Optional, Union, Set, Tuple, Literal\nfrom enum import Enum\n"

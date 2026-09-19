@@ -331,7 +331,7 @@ def test_agentswarm_cli_tui_downloads_platform_cli(monkeypatch, tmp_path):
         def json(self):
             return self.payload
 
-        def iter_content(self, chunk_size=0):
+        def iter_bytes(self, chunk_size=0):
             return iter(self.chunks)
 
         def __enter__(self):
@@ -340,10 +340,8 @@ def test_agentswarm_cli_tui_downloads_platform_cli(monkeypatch, tmp_path):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    def fake_get(url, timeout, stream=False):
+    def fake_get(url, timeout, follow_redirects):
         calls.append(url)
-        if stream:
-            return Response(chunks=[data])
         return Response(
             payload={
                 "dist": {
@@ -353,7 +351,12 @@ def test_agentswarm_cli_tui_downloads_platform_cli(monkeypatch, tmp_path):
             }
         )
 
-    monkeypatch.setattr(agentswarm_cli_demo.requests, "get", fake_get)
+    def fake_stream(method, url, timeout, follow_redirects):
+        calls.append(url)
+        return Response(chunks=[data])
+
+    monkeypatch.setattr(agentswarm_cli_demo.httpx, "get", fake_get)
+    monkeypatch.setattr(agentswarm_cli_demo.httpx, "stream", fake_stream)
     monkeypatch.setattr(agentswarm_cli_demo, "_cache", lambda: root)
     monkeypatch.setattr(
         agentswarm_cli_demo,
