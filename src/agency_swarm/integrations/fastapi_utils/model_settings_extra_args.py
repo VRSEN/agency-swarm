@@ -191,8 +191,8 @@ def _reasoning_effort_value(value: object) -> ReasoningEffortValue | None:
     return None
 
 
-def _reasoning_summary_value(value: Any) -> ReasoningSummaryValue | None:
-    if value in {"auto", "concise", "detailed"}:
+def _reasoning_summary_value(value: object) -> ReasoningSummaryValue | None:
+    if isinstance(value, str) and value in {"auto", "concise", "detailed"}:
         return cast(ReasoningSummaryValue, value)
     return None
 
