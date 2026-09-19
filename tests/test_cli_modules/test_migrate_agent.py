@@ -60,7 +60,7 @@ def test_check_node_dependencies_succeeds_with_tsx(monkeypatch: pytest.MonkeyPat
     def fake_run(command, capture_output, check, shell):  # type: ignore[no-untyped-def]
         if command[0] == "node":
             return CompletedProcess(command, 0)
-        if command[:2] == ["npx", "tsx"]:
+        if command[:3] == ["npx", "--yes", migrate_agent.TSX_PACKAGE]:
             return CompletedProcess(command, 0)
         raise CalledProcessError(1, command)
 
@@ -77,7 +77,7 @@ def test_check_node_dependencies_succeeds_with_npx_ts_node(monkeypatch: pytest.M
     def fake_run(command, capture_output, check, shell):  # type: ignore[no-untyped-def]
         if command[0] == "node":
             return CompletedProcess(command, 0)
-        if command[:2] == ["npx", "tsx"]:
+        if command[:3] == ["npx", "--yes", migrate_agent.TSX_PACKAGE]:
             raise CalledProcessError(1, command)  # tsx not available
         if command[:2] == ["npx", "ts-node"]:
             return CompletedProcess(command, 0)
@@ -96,7 +96,7 @@ def test_check_node_dependencies_succeeds_with_global_ts_node(monkeypatch: pytes
     def fake_run(command, capture_output, check, shell):  # type: ignore[no-untyped-def]
         if command[0] == "node":
             return CompletedProcess(command, 0)
-        if command[:2] == ["npx", "tsx"]:
+        if command[:3] == ["npx", "--yes", migrate_agent.TSX_PACKAGE]:
             raise CalledProcessError(1, command)  # tsx not available
         if command[:2] == ["npx", "ts-node"]:
             raise CalledProcessError(1, command)  # npx ts-node not available

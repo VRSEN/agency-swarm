@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+TSX_PACKAGE = "tsx@4.23.13"
+
 
 def find_typescript_script() -> Path | None:
     """Find the TypeScript generator script in the CLI utils directory."""
@@ -43,7 +45,7 @@ def check_node_dependencies() -> tuple[bool, str]:
         return False, ""
 
     # Try tsx first (better ES module support)
-    if _command_succeeds(["npx", "tsx", "--version"], shell=is_windows):
+    if _command_succeeds(["npx", "--yes", TSX_PACKAGE, "--version"], shell=is_windows):
         return True, "tsx"
 
     # Fall back to ts-node
@@ -98,8 +100,12 @@ def migrate_agent_command(settings_file: str, output_dir: str = ".") -> int:
     try:
         os.chdir(output_path)
 
-        # Run the TypeScript script with the detected runner
-        cmd = ["npx", runner, str(ts_script), settings_arg]
+        # Run the TypeScript script with the detected runner (tsx is pinned)
+        cmd = (
+            ["npx", "--yes", TSX_PACKAGE, str(ts_script), settings_arg]
+            if runner == "tsx"
+            else ["npx", runner, str(ts_script), settings_arg]
+        )
 
         print(f"Running: {' '.join(cmd)}")
         print(f"Output directory: {output_path}")
