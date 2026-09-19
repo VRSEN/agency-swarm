@@ -60,7 +60,9 @@ def loop_scoped_openai_client() -> AsyncOpenAI:
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
-        return AsyncOpenAI(http_client=shared_http_client())
+        # No loop to bind to; a loop-scoped client resolves the caller's pool
+        # per request, so the instance stays usable across later loops.
+        return AsyncOpenAI(http_client=loop_scoped_http_client())
     with _registry_lock:
         client = _openai_clients_by_loop.get(loop)
         if client is None or client.is_closed():

@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from agency_swarm import Agency, Agent
+from agency_swarm import Agency, Agent, set_tracing_disabled
 from agency_swarm.integrations.openclaw_model import build_openclaw_responses_model
 from agency_swarm.utils.openrouter import build_openrouter_chat_model
 
@@ -95,6 +95,7 @@ def stub_openai_base_url() -> Iterator[str]:
 
 def test_openclaw_model_two_sequential_get_response_sync(stub_openai_base_url: str):
     """A stored OpenClaw model must not carry dead event-loop state between sync calls."""
+    set_tracing_disabled(True)
     model = build_openclaw_responses_model(base_url=f"{stub_openai_base_url}/v1", api_key="test-key")
     agency = Agency(Agent(name="Stub", instructions="Reply briefly.", model=model))
 
@@ -107,6 +108,7 @@ def test_openclaw_model_two_sequential_get_response_sync(stub_openai_base_url: s
 
 def test_openrouter_model_two_sequential_get_response_sync(stub_openai_base_url: str):
     """A stored OpenRouter model must not carry dead event-loop state between sync calls."""
+    set_tracing_disabled(True)
     model = build_openrouter_chat_model("openrouter/openai/gpt-5", api_key="test-key", base_url=stub_openai_base_url)
     agency = Agency(Agent(name="Stub", instructions="Reply briefly.", model=model))
 

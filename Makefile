@@ -94,7 +94,7 @@ build:
 help:
 	@echo "Available commands:"
 	@echo "  sync         - Install dependencies (all extras + dev)"
-	@echo "  test-env     - Sync deps and verify LiteLLM test imports"
+	@echo "  test-env     - Sync deps and verify agency_swarm imports"
 	@echo "  format       - Format code and apply safe fixes"
 	@echo "  lint         - Run linting checks"
 	@echo "  lint-unsafe  - Run linting with unsafe fixes"
