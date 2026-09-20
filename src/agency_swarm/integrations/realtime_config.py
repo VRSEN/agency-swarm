@@ -19,6 +19,7 @@ from agency_swarm.agent.constants import (
 from agency_swarm.realtime.agency import RealtimeAgency
 
 SUPPORTED_REALTIME_PROVIDERS = ("openai", "xai")
+OPENAI_DEFAULT_REALTIME_MODEL = "gpt-realtime-2"
 XAI_DEFAULT_REALTIME_MODEL = "grok-voice-think-fast-1.0"
 XAI_DEFAULT_REALTIME_URL = "wss://api.x.ai/v1/realtime"
 
@@ -38,7 +39,7 @@ def _resolve_model_name(model: str | None, provider: Literal["openai", "xai"]) -
         return model
     if provider == "xai":
         return XAI_DEFAULT_REALTIME_MODEL
-    return "gpt-realtime-2"
+    return OPENAI_DEFAULT_REALTIME_MODEL
 
 
 def build_model_settings(
