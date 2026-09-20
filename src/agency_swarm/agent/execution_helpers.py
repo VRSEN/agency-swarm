@@ -3,6 +3,7 @@ import logging
 import re
 from collections.abc import Callable
 from contextlib import AsyncExitStack
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from agents import (
@@ -22,6 +23,7 @@ from openai.types.responses import (
     ResponseFunctionWebSearch,
 )
 
+from agency_swarm.agent.agency_session import AgencySession
 from agency_swarm.agent.codex_model_input import with_codex_model_input_role_rewrite
 from agency_swarm.agent.context_types import AgentRuntimeState
 from agency_swarm.agent.runner import Runner
@@ -57,7 +59,8 @@ def _handoff_identity(handoff: Any) -> tuple[Any, Any, Any]:
 async def perform_single_run(
     *,
     agent: "Agent",
-    history_for_runner: list[TResponseInputItem],
+    input_items: list[TResponseInputItem],
+    session: AgencySession,
     master_context_for_run: MasterContext,
     hooks_override: RunHooks | None,
     run_config_override: RunConfig | None,
@@ -78,14 +81,19 @@ async def perform_single_run(
                 logger.warning(f"Entering async context for server {server.name}")
                 await mcp_stack.enter_async_context(server)  # type: ignore[arg-type]
 
+        run_config = with_codex_model_input_role_rewrite(run_config_override or RunConfig())
+        # Copy so retries never wrap a previous session callback and reused configs stay clean.
+        merged_callback = session.session_input_callback(run_config.session_input_callback)
+        run_config = replace(run_config, session_input_callback=merged_callback)
         with agency_system_reminder_run(master_context_for_run):
             result = await Runner.run(
                 starting_agent=agent,
-                input=history_for_runner,
+                input=input_items,
                 context=master_context_for_run,
                 hooks=hooks_override,
-                run_config=with_codex_model_input_role_rewrite(run_config_override or RunConfig()),
+                run_config=run_config,
                 max_turns=kwargs.get("max_turns", 1000000),
+                session=session,
             )
     return result
 
@@ -96,7 +104,8 @@ async def perform_single_run(
 async def run_with_guardrails(
     *,
     agent: "Agent",
-    history_for_runner: list[TResponseInputItem],
+    input_items: list[TResponseInputItem],
+    session: AgencySession,
     master_context_for_run: MasterContext,
     sender_name: str | None,
     agency_context: "AgencyContext | None",
@@ -115,7 +124,8 @@ async def run_with_guardrails(
         try:
             run_result = await perform_single_run(
                 agent=agent,
-                history_for_runner=history_for_runner,
+                input_items=input_items,
+                session=session,
                 master_context_for_run=master_context_for_run,
                 hooks_override=hooks_override,
                 run_config_override=run_config_override,
@@ -123,7 +133,7 @@ async def run_with_guardrails(
             )
             return run_result, master_context_for_run
         except OutputGuardrailTripwireTriggered as e:
-            history_for_runner = append_guardrail_feedback(
+            append_guardrail_feedback(
                 agent=agent,
                 agency_context=agency_context,
                 sender_name=sender_name,
@@ -132,7 +142,6 @@ async def run_with_guardrails(
                 current_agent_run_id=current_agent_run_id,
                 exception=e,
                 include_assistant=True,
-                run_config_override=run_config_override,
             )
             if attempts_remaining <= 0:
                 raise e
@@ -146,9 +155,12 @@ async def run_with_guardrails(
             except Exception:
                 logger.info("Output guardrail tripped. attempts_left=%s", attempts_remaining)
             attempts_remaining -= 1
+            # Retry with no new input: the session replays the store slice, which
+            # now includes the persisted guardrail feedback.
+            input_items = []
             continue
         except InputGuardrailTripwireTriggered as e:
-            history_for_runner = append_guardrail_feedback(
+            append_guardrail_feedback(
                 agent=agent,
                 agency_context=agency_context,
                 sender_name=sender_name,
@@ -157,7 +169,6 @@ async def run_with_guardrails(
                 current_agent_run_id=current_agent_run_id,
                 exception=e,
                 include_assistant=False,
-                run_config_override=run_config_override,
             )
             if not raise_input_guardrail_error:
                 from agents import RunContextWrapper  # local import to avoid cycle
@@ -166,7 +177,7 @@ async def run_with_guardrails(
                 wrapper = RunContextWrapper(master_context_for_run)
                 return (
                     RunResult(
-                        input=history_for_runner,
+                        input=session.current_history_for_model(),
                         new_items=[],
                         raw_responses=[],
                         final_output=guidance_text,
@@ -204,7 +215,6 @@ def run_item_to_tresponse_input_item(item: RunItem) -> TResponseInputItem | None
     except Exception as e:
         logger.warning(f"Failed to convert {type(item).__name__} using to_input_item(): {e}")
         return None
-
 
 def prepare_master_context(
     agent: "Agent", context_override: dict[str, Any] | None, agency_context: "AgencyContext | None" = None

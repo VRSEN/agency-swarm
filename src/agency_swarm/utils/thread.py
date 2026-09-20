@@ -8,6 +8,20 @@ from agents import TResponseInputItem
 logger = logging.getLogger(__name__)
 
 
+def _matches_conversation_slice(message: TResponseInputItem, agent: str, caller_agent: str | None) -> bool:
+    """Return True when a stored message belongs to an agent/caller conversation slice.
+
+    Mirrors ``ThreadManager.get_conversation_history`` semantics: a ``None`` caller
+    selects every message sent by the user (``callerAgent`` absent), while a named
+    caller selects messages exchanged in either direction of the agent pair.
+    """
+    if caller_agent is None:
+        return message.get("callerAgent") is None
+    return (message.get("agent") == agent and message.get("callerAgent") == caller_agent) or (
+        message.get("agent") == caller_agent and message.get("callerAgent") == agent
+    )
+
+
 @dataclass
 class MessageStore:
     """Flat storage for all messages across all agents.
@@ -98,6 +112,36 @@ class MessageStore:
                 conversation.append(msg)
 
         return conversation
+
+    def pop_message_for_pair(self, agent: str, caller_agent: str | None) -> TResponseInputItem | None:
+        """Remove and return the most recent message of an agent/caller slice.
+
+        Args:
+            agent: Recipient agent name
+            caller_agent: Sender agent name (None selects the shared user thread)
+
+        Returns:
+            The removed message, or None when the slice is empty
+        """
+        for index in range(len(self.messages) - 1, -1, -1):
+            if _matches_conversation_slice(self.messages[index], agent, caller_agent):
+                return self.messages.pop(index)
+        return None
+
+    def remove_messages_for_pair(self, agent: str, caller_agent: str | None) -> int:
+        """Remove every message belonging to an agent/caller slice.
+
+        Args:
+            agent: Recipient agent name
+            caller_agent: Sender agent name (None selects the shared user thread)
+
+        Returns:
+            Number of messages removed
+        """
+        kept = [msg for msg in self.messages if not _matches_conversation_slice(msg, agent, caller_agent)]
+        removed = len(self.messages) - len(kept)
+        self.messages = kept
+        return removed
 
     def clear(self) -> None:
         """Remove all messages from the store."""
@@ -204,6 +248,20 @@ class ThreadManager:
         # Return in insertion order
         # Timestamps are preserved for diagnostic purposes but don't drive ordering.
         return self._store.messages.copy()
+
+    def pop_message_for_pair(self, agent: str, caller_agent: str | None) -> TResponseInputItem | None:
+        """Remove and return the most recent message of an agent/caller slice and persist."""
+        message = self._store.pop_message_for_pair(agent, caller_agent)
+        if message is not None:
+            self._save_messages()
+        return message
+
+    def remove_messages_for_pair(self, agent: str, caller_agent: str | None) -> int:
+        """Remove every message of an agent/caller slice and persist the change."""
+        removed = self._store.remove_messages_for_pair(agent, caller_agent)
+        if removed:
+            self._save_messages()
+        return removed
 
     def init_messages(self) -> None:
         """Load all messages from the load callback into the store."""

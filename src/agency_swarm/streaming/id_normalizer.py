@@ -148,13 +148,24 @@ class StreamIdNormalizer:
             event_any.call_id = stable_id
         return event
 
-    def normalize_message_dicts(self, messages: list[TResponseInputItem]) -> list[TResponseInputItem]:
+    def normalize_message_dicts(
+        self,
+        messages: list[TResponseInputItem],
+        *,
+        seq_by_agent_run_id: dict[str, int] | None = None,
+    ) -> list[TResponseInputItem]:
         """Rewrite placeholder ids in serialized message items.
 
         This is used both for API payloads (`new_messages`) and for normalizing messages before
         persistence when the upstream model supplies placeholder IDs.
+
+        Args:
+            seq_by_agent_run_id: Optional sequence counters keyed by agent_run_id. Callers that
+                normalize in multiple batches (e.g. a session persisting items across a run) can
+                share one dict so generated ids stay unique across batches.
         """
-        seq_by_agent_run_id: dict[str, int] = {}
+        if seq_by_agent_run_id is None:
+            seq_by_agent_run_id = {}
         normalized: list[TResponseInputItem] = []
         for idx, msg in enumerate(messages):
             msg_id = msg.get("id")
