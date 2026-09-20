@@ -14,7 +14,7 @@ class RealtimeDemoLauncher:
         host: str = "127.0.0.1",
         port: int = 8000,
         provider: str = "openai",
-        model: str = "gpt-realtime-2",
+        model: str | None = None,
         voice: str | None = None,
         turn_detection: dict[str, Any] | None = None,
         input_audio_format: str | None = None,
@@ -25,8 +25,10 @@ class RealtimeDemoLauncher:
     ) -> None:
         """Start the realtime demo server and keep it running until interrupted.
 
-        `voice` sets the single voice used for the whole session. Leave it unset to use the
-        entry agent's `voice`, or the provider default when the entry agent has none.
+        `model` overrides the provider's default realtime model; leave it unset to resolve the
+        default for the selected `provider`. `voice` sets the single voice used for the whole
+        session. Leave it unset to use the entry agent's `voice`, or the provider default when
+        the entry agent has none.
         """
         if not isinstance(agency, Agency):
             raise TypeError("RealtimeDemoLauncher.start expects an Agency instance.")
