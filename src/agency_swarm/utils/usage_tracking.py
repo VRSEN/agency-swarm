@@ -162,7 +162,7 @@ def load_pricing_data() -> PricingData:
         for model_name, model_pricing in raw.items():
             if not isinstance(model_name, str) or not isinstance(model_pricing, dict):
                 continue
-            prices = {key: _coerce_price(model_pricing.get(key)) for key in _BASE_PRICING_KEYS}
+            prices = {key: _coerce_price(model_pricing[key]) for key in _BASE_PRICING_KEYS if key in model_pricing}
             prices.update(
                 {
                     key: _coerce_price(value)
