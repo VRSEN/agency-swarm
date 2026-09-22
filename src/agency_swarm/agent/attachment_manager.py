@@ -30,6 +30,7 @@ class AttachmentManager:
 
         # Temp variables used to hold attachment data to be used in cleanup
         self._temp_code_interpreter_file_ids: list[str] = []
+        self._temp_code_interpreter_tool_created = False
 
     def init_attachments_vs(self, vs_name: str = "attachments_vs"):
         """
@@ -113,8 +114,7 @@ class AttachmentManager:
         # Add temporary tools for other file types
         if code_interpreter_ids:
             logger.info(f"Adding file ids: {code_interpreter_ids} for {self.agent.name}'s code interpreter")
-            self.agent.file_manager.add_code_interpreter_tool(code_interpreter_ids)  # type: ignore[union-attr]
-            self._temp_code_interpreter_file_ids = code_interpreter_ids
+            self._add_code_interpreter_attachments(code_interpreter_ids)
             filenames = ", ".join(code_interpreter_filenames)
             content_list.append(
                 {
@@ -130,7 +130,23 @@ class AttachmentManager:
 
         return content_list
 
-    def attachments_cleanup(self):
+    def _add_code_interpreter_attachments(self, file_ids: list[str]) -> None:
+        tool = next((tool for tool in self.agent.tools if isinstance(tool, CodeInterpreterTool)), None)
+        container = tool.tool_config.get("container") if tool is not None else None
+        existing_ids = (
+            list(container.get("file_ids", [])) if container is not None and not isinstance(container, str) else []
+        )
+        # Snapshot before the file manager mutates the tool's file list.
+        temporary_ids = [file_id for file_id in file_ids if file_id not in existing_ids]
+        assert self.agent.file_manager is not None
+        self.agent.file_manager.add_code_interpreter_tool(file_ids)
+        if tool is not None and (container is None or isinstance(container, str)):
+            return
+        self._temp_code_interpreter_file_ids.extend(temporary_ids)
+        if tool is None:
+            self._temp_code_interpreter_tool_created = True
+
+    def attachments_cleanup(self) -> None:
         """
         Clean up temporary attachments and reset agent to initial state.
         """
@@ -142,11 +158,11 @@ class AttachmentManager:
                     if isinstance(code_interpreter_container, str):
                         logger.warning(f"Agent {self.agent.name}: Cannot modify container directly for file removal")
                         break
-                    file_ids_list = code_interpreter_container.get("file_ids", [])
+                    file_ids_list = list(code_interpreter_container.get("file_ids", []))
                     for file_id in self._temp_code_interpreter_file_ids:
                         if file_id in file_ids_list:
                             file_ids_list.remove(file_id)
-                            if len(file_ids_list) == 0:
+                            if len(file_ids_list) == 0 and self._temp_code_interpreter_tool_created:
                                 self.agent.tools.remove(tool)
                                 logger.debug(f"Removed temp CodeInterpreterTool from {self.agent.name}")
                             else:
@@ -156,6 +172,7 @@ class AttachmentManager:
 
         # Reset temp variables
         self._temp_code_interpreter_file_ids = []
+        self._temp_code_interpreter_tool_created = False
 
     def _get_filename_by_id(self, file_id: str) -> str:
         """Get the filename of a file by its ID"""
