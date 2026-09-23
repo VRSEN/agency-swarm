@@ -15,10 +15,13 @@ If you build an app around your agents, you may want each member to have their o
     Open your **API integration**, select **Members allowance**, turn on limits, and choose an amount. The default applies to every member registered through that integration.
   </Step>
   <Step title="Register members from your app">
-    Your app registers each person with a stable user ID. Agencii returns a member ID that your app uses for their agent requests. Registering the same person again keeps their existing allowance and usage.
+    Your app [registers each person](/platform/integrations/api/register-api-consumer) with a stable user ID. Agencii returns a `consumerId` that your app uses for their agent requests. Registering the same person again keeps their existing allowance and usage.
+  </Step>
+  <Step title="Send requests for that member">
+    Include the `consumerId` and a unique `usageRequestId` when you [stream an API v2 response](/platform/integrations/api/get-completion-v2). Agencii checks the allowance before starting the run and returns HTTP `429` if the member has reached their limit.
   </Step>
   <Step title="Watch and adjust usage">
-    The members table shows each person's AI usage, renewal date, and access status. You can change one member's allowance or pause their AI access without changing the default for everyone else.
+    The members table shows each person's AI usage, renewal date, and access status. Your app can [read a member's current allowance](/platform/integrations/api/get-api-consumer-allowance). You can change one member's allowance or [pause their AI access](/platform/integrations/api/set-api-consumer-status) without changing the default for everyone else.
   </Step>
 </Steps>
 

@@ -185,8 +185,14 @@
               "platform/integrations/whatsapp-integration",
               "platform/integrations/zapier-integration",
               "platform/integrations/n8n-integration",
-              "platform/integrations/web-api",
-              "platform/integrations/member-allowances",
+              {
+                "group": "API integration",
+                "icon": "code",
+                "pages": [
+                  "platform/integrations/web-api",
+                  "platform/integrations/member-allowances"
+                ]
+              },
               "platform/integrations/widget"
             ]
           },
