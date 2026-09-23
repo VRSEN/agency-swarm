@@ -104,6 +104,103 @@
           "chatId": { "type": "string", "description": "The unique identifier for the newly created chat. Example: \"FVfA971B3fnBH4S1OKlo\"" }
         }
       },
+      "ApiConsumerPeriod": {
+        "type": "object",
+        "required": ["id", "startsAt", "endsAt", "limitMicros", "spentMicros", "remainingMicros", "inputTokens", "outputTokens", "usageItemCount", "updatedAt"],
+        "properties": {
+          "id": { "type": "string", "example": "2026-09-01", "description": "UTC period start date and document ID." },
+          "startsAt": { "type": "string", "format": "date-time" },
+          "endsAt": { "type": "string", "format": "date-time" },
+          "limitMicros": { "type": "integer", "format": "int64", "example": 20000000, "description": "USD allowance in millionths of a dollar." },
+          "spentMicros": { "type": "integer", "format": "int64", "example": 4250000 },
+          "remainingMicros": { "type": "integer", "format": "int64", "example": 15750000 },
+          "inputTokens": { "type": "integer", "format": "int64", "example": 1200 },
+          "outputTokens": { "type": "integer", "format": "int64", "example": 300 },
+          "usageItemCount": { "type": "integer", "example": 2 },
+          "lastUsageRequestId": { "type": "string", "nullable": true },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ApiConsumerAllowance": {
+        "type": "object",
+        "required": ["consumerId", "active", "canStartRun", "period"],
+        "properties": {
+          "consumerId": { "type": "string" },
+          "active": { "type": "boolean" },
+          "canStartRun": { "type": "boolean", "description": "False when access is disabled or the current period is exhausted." },
+          "period": { "$ref": "#/components/schemas/ApiConsumerPeriod" }
+        }
+      },
+      "RegisterApiConsumerResponse": {
+        "allOf": [
+          { "$ref": "#/components/schemas/ApiConsumerAllowance" },
+          {
+            "type": "object",
+            "required": ["created"],
+            "properties": { "created": { "type": "boolean" } }
+          }
+        ]
+      },
+      "RegisterApiConsumerRequest": {
+        "type": "object",
+        "required": ["apiIntegrationId", "externalUserId"],
+        "properties": {
+          "apiIntegrationId": { "type": "string" },
+          "externalUserId": { "type": "string", "maxLength": 512, "description": "A stable user ID from your application. It is stored as a hash." },
+          "displayName": { "type": "string", "maxLength": 256 },
+          "email": { "type": "string", "format": "email", "maxLength": 320 }
+        }
+      },
+      "GetApiConsumerAllowanceRequest": {
+        "type": "object",
+        "required": ["apiIntegrationId", "consumerId"],
+        "properties": {
+          "apiIntegrationId": { "type": "string" },
+          "consumerId": { "type": "string" }
+        }
+      },
+      "SetApiConsumerStatusRequest": {
+        "type": "object",
+        "required": ["apiIntegrationId", "consumerId", "active"],
+        "properties": {
+          "apiIntegrationId": { "type": "string" },
+          "consumerId": { "type": "string" },
+          "active": { "type": "boolean" }
+        }
+      },
+      "ApiV2Attachment": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": { "type": "string", "enum": ["input_file", "input_image"] },
+          "file_url": { "type": "string", "format": "uri" },
+          "filename": { "type": "string" },
+          "image_url": { "type": "string", "format": "uri" }
+        }
+      },
+      "GetCompletionV2Request": {
+        "type": "object",
+        "required": ["apiIntegrationId", "message"],
+        "properties": {
+          "apiIntegrationId": { "type": "string" },
+          "message": { "type": "string" },
+          "agent": { "type": "string", "description": "Agency entry point. The integration default is used when omitted." },
+          "chatId": { "type": "string", "nullable": true },
+          "aliasChatId": { "type": "string", "nullable": true },
+          "attachments": { "type": "array", "maxItems": 5, "items": { "$ref": "#/components/schemas/ApiV2Attachment" } },
+          "user_context": { "oneOf": [{ "type": "object", "additionalProperties": true }, { "type": "string" }], "nullable": true },
+          "consumerId": { "type": "string", "description": "Required when member allowances are enabled." },
+          "usageRequestId": { "type": "string", "description": "Unique ID carried into the usage record for reconciliation." }
+        }
+      },
+      "ApiErrorResponse": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": { "type": "string" },
+          "code": { "type": "string", "nullable": true, "example": "consumer_allowance_exhausted" }
+        }
+      },
       "ErrorResponse": {
         "type": "object",
         "description": "Standard error response format.",
@@ -220,6 +317,84 @@
           }
         },
         "security": [ { "BearerAuth": [] } ]
+      }
+    },
+    "/register_api_consumer": {
+      "post": {
+        "summary": "Register API consumer",
+        "description": "Idempotently registers one application member. Allowance values are controlled by the integration owner and cannot be supplied by this route.",
+        "operationId": "registerApiConsumer",
+        "servers": [{ "url": "https://api-integration-v2-qd6wo466iq-uc.a.run.app", "description": "API v2 server" }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RegisterApiConsumerRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "Existing consumer returned.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RegisterApiConsumerResponse" } } } },
+          "201": { "description": "Consumer created.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RegisterApiConsumerResponse" } } } },
+          "400": { "description": "Invalid request or allowance policy is not configured.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } },
+          "401": { "description": "Missing or invalid platform API key.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } },
+          "403": { "description": "The API key does not own this integration.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } },
+          "404": { "description": "Integration not found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } }
+        }
+      }
+    },
+    "/get_api_consumer_allowance": {
+      "post": {
+        "summary": "Get API consumer allowance",
+        "description": "Returns the live read model for the current UTC usage period and lazily rolls an expired period forward.",
+        "operationId": "getApiConsumerAllowance",
+        "servers": [{ "url": "https://api-integration-v2-qd6wo466iq-uc.a.run.app", "description": "API v2 server" }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GetApiConsumerAllowanceRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "Current allowance returned.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiConsumerAllowance" } } } },
+          "400": { "description": "Invalid request.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } },
+          "401": { "description": "Missing or invalid platform API key.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } },
+          "403": { "description": "The API key does not own this integration.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } },
+          "404": { "description": "Integration or consumer not found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } }
+        }
+      }
+    },
+    "/set_api_consumer_status": {
+      "post": {
+        "summary": "Set API consumer status",
+        "description": "Enables or disables AI access for a registered consumer. This route cannot change monetary limits or renewal policy.",
+        "operationId": "setApiConsumerStatus",
+        "servers": [{ "url": "https://api-integration-v2-qd6wo466iq-uc.a.run.app", "description": "API v2 server" }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SetApiConsumerStatusRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "Status updated.", "content": { "application/json": { "schema": { "type": "object", "required": ["consumerId", "active"], "properties": { "consumerId": { "type": "string" }, "active": { "type": "boolean" } } } } } },
+          "400": { "description": "Invalid request.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } },
+          "401": { "description": "Missing or invalid platform API key.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } },
+          "403": { "description": "The API key does not own this integration.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } },
+          "404": { "description": "Integration or consumer not found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } }
+        }
+      }
+    },
+    "/get_completion_v2": {
+      "post": {
+        "summary": "Stream API v2 completion",
+        "description": "Starts an SSE agent run. When allowances are enabled, consumerId and usageRequestId are required. An in-progress response may finish above the limit; the next request is rejected.",
+        "operationId": "getCompletionV2",
+        "servers": [{ "url": "https://api-integration-v2-qd6wo466iq-uc.a.run.app", "description": "API v2 server" }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GetCompletionV2Request" } } }
+        },
+        "responses": {
+          "200": { "description": "Server-sent event stream.", "content": { "text/event-stream": { "schema": { "type": "string" } } } },
+          "400": { "description": "Invalid request or missing allowance attribution.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } },
+          "401": { "description": "Missing or invalid platform API key.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } },
+          "403": { "description": "The API key does not own this integration.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } },
+          "404": { "description": "Integration or consumer not found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } },
+          "429": { "description": "Consumer is inactive or has exhausted the current allowance.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } }
+        }
       }
     }
   }

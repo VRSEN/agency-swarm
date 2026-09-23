@@ -186,6 +186,7 @@
               "platform/integrations/zapier-integration",
               "platform/integrations/n8n-integration",
               "platform/integrations/web-api",
+              "platform/integrations/member-allowances",
               "platform/integrations/widget"
             ]
           },

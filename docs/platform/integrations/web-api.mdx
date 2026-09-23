@@ -8,6 +8,10 @@ icon: "code"
 
 API Integrations provide a set of endpoints allowing you to run your agents on custom backends or on other unsupported channels.
 
+API v2 also supports server-controlled, per-member AI allowances for applications built on top of an API Integration. Agencii owns the limit and usage ledger. Your application registers a stable member, checks their current allowance, and sends the returned `consumerId` with each v2 completion.
+
+For a simple explanation and course-platform example, see [Members allowance](/platform/integrations/member-allowances).
+
 <Info>
 ⚡ Live Postman Example: [Go to Postman →](https://www.postman.com/vrsen-ai/agencii-api/overview)
 </Info>
@@ -42,7 +46,62 @@ API Integrations provide a set of endpoints allowing you to run your agents on c
 >
   Get a response from your agent.
 </Card>
+
+<Card
+  title="Register API Consumer"
+  icon="user-plus"
+  href="/platform/integrations/api/register-api-consumer"
+>
+  Register an application member for server-controlled AI usage.
+</Card>
+
+<Card
+  title="Get Consumer Allowance"
+  icon="gauge"
+  href="/platform/integrations/api/get-api-consumer-allowance"
+>
+  Read the member's live limit, spend, remaining amount, and renewal period.
+</Card>
+
+<Card
+  title="Set Consumer Status"
+  icon="user-lock"
+  href="/platform/integrations/api/set-api-consumer-status"
+>
+  Enable or disable AI access for a registered member.
+</Card>
+
+<Card
+  title="Stream API v2 Completion"
+  icon="wave-pulse"
+  href="/platform/integrations/api/get-completion-v2"
+>
+  Stream an agent run with member attribution and file attachments.
+</Card>
 </CardGroup>
+
+---
+
+## Member allowance flow
+
+<Steps>
+  <Step title="Configure the policy in Agencii">
+    Open the API Integration's **Members allowance** tab, enable limits, and set the default USD allowance. Each member renews monthly on the date they first registered. Client applications cannot set or increase the limit.
+  </Step>
+  <Step title="Register each application member">
+    Call `POST /register_api_consumer` with your stable external user ID. Registration is idempotent, so retries return the same `consumerId`.
+  </Step>
+  <Step title="Store and reuse consumerId">
+    Save the returned `consumerId` on your own user record. Use `POST /get_api_consumer_allowance` to show the current period in your UI.
+  </Step>
+  <Step title="Attribute every v2 run">
+    Send `consumerId` and a unique `usageRequestId` with `POST /get_completion_v2`. When the member has reached the limit, the API returns HTTP `429` before creating a chat turn or starting an agent run.
+  </Step>
+</Steps>
+
+<Note>
+The response already in progress is allowed to finish, so final spend can be slightly above the limit. The next request is blocked. The allowance currently includes AI model usage from the Responses API; file storage, uploads, and sandbox compute are excluded.
+</Note>
 
 ---
 
@@ -52,5 +111,6 @@ API Integrations provide a set of endpoints allowing you to run your agents on c
 - Ensure that your `apiIntegrationId` is valid and corresponds to an existing integration.
 - Replace placeholder values with actual data when making requests.
 - The `attachments` parameter in `/get_response` allows you to include files and specify tools for processing.
+- API v1 behavior is unchanged and does not enforce per-consumer allowances.
 
 ---
