@@ -108,7 +108,7 @@
         "type": "object",
         "required": ["id", "startsAt", "endsAt", "limitMicros", "spentMicros", "remainingMicros", "inputTokens", "outputTokens", "usageItemCount", "updatedAt"],
         "properties": {
-          "id": { "type": "string", "example": "2026-09-01", "description": "UTC period start date and document ID." },
+          "id": { "type": "string", "example": "2026-09-23", "description": "UTC period start date and document ID, based on the member's registration date." },
           "startsAt": { "type": "string", "format": "date-time" },
           "endsAt": { "type": "string", "format": "date-time" },
           "limitMicros": { "type": "integer", "format": "int64", "example": 20000000, "description": "USD allowance in millionths of a dollar." },
@@ -361,7 +361,7 @@
     "/set_api_consumer_status": {
       "post": {
         "summary": "Set API consumer status",
-        "description": "Enables or disables AI access for a registered consumer. This route cannot change monetary limits or renewal policy.",
+        "description": "Enables or disables AI access for a registered consumer. This route cannot change monetary limits or renewal dates.",
         "operationId": "setApiConsumerStatus",
         "servers": [{ "url": "https://api-integration-v2-qd6wo466iq-uc.a.run.app", "description": "API v2 server" }],
         "requestBody": {
