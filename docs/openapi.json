@@ -193,7 +193,13 @@
           { "$ref": "#/components/schemas/ApiV2FileAttachment" },
           { "$ref": "#/components/schemas/ApiV2ImageAttachment" }
         ],
-        "discriminator": { "propertyName": "type" }
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "input_file": "#/components/schemas/ApiV2FileAttachment",
+            "input_image": "#/components/schemas/ApiV2ImageAttachment"
+          }
+        }
       },
       "GetCompletionV2Request": {
         "type": "object",
