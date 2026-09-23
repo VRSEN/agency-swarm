@@ -168,15 +168,32 @@
           "active": { "type": "boolean" }
         }
       },
-      "ApiV2Attachment": {
+      "ApiV2FileAttachment": {
         "type": "object",
-        "required": ["type"],
+        "additionalProperties": false,
+        "required": ["type", "file_url"],
         "properties": {
-          "type": { "type": "string", "enum": ["input_file", "input_image"] },
-          "file_url": { "type": "string", "format": "uri" },
-          "filename": { "type": "string" },
-          "image_url": { "type": "string", "format": "uri" }
+          "type": { "type": "string", "enum": ["input_file"] },
+          "file_url": { "type": "string", "format": "uri", "description": "An HTTP(S) URL for the file." },
+          "filename": { "type": "string", "description": "Optional file name without a directory path." }
         }
+      },
+      "ApiV2ImageAttachment": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "image_url"],
+        "properties": {
+          "type": { "type": "string", "enum": ["input_image"] },
+          "image_url": { "type": "string", "minLength": 1, "description": "Image URL or data URL." },
+          "detail": { "type": "string", "enum": ["auto", "low", "high"], "default": "auto" }
+        }
+      },
+      "ApiV2Attachment": {
+        "oneOf": [
+          { "$ref": "#/components/schemas/ApiV2FileAttachment" },
+          { "$ref": "#/components/schemas/ApiV2ImageAttachment" }
+        ],
+        "discriminator": { "propertyName": "type" }
       },
       "GetCompletionV2Request": {
         "type": "object",
@@ -187,7 +204,7 @@
           "agent": { "type": "string", "description": "Agency entry point. The integration default is used when omitted." },
           "chatId": { "type": "string", "nullable": true },
           "aliasChatId": { "type": "string", "nullable": true },
-          "attachments": { "type": "array", "maxItems": 5, "items": { "$ref": "#/components/schemas/ApiV2Attachment" } },
+          "attachments": { "type": "array", "items": { "$ref": "#/components/schemas/ApiV2Attachment" } },
           "user_context": { "oneOf": [{ "type": "object", "additionalProperties": true }, { "type": "string" }], "nullable": true },
           "consumerId": { "type": "string", "description": "Required when member allowances are enabled." },
           "usageRequestId": { "type": "string", "description": "Unique ID carried into the usage record for reconciliation." }
@@ -324,7 +341,7 @@
         "summary": "Register API consumer",
         "description": "Idempotently registers one application member. Allowance values are controlled by the integration owner and cannot be supplied by this route.",
         "operationId": "registerApiConsumer",
-        "servers": [{ "url": "https://api-integration-v2-qd6wo466iq-uc.a.run.app", "description": "API v2 server" }],
+        "servers": [{ "url": "https://api-integration-v2-japboyzddq-uc.a.run.app", "description": "Production API v2 server" }],
         "requestBody": {
           "required": true,
           "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RegisterApiConsumerRequest" } } }
@@ -344,7 +361,7 @@
         "summary": "Get API consumer allowance",
         "description": "Returns the live read model for the current UTC usage period and lazily rolls an expired period forward.",
         "operationId": "getApiConsumerAllowance",
-        "servers": [{ "url": "https://api-integration-v2-qd6wo466iq-uc.a.run.app", "description": "API v2 server" }],
+        "servers": [{ "url": "https://api-integration-v2-japboyzddq-uc.a.run.app", "description": "Production API v2 server" }],
         "requestBody": {
           "required": true,
           "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GetApiConsumerAllowanceRequest" } } }
@@ -363,7 +380,7 @@
         "summary": "Set API consumer status",
         "description": "Enables or disables AI access for a registered consumer. This route cannot change monetary limits or renewal dates.",
         "operationId": "setApiConsumerStatus",
-        "servers": [{ "url": "https://api-integration-v2-qd6wo466iq-uc.a.run.app", "description": "API v2 server" }],
+        "servers": [{ "url": "https://api-integration-v2-japboyzddq-uc.a.run.app", "description": "Production API v2 server" }],
         "requestBody": {
           "required": true,
           "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SetApiConsumerStatusRequest" } } }
@@ -382,13 +399,13 @@
         "summary": "Stream API v2 completion",
         "description": "Starts an SSE agent run. When allowances are enabled, consumerId and usageRequestId are required. An in-progress response may finish above the limit; the next request is rejected.",
         "operationId": "getCompletionV2",
-        "servers": [{ "url": "https://api-integration-v2-qd6wo466iq-uc.a.run.app", "description": "API v2 server" }],
+        "servers": [{ "url": "https://api-integration-v2-japboyzddq-uc.a.run.app", "description": "Production API v2 server" }],
         "requestBody": {
           "required": true,
           "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GetCompletionV2Request" } } }
         },
         "responses": {
-          "200": { "description": "Server-sent event stream.", "content": { "text/event-stream": { "schema": { "type": "string" } } } },
+          "200": { "description": "Server-sent events by default, or plain text when Text Only Mode is enabled for the integration.", "content": { "text/event-stream": { "schema": { "type": "string" } }, "text/plain": { "schema": { "type": "string" } } } },
           "400": { "description": "Invalid request or missing allowance attribution.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } },
           "401": { "description": "Missing or invalid platform API key.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } },
           "403": { "description": "The API key does not own this integration.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } },
