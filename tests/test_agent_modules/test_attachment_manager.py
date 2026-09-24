@@ -11,7 +11,73 @@ import pytest
 from agents import CodeInterpreterTool
 from agents.exceptions import AgentsException
 
+from agency_swarm import Agent
 from agency_swarm.agent.attachment_manager import AttachmentManager
+
+
+@pytest.fixture
+def attachment_agent(monkeypatch: pytest.MonkeyPatch) -> Agent:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    agent = Agent(name="AttachmentCleanupTest")
+    assert agent.attachment_manager is not None
+
+    def filename(file_id: str) -> str:
+        return f"{file_id}.csv"
+
+    monkeypatch.setattr(agent.attachment_manager, "_get_filename_by_id", filename)
+    return agent
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("file_count", [1, 2, 3])
+async def test_cleanup_removes_all_new_code_interpreter_files(attachment_agent: Agent, file_count: int) -> None:
+    manager = attachment_agent.attachment_manager
+    assert manager is not None
+    file_ids = [f"file-{index}" for index in range(file_count)]
+    await manager.sort_file_attachments(file_ids)
+    tools = [tool for tool in attachment_agent.tools if isinstance(tool, CodeInterpreterTool)]
+    assert len(tools) == 1
+    assert tools[0].tool_config["container"] == {"type": "auto", "file_ids": file_ids}
+
+    manager.attachments_cleanup()
+
+    assert not any(isinstance(tool, CodeInterpreterTool) for tool in attachment_agent.tools)
+    assert manager._temp_code_interpreter_file_ids == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("existing_file_ids", [None, [], ["file-existing"]])
+async def test_cleanup_preserves_preconfigured_code_interpreter(
+    attachment_agent: Agent, existing_file_ids: list[str] | None
+) -> None:
+    tool = CodeInterpreterTool(tool_config={"type": "code_interpreter"})
+    if existing_file_ids is not None:
+        tool.tool_config["container"] = {"type": "auto", "file_ids": list(existing_file_ids)}
+    attachment_agent.add_tool(tool)
+    manager = attachment_agent.attachment_manager
+    assert manager is not None
+    await manager.sort_file_attachments([*(existing_file_ids or []), "file-temporary"])
+
+    manager.attachments_cleanup()
+
+    assert tool in attachment_agent.tools
+    if existing_file_ids is None:
+        assert tool.tool_config == {"type": "code_interpreter"}
+    else:
+        assert tool.tool_config["container"] == {"type": "auto", "file_ids": existing_file_ids}
+
+
+@pytest.mark.asyncio
+async def test_cleanup_tracks_multiple_attachment_batches(attachment_agent: Agent) -> None:
+    manager = attachment_agent.attachment_manager
+    assert manager is not None
+    await manager.sort_file_attachments(["file-first", "file-shared"])
+    await manager.sort_file_attachments(["file-shared", "file-last"])
+
+    manager.attachments_cleanup()
+    manager.attachments_cleanup()
+
+    assert not any(isinstance(tool, CodeInterpreterTool) for tool in attachment_agent.tools)
 
 
 class TestAttachmentManager:
@@ -119,6 +185,7 @@ class TestAttachmentManager:
         mock_agent = Mock()
         mock_agent.name = "TestAgent"
         mock_agent.file_manager = Mock()
+        mock_agent.tools = []
 
         attachment_manager = AttachmentManager(mock_agent)
         attachment_manager._get_filename_by_id = Mock(return_value="report.txt")
@@ -179,6 +246,7 @@ class TestAttachmentManager:
 
         attachment_manager = AttachmentManager(mock_agent)
         attachment_manager._temp_code_interpreter_file_ids = ["file-123", "file-456"]
+        attachment_manager._temp_code_interpreter_tool_created = True
 
         # Call cleanup - should remove entire tool
         attachment_manager.attachments_cleanup()
