@@ -80,6 +80,23 @@ async def test_cleanup_tracks_multiple_attachment_batches(attachment_agent: Agen
     assert not any(isinstance(tool, CodeInterpreterTool) for tool in attachment_agent.tools)
 
 
+@pytest.mark.asyncio
+async def test_cleanup_restores_shared_file_ids_list(attachment_agent: Agent) -> None:
+    shared_file_ids = ["file-existing"]
+    tool = CodeInterpreterTool(
+        tool_config={"type": "code_interpreter", "container": {"type": "auto", "file_ids": shared_file_ids}}
+    )
+    attachment_agent.add_tool(tool)
+    manager = attachment_agent.attachment_manager
+    assert manager is not None
+
+    await manager.sort_file_attachments(["file-temporary"])
+    manager.attachments_cleanup()
+
+    assert tool.tool_config["container"]["file_ids"] is shared_file_ids
+    assert shared_file_ids == ["file-existing"]
+
+
 class TestAttachmentManager:
     """Test AttachmentManager class functionality."""
 
