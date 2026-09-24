@@ -1235,9 +1235,10 @@ def test_litellm_prefixed_wrapper_model_normalizes_variant_extra_args_without_mo
 
 
 @pytest.mark.parametrize("model_name", ["xai/grok-4.3", "xai/grok-4-1-fast", "xai/grok-code-fast"])
-def test_xai_grok_variant_forwards_selected_reasoning_effort(model_name: str) -> None:
+def test_xai_grok_variant_forwards_selected_reasoning_effort(monkeypatch, model_name: str) -> None:
     """Selected xAI Grok variants should reach LiteLLM as explicit extra args."""
     pytest.importorskip("agents")
+    litellm = pytest.importorskip("litellm")
     pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     from agents.extensions.models.litellm_model import LitellmModel
@@ -1245,6 +1246,8 @@ def test_xai_grok_variant_forwards_selected_reasoning_effort(model_name: str) ->
     from agency_swarm import Agent
     from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
     from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    monkeypatch.setattr(litellm, "supports_reasoning", lambda *args, **kwargs: True)
 
     agent = Agent(name="A", instructions="x", model=LitellmModel(model=model_name))
     agency = type("Agency", (), {"agents": {"A": agent}})()
@@ -1267,9 +1270,10 @@ def test_xai_grok_variant_forwards_selected_reasoning_effort(model_name: str) ->
 
 
 @pytest.mark.parametrize("model_name", ["xai/grok-4", "xai/grok-4-1-fast-non-reasoning"])
-def test_xai_grok_variant_drops_unsupported_reasoning_effort(model_name: str) -> None:
+def test_xai_grok_variant_drops_unsupported_reasoning_effort(monkeypatch, model_name: str) -> None:
     """xAI Grok variants without configurable reasoning should not receive LiteLLM reasoning args."""
     pytest.importorskip("agents")
+    litellm = pytest.importorskip("litellm")
     pytest.importorskip("agents.extensions.models.litellm_model", exc_type=ImportError)
 
     from agents.extensions.models.litellm_model import LitellmModel
@@ -1277,6 +1281,8 @@ def test_xai_grok_variant_drops_unsupported_reasoning_effort(model_name: str) ->
     from agency_swarm import Agent
     from agency_swarm.integrations.fastapi_utils.endpoint_handlers import apply_openai_client_config
     from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
+
+    monkeypatch.setattr(litellm, "supports_reasoning", lambda *args, **kwargs: False)
 
     agent = Agent(name="A", instructions="x", model=LitellmModel(model=model_name))
     agency = type("Agency", (), {"agents": {"A": agent}})()
