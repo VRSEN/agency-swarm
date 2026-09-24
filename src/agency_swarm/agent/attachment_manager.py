@@ -1,6 +1,6 @@
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from agents import CodeInterpreterTool, TResponseInputItem
 from agents.exceptions import AgentsException
@@ -158,7 +158,7 @@ class AttachmentManager:
                     if isinstance(code_interpreter_container, str):
                         logger.warning(f"Agent {self.agent.name}: Cannot modify container directly for file removal")
                         break
-                    file_ids_list = list(code_interpreter_container.get("file_ids", []))
+                    file_ids_list = cast(list[str], code_interpreter_container.get("file_ids", []))
                     for file_id in self._temp_code_interpreter_file_ids:
                         if file_id in file_ids_list:
                             file_ids_list.remove(file_id)
