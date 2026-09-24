@@ -11,7 +11,7 @@ This file contains only repository-specific addenda to the controlling machine-g
 1.3 Shared policy from `VRSEN/agentswarm-cli` may appear here only as a strict subset or a necessary Python/Agency adaptation; omit CLI, TUI, OpenCode, Bun, npm, and package-layout rules without a Python or Agency equivalent.
 1.4 If an active pull request duplicates an open Dependabot dependency update, close the Dependabot pull request through the normal public-mutation approval path.
 1.5 Commits and pull requests carry no AI attribution: no AI `Co-Authored-By` trailers and no "Generated with" footers in commit messages, pull request titles, or pull request descriptions.
-1.6 If functionality is now implemented upstream, remove the custom implementation unless there is a concrete reason to keep it. If the custom implementation differs from upstream in a way that looks artificial, incorrect, or non-standard, escalate to the user with a recommendation to delete it and reuse upstream behavior.
+1.6 If functionality is now implemented upstream, remove the custom implementation unless there is a concrete reason to keep it. If the custom implementation differs from upstream in a way that looks artificial, incorrect, or non-standard, escalate to the maintainer with a recommendation to delete it and reuse upstream behavior.
 1.7 Third-party or vendor integrations live outside this repository: decline vendor-pitch issues and pull requests with a pointer to the existing extension seam, and ship at most a docs recipe.
 1.8 Backward compatibility is not a constraint: take the best target design, and ship breaking changes under a new major or minor version with a breaking-changes note.
 
@@ -34,7 +34,7 @@ This file contains only repository-specific addenda to the controlling machine-g
 
 3.1 Documentation work follows `.cursor/rules/writing-docs.mdc`.
 3.2 Before review of substantial documentation work, start `cd docs && mintlify dev` and state that the preview is running.
-3.3 Do not mention fork origins in user-facing docs unless the user asks.
+3.3 Do not mention fork origins in user-facing docs unless the maintainer asks.
 
 ## 4. Python, Types, And File Discipline
 
@@ -44,10 +44,10 @@ This file contains only repository-specific addenda to the controlling machine-g
 4.4 Do not use `Any`, duck typing, or runtime field checks where proper types exist, and avoid type ignores in production code.
 4.5 Prefer authoritative typed dependency models and inspect dependency types and adjacent patterns before changing runtime code.
 4.6 Prefer top-level imports; call out any necessary local import and restructure circular dependencies instead of hiding them with local-import workarounds.
-4.7 No file may exceed 500 lines without explicit user approval.
+4.7 No file may exceed 500 lines without explicit maintainer approval.
 4.8 Prefer methods between 10 and 40 lines and keep them under 100 lines.
 4.9 Target test coverage of at least 90%.
-4.10 When editing an oversized file, keep the net change minimal and reduce its size in the same change unless the user approves otherwise.
+4.10 When editing an oversized file, keep the net change minimal and reduce its size in the same change unless the maintainer approves otherwise.
 4.11 When dependency requirements or resolved versions change, update every affected lockfile in the same change.
 4.12 Keep terminology self-consistent: code identifiers, internal symbols, comments, user-facing copy, and documentation use the same product vocabulary (for example, canonical mode names), and each change's polishing pass includes a terminology-consistency check.
 
@@ -71,4 +71,4 @@ This file contains only repository-specific addenda to the controlling machine-g
 6.8 Existing behavior affected by a change must be regression-tested end-to-end, and the previous and new releases compared, before merge or release.
 6.9 No test may be skipped in the final pre-release suite; tests requiring real API keys run with real keys. A single skipped test blocks the release claim.
 6.10 Nothing is tagged, published as a GitHub release, or uploaded to PyPI without the maintainer's explicit approval; agents prepare release drafts only.
-6.11 After upgrading `openai-agents`, LiteLLM, or a provider SDK, run an end-to-end test that makes a tool call or delegation and then sends the resulting history back to the model in a following turn.
+6.11 After upgrading `openai-agents`, LiteLLM, or a provider SDK, run the full formal test suite (`make ci`); it must include end-to-end coverage that makes a tool call or delegation and then sends the resulting history back to the model in a following turn.
