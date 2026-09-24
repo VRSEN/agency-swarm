@@ -1,5 +1,7 @@
 # Agency Swarm Repository Addendum
 
+Core principle, in the maintainer's words: "Agency Swarm should remain a focused orchestration layer over the OpenAI Agents SDK, not grow into a duplicate agent runtime. Whenever possible, use the OpenAI Agents SDK instead of reimplementing its behavior." Every change is checked against it.
+
 This file contains only repository-specific addenda to the controlling machine-global policy and matching global skills.
 
 ## 1. Repository Baseline
@@ -11,6 +13,7 @@ This file contains only repository-specific addenda to the controlling machine-g
 1.5 Commits and pull requests carry no AI attribution: no AI `Co-Authored-By` trailers and no "Generated with" footers in commit messages, pull request titles, or pull request descriptions.
 1.6 If functionality is now implemented upstream, remove the custom implementation unless there is a concrete reason to keep it. If the custom implementation differs from upstream in a way that looks artificial, incorrect, or non-standard, escalate to the user with a recommendation to delete it and reuse upstream behavior.
 1.7 Third-party or vendor integrations live outside this repository: decline vendor-pitch issues and pull requests with a pointer to the existing extension seam, and ship at most a docs recipe.
+1.8 Backward compatibility is not a constraint: take the best target design, and ship breaking changes under a new major or minor version with a breaking-changes note.
 
 ## 2. Repository Commands And Review Artifacts
 
@@ -67,3 +70,5 @@ This file contains only repository-specific addenda to the controlling machine-g
 6.7 A release claim requires per-commit evidence on the release page: every change since the previous release names its test evidence and confidence level.
 6.8 Existing behavior affected by a change must be regression-tested end-to-end, and the previous and new releases compared, before merge or release.
 6.9 No test may be skipped in the final pre-release suite; tests requiring real API keys run with real keys. A single skipped test blocks the release claim.
+6.10 Nothing is tagged, published as a GitHub release, or uploaded to PyPI without the maintainer's explicit approval; agents prepare release drafts only.
+6.11 After upgrading `openai-agents`, LiteLLM, or a provider SDK, run an end-to-end test that makes a tool call or delegation and then sends the resulting history back to the model in a following turn.
