@@ -25,6 +25,7 @@ class MessageFilter:
         "shell_call",
         "local_shell_call",
         "tool_search_call",
+        "program",
         # Agents SDK item types
         "tool_call_item",
         "handoff_call_item",
@@ -40,6 +41,7 @@ class MessageFilter:
         "shell_call_output",
         "local_shell_call_output",
         "tool_search_output",
+        "program_output",
         # Agents SDK item types
         "tool_call_output_item",
         "handoff_output_item",
@@ -98,10 +100,11 @@ class MessageFilter:
 
         Pattern 1 (call_id linking):
             Call types: function_call, computer_call, shell_call, local_shell_call,
-                apply_patch_call, custom_tool_call, tool_call_item, handoff_call_item
+                apply_patch_call, custom_tool_call, tool_search_call, program,
+                tool_call_item, handoff_call_item
             Output types: function_call_output, computer_call_output, shell_call_output,
                 local_shell_call_output, apply_patch_call_output, custom_tool_call_output,
-                tool_call_output_item, handoff_output_item
+                tool_search_output, program_output, tool_call_output_item, handoff_output_item
 
         Pattern 2 (approval_request_id linking):
             mcp_approval_request[_item] <-> mcp_approval_response[_item]
