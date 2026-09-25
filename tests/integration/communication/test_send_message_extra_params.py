@@ -4,7 +4,7 @@ import pytest
 from agents import RunContextWrapper
 from pydantic import BaseModel, Field
 
-from agency_swarm import Agency, Agent, ModelSettings
+from agency_swarm import Agency, Agent
 from agency_swarm.context import MasterContext
 from agency_swarm.tools.send_message import SendMessage
 from agency_swarm.utils.thread import ThreadManager
@@ -26,8 +26,8 @@ class NestedSendMessage(SendMessage):
 
 @pytest.mark.asyncio
 async def test_schema_includes_extra_params_for_explicit_and_nested_models():
-    a = Agent(name="A", instructions="", model_settings=ModelSettings(temperature=0.0))
-    b = Agent(name="B", instructions="", model_settings=ModelSettings(temperature=0.0))
+    a = Agent(name="A", instructions="")
+    b = Agent(name="B", instructions="")
 
     explicit_agency = Agency(a, communication_flows=[(a > b, SendMessageWithContext)])
     explicit_tool = next(iter(explicit_agency.get_agent_runtime_state("A").send_message_tools.values()))
@@ -50,9 +50,8 @@ async def test_validation_of_extra_params_errors():
     a = Agent(
         name="A",
         instructions="Use send_message to talk to B and include fields.",
-        model_settings=ModelSettings(temperature=0.0),
     )
-    b = Agent(name="B", instructions="Reply with OK", model_settings=ModelSettings(temperature=0.0))
+    b = Agent(name="B", instructions="Reply with OK")
     agency = Agency(a, communication_flows=[(a > b, SendMessageWithContext)])
 
     runtime_state = agency.get_agent_runtime_state("A")

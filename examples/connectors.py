@@ -27,6 +27,9 @@ current_date = datetime.datetime.now()
 
 calendar_assistant = Agent(
     name="CalendarAssistant",
+    # Hosted connectors (connector_id) are only supported on models released
+    # before September 1, 2026; gpt-5.2 is the model used in OpenAI's docs.
+    model="gpt-5.2",
     instructions=f"You are an assistant that can access user's Google Calendar. Current date is {current_date}.",
     tools=[
         HostedMCPTool(

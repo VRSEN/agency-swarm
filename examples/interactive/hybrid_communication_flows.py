@@ -41,7 +41,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 
 from pydantic import Field
 
-from agency_swarm import Agency, Agent, ModelSettings, function_tool
+from agency_swarm import Agency, Agent, function_tool
 from agency_swarm.tools.send_message import Handoff, SendMessage
 
 # Setup logging
@@ -106,7 +106,6 @@ project_manager = Agent(
         "CRITICAL: When you receive responses from team members, include their complete "
         "findings and recommendations in your final output to maintain transparency."
     ),
-    model_settings=ModelSettings(temperature=0),
 )
 
 developer = Agent(
@@ -120,7 +119,6 @@ developer = Agent(
         "When performing handoffs, transfer complete context including all technical details."
     ),
     tools=[review_code_quality, implement_feature],
-    model_settings=ModelSettings(temperature=0),
 )
 
 security_expert = Agent(
@@ -134,7 +132,6 @@ security_expert = Agent(
         "Focus on practical, actionable security improvements."
     ),
     tools=[security_audit, vulnerability_scan],
-    model_settings=ModelSettings(temperature=0),
 )
 
 agency = Agency(

@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 
 from openai import AsyncOpenAI
 
-from agency_swarm import Agency, Agent, ModelSettings
+from agency_swarm import Agency, Agent
 
 client = AsyncOpenAI()
 
@@ -125,7 +125,6 @@ async def main():
         When files or images are provided, examine them carefully and provide detailed analysis.
         Be precise and specific in your responses.
         You are allowed to share all data found within documents with the user.""",
-        model_settings=ModelSettings(temperature=0.0),  # Deterministic responses
     )
 
     # Create agency with the single agent

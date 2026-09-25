@@ -29,7 +29,7 @@ Key Implementation Findings:
 from unittest.mock import MagicMock, patch
 
 import pytest
-from agents import HandoffInputData, ModelSettings, RunContextWrapper
+from agents import HandoffInputData, RunContextWrapper
 
 from agency_swarm import Agency, Agent
 from agency_swarm.tools import Handoff
@@ -42,7 +42,6 @@ def orchestrator_agent():
     return Agent(
         name="AgentA",
         instructions="You are an orchestrator agent. You coordinate tasks by communicating with other agents.",
-        model_settings=ModelSettings(temperature=0.0),
     )
 
 
@@ -55,7 +54,6 @@ def intermediate_agent():
             "You are an intermediate agent. Whenever asked to speak with agent C, use the transfer_to_AgentC tool "
             "immediately, without any questions."
         ),
-        model_settings=ModelSettings(temperature=0.0),
     )
 
 
@@ -65,7 +63,6 @@ def specialist_agent():
     return Agent(
         name="AgentC",
         instructions="You are a specialist agent. You process tasks handed off from other agents.",
-        model_settings=ModelSettings(temperature=0.0),
     )
 
 
@@ -355,18 +352,14 @@ class TestComplexHandoffScenarios:
         class NoReminder(Handoff):
             add_reminder = False
 
-        agent_a = Agent(
-            name="AgentA", instructions="Primary orchestrator", model_settings=ModelSettings(temperature=0.0)
-        )
+        agent_a = Agent(name="AgentA", instructions="Primary orchestrator")
         agent_b = Agent(
             name="AgentB",
             instructions="Secondary orchestrator with handoffs",
-            model_settings=ModelSettings(temperature=0.0),
         )
         agent_c = Agent(
             name="AgentC",
             instructions="Specialist",
-            model_settings=ModelSettings(temperature=0.0),
             handoff_reminder="Custom reminder",
         )
 

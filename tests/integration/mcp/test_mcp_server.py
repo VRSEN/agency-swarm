@@ -19,7 +19,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx2
 import pytest
-from agents import ModelSettings, ToolOriginType
+from agents import ToolOriginType
 from agents.items import ToolCallItem, ToolCallOutputItem
 from agents.mcp.server import (
     MCPServerStdio,
@@ -105,7 +105,6 @@ def _make_agency_with_local_mcp(server_url: str) -> Agency:
         name="MCP HTTP Agent",
         description="Agent using local MCP tools over HTTP",
         mcp_servers=[mcp_client],
-        model_settings=ModelSettings(temperature=0),
     )
 
     return Agency(agent, name="mcp_http_agency", shared_instructions="Test MCP HTTP Integration")
@@ -216,7 +215,6 @@ if __name__ == "__main__":
 
         agent = Agent(
             name="MCP Stdio Agent",
-            model_settings=ModelSettings(temperature=0),
             mcp_servers=[stdio_server],
         )
 

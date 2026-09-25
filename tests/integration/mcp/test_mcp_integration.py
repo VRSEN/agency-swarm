@@ -3,7 +3,6 @@ import logging
 import os
 
 import pytest
-from agents import ModelSettings
 from agents.mcp.server import MCPServerStdio
 from dotenv import load_dotenv
 
@@ -33,7 +32,6 @@ def _agency_factory() -> Agency:
 
     agent = Agent(
         name="MCP StdIO Agent",
-        model_settings=ModelSettings(temperature=0),
         mcp_servers=[stdio_server],
     )
 

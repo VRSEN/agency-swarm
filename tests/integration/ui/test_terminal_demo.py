@@ -8,7 +8,6 @@ of the terminal.
 from unittest.mock import patch
 
 import pytest
-from agents import ModelSettings
 from prompt_toolkit.document import Document
 
 from agency_swarm import Agency, Agent
@@ -73,14 +72,12 @@ def agency():
             "Always respond with 'Test response: [user message]'. "
             "You can hand off to the Developer agent by using transfer_to_ tool."
         ),
-        model_settings=ModelSettings(temperature=0),
     )
 
     developer_agent = Agent(
         name="Developer",
         description="A developer agent",
         instructions="You are a developer. Respond with 'Dev response: [message]'.",
-        model_settings=ModelSettings(temperature=0),
     )
 
     # Agent with a bad formatted name
@@ -88,7 +85,6 @@ def agency():
         name="SecUrity ExperT_Agent",
         description="A security expert agent",
         instructions="You are a security expert. Respond with 'Security expert response: [message]'.",
-        model_settings=ModelSettings(temperature=0),
     )
 
     agency = Agency(
