@@ -211,7 +211,7 @@
           "chatId": { "type": "string", "nullable": true },
           "aliasChatId": { "type": "string", "nullable": true },
           "attachments": { "type": "array", "items": { "$ref": "#/components/schemas/ApiV2Attachment" } },
-          "sandboxFiles": { "type": "array", "maxItems": 5, "description": "Files already uploaded into this integration's persistent agency mount. The agent can read these paths with sandbox tools; send images in attachments as well when the model should see them.", "items": { "type": "object", "required": ["name", "path"], "properties": { "name": { "type": "string", "description": "Uploaded filename." }, "path": { "type": "string", "description": "Canonical /app/mnt/ path returned by create_agency_upload." } } } },
+          "sandboxFiles": { "type": "array", "maxItems": 5, "description": "Files already uploaded into this integration's persistent agency mount. The agent can read these paths with sandbox tools; send images in attachments as well when the model should see them.", "items": { "type": "object", "required": ["name", "path"], "properties": { "name": { "type": "string", "description": "Uploaded filename. Must match the final path segment and contain no control characters." }, "path": { "type": "string", "description": "Canonical /app/mnt/ path returned by create_agency_upload." } } } },
           "user_context": { "oneOf": [{ "type": "object", "additionalProperties": true }, { "type": "string" }], "nullable": true },
           "consumerId": { "type": "string", "description": "Required when member allowances are enabled." },
           "usageRequestId": { "type": "string", "description": "Unique ID carried into the usage record for reconciliation." }
