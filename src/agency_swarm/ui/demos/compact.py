@@ -6,6 +6,7 @@ from agents import TResponseInputItem
 from openai.types.responses import Response
 
 from agency_swarm import Agency
+from agency_swarm.agent.constants import FRAMEWORK_DEFAULT_MODEL
 
 _COMPACT_PROMPT = dedent(
     """
@@ -87,7 +88,7 @@ def _resolve_model_name(agency_instance: Agency) -> str:
                 return value
     except Exception:
         pass
-    return "gpt-5.6-luna"
+    return FRAMEWORK_DEFAULT_MODEL
 
 
 async def compact_thread(agency_instance: Agency, args: list[str]) -> TResponseInputItem:
@@ -105,7 +106,7 @@ async def compact_thread(agency_instance: Agency, args: list[str]) -> TResponseI
     client = entry_agent.client_sync
 
     model_name = _resolve_model_name(agency_instance)
-    if model_name.startswith("gpt-5.6-"):
+    if model_name.startswith(("gpt-5.6-", "gpt-6-")):
         response: Response = client.responses.create(model=model_name, input=final_prompt, reasoning={"effort": "none"})
     else:
         response = client.responses.create(model=model_name, input=final_prompt)

@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from agency_swarm.agent.core import Agent
 
 # Reasoning model prefixes that support reasoning parameter but not temperature
-REASONING_MODEL_PREFIXES = ("gpt-5", "o3", "o4-mini", "o1")
+REASONING_MODEL_PREFIXES = ("gpt-5", "gpt-6", "o3", "o4-mini", "o1")
 logger = logging.getLogger(__name__)
 
 

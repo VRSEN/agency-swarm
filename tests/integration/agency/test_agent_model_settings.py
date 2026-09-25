@@ -26,7 +26,6 @@ async def test_agent_structured_response_output_type():
             "{greeting: string, recipient: string}. Do not include any extra text."
         ),
         output_type=GreetingSchema,
-        model_settings=ModelSettings(temperature=0.0),
     )
 
     # Ask the agent to greet a recipient; rely on the model+instructions to produce structured JSON
@@ -56,7 +55,7 @@ async def test_max_tokens_limits_output_length():
     agent = Agent(
         name="TokenLimitAgent",
         instructions=("Respond to the user's request. Keep your answer within the model's limits."),
-        model_settings=ModelSettings(temperature=0.0, max_tokens=16),
+        model_settings=ModelSettings(max_tokens=16),
     )
 
     prompt = (

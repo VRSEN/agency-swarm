@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 import hatch_build
-from hatch_build import PRICE_OVERRIDES, PRICING_FILE_RELATIVE_PATH, CustomBuildHook
+from hatch_build import MODEL_ENTRY_INSERTIONS, PRICE_OVERRIDES, PRICING_FILE_RELATIVE_PATH, CustomBuildHook
 
 
 def _build_hook_with_root(tmp_path: Path) -> CustomBuildHook:
@@ -168,6 +168,31 @@ def test_main_build_rejects_unexpected_upstream_price(monkeypatch: pytest.Monkey
         hook.initialize(version="0.0.0", build_data={})
 
     assert pricing_file_path.read_bytes() == original
+
+
+def test_apply_model_insertions_inserts_missing_entries(caplog: pytest.LogCaptureFixture) -> None:
+    pricing_data: dict[str, object] = {"sample_spec": {}}
+
+    caplog.set_level(logging.WARNING)
+    hatch_build._apply_model_insertions(pricing_data)
+
+    for model_name, entry in MODEL_ENTRY_INSERTIONS.items():
+        assert pricing_data[model_name] == entry
+        assert pricing_data[model_name] is not entry
+        assert f"Inserted repository-owned pricing entry for {model_name}" in caplog.text
+
+
+def test_apply_model_insertions_keeps_existing_upstream_entries(caplog: pytest.LogCaptureFixture) -> None:
+    pricing_data: dict[str, object] = {
+        model_name: {"input_cost_per_token": 1e-09} for model_name in MODEL_ENTRY_INSERTIONS
+    }
+
+    caplog.set_level(logging.INFO)
+    hatch_build._apply_model_insertions(pricing_data)
+
+    for model_name in MODEL_ENTRY_INSERTIONS:
+        assert pricing_data[model_name] == {"input_cost_per_token": 1e-09}
+        assert f"LiteLLM now lists {model_name}" in caplog.text
 
 
 def test_main_build_rejects_malformed_download(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

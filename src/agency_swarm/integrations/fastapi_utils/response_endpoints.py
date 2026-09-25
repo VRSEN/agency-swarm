@@ -14,6 +14,7 @@ from openai.types.shared.reasoning import Reasoning
 from pydantic import BaseModel, Field
 
 from agency_swarm import Agency, Agent, GuardrailFunctionOutput, RunContextWrapper
+from agency_swarm.agent.constants import FRAMEWORK_DEFAULT_MODEL
 from agency_swarm.integrations.fastapi_utils import endpoint_handlers
 from agency_swarm.integrations.fastapi_utils.logging_middleware import get_logs_endpoint_impl
 from agency_swarm.integrations.fastapi_utils.message_builders import (
@@ -306,7 +307,7 @@ Rules:
             response = cast(
                 Any,
                 await client.responses.create(
-                    model="gpt-5.6-luna",
+                    model=FRAMEWORK_DEFAULT_MODEL,
                     instructions=title_instructions + retry_suffix,
                     input=codex_input,
                     include=[REASONING_ENCRYPTED_CONTENT_INCLUDE],
@@ -331,7 +332,7 @@ Rules:
             )
         raise ValueError("Generated chat name must contain between 2 and 6 words")
 
-    model = OpenAIResponsesModel(model="gpt-5.6-luna", openai_client=client)
+    model = OpenAIResponsesModel(model=FRAMEWORK_DEFAULT_MODEL, openai_client=client)
 
     name_agent = Agent(
         name="NameGenerator",

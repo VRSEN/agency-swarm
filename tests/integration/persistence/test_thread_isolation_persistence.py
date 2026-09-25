@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from agents import ModelSettings
 
 from agency_swarm import Agency, Agent
 
@@ -22,7 +21,6 @@ def ceo_agent_instance():
         name="CEO",
         description="Chief Executive Officer",
         instructions="You are the CEO. Remember information and delegate tasks.",
-        model_settings=ModelSettings(temperature=0.0),
     )
 
 
@@ -32,7 +30,6 @@ def developer_agent_instance():
         name="Developer",
         description="Software Developer",
         instructions="You are a Developer. Remember technical details.",
-        model_settings=ModelSettings(temperature=0.0),
     )
 
 

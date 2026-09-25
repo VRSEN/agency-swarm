@@ -19,7 +19,7 @@ examples_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(examples_root, "src"))
 sys.path.insert(0, examples_root)
 
-from agency_swarm import Agency, Agent, ModelSettings, function_tool  # noqa: E402
+from agency_swarm import Agency, Agent, function_tool  # noqa: E402
 from agency_swarm.tools.send_message import Handoff, SendMessage  # noqa: E402
 from examples.utils import print_highlighted_send_message_args  # noqa: E402
 
@@ -81,7 +81,6 @@ coordinator = Agent(
         "complete, word-for-word response text in your final output. Do not summarize, "
         "paraphrase, or omit any details from their responses."
     ),
-    model_settings=ModelSettings(temperature=0.0),
 )
 
 # Specialist with both analysis tools
@@ -97,7 +96,6 @@ specialist = Agent(
         "Include the complete raw result in your response."
     ),
     tools=[analyze_costs, analyze_performance],
-    model_settings=ModelSettings(temperature=0.0),
 )
 
 agency = Agency(

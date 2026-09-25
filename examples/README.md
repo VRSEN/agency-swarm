@@ -32,7 +32,6 @@ This directory contains runnable examples demonstrating key features of Agency S
   - `client.py` – Client examples for testing endpoints
 - **`interactive/realtime/demo.py`** – Launch the packaged realtime voice/web demo (edit to customize agents)
 - **`mcp_servers.py`** – Using tools from MCP servers (local and hosted)
-- **`connectors.py`** – Google Calendar integration using OpenAI hosted tools
 
 ## Model Providers
 - **`interactive/third_party_models.py`** – Using third-party models (Claude, Gemini, Grok) via LiteLLM
