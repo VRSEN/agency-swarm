@@ -352,14 +352,15 @@ class TestComplexHandoffScenarios:
         class NoReminder(Handoff):
             add_reminder = False
 
-        agent_a = Agent(name="AgentA", instructions="Primary orchestrator")
+        transfer_hint = " When asked to transfer to another agent, call the matching transfer_to_* tool immediately."
+        agent_a = Agent(name="AgentA", instructions="Primary orchestrator." + transfer_hint)
         agent_b = Agent(
             name="AgentB",
-            instructions="Secondary orchestrator with handoffs",
+            instructions="Secondary orchestrator with handoffs." + transfer_hint,
         )
         agent_c = Agent(
             name="AgentC",
-            instructions="Specialist",
+            instructions="Specialist." + transfer_hint,
             handoff_reminder="Custom reminder",
         )
 
@@ -374,10 +375,18 @@ class TestComplexHandoffScenarios:
                 (agent_c > agent_a, NoReminder),  # No-reminder handoff
             ],
         )
+
+        def _handoff_reminder() -> dict:
+            return next(
+                (m for m in agency.thread_manager.get_all_messages() if m.get("message_origin") == "handoff_reminder"),
+                {},
+            )
+
         # Check default handoff
         agency.get_response_sync("Transfer to AgentB agent", recipient_agent=agent_a)
-        system_message = agency.thread_manager.get_all_messages()[1]
+        system_message = _handoff_reminder()
 
+        assert system_message, "Expected a handoff reminder message in history"
         assert system_message["role"] == "system", (
             f"Incorrect role, got: {system_message}, expected reminder system message"
         )
@@ -389,8 +398,9 @@ class TestComplexHandoffScenarios:
 
         # Check custom reminder
         agency.get_response_sync("Transfer to AgentC agent", recipient_agent=agent_b)
-        system_message = agency.thread_manager.get_all_messages()[1]
+        system_message = _handoff_reminder()
 
+        assert system_message, "Expected a handoff reminder message in history"
         assert system_message["role"] == "system", (
             f"Incorrect role, got: {system_message}, expected reminder system message"
         )
@@ -404,6 +414,26 @@ class TestComplexHandoffScenarios:
         agency.get_response_sync("Transfer to AgentA agent", recipient_agent=agent_c)
         chat_history = agency.thread_manager.get_all_messages()
 
-        for message in chat_history:
-            if "role" in message:
-                assert message["role"] != "system", f"Incorrect role, got: {message}, expected no system messages"
+        tool_names = [m.get("name") for m in chat_history if m.get("type") == "function_call"]
+        assert "transfer_to_AgentA" in tool_names, (
+            f"Expected a transfer_to_AgentA handoff call, got tool calls: {tool_names}"
+        )
+
+        # After the transfer the model may keep handing off, so reminders for
+        # reminder-enabled targets are legitimate. The NoReminder flow into
+        # AgentA must never produce one.
+        enabled_reminders = {
+            "transfer_to_AgentB": "Transfer completed. You are AgentB. Please continue the task.",
+            "transfer_to_AgentC": "Custom reminder",
+        }
+        reminder_msgs = [m for m in chat_history if m.get("message_origin") == "handoff_reminder"]
+        for reminder in reminder_msgs:
+            assert reminder.get("role") == "system", f"Incorrect reminder role, got: {reminder}"
+            assert reminder.get("content") in enabled_reminders.values(), (
+                f"Handoff reminder not matching a reminder-enabled target: {reminder}"
+            )
+        for call_name, reminder_text in enabled_reminders.items():
+            reminder_count = sum(1 for m in reminder_msgs if m.get("content") == reminder_text)
+            assert reminder_count <= tool_names.count(call_name), (
+                f"Handoff reminders without a matching {call_name} call: {reminder_msgs} vs {tool_names}"
+            )

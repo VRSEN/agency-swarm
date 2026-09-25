@@ -70,7 +70,7 @@ def agency():
         instructions=(
             "You are a helpful test assistant. Keep responses very brief (max 10 words). "
             "Always respond with 'Test response: [user message]'. "
-            "You can hand off to the Developer agent by using transfer_to_ tool."
+            "When the user asks to transfer or names a transfer_to_* tool, call that tool immediately."
         ),
     )
 

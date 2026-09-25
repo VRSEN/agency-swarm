@@ -155,12 +155,16 @@ async def test_thread_persistence_shared_structural(
 
 @pytest.mark.asyncio
 async def test_persistence_thread_file_separation(
-    file_persistence_callbacks, ceo_agent_instance, developer_agent_instance
+    file_persistence_callbacks, ceo_agent_instance, developer_agent_instance, temp_persistence_dir
 ):
     """
     Test that different threads are saved as separate files.
 
-    Verifies file-level isolation of thread persistence.
+    Verifies file-level isolation of thread persistence: each thread file must
+    contain only messages stamped for that thread. Assertions target ownership
+    metadata and unique tokens rather than free text, because the shared user
+    thread lets every recipient agent see earlier user exchanges, so a model
+    may legitimately quote them in its reply.
     """
     load_cb, save_cb = file_persistence_callbacks
 
@@ -174,26 +178,54 @@ async def test_persistence_thread_file_separation(
         save_threads_callback=save_cb,
     )
 
+    ceo_token = f"CEO{uuid.uuid4().hex}"
+    dev_token = f"DEV{uuid.uuid4().hex}"
+
     # Create threads
-    await agency.get_response(message="CEO message", recipient_agent="CEO")
-    await agency.get_response(message="Developer message", recipient_agent="Developer")
+    await agency.get_response(message=f"CEO project: {ceo_token}", recipient_agent="CEO")
+    await agency.get_response(message=f"Developer project: {dev_token}", recipient_agent="Developer")
 
-    # Verify messages exist
-    all_messages = load_cb()
-    ceo_messages = [msg for msg in all_messages if msg.get("agent") == "CEO" and msg.get("callerAgent") is None]
-    dev_messages = [msg for msg in all_messages if msg.get("agent") == "Developer" and msg.get("callerAgent") is None]
+    def load_thread_items(file_name: str) -> list[dict[str, Any]]:
+        file_path = temp_persistence_dir / file_name
+        assert file_path.exists(), f"Missing thread file {file_name}"
+        items = json.loads(file_path.read_text()).get("items")
+        assert isinstance(items, list) and items, f"{file_name} contains no messages"
+        return items
 
-    assert len(ceo_messages) > 0, "CEO messages should exist"
-    assert len(dev_messages) > 0, "Developer messages should exist"
+    ceo_items = load_thread_items("None_to_CEO.json")
+    dev_items = load_thread_items("None_to_Developer.json")
 
-    # Verify content separation
-    ceo_file_content = str(ceo_messages).lower()
-    dev_file_content = str(dev_messages).lower()
+    # Ownership: every persisted item is stamped with exactly one
+    # (callerAgent, agent) pair and the save callback buckets by that pair, so
+    # a file holding a foreign stamp means a real leak between threads.
+    for item in ceo_items:
+        assert item.get("callerAgent") is None and item.get("agent") == "CEO", (
+            f"user->CEO file holds an item stamped for another thread: {item}"
+        )
+    for item in dev_items:
+        assert item.get("callerAgent") is None and item.get("agent") == "Developer", (
+            f"user->Developer file holds an item stamped for another thread: {item}"
+        )
 
-    assert "ceo message" in ceo_file_content, "CEO file missing CEO content"
-    assert "developer message" not in ceo_file_content, "CEO file contaminated with Developer content"
-    assert "developer message" in dev_file_content, "Developer file missing Developer content"
-    assert "ceo message" not in dev_file_content, "Developer file contaminated with CEO content"
+    # Routing: each file holds the user message addressed to its agent,
+    # identified by a unique token.
+    ceo_user_items = [item for item in ceo_items if item.get("role") == "user"]
+    dev_user_items = [item for item in dev_items if item.get("role") == "user"]
+    assert any(ceo_token in str(item) for item in ceo_user_items), "CEO file missing its user message"
+    assert any(dev_token in str(item) for item in dev_user_items), "Developer file missing its user message"
+    assert not any(ceo_token in str(item) for item in dev_user_items), (
+        "User message addressed to CEO leaked into the Developer thread file"
+    )
+    assert not any(dev_token in str(item) for item in ceo_user_items), (
+        "User message addressed to Developer leaked into the CEO thread file"
+    )
 
-    print("✓ Each conversation properly tracked")
-    print("✓ Message-level content isolation verified")
+    # Completeness: the two files together hold every user-thread message
+    # exactly once, with nothing dropped or duplicated.
+    flat_user_items = [msg for msg in load_cb() if msg.get("callerAgent") is None]
+    assert len(ceo_items) + len(dev_items) == len(flat_user_items), (
+        "Thread files do not partition the shared user thread"
+    )
+
+    print("✓ Each thread saved to its own file")
+    print("✓ Message ownership isolation verified")
