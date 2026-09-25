@@ -9,7 +9,7 @@ from .model_utils import is_reasoning_model
 def create_agent_template(
     agent_name=None,
     agent_description=None,
-    model="gpt-5.4",
+    model="gpt-6-luna",
     reasoning=None,
     max_tokens=None,
     temperature=None,
@@ -75,8 +75,8 @@ def create_agent_template(
     reasoning_line = ""
     if reasoning:
         reasoning_import = "\nfrom openai.types.shared import Reasoning"
-        # GPT-5 models support summary parameter in Reasoning
-        if model.startswith("gpt-5"):
+        # GPT-5 and GPT-6 models support summary parameter in Reasoning
+        if model.startswith(("gpt-5", "gpt-6")):
             reasoning_line = f'\n        reasoning=Reasoning(effort="{reasoning}", summary="auto"),'
         else:
             reasoning_line = f'\n        reasoning=Reasoning(effort="{reasoning}"),'

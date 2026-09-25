@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 from agents import Agent as BaseAgent, FunctionTool, GuardrailFunctionOutput, ModelSettings, RunContextWrapper
 from agents.models.default_models import get_default_model_settings as get_sdk_default_model_settings
+from openai.types.shared.reasoning import Reasoning
 
 from agency_swarm.agent.attachment_manager import AttachmentManager
 from agency_swarm.agent.constants import FRAMEWORK_DEFAULT_MODEL
@@ -36,6 +37,13 @@ _INPUT_GUARDRAIL_WRAPPED_ATTR = "_agency_swarm_input_guardrail_wrapped"
 # include_usage=True enables streaming usage tracking for LiteLLM models
 _FRAMEWORK_DEFAULT_MODEL_SETTINGS = ModelSettings(truncation="auto", include_usage=True)
 
+# Per-model defaults for ids the installed Agents SDK does not pattern-match yet.
+# The SDK default-settings table only covers gpt-5* ids, so pin the effort the
+# framework default runs at (medium, also the model's API default) explicitly.
+_FRAMEWORK_MODEL_SETTINGS_BY_ID: dict[str, ModelSettings] = {
+    "gpt-6-luna": ModelSettings(reasoning=Reasoning(effort="medium")),
+}
+
 
 def _patch_litellm_thinking_blocks_for_model(model: Any) -> None:
     if not _is_litellm_model(model):
@@ -57,11 +65,16 @@ def _is_litellm_model(model: Any) -> bool:
 def _get_framework_default_model_settings(model: str | None = None) -> ModelSettings:
     """Get SDK defaults for a model and layer Agency Swarm defaults on top."""
     base = ModelSettings() if model is None else get_sdk_default_model_settings(model)
-    updates = {
-        field.name: getattr(_FRAMEWORK_DEFAULT_MODEL_SETTINGS, field.name)
-        for field in dataclasses.fields(ModelSettings)
-        if getattr(base, field.name) is None and getattr(_FRAMEWORK_DEFAULT_MODEL_SETTINGS, field.name) is not None
-    }
+    per_model = _FRAMEWORK_MODEL_SETTINGS_BY_ID.get(model) if model is not None else None
+    updates = {}
+    for field in dataclasses.fields(ModelSettings):
+        if getattr(base, field.name) is not None:
+            continue
+        value = getattr(per_model, field.name) if per_model is not None else None
+        if value is None:
+            value = getattr(_FRAMEWORK_DEFAULT_MODEL_SETTINGS, field.name)
+        if value is not None:
+            updates[field.name] = value
     return dataclasses.replace(base, **updates) if updates else base
 
 

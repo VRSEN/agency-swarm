@@ -5,7 +5,7 @@ from pathlib import Path
 TESTS_ROOT = Path(__file__).parents[1]
 
 # Retired model id -> the model new tests should use instead.
-RETIRED_MODELS = {"gpt-5.4-mini": "gpt-5.6-luna"}
+RETIRED_MODELS = {"gpt-5.4-mini": "gpt-6-luna"}
 
 # Files where a retired id is load-bearing: the exact string is what the test proves.
 ALLOWLIST = {
@@ -55,7 +55,7 @@ def test_tests_do_not_hardcode_retired_models() -> None:
     assert not offenders, (
         "Retired model ids found in the test suite:\n"
         + "\n".join(offenders)
-        + "\n\nUse gpt-5.6-luna instead. It is the framework default (FRAMEWORK_DEFAULT_MODEL), has a "
+        + "\n\nUse gpt-6-luna instead. It is the framework default (FRAMEWORK_DEFAULT_MODEL), has a "
         "1,050,000-token context window and reasoning support, and is cheaper per token, so this is not "
         "a capability downgrade.\nIf the exact id is load-bearing - provider-prefix routing "
         "(litellm/openrouter/anthropic), OpenClaw model resolution, or a pricing or capability-detection "

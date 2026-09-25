@@ -4,7 +4,7 @@ from typing import Literal
 
 # Override the Agents SDK default model (gpt-4.1) to prevent infinite tool-call
 # loops observed with that model in handoff workflows.
-FRAMEWORK_DEFAULT_MODEL = "gpt-5.6-luna"
+FRAMEWORK_DEFAULT_MODEL = "gpt-6-luna"
 
 AGENT_PARAMS = {
     "files_folder",

@@ -15,6 +15,7 @@ def test_is_reasoning_model_case_table() -> None:
         ("o4-mini", True),
         ("gpt-5.4", True),
         ("gpt-5.4-mini", True),
+        ("gpt-6-luna", True),
         (OpenAIResponsesModel(model="openai/gpt-5.4-mini", openai_client=client), True),
         ("gpt-4.1", False),
         (None, False),
