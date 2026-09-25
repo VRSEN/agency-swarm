@@ -404,15 +404,15 @@
     "/create_agency_upload": {
       "post": {
         "summary": "Create agency upload",
-        "description": "Signs a 15-minute upload URL for an API integration with persistent agency storage. Call this from your server after checking which app member owns the file. PUT the file bytes to uploadUrl with the same Content-Type, then pass resource as a sandboxFiles path when starting a completion.",
+        "description": "Signs a 15-minute, size-limited upload form for an API integration with persistent agency storage. Call this from your server after checking which app member owns the file. POST multipart/form-data to uploadUrl with every uploadFields entry followed by the file field. Uploads are limited to 20 MiB. Pass resource as a sandboxFiles path when starting a completion.",
         "operationId": "createAgencyUpload",
         "servers": [{ "url": "https://api-integration-v2-japboyzddq-uc.a.run.app", "description": "Production API v2 server" }],
         "requestBody": {
           "required": true,
-          "content": { "application/json": { "schema": { "type": "object", "required": ["apiIntegrationId", "folder", "filename", "contentType"], "properties": { "apiIntegrationId": { "type": "string" }, "folder": { "type": "string", "description": "Canonical folder below /app/mnt/, chosen by your server for the app member." }, "filename": { "type": "string", "description": "File name without directories." }, "contentType": { "type": "string", "example": "image/png" } } } } }
+          "content": { "application/json": { "schema": { "type": "object", "required": ["apiIntegrationId", "folder", "filename", "contentType", "sizeBytes"], "properties": { "apiIntegrationId": { "type": "string" }, "folder": { "type": "string", "description": "Canonical folder below /app/mnt/, chosen by your server for the app member." }, "filename": { "type": "string", "description": "File name without directories or control characters." }, "contentType": { "type": "string", "example": "image/png" }, "sizeBytes": { "type": "integer", "minimum": 1, "maximum": 20971520, "description": "Number of file bytes to upload." } } } } }
         },
         "responses": {
-          "200": { "description": "Upload destination reserved.", "content": { "application/json": { "schema": { "type": "object", "required": ["resource", "uploadUrl"], "properties": { "resource": { "type": "string", "description": "Persistent /app/mnt/ file path for sandboxFiles." }, "uploadUrl": { "type": "string", "format": "uri", "description": "Short-lived signed PUT URL. Keep it on your server." } } } } } },
+          "200": { "description": "Upload destination reserved.", "content": { "application/json": { "schema": { "type": "object", "required": ["resource", "uploadUrl", "uploadFields"], "properties": { "resource": { "type": "string", "description": "Persistent /app/mnt/ file path for sandboxFiles." }, "uploadUrl": { "type": "string", "format": "uri", "description": "Short-lived signed POST destination. Keep it on your server." }, "uploadFields": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Form fields to include unchanged before the file field." } } } } } },
           "400": { "description": "Invalid path or persistent storage is unavailable." },
           "401": { "description": "Missing or invalid platform API key." },
           "403": { "description": "The API key does not own this integration." },
