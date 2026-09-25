@@ -42,6 +42,22 @@ API Integrations provide a set of endpoints allowing you to run your agents on c
 >
   Get a response from your agent.
 </Card>
+
+<Card
+  title="Stream API v2 Completion"
+  icon="wave-pulse"
+  href="/platform/integrations/api/stream-api-v2-completion"
+>
+  Stream an agent run with member attribution and file attachments.
+</Card>
+
+<Card
+  title="Create Agency Upload"
+  icon="upload"
+  href="/platform/integrations/api/create-agency-upload"
+>
+  Upload a member's file where your agent can read it with sandbox tools.
+</Card>
 </CardGroup>
 
 ---
@@ -52,5 +68,6 @@ API Integrations provide a set of endpoints allowing you to run your agents on c
 - Ensure that your `apiIntegrationId` is valid and corresponds to an existing integration.
 - Replace placeholder values with actual data when making requests.
 - The `attachments` parameter in `/get_response` allows you to include files and specify tools for processing.
+- API v1 behavior is unchanged and does not enforce per-consumer allowances.
 
 ---
