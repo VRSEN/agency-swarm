@@ -211,6 +211,7 @@
           "chatId": { "type": "string", "nullable": true },
           "aliasChatId": { "type": "string", "nullable": true },
           "attachments": { "type": "array", "items": { "$ref": "#/components/schemas/ApiV2Attachment" } },
+          "sandboxFiles": { "type": "array", "maxItems": 5, "description": "Files already uploaded into this integration's persistent agency mount. The agent can read these paths with sandbox tools; send images in attachments as well when the model should see them.", "items": { "type": "object", "required": ["name", "path"], "properties": { "name": { "type": "string", "description": "Uploaded filename." }, "path": { "type": "string", "description": "Canonical /app/mnt/ path returned by create_agency_upload." } } } },
           "user_context": { "oneOf": [{ "type": "object", "additionalProperties": true }, { "type": "string" }], "nullable": true },
           "consumerId": { "type": "string", "description": "Required when member allowances are enabled." },
           "usageRequestId": { "type": "string", "description": "Unique ID carried into the usage record for reconciliation." }
@@ -397,6 +398,25 @@
           "401": { "description": "Missing or invalid platform API key.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } },
           "403": { "description": "The API key does not own this integration.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } },
           "404": { "description": "Integration or consumer not found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } }
+        }
+      }
+    },
+    "/create_agency_upload": {
+      "post": {
+        "summary": "Create agency upload",
+        "description": "Signs a 15-minute upload URL for an API integration with persistent agency storage. Call this from your server after checking which app member owns the file. PUT the file bytes to uploadUrl with the same Content-Type, then pass resource as a sandboxFiles path when starting a completion.",
+        "operationId": "createAgencyUpload",
+        "servers": [{ "url": "https://api-integration-v2-japboyzddq-uc.a.run.app", "description": "Production API v2 server" }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "required": ["apiIntegrationId", "folder", "filename", "contentType"], "properties": { "apiIntegrationId": { "type": "string" }, "folder": { "type": "string", "description": "Canonical folder below /app/mnt/, chosen by your server for the app member." }, "filename": { "type": "string", "description": "File name without directories." }, "contentType": { "type": "string", "example": "image/png" } } } } }
+        },
+        "responses": {
+          "200": { "description": "Upload destination reserved.", "content": { "application/json": { "schema": { "type": "object", "required": ["resource", "uploadUrl"], "properties": { "resource": { "type": "string", "description": "Persistent /app/mnt/ file path for sandboxFiles." }, "uploadUrl": { "type": "string", "format": "uri", "description": "Short-lived signed PUT URL. Keep it on your server." } } } } } },
+          "400": { "description": "Invalid path or persistent storage is unavailable." },
+          "401": { "description": "Missing or invalid platform API key." },
+          "403": { "description": "The API key does not own this integration." },
+          "404": { "description": "Integration or agency not found." }
         }
       }
     },
