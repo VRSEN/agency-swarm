@@ -9,11 +9,12 @@ This file contains only repository-specific addenda to the controlling machine-g
 1.1 The canonical remote-tracking default branch is `origin/main`.
 1.2 `CLAUDE.md` must remain a symlink to `AGENTS.md`; verify it before relying on repository policy or shipping a repository-policy change.
 1.3 Shared policy from `VRSEN/agentswarm-cli` may appear here only as a strict subset or a necessary Python/Agency adaptation; omit CLI, TUI, OpenCode, Bun, npm, and package-layout rules without a Python or Agency equivalent.
-1.4 If an active pull request duplicates an open Dependabot dependency update, close the Dependabot pull request through the normal public-mutation approval path.
+1.4 If an active pull request duplicates an open Dependabot dependency update, propose closing the Dependabot pull request under 1.9.
 1.5 Commits and pull requests carry no AI attribution: no AI `Co-Authored-By` trailers and no "Generated with" footers in commit messages, pull request titles, or pull request descriptions.
 1.6 If functionality is now implemented upstream, remove the custom implementation unless there is a concrete reason to keep it. If the custom implementation differs from upstream in a way that looks artificial, incorrect, or non-standard, escalate to the maintainer with a recommendation to delete it and reuse upstream behavior.
 1.7 Third-party or vendor integrations live outside this repository: decline vendor-pitch issues and pull requests with a pointer to the existing extension seam, and ship at most a docs recipe.
-1.8 Backward compatibility is not a constraint: take the best target design, and ship breaking changes under a new major or minor version with a breaking-changes note.
+1.8 Keep backward compatibility. A breaking change ships only when it is necessary, only in a new major version, and always with a breaking-changes note.
+1.9 Any public action on GitHub needs the maintainer's approval of the exact text or action first: comments, reviews, issues, pull requests, merges, closes, reopens, labels, pushes to shared branches, tags, releases and package uploads. Agents prepare drafts. The one exception is a short reply correcting an automated comment that is clearly wrong.
 
 ## 2. Repository Commands And Review Artifacts
 
@@ -22,13 +23,9 @@ This file contains only repository-specific addenda to the controlling machine-g
 2.3 Run `make check` before staging or committing runtime, interface, or integration changes.
 2.4 Run `make ci` before a release, a broad or risky merge-readiness claim, a repository-wide health claim, or when focused proof cannot bound risk.
 2.5 Use project virtual environments and repository task runners, not global interpreters or absolute paths.
-2.6 The general review gate is an independent review by a different live model through the currently allowed route in the global worker-model-routing allowlist, at `high` reasoning effort, against `origin/main`.
-2.7 The policy review gate uses the same route at `xhigh` reasoning effort.
-2.8 The pre-release review gate uses the same route at `xhigh` reasoning effort against the exact release commit.
-2.9 Broad, public, high-risk, or low-confidence repository-policy edits require a clean policy review before shipping; `high` is insufficient.
-2.10 When the primary review route cannot be used, fall back only to another currently-allowed route with the same `origin/main` base and reasoning class.
-2.11 Save pre-release and fallback review output to the owning task's artifacts directory, never `/tmp`.
-2.12 Supporting reviews may supplement but never replace a required independent review.
+2.6 Every change gets an independent review against `origin/main` by a different model than the one that wrote it.
+2.7 Repository-policy edits and release commits get the deepest review available; the pre-release review runs against the exact release commit.
+2.8 Save pre-release review output with the release evidence, never in `/tmp`.
 
 ## 3. Documentation
 
@@ -61,7 +58,7 @@ This file contains only repository-specific addenda to the controlling machine-g
 
 ## 6. Release Specifics
 
-6.1 A release or safety claim requires a clean pre-release review (2.8) against the exact release commit.
+6.1 A release or safety claim requires a clean pre-release review (2.7) against the exact release commit.
 6.2 Before a release or safety claim, send a real first message through the installed interface to the maintained local test agency and observe a non-empty streamed response through that interface.
 6.3 Automated authentication smoke tests do not satisfy the installed-interface proof in 6.2.
 6.4 A launch, credential, dependency, or interface failure in that proof blocks the release claim until it is reproduced and root-caused.
@@ -70,5 +67,4 @@ This file contains only repository-specific addenda to the controlling machine-g
 6.7 A release claim requires per-commit evidence on the release page: every change since the previous release names its test evidence and confidence level.
 6.8 Existing behavior affected by a change must be regression-tested end-to-end, and the previous and new releases compared, before merge or release.
 6.9 No test may be skipped in the final pre-release suite; tests requiring real API keys run with real keys. A single skipped test blocks the release claim.
-6.10 Nothing is tagged, published as a GitHub release, or uploaded to PyPI without the maintainer's explicit approval; agents prepare release drafts only.
-6.11 After upgrading `openai-agents`, LiteLLM, or a provider SDK, run the full formal test suite (`make ci`); it must include end-to-end coverage that makes a tool call or delegation and then sends the resulting history back to the model in a following turn.
+6.10 After upgrading `openai-agents`, LiteLLM, or a provider SDK, run the full formal test suite (`make ci`); it must include end-to-end coverage that makes a tool call or delegation and then sends the resulting history back to the model in a following turn.
