@@ -25,9 +25,11 @@ def test_model_settings_defaults_distinguish_nameless_model_objects_from_luna() 
     for agent in (default_agent, none_model_agent):
         assert agent.model_settings.reasoning is not None
         assert agent.model_settings.reasoning.effort == "medium"
+        assert agent.model_settings.verbosity == "low"
 
     assert explicit_luna_agent.model_settings.reasoning is not None
     assert explicit_luna_agent.model_settings.reasoning.effort == "none"
+    assert explicit_luna_agent.model_settings.verbosity == "low"
 
     assert default_agent.model == FRAMEWORK_DEFAULT_MODEL
     assert explicit_luna_agent.model == "gpt-5.6-luna"
@@ -38,6 +40,7 @@ def test_framework_default_model_normalizes_none_without_overriding_explicit_con
     default_agent = Agent(name="DefaultAgent", instructions="Test", model=None)
     assert default_agent.model == FRAMEWORK_DEFAULT_MODEL
     assert default_agent.model_settings.reasoning == Reasoning(effort="medium")
+    assert default_agent.model_settings.verbosity == "low"
 
     explicit_model_agent = Agent(name="ExplicitModelAgent", instructions="Test", model="gpt-4.1")
     assert explicit_model_agent.model == "gpt-4.1"

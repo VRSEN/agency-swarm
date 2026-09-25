@@ -38,10 +38,12 @@ _INPUT_GUARDRAIL_WRAPPED_ATTR = "_agency_swarm_input_guardrail_wrapped"
 _FRAMEWORK_DEFAULT_MODEL_SETTINGS = ModelSettings(truncation="auto", include_usage=True)
 
 # Per-model defaults for ids the installed Agents SDK does not pattern-match yet.
-# The SDK default-settings table only covers gpt-5* ids, so pin the effort the
-# framework default runs at (medium, also the model's API default) explicitly.
+# The SDK default-settings table only covers gpt-5* ids, so pin the effort and
+# verbosity the framework default ran at under gpt-5.6-luna. SDK defaults are
+# applied first and would win over this table; test_default_model_contract.py
+# is what catches that drift on an SDK upgrade.
 _FRAMEWORK_MODEL_SETTINGS_BY_ID: dict[str, ModelSettings] = {
-    "gpt-6-luna": ModelSettings(reasoning=Reasoning(effort="medium")),
+    "gpt-6-luna": ModelSettings(reasoning=Reasoning(effort="medium"), verbosity="low"),
 }
 
 
