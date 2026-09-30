@@ -62,6 +62,14 @@ API Integrations provide a set of endpoints allowing you to run your agents on c
 
 ---
 
+## Recover an interrupted API v2 request
+
+Use a unique `usageRequestId` for each request. If an error includes
+`X-Agent-Run-Admitted: false`, the request was rejected before a run started.
+If a connection ends without that header, the agent may still be working. Read
+`/get_chat_messages` and match `status.usageRequestId` before retrying. An older
+completed response does not mean the current run has finished.
+
 ## Additional Notes
 
 - All timestamps are in ISO 8601 format.

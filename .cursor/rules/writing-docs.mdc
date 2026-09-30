@@ -151,3 +151,10 @@ Use these examples as guidance, not strict templates.
 # References
 
 - [Mintlify Documentation](https://www.mintlify.com/docs/llms.txt) - Check if you need clarification about how mintlify works or looking for any other components.
+
+## Platform API reference
+
+Keep the public API reference aligned with the tested backend contract. Use the verified
+staging server for unreleased API v2 examples; change it to production only after release.
+Explain interruption recovery and member limits in the API integration subgroup, without
+exposing internal deployment or billing implementation details.

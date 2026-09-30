@@ -214,7 +214,8 @@
           "sandboxFiles": { "type": "array", "maxItems": 5, "description": "Files already uploaded into this integration's persistent agency mount. The agent can read these paths with sandbox tools; send images in attachments as well when the model should see them.", "items": { "type": "object", "required": ["name", "path"], "properties": { "name": { "type": "string", "description": "Uploaded filename. Must match the final path segment and contain no control characters." }, "path": { "type": "string", "description": "Canonical /app/mnt/ path returned by create_agency_upload." } } } },
           "user_context": { "oneOf": [{ "type": "object", "additionalProperties": true }, { "type": "string" }], "nullable": true },
           "consumerId": { "type": "string", "description": "Required when member allowances are enabled." },
-          "usageRequestId": { "type": "string", "description": "Unique ID carried into the usage record for reconciliation." }
+          "usageRequestId": {"type": "string", "description": "Unique ID for this request, included in chat status and usage records. Required when allowances are enabled. Match it when recovering an interrupted request."},
+          "attachmentUrlRefreshes": {"type": "object", "additionalProperties": {"type": "string", "format": "uri"}, "description": "Map each expired earlier attachment URL without its query string to a fresh HTTPS URL with the same host and path. Include all earlier conversation files that need refreshing."}
         }
       },
       "ApiErrorResponse": {
@@ -348,7 +349,7 @@
         "summary": "Register API consumer",
         "description": "Idempotently registers one application member. Allowance values are controlled by the integration owner and cannot be supplied by this route.",
         "operationId": "registerApiConsumer",
-        "servers": [{ "url": "https://api-integration-v2-japboyzddq-uc.a.run.app", "description": "Production API v2 server" }],
+        "servers": [{ "url": "https://api-integration-v2-qd6wo466iq-uc.a.run.app", "description": "Staging API v2 server" }],
         "requestBody": {
           "required": true,
           "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RegisterApiConsumerRequest" } } }
@@ -368,7 +369,7 @@
         "summary": "Get API consumer allowance",
         "description": "Returns the live read model for the current UTC usage period and lazily rolls an expired period forward.",
         "operationId": "getApiConsumerAllowance",
-        "servers": [{ "url": "https://api-integration-v2-japboyzddq-uc.a.run.app", "description": "Production API v2 server" }],
+        "servers": [{ "url": "https://api-integration-v2-qd6wo466iq-uc.a.run.app", "description": "Staging API v2 server" }],
         "requestBody": {
           "required": true,
           "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GetApiConsumerAllowanceRequest" } } }
@@ -387,7 +388,7 @@
         "summary": "Set API consumer status",
         "description": "Enables or disables AI access for a registered consumer. This route cannot change monetary limits or renewal dates.",
         "operationId": "setApiConsumerStatus",
-        "servers": [{ "url": "https://api-integration-v2-japboyzddq-uc.a.run.app", "description": "Production API v2 server" }],
+        "servers": [{ "url": "https://api-integration-v2-qd6wo466iq-uc.a.run.app", "description": "Staging API v2 server" }],
         "requestBody": {
           "required": true,
           "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SetApiConsumerStatusRequest" } } }
@@ -406,7 +407,7 @@
         "summary": "Create agency upload",
         "description": "Signs a 15-minute, size-limited upload form for an API integration with persistent agency storage. Call this from your server after checking which app member owns the file. POST multipart/form-data to uploadUrl with every uploadFields entry followed by the file field. Uploads are limited to 20 MiB. Pass resource as a sandboxFiles path when starting a completion.",
         "operationId": "createAgencyUpload",
-        "servers": [{ "url": "https://api-integration-v2-japboyzddq-uc.a.run.app", "description": "Production API v2 server" }],
+        "servers": [{ "url": "https://api-integration-v2-qd6wo466iq-uc.a.run.app", "description": "Staging API v2 server" }],
         "requestBody": {
           "required": true,
           "content": { "application/json": { "schema": { "type": "object", "required": ["apiIntegrationId", "folder", "filename", "contentType", "sizeBytes"], "properties": { "apiIntegrationId": { "type": "string" }, "folder": { "type": "string", "description": "Canonical folder below /app/mnt/, chosen by your server for the app member." }, "filename": { "type": "string", "description": "File name without directories or control characters." }, "contentType": { "type": "string", "example": "image/png" }, "sizeBytes": { "type": "integer", "minimum": 1, "maximum": 20971520, "description": "Number of file bytes to upload." } } } } }
@@ -423,20 +424,21 @@
     "/get_completion_v2": {
       "post": {
         "summary": "Stream API v2 completion",
-        "description": "Starts an SSE agent run. When allowances are enabled, consumerId and usageRequestId are required. An in-progress response may finish above the limit; the next request is rejected.",
+        "description": "Starts an SSE agent run. When allowances are enabled, consumerId and usageRequestId are required. An in-progress response may finish above the limit; the next request is rejected. Every request must use the integration owner's API key. Errors with X-Agent-Run-Admitted: false were rejected before reserving a run. If that header is absent after an interruption, check chat status using the same usageRequestId before retrying.",
         "operationId": "getCompletionV2",
-        "servers": [{ "url": "https://api-integration-v2-japboyzddq-uc.a.run.app", "description": "Production API v2 server" }],
+        "servers": [{ "url": "https://api-integration-v2-qd6wo466iq-uc.a.run.app", "description": "Staging API v2 server" }],
         "requestBody": {
           "required": true,
           "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GetCompletionV2Request" } } }
         },
         "responses": {
           "200": { "description": "Server-sent events by default, or plain text when Text Only Mode is enabled for the integration.", "content": { "text/event-stream": { "schema": { "type": "string" } }, "text/plain": { "schema": { "type": "string" } } } },
-          "400": { "description": "Invalid request or missing allowance attribution.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } },
-          "401": { "description": "Missing or invalid platform API key.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } },
-          "403": { "description": "The API key does not own this integration.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } },
-          "404": { "description": "Integration or consumer not found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } },
-          "429": { "description": "Consumer is inactive or has exhausted the current allowance.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } } } }
+          "400": {"description": "Invalid request or missing allowance attribution.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ApiErrorResponse"}}}, "headers": {"X-Agent-Run-Admitted": {"description": "false means no run was reserved. An absent header does not prove rejection.", "schema": {"type": "string", "enum": ["false"]}}}},
+          "401": {"description": "Missing or invalid platform API key.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ApiErrorResponse"}}}, "headers": {"X-Agent-Run-Admitted": {"description": "false means no run was reserved. An absent header does not prove rejection.", "schema": {"type": "string", "enum": ["false"]}}}},
+          "403": {"description": "The API key does not own this integration.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ApiErrorResponse"}}}, "headers": {"X-Agent-Run-Admitted": {"description": "false means no run was reserved. An absent header does not prove rejection.", "schema": {"type": "string", "enum": ["false"]}}}},
+          "404": {"description": "Integration or consumer not found.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ApiErrorResponse"}}}, "headers": {"X-Agent-Run-Admitted": {"description": "false means no run was reserved. An absent header does not prove rejection.", "schema": {"type": "string", "enum": ["false"]}}}},
+          "409": {"description": "The previous run is still active. Wait or cancel that exact run before starting another.", "headers": {"X-Agent-Run-Admitted": {"description": "false means no run was reserved. An absent header does not prove rejection.", "schema": {"type": "string", "enum": ["false"]}}}, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ApiErrorResponse"}}}},
+          "429": {"description": "Consumer is inactive or has exhausted the current allowance.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ApiErrorResponse"}}}, "headers": {"X-Agent-Run-Admitted": {"description": "false means no run was reserved. An absent header does not prove rejection.", "schema": {"type": "string", "enum": ["false"]}}}}
         }
       }
     }
