@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 # Add src to path for standalone example execution
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
-from agency_swarm import Agency, Agent, BaseTool, ModelSettings, function_tool  # noqa: E402  # isort: skip
+from agency_swarm import Agency, Agent, BaseTool, function_tool  # noqa: E402  # isort: skip
 
 
 # --- BaseTool pattern --- #
@@ -92,7 +92,6 @@ def create_demo_agency() -> Agency:
             "or 'Error: <reason>'."
         ),
         tools=[add_numbers, AddTool],
-        model_settings=ModelSettings(temperature=0.0),
     )
     return Agency(tool_user)
 

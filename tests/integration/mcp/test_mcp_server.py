@@ -19,7 +19,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx2
 import pytest
-from agents import ModelSettings, ToolOriginType
+from agents import ToolOriginType
 from agents.items import ToolCallItem, ToolCallOutputItem
 from agents.mcp.server import (
     MCPServerStdio,
@@ -105,7 +105,6 @@ def _make_agency_with_local_mcp(server_url: str) -> Agency:
         name="MCP HTTP Agent",
         description="Agent using local MCP tools over HTTP",
         mcp_servers=[mcp_client],
-        model_settings=ModelSettings(temperature=0),
     )
 
     return Agency(agent, name="mcp_http_agency", shared_instructions="Test MCP HTTP Integration")
@@ -115,10 +114,11 @@ def _make_agency_with_local_mcp(server_url: str) -> Agency:
 async def test_mcp_http_tools_list(mcp_http_server):
     """Verify the agent can discover tools exposed by the MCP HTTP server."""
     agency = _make_agency_with_local_mcp(mcp_http_server)
-    res = await agency.get_response("What tools do you have?")
-    text = str(res.final_output).lower()
+    # MCP tools are converted to FunctionTools on the agent at creation time, so
+    # discovery is proven by the tool list itself, not by the model's wording.
     # sample_tool is provided by tests/data/tools/sample_tool.py
-    assert "sample_tool" in text or "sample tool" in text
+    tool_names = {getattr(tool, "name", None) for tool in agency.agents["MCP HTTP Agent"].tools}
+    assert "sample_tool" in tool_names, f"sample_tool missing from discovered tools: {tool_names}"
 
 
 @pytest.mark.asyncio
@@ -216,7 +216,6 @@ if __name__ == "__main__":
 
         agent = Agent(
             name="MCP Stdio Agent",
-            model_settings=ModelSettings(temperature=0),
             mcp_servers=[stdio_server],
         )
 

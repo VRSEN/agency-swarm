@@ -6,7 +6,8 @@ This hook downloads the latest pricing data from LiteLLM before building the pac
 The pricing file is:
 1. Downloaded on `main` and detached release checkouts before each wheel or sdist build;
    editable installs (`uv sync`, `make sync`) keep the committed copy
-2. Corrected with repository-owned overrides when LiteLLM is temporarily stale
+2. Corrected with repository-owned overrides, and supplemented with repository-owned
+   entries for models LiteLLM has not listed yet, when LiteLLM is temporarily stale
 3. Included in the package artifacts (via pyproject.toml)
 4. Committed to the repo so tests can run without network access
 """
@@ -80,6 +81,64 @@ PRICE_OVERRIDES: dict[str, PriceOverride] = {
         "output_cost_per_token_batches": (7.5e-06, 6e-06),
         "output_cost_per_token_flex": (7.5e-06, 6e-06),
         "output_cost_per_token_priority": (3e-05, 2.4e-05),
+    },
+}
+
+# Repository-owned entries merged when LiteLLM has not listed the model yet.
+# Source: https://developers.openai.com/api/docs/models/gpt-6-luna (effective 2026-09-22).
+MODEL_ENTRY_INSERTIONS: dict[str, dict[str, object]] = {
+    "gpt-6-luna": {
+        "cache_creation_input_token_cost": 1.25e-07,
+        "cache_creation_input_token_cost_above_272k_tokens": 2.5e-07,
+        "cache_creation_input_token_cost_flex": 6.25e-08,
+        "cache_creation_input_token_cost_priority": 2.5e-07,
+        "cache_read_input_token_cost": 1e-08,
+        "cache_read_input_token_cost_above_272k_tokens": 2e-08,
+        "cache_read_input_token_cost_flex": 5e-09,
+        "cache_read_input_token_cost_priority": 2e-08,
+        "input_cost_per_token": 1e-07,
+        "input_cost_per_token_above_272k_tokens": 2e-07,
+        "input_cost_per_token_batches": 5e-08,
+        "input_cost_per_token_flex": 5e-08,
+        "input_cost_per_token_priority": 2e-07,
+        "litellm_provider": "openai",
+        "max_input_tokens": 1050000,
+        "max_output_tokens": 128000,
+        "max_tokens": 128000,
+        "mode": "chat",
+        "output_cost_per_token": 5e-07,
+        "output_cost_per_token_above_272k_tokens": 7.5e-07,
+        "output_cost_per_token_batches": 2.5e-07,
+        "output_cost_per_token_flex": 2.5e-07,
+        "output_cost_per_token_priority": 1e-06,
+        "regional_processing_uplift_multiplier_eu": 1.1,
+        "regional_processing_uplift_multiplier_us": 1.1,
+        "supported_endpoints": [
+            "/v1/chat/completions",
+            "/v1/batch",
+            "/v1/responses",
+        ],
+        "supported_modalities": [
+            "text",
+            "image",
+        ],
+        "supported_output_modalities": [
+            "text",
+        ],
+        "supports_function_calling": True,
+        "supports_minimal_reasoning_effort": False,
+        "supports_native_streaming": True,
+        "supports_none_reasoning_effort": True,
+        "supports_parallel_function_calling": True,
+        "supports_pdf_input": True,
+        "supports_prompt_caching": True,
+        "supports_reasoning": True,
+        "supports_response_schema": True,
+        "supports_system_messages": True,
+        "supports_tool_choice": True,
+        "supports_vision": True,
+        "supports_web_search": True,
+        "supports_xhigh_reasoning_effort": True,
     },
 }
 
@@ -167,6 +226,21 @@ def _apply_price_overrides(pricing_data: PricingData) -> None:
             )
 
 
+def _apply_model_insertions(pricing_data: PricingData) -> None:
+    for model_name, entry in MODEL_ENTRY_INSERTIONS.items():
+        if isinstance(pricing_data.get(model_name), dict):
+            logger.info(
+                "LiteLLM now lists %s; the repository insertion is redundant and can be removed.",
+                model_name,
+            )
+            continue
+        pricing_data[model_name] = dict(entry)
+        logger.warning(
+            "Inserted repository-owned pricing entry for %s; LiteLLM does not list it yet.",
+            model_name,
+        )
+
+
 def _serialize_pricing_data(pricing_data: PricingData) -> bytes:
     return (json.dumps(pricing_data, indent=4) + "\n").encode()
 
@@ -209,6 +283,7 @@ class CustomBuildHook(BuildHookInterface):
         downloaded = _download_pricing_data()
         pricing_data = _load_pricing_data(downloaded, PRICING_FILE_URL)
         _apply_price_overrides(pricing_data)
+        _apply_model_insertions(pricing_data)
         updated = _serialize_pricing_data(pricing_data)
 
         if pricing_file_path.exists() and pricing_file_path.read_bytes() == updated:

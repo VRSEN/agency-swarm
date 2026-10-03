@@ -3,7 +3,6 @@ import logging
 import os
 
 import pytest
-from agents import ModelSettings
 from agents.mcp.server import MCPServerStdio
 from dotenv import load_dotenv
 
@@ -33,7 +32,6 @@ def _agency_factory() -> Agency:
 
     agent = Agent(
         name="MCP StdIO Agent",
-        model_settings=ModelSettings(temperature=0),
         mcp_servers=[stdio_server],
     )
 
@@ -51,9 +49,11 @@ async def test_mcp_stdio_get_response(caplog):
     agency = _agency_factory()
 
     with caplog.at_level(logging.ERROR):
-        res = await agency.get_response("What tools do you have?")
+        await agency.get_response("What tools do you have?")
 
-    assert "greet" in res.final_output.lower() and "add" in res.final_output.lower()
+    # Tool discovery is proven by the converted tool list, not the model's wording.
+    tool_names = {getattr(tool, "name", None) for tool in agency.agents["MCP StdIO Agent"].tools}
+    assert "greet" in tool_names and "add" in tool_names, f"Expected stdio tools missing: {tool_names}"
 
     # ensure no MCP cleanup error logs were emitted
     err_msgs = [rec.getMessage() for rec in caplog.records]

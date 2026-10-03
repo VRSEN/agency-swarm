@@ -49,7 +49,6 @@ async def test_agent_processes_message_files_attachment(real_openai_client: Asyn
             "You are a helpful assistant. When files are attached, you can read their content directly. "
             "Answer questions about the file content accurately."
         ),
-        model_settings=ModelSettings(temperature=0.0),
     )
     attachment_tester_agent._openai_client = real_openai_client
 
@@ -134,7 +133,6 @@ async def test_multi_file_type_processing(real_openai_client: AsyncOpenAI, tmp_p
             instructions="""You are an agent that can read and analyze PDF files automatically.
             When PDF files are attached, you can access their content directly.
             Extract and summarize key information from the PDF content accurately.""",
-            model_settings=ModelSettings(temperature=0.0),
         )
         file_processor_agent._openai_client = real_openai_client
 
@@ -156,7 +154,6 @@ async def test_multi_file_type_processing(real_openai_client: AsyncOpenAI, tmp_p
         response_lower = response_result.final_output.lower()
         expected_lower = expected_content.lower()
 
-        # With temperature=0, responses should be deterministic
         content_found = expected_lower in response_lower
 
         assert content_found, (
@@ -422,7 +419,7 @@ async def test_code_interpreter_tool(real_openai_client: AsyncOpenAI, tmp_path: 
         code_interpreter_agent = Agent(
             name="CodeInterpreterAgent",
             instructions="""You are an agent that can read and execute code using CodeInterpreter tool.""",
-            model_settings=ModelSettings(temperature=0.0, tool_choice="required"),
+            model_settings=ModelSettings(tool_choice="required"),
             tool_use_behavior="stop_on_first_tool",
             files_folder=tmp_dir,
         )
@@ -523,13 +520,12 @@ async def test_agent_vision_capabilities(real_openai_client: AsyncOpenAI, tmp_pa
     for image_path, _, _ in test_images:
         assert image_path.exists(), f"Test image not found at {image_path}"
 
-    # Create a vision-capable agent with temperature=0 for deterministic responses
+    # Create a vision-capable agent
     vision_agent = Agent(
         name="VisionAgent",
         instructions="""You are an expert vision AI that can analyze images accurately.
         When images are provided, examine them carefully and answer questions about their content.
         Be precise and specific in your descriptions.""",
-        model_settings=ModelSettings(temperature=0.0),
     )
     vision_agent._openai_client = real_openai_client
 

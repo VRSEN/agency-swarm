@@ -216,6 +216,7 @@ def run_item_to_tresponse_input_item(item: RunItem) -> TResponseInputItem | None
         logger.warning(f"Failed to convert {type(item).__name__} using to_input_item(): {e}")
         return None
 
+
 def prepare_master_context(
     agent: "Agent", context_override: dict[str, Any] | None, agency_context: "AgencyContext | None" = None
 ) -> MasterContext:

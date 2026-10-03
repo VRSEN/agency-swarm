@@ -19,7 +19,6 @@ import pytest
 
 os.environ.setdefault("OPENAI_AGENTS_DISABLE_TRACING", "1")
 
-from agents import ModelSettings
 from agents.tracing import set_tracing_disabled
 
 from agency_swarm import Agency, Agent, run_fastapi
@@ -80,7 +79,6 @@ def agency_factory():
         agent = Agent(
             name="LogTestAgent",
             instructions="You are a test agent for logging middleware testing.",
-            model_settings=ModelSettings(temperature=0),
         )
         return Agency(
             agent,

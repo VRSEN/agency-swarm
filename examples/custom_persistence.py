@@ -15,8 +15,6 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from agency_swarm import ModelSettings
-
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s - %(levelname)s - %(message)s")
 
 script_dir = Path(__file__).parent
@@ -86,7 +84,6 @@ assistant_agent = Agent(
     name="AssistantAgent",
     instructions="You are a helpful assistant. Answer questions and help users with their tasks.",
     tools=[],
-    model_settings=ModelSettings(temperature=0.0),  # Deterministic responses
 )
 
 # Define chat_id for demonstration - in production, this would come from your session management
@@ -132,7 +129,6 @@ async def run_persistent_conversation():
         name="AssistantAgent",
         instructions="You are a helpful assistant. Answer questions and help users with their tasks.",
         tools=[],
-        model_settings=ModelSettings(temperature=0.0),  # Deterministic responses
     )
 
     agency_reloaded = Agency(

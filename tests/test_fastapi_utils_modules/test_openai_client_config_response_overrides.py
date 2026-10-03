@@ -9,6 +9,7 @@ import pytest
 @pytest.mark.asyncio
 async def test_generate_chat_name_uses_codex_direct_client_stream() -> None:
     """Codex chat-name generation should use the proven low-level client request shape."""
+    from agency_swarm.agent.constants import FRAMEWORK_DEFAULT_MODEL
     from agency_swarm.integrations.fastapi_utils import endpoint_handlers
 
     captured: dict[str, object] = {}
@@ -41,7 +42,7 @@ async def test_generate_chat_name_uses_codex_direct_client_stream() -> None:
     )
 
     assert result == "Friendly Greeting"
-    assert captured["model"] == "gpt-5.6-luna"
+    assert captured["model"] == FRAMEWORK_DEFAULT_MODEL
     assert captured["store"] is False
     assert captured["stream"] is True
     assert captured["reasoning"] == {"effort": "none"}

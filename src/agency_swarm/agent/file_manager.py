@@ -90,27 +90,24 @@ class AgentFileManager:
             if remote_created_at is not None and local_mtime <= float(remote_created_at):
                 logger.info(f"File {fpath.name} unchanged since upload, skipping...")
                 return existing_file_id
-            else:
-                logger.info(
-                    f"File {fpath.name} appears newer locally (mtime={local_mtime}, created_at={remote_created_at});"
-                    f" replacing file {existing_file_id} on OpenAI."
-                )
-                try:
-                    # Detach from VS and delete remote file before re-upload
-                    self._sync.remove_file_from_vs_and_oai(existing_file_id)
-                except Exception as e:
-                    logger.warning(f"Agent {self.agent.name}: Failed to remove existing file {existing_file_id}: {e}")
+            logger.info(
+                f"File {fpath.name} appears newer locally (mtime={local_mtime}, created_at={remote_created_at});"
+                f" replacing file {existing_file_id} on OpenAI."
+            )
 
         try:
             with open(fpath, "rb") as f:
                 uploaded_file: FileObject = self.agent.client_sync.files.create(file=f, purpose="assistants")
-            logger.info(
-                f"Agent {self.agent.name}: Successfully uploaded file {fpath.name} to OpenAI. "
-                f"File ID: {uploaded_file.id}"
-            )
+            logger.info("Agent %s: Uploaded %s to OpenAI as %s", self.agent.name, fpath.name, uploaded_file.id)
         except Exception as e:
             logger.error(f"Agent {self.agent.name}: Failed to upload file {fpath.name} to OpenAI: {e}")
             raise AgentsException(f"Failed to upload file {fpath.name} to OpenAI: {e}") from e
+
+        if existing_file_id:
+            try:
+                self._sync.remove_file_from_vs_and_oai(existing_file_id)
+            except Exception as e:
+                logger.warning(f"Agent {self.agent.name}: Failed to remove existing file {existing_file_id}: {e}")
 
         destination_path: Path | None = None
         try:
