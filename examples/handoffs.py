@@ -22,7 +22,7 @@ from utils import print_history
 # Path setup so the example can be run standalone
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
-from agency_swarm import Agency, Agent, ModelSettings, function_tool
+from agency_swarm import Agency, Agent, function_tool
 from agency_swarm.tools.send_message import Handoff
 
 # Setup logging
@@ -86,7 +86,6 @@ dev_lead = Agent(
     # Reminder shown when DevLead receives a handoff (e.g., from ComplianceOfficer).
     # Default format: "Transfer completed. You are {recipient_agent_name}. Please continue the task."
     handoff_reminder="Compliance review is complete. Confirm deployment steps and attach audit artifacts.",
-    model_settings=ModelSettings(temperature=0.0),
 )
 
 security_engineer = Agent(
@@ -98,7 +97,6 @@ security_engineer = Agent(
         "without adding a reminder (disabled)."
     ),
     tools=[security_audit, vulnerability_scan],
-    model_settings=ModelSettings(temperature=0.0),
 )
 
 compliance_officer = Agent(
@@ -109,7 +107,6 @@ compliance_officer = Agent(
         "When handing back to DevLead, confirm sign-off steps and artifacts—they receive a custom reminder to double-check."
     ),
     tools=[policy_check, generate_compliance_report],
-    model_settings=ModelSettings(temperature=0.0),
 )
 
 agency = Agency(

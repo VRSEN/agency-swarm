@@ -54,11 +54,7 @@ async def test_conversation_starter_cache_reuse_without_llm(tmp_path, monkeypatc
     cache_dir = Path(tmp_path) / "starter_cache"
     cache_files = await _wait_for_cache_files(cache_dir, 1)
     assert len(cache_files) == 1
-    cached = load_cached_starter(
-        agent.name,
-        starter,
-        expected_fingerprint=agent._conversation_starters_fingerprint,
-    )
+    cached = await _wait_for_cached_starter(agent, starter)
     assert cached is not None
 
     expected_text = extract_final_output_text(cached.items)
@@ -102,11 +98,7 @@ async def test_quick_reply_cache_reuse_without_model_call(tmp_path, monkeypatch)
     cache_dir = Path(tmp_path) / "starter_cache"
     cache_files = await _wait_for_cache_files(cache_dir, 1)
     assert len(cache_files) == 1
-    cached = load_cached_starter(
-        agent.name,
-        quick_reply,
-        expected_fingerprint=agent._conversation_starters_fingerprint,
-    )
+    cached = await _wait_for_cached_starter(agent, quick_reply)
     assert cached is not None
     expected_text = extract_final_output_text(cached.items)
     assert expected_text
@@ -146,11 +138,7 @@ async def test_conversation_starter_cache_reuse_stream_without_llm(tmp_path, mon
     cache_dir = Path(tmp_path) / "starter_cache"
     cache_files = await _wait_for_cache_files(cache_dir, 1)
     assert len(cache_files) == 1
-    cached = load_cached_starter(
-        agent.name,
-        starter,
-        expected_fingerprint=agent._conversation_starters_fingerprint,
-    )
+    cached = await _wait_for_cached_starter(agent, starter)
     assert cached is not None
 
     expected_text = extract_final_output_text(cached.items)
@@ -184,11 +172,7 @@ async def test_conversation_starter_cache_skips_with_context_override(tmp_path, 
     cache_dir = Path(tmp_path) / "starter_cache"
     cache_files = await _wait_for_cache_files(cache_dir, 1)
     assert len(cache_files) == 1
-    cached = load_cached_starter(
-        agent.name,
-        starter,
-        expected_fingerprint=agent._conversation_starters_fingerprint,
-    )
+    cached = await _wait_for_cached_starter(agent, starter)
     assert cached is not None
     expected_text = extract_final_output_text(cached.items)
     assert expected_text == "Cached starter answer."
@@ -216,11 +200,7 @@ async def test_conversation_starter_cache_skips_stream_with_context_override(tmp
     cache_dir = Path(tmp_path) / "starter_cache"
     cache_files = await _wait_for_cache_files(cache_dir, 1)
     assert len(cache_files) == 1
-    cached = load_cached_starter(
-        agent.name,
-        starter,
-        expected_fingerprint=agent._conversation_starters_fingerprint,
-    )
+    cached = await _wait_for_cached_starter(agent, starter)
     assert cached is not None
     expected_text = extract_final_output_text(cached.items)
     assert expected_text == "Cached starter answer."

@@ -25,7 +25,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from . import openclaw_model
-from .openclaw_model import DEFAULT_OPENCLAW_MODEL, DEFAULT_OPENCLAW_PROXY_API_PATH
+from .openclaw_model import DEFAULT_OPENCLAW_MODEL, DEFAULT_OPENCLAW_PROVIDER_MODEL, DEFAULT_OPENCLAW_PROXY_API_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -253,7 +253,7 @@ class OpenClawIntegrationConfig:
             startup_timeout_seconds=float(os.getenv("OPENCLAW_STARTUP_TIMEOUT_SECONDS", "60")),
             proxy_timeout_seconds=float(os.getenv("OPENCLAW_PROXY_TIMEOUT_SECONDS", "120")),
             default_model=os.getenv("OPENCLAW_DEFAULT_MODEL", DEFAULT_OPENCLAW_MODEL),
-            provider_model=os.getenv("OPENCLAW_PROVIDER_MODEL", "openai/gpt-5.4"),
+            provider_model=os.getenv("OPENCLAW_PROVIDER_MODEL", DEFAULT_OPENCLAW_PROVIDER_MODEL),
             gateway_command=gateway_command,
             profile=os.getenv("OPENCLAW_PROFILE"),
             tool_mode=_read_openclaw_tool_mode_env(),

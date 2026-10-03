@@ -307,7 +307,6 @@ async def test_multiple_sequential_subagent_calls() -> None:
             "After Worker responds, use send_message again to ask Worker to validate the result. "
             "Finally, respond with 'DONE'."
         ),
-        model_settings=ModelSettings(temperature=0.0),
         tools=[get_market_data],
     )
 
@@ -318,7 +317,6 @@ async def test_multiple_sequential_subagent_calls() -> None:
             "When asked to process: use process_data tool and respond 'Processed'. "
             "When asked to validate: use validate_result tool and respond 'Validated'."
         ),
-        model_settings=ModelSettings(temperature=0.0),
         tools=[process_data, validate_result],
     )
 
@@ -539,7 +537,6 @@ async def test_parallel_subagent_calls() -> None:
             "After ProcessorA responds, use send_message to ask ProcessorB to validate. "
             "Finally, use combine_results tool and respond 'All done'."
         ),
-        model_settings=ModelSettings(temperature=0.0),
         tools=[get_market_data, combine_results],
     )
 
@@ -547,7 +544,7 @@ async def test_parallel_subagent_calls() -> None:
         name="ProcessorA",
         description="Data processor",
         instructions="When asked: use process_data tool and respond 'ProcessorA complete'.",
-        model_settings=ModelSettings(temperature=0.0, tool_choice="required"),
+        model_settings=ModelSettings(tool_choice="required"),
         tools=[process_data],
     )
 
@@ -555,7 +552,7 @@ async def test_parallel_subagent_calls() -> None:
         name="ProcessorB",
         description="Result validator",
         instructions="When asked: use validate_result tool and respond 'ProcessorB complete'.",
-        model_settings=ModelSettings(temperature=0.0, tool_choice="required"),
+        model_settings=ModelSettings(tool_choice="required"),
         tools=[validate_result],
     )
 

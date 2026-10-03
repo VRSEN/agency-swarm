@@ -1,0 +1,38 @@
+---
+title: "Members allowance"
+description: "Set a monthly AI usage limit for each member of an app built with the Agencii API."
+icon: "users"
+---
+
+## Give every member room to use your agents
+
+If you build an app around your agents, you may want each member to have their own monthly AI allowance. For example, a course platform could give every student access to a coaching agent while keeping one student's usage from consuming the budget for everyone else.
+
+**Members allowance** lets you set that limit in Agencii. Your app can show a member's remaining allowance, but its users cannot change the limit themselves.
+
+<Steps>
+  <Step title="Set the default allowance">
+    Open your **API integration**, select **Members allowance**, turn on limits, and choose an amount. The default applies to every member registered through that integration.
+  </Step>
+  <Step title="Register members from your app">
+    Your app [registers each person](/platform/integrations/api/register-api-consumer) with a stable user ID. Agencii returns a `consumerId` that your app uses for their agent requests. Registering the same person again keeps their existing allowance and usage.
+  </Step>
+  <Step title="Send requests for that member">
+    Include the `consumerId` and a unique `usageRequestId` when you [stream an API v2 response](/platform/integrations/api/stream-api-v2-completion). Agencii checks the allowance before starting the run and returns HTTP `429` if the member has reached their limit.
+  </Step>
+  <Step title="Watch and adjust usage">
+    The members table shows each person's AI usage, renewal date, and access status. Your app can [read a member's current allowance](/platform/integrations/api/get-api-consumer-allowance). You can change one member's allowance or [pause their AI access](/platform/integrations/api/set-api-consumer-status) without changing the default for everyone else.
+  </Step>
+</Steps>
+
+When a member reaches their limit, Agencii blocks their **next** agent request. A response already in progress can finish, so usage may end slightly above the limit. Their allowance renews each month on the date they first registered, at 00:00 UTC. For someone who joined on the 29th, 30th, or 31st, renewal falls on the last day of shorter months. Unused allowance does not roll over.
+
+<Note>
+Members allowance currently tracks AI model usage for API v2 agent responses. It does not include sandbox compute, uploads, or file storage. It is separate from the credits used to pay for your Agencii account.
+</Note>
+
+## Example: a course with AI coaches
+
+Suppose your course has 500 students and several agents. Set a $20 monthly default for your API integration. Every registered student gets their own allowance, even when they use different agents. If one student needs extra support, edit that student's limit in the members table. Your course app can read their remaining allowance and explain when it renews.
+
+To connect your app, see the [API integration guide](/platform/integrations/web-api). Templates for building apps like this are coming soon.

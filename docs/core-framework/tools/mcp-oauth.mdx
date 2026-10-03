@@ -4,19 +4,6 @@ description: 'Let your users connect their own accounts (Gmail, GitHub, Notion) 
 icon: "key"
 ---
 
-## What is this?
-
-This feature lets **your users** connect their personal accounts to AI agents you build. When a user wants your agent to access their Gmail, GitHub, or Notion, they simply click "Authorize" in their browser—just like signing into any app. The agent then stores their credentials and can access their data on their behalf.
-
-**Example:** You build a productivity agent. A user asks it to "summarize my unread emails." The agent prompts the user to authorize Gmail access. They click approve, and the agent can now read their inbox. Next time, the stored token is reused or refreshed automatically. The user signs in again only when the token can no longer be refreshed.
-
-## Why use this?
-
-- **Users authenticate themselves** - You don't need their passwords or API keys
-- **Tokens are stored per user** - Each user's credentials are isolated
-- **Automatic refresh** - Tokens renew automatically; users only re-authorize when needed
-- **Works with any OAuth provider** - GitHub, Google, Notion, and more
-
 ## Quickstart: connect a hosted MCP server
 
 Hosted servers such as Notion handle OAuth for you. Set your `OPENAI_API_KEY`, then run this script. On the first request, your browser opens so you can authorize the account.
@@ -35,6 +22,21 @@ agency.get_response_sync("List my recent Notion pages")  # Local run: browser op
 <Note>
 The first run opens the browser for consent. Tokens are cached under `~/.agency-swarm/mcp-tokens/`, reused, and refreshed automatically. Users re-authorize only when refresh is no longer possible.
 </Note>
+
+For a runnable script, see [`examples/mcp_oauth/notion_client.py`](https://github.com/VRSEN/agency-swarm/blob/main/examples/mcp_oauth/notion_client.py).
+
+## What is this?
+
+This feature lets **your users** connect their personal accounts to AI agents you build. When a user wants your agent to access their Gmail, GitHub, or Notion, they simply click "Authorize" in their browser—just like signing into any app. The agent then stores their credentials and can access their data on their behalf.
+
+**Example:** You build a productivity agent. A user asks it to "summarize my unread emails." The agent prompts the user to authorize Gmail access. They click approve, and the agent can now read their inbox. Next time, the stored token is reused or refreshed automatically. The user signs in again only when the token can no longer be refreshed.
+
+## Why use this?
+
+- **Users authenticate themselves** - You don't need their passwords or API keys
+- **Tokens are stored per user** - Each user's credentials are isolated
+- **Automatic refresh** - Tokens renew automatically; users only re-authorize when needed
+- **Works with any OAuth provider** - GitHub, Google, Notion, and more
 
 ## Connect a self-hosted MCP server
 

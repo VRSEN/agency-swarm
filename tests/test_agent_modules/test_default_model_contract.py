@@ -22,9 +22,14 @@ def test_model_settings_defaults_distinguish_nameless_model_objects_from_luna() 
     explicit_luna_agent = Agent(name="ExplicitLuna", instructions="Test", model="gpt-5.6-luna")
     none_model_agent = Agent(name="NoneModel", instructions="Test", model=None)
 
-    for agent in (default_agent, explicit_luna_agent, none_model_agent):
+    for agent in (default_agent, none_model_agent):
         assert agent.model_settings.reasoning is not None
-        assert agent.model_settings.reasoning.effort == "none"
+        assert agent.model_settings.reasoning.effort == "medium"
+        assert agent.model_settings.verbosity == "low"
+
+    assert explicit_luna_agent.model_settings.reasoning is not None
+    assert explicit_luna_agent.model_settings.reasoning.effort == "none"
+    assert explicit_luna_agent.model_settings.verbosity == "low"
 
     assert default_agent.model == FRAMEWORK_DEFAULT_MODEL
     assert explicit_luna_agent.model == "gpt-5.6-luna"
@@ -34,7 +39,8 @@ def test_model_settings_defaults_distinguish_nameless_model_objects_from_luna() 
 def test_framework_default_model_normalizes_none_without_overriding_explicit_configuration() -> None:
     default_agent = Agent(name="DefaultAgent", instructions="Test", model=None)
     assert default_agent.model == FRAMEWORK_DEFAULT_MODEL
-    assert default_agent.model_settings.reasoning == Reasoning(effort="none")
+    assert default_agent.model_settings.reasoning == Reasoning(effort="medium")
+    assert default_agent.model_settings.verbosity == "low"
 
     explicit_model_agent = Agent(name="ExplicitModelAgent", instructions="Test", model="gpt-4.1")
     assert explicit_model_agent.model == "gpt-4.1"
@@ -61,14 +67,14 @@ def test_framework_default_model_uses_bundled_long_context_pricing() -> None:
     pricing_data = load_pricing_data()
     pricing = get_model_pricing(FRAMEWORK_DEFAULT_MODEL, pricing_data)
     assert pricing is not None
-    assert pricing["cache_creation_input_token_cost_above_272k_tokens"] == 5e-7
-    assert pricing["cache_read_input_token_cost_above_272k_tokens"] == 4e-8
-    assert pricing["input_cost_per_token_above_272k_tokens"] == 4e-7
-    assert pricing["output_cost_per_token_above_272k_tokens"] == 1.8e-6
+    assert pricing["cache_creation_input_token_cost_above_272k_tokens"] == 2.5e-7
+    assert pricing["cache_read_input_token_cost_above_272k_tokens"] == 2e-8
+    assert pricing["input_cost_per_token_above_272k_tokens"] == 2e-7
+    assert pricing["output_cost_per_token_above_272k_tokens"] == 7.5e-7
 
     expected_cost = 300_000 * pricing["input_cost_per_token_above_272k_tokens"]
     expected_cost += 1_000 * pricing["output_cost_per_token_above_272k_tokens"]
-    assert expected_cost == pytest.approx(0.1218)
+    assert expected_cost == pytest.approx(0.06075)
     assert calculate_openai_cost(
         FRAMEWORK_DEFAULT_MODEL,
         input_tokens=300_000,
