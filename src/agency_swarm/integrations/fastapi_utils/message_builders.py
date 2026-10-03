@@ -7,16 +7,18 @@ import uuid
 from typing import Any, cast
 
 from ag_ui.core import (
-    AudioInputContent,
+    AudioPart,
     BinaryInputContent,
-    DocumentInputContent,
-    ImageInputContent,
-    InputContentDataSource,
-    InputContentUrlSource,
+    DataSource,
+    DocumentPart,
+    FileSource,
+    ImagePart,
     Message,
+    PartSource,
     SystemMessage,
-    TextInputContent,
-    VideoInputContent,
+    TextPart,
+    UrlSource,
+    VideoPart,
 )
 from agents import TResponseInputItem
 
@@ -133,13 +135,13 @@ def _normalize_agui_history_messages(messages: list[dict[str, Any]]) -> list[dic
 
 def _convert_agui_content_part(part: Any) -> dict[str, Any]:
     """Convert one AG-UI content part into a Responses input content part."""
-    if isinstance(part, TextInputContent):
+    if isinstance(part, TextPart):
         return {"type": "input_text", "text": part.text}
 
-    if isinstance(part, ImageInputContent):
+    if isinstance(part, ImagePart):
         return _convert_agui_image_content_part(part)
 
-    if isinstance(part, DocumentInputContent | AudioInputContent | VideoInputContent):
+    if isinstance(part, DocumentPart | AudioPart | VideoPart):
         return _convert_agui_file_content_part(part.source)
 
     if isinstance(part, BinaryInputContent):
@@ -151,27 +153,33 @@ def _convert_agui_content_part(part: Any) -> dict[str, Any]:
     raise TypeError(f"Unsupported AG-UI content part: {type(part).__name__}")
 
 
-def _convert_agui_image_content_part(part: ImageInputContent) -> dict[str, Any]:
+def _convert_agui_image_content_part(part: ImagePart) -> dict[str, Any]:
     """Convert AG-UI image content into a Responses image input part."""
     image_part: dict[str, Any] = {"type": "input_image", "detail": "auto"}
     source = part.source
-    if isinstance(source, InputContentUrlSource):
+    if isinstance(source, UrlSource):
         image_part["image_url"] = source.value
         return image_part
-    if isinstance(source, InputContentDataSource):
+    if isinstance(source, DataSource):
         image_part["image_url"] = _build_data_url(source.mime_type, source.value)
+        return image_part
+    if isinstance(source, FileSource):
+        image_part["file_id"] = source.value
         return image_part
     raise TypeError(f"Unsupported AG-UI image source: {type(source).__name__}")
 
 
-def _convert_agui_file_content_part(source: InputContentUrlSource | InputContentDataSource) -> dict[str, Any]:
+def _convert_agui_file_content_part(source: PartSource) -> dict[str, Any]:
     """Convert AG-UI file-like content into a Responses file input part."""
     file_part: dict[str, Any] = {"type": "input_file"}
-    if isinstance(source, InputContentUrlSource):
+    if isinstance(source, UrlSource):
         file_part["file_url"] = source.value
         return file_part
-    if isinstance(source, InputContentDataSource):
+    if isinstance(source, DataSource):
         file_part["file_data"] = _build_data_url(source.mime_type, source.value)
+        return file_part
+    if isinstance(source, FileSource):
+        file_part["file_id"] = source.value
         return file_part
     raise TypeError(f"Unsupported AG-UI file source: {type(source).__name__}")
 

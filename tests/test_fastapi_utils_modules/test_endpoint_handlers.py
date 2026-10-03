@@ -12,6 +12,7 @@ from ag_ui.core import (
     BinaryInputContent,
     DocumentInputContent,
     EventType,
+    FileSource,
     ImageInputContent,
     InputContentDataSource,
     InputContentUrlSource,
@@ -147,19 +148,57 @@ async def test_build_agui_message_input_wraps_content_parts() -> None:
 
 
 @pytest.mark.asyncio
-async def test_build_agui_message_input_serializes_deprecated_binary_file_data() -> None:
-    """Deprecated AG-UI binary file data should still be valid Responses file input."""
+async def test_normalize_agui_history_messages_serializes_deprecated_binary_file_data() -> None:
+    """Deprecated AG-UI binary file data should still be valid Responses file input.
 
-    with pytest.deprecated_call():
-        binary_content = BinaryInputContent(mime_type="application/pdf", data="CCCC", filename="report.pdf")
+    ag-ui-protocol 1.0 dropped the binary part from ContentPart, so a
+    BinaryInputContent can no longer pass RunAgentInput validation; the
+    converter branch stays reachable through unvalidated history dicts.
+    """
 
-    message_input = _build_agui_message_input([UserMessage(id="u1", content=[binary_content])])
+    history = _normalize_agui_history_messages(
+        [
+            {
+                "role": "user",
+                "content": [BinaryInputContent(mime_type="application/pdf", data="CCCC", filename="report.pdf")],
+            }
+        ]
+    )
+
+    assert history == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "input_file", "file_data": "data:application/pdf;base64,CCCC", "filename": "report.pdf"}
+            ],
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_build_agui_message_input_maps_file_source_to_file_id() -> None:
+    """AG-UI 1.0 file sources (provider-issued handles) should map to Responses file_id parts."""
+
+    message_input = _build_agui_message_input(
+        [
+            UserMessage(
+                id="u1",
+                content=[
+                    DocumentInputContent(
+                        source=FileSource(value="file-abc123", provider="openai", mime_type="application/pdf")
+                    ),
+                    ImageInputContent(source=FileSource(value="file-img456", provider="openai")),
+                ],
+            )
+        ]
+    )
 
     assert message_input == [
         {
             "role": "user",
             "content": [
-                {"type": "input_file", "file_data": "data:application/pdf;base64,CCCC", "filename": "report.pdf"}
+                {"type": "input_file", "file_id": "file-abc123"},
+                {"type": "input_image", "detail": "auto", "file_id": "file-img456"},
             ],
         }
     ]
