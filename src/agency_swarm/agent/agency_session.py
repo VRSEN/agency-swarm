@@ -325,6 +325,7 @@ class AgencySession(SessionABC):
             # The just-persisted new input is supplied separately as "n" items;
             # skip its stored copies so the model sees it exactly once.
             history_items = [message for message in history_items if id(message) not in self._new_input_stored_ids]
+        history_items = MessageFilter.trim_to_latest_compaction(history_items)
         tagged = [
             dict(item, **{_HISTORY_TAG: "h"})  # type: ignore[typeddict-item]
             for item in history_items

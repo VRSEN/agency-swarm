@@ -14,6 +14,9 @@ class MessageFilter:
     # Message types that should be filtered out
     FILTERED_TYPES = {"mcp_list_tools", "openai_list_tools"}
 
+    # Server-side compaction item emitted by the Responses API
+    COMPACTION_TYPE = "compaction"
+
     # === PATTERN 1: call_id linking ===
     # These message pairs are linked by call_id field
     CALL_ID_CALL_TYPES = {
@@ -86,6 +89,24 @@ class MessageFilter:
             logger.info(f"Filtered out {original_count - len(filtered)} messages")
 
         return filtered
+
+    @staticmethod
+    def trim_to_latest_compaction(messages: list[TResponseInputItem]) -> list[TResponseInputItem]:
+        """Drop everything before the most recent server-side compaction item.
+
+        A `compaction` item carries the compacted state of the whole earlier conversation,
+        so replaying the items before it only re-sends (and re-bills) context it replaces.
+
+        Args:
+            messages: Conversation history in order
+
+        Returns:
+            list[TResponseInputItem]: History starting at the latest compaction item, or unchanged if none
+        """
+        for idx in range(len(messages) - 1, -1, -1):
+            if messages[idx].get("type") == MessageFilter.COMPACTION_TYPE:
+                return messages[idx:]
+        return messages
 
     @staticmethod
     def remove_orphaned_messages(
