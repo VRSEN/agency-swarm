@@ -135,6 +135,7 @@ def _apply_codex_compatibility_model_settings(agent: Agent) -> None:
     current: ModelSettings = getattr(agent, "model_settings", None) or ModelSettings()
     current.store = False
     current.truncation = None
+    current.context_management = None
     ensure_store_false_reasoning_encrypted_content(current)
     agent.model_settings = current
 

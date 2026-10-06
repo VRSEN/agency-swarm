@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from agents import TResponseInputItem
 from agents.memory import SessionABC, SessionInputCallback
+from agents.sandbox.capabilities.compaction import Compaction
 
 from agency_swarm.messages import MessageFilter, MessageFormatter
 from agency_swarm.messages.response_input_sanitizer import sanitize_store_false_responses_input
@@ -46,6 +47,8 @@ if TYPE_CHECKING:
     from agency_swarm.agent.core import Agent
 
 logger = logging.getLogger(__name__)
+
+_COMPACTION = Compaction()
 
 # Internal tag used to partition the sanitized history/new boundary back apart.
 _HISTORY_TAG = "_agency_swarm_history_tag"
@@ -325,7 +328,8 @@ class AgencySession(SessionABC):
             # The just-persisted new input is supplied separately as "n" items;
             # skip its stored copies so the model sees it exactly once.
             history_items = [message for message in history_items if id(message) not in self._new_input_stored_ids]
-        history_items = MessageFilter.trim_to_latest_compaction(history_items)
+        # Replay from the latest server-side compaction item, as the SDK's Compaction capability does.
+        history_items = _COMPACTION.process_context(history_items)
         tagged = [
             dict(item, **{_HISTORY_TAG: "h"})  # type: ignore[typeddict-item]
             for item in history_items

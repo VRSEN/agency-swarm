@@ -13,7 +13,9 @@ from functools import wraps
 from typing import TYPE_CHECKING, Any
 
 from agents import Agent as BaseAgent, FunctionTool, GuardrailFunctionOutput, ModelSettings, RunContextWrapper
+from agents.memory.openai_responses_compaction_session import is_openai_model_name
 from agents.models.default_models import get_default_model_settings as get_sdk_default_model_settings
+from agents.sandbox.capabilities.compaction import Compaction
 from openai.types.shared.reasoning import Reasoning
 
 from agency_swarm.agent.attachment_manager import AttachmentManager
@@ -77,6 +79,9 @@ def _get_framework_default_model_settings(model: str | None = None) -> ModelSett
             value = getattr(_FRAMEWORK_DEFAULT_MODEL_SETTINGS, field.name)
         if value is not None:
             updates[field.name] = value
+    if base.context_management is None and model is not None and is_openai_model_name(model):
+        # Server-side compaction with the SDK's per-model threshold, so long threads stop re-sending full history.
+        updates["context_management"] = Compaction().sampling_params({"model": model})["context_management"]
     return dataclasses.replace(base, **updates) if updates else base
 
 
