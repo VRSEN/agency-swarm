@@ -1,12 +1,17 @@
+import asyncio
 import json
 from textwrap import dedent
 from typing import Any, cast
 
 from agents import TResponseInputItem
+from agents.memory.openai_responses_compaction_session import is_openai_model_name
+from openai import omit
 from openai.types.responses import Response
 
-from agency_swarm import Agency
+from agency_swarm import Agency, Agent
+from agency_swarm.agent.agency_session import COMPACTION_RETAINED_ORIGIN, create_agency_session
 from agency_swarm.agent.constants import FRAMEWORK_DEFAULT_MODEL
+from agency_swarm.utils.model_utils import get_default_settings_model_name
 
 _COMPACT_PROMPT = dedent(
     """
@@ -119,3 +124,76 @@ async def compact_thread(agency_instance: Agency, args: list[str]) -> TResponseI
         {"role": "system", "content": prefixed, "message_origin": "thread_summary"},
     )
     return summary_message
+
+
+async def compact_thread_items(agency_instance: Agency, args: list[str]) -> list[TResponseInputItem]:
+    """Return the compacted replacement for the whole thread.
+
+    When every conversation runs on an OpenAI model, each conversation (the user thread and every
+    agent-to-agent thread) is compacted with the Responses API compact endpoint, as the Agents SDK
+    does. Otherwise the thread is replaced by a single model-written summary message.
+    """
+    if not agency_instance.entry_points:
+        raise RuntimeError("Agency has no entry points; configure at least one entry agent.")
+    conversations = _conversations(agency_instance)
+    if not all(_responses_compact_model(agent) for agent, _caller in conversations):
+        return [await compact_thread(agency_instance, args)]
+
+    instructions = " ".join(args) or None
+    compacted = await asyncio.gather(
+        *(_compact_conversation(agency_instance, agent, caller, instructions) for agent, caller in conversations)
+    )
+    return [item for conversation in compacted for item in conversation]
+
+
+def _conversations(agency_instance: Agency) -> list[tuple[Agent, str | None]]:
+    """The user thread, then each (recipient, caller) agent-to-agent thread in first-seen order."""
+    conversations: list[tuple[Agent, str | None]] = [(agency_instance.entry_points[0], None)]
+    for message in agency_instance.thread_manager.get_all_messages():
+        record = cast(dict[str, Any], message)
+        caller, recipient = record.get("callerAgent"), record.get("agent")
+        if caller is None or recipient not in agency_instance.agents:
+            continue
+        if all((agent.name, known_caller) != (recipient, caller) for agent, known_caller in conversations):
+            conversations.append((agency_instance.agents[recipient], caller))
+    return conversations
+
+
+def _responses_compact_model(agent: Agent) -> str | None:
+    model_name = get_default_settings_model_name(agent.model)
+    return model_name if model_name and is_openai_model_name(model_name) else None
+
+
+async def _compact_conversation(
+    agency_instance: Agency, agent: Agent, caller: str | None, instructions: str | None
+) -> list[TResponseInputItem]:
+    session = create_agency_session(
+        agent=agent,
+        sender_name=caller,
+        agency_context=agency_instance.get_agent_context(agent.name),
+        new_input_items=[],
+        agent_run_id=None,
+        parent_run_id=None,
+        run_trace_id=None,
+        run_config_override=None,
+    )
+    # The same history the model would receive on the next turn.
+    history = await session.get_items()
+    if not history:
+        return []
+    compacted = await agent.client.responses.compact(
+        model=cast(str, _responses_compact_model(agent)),
+        input=cast(Any, history),
+        instructions=instructions if instructions is not None else omit,
+    )
+    items: list[TResponseInputItem] = []
+    for output_item in compacted.output:
+        # responses.compact returns user messages with input_text parts inside output-message models.
+        item = output_item.model_dump(exclude_unset=True, warnings=False)
+        item.pop("created_by", None)
+        item["agent"] = agent.name
+        item["callerAgent"] = caller
+        if item.get("type") != "compaction":
+            item["message_origin"] = COMPACTION_RETAINED_ORIGIN
+        items.append(cast(TResponseInputItem, item))
+    return items

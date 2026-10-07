@@ -94,20 +94,6 @@ async def test_compact_uses_entry_agent_client_sync_and_model_passthrough():
 
 
 @pytest.mark.asyncio
-async def test_compact_disables_reasoning_for_openai_model():
-    """Compact should avoid implicit billed reasoning for OpenAI models."""
-    fake_client = _FakeClient()
-    agent = _real_agent_with_client(name="Coordinator", model="gpt-5.6-luna", client=fake_client)
-    agency = _Agency(agent)
-
-    await TerminalDemoLauncher.compact_thread(agency, [])
-
-    last = fake_client.calls[-1]
-    assert last["model"] == "gpt-5.6-luna"
-    assert last["reasoning"] == {"effort": "none"}
-
-
-@pytest.mark.asyncio
 async def test_compact_failure_surfaces_error_and_preserves_state(monkeypatch):
     failing_agent = _real_agent_with_client(name="Coordinator", model="anthropic/model", client=_FailingClient())
     agency = _Agency(failing_agent)

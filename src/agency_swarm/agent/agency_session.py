@@ -50,6 +50,10 @@ logger = logging.getLogger(__name__)
 
 _COMPACTION = Compaction()
 
+# message_origin for the items responses.compact returns ahead of its compaction item.
+# They belong to that compaction and must be replayed with it.
+COMPACTION_RETAINED_ORIGIN = "compaction_retained"
+
 # Internal tag used to partition the sanitized history/new boundary back apart.
 _HISTORY_TAG = "_agency_swarm_history_tag"
 
@@ -328,8 +332,7 @@ class AgencySession(SessionABC):
             # The just-persisted new input is supplied separately as "n" items;
             # skip its stored copies so the model sees it exactly once.
             history_items = [message for message in history_items if id(message) not in self._new_input_stored_ids]
-        # Replay from the latest server-side compaction item, as the SDK's Compaction capability does.
-        history_items = _COMPACTION.process_context(history_items)
+        history_items = _replay_from_latest_compaction(history_items)
         tagged = [
             dict(item, **{_HISTORY_TAG: "h"})  # type: ignore[typeddict-item]
             for item in history_items
@@ -396,6 +399,18 @@ class AgencySession(SessionABC):
         if not isinstance(agents, dict) or name not in agents:
             return None
         return name
+
+
+def _replay_from_latest_compaction(items: list[TResponseInputItem]) -> list[TResponseInputItem]:
+    """Replay from the latest compaction item, as the SDK's Compaction capability does.
+
+    Manual compaction (responses.compact) returns retained items before its compaction item;
+    keep those too, because the compaction item does not cover them.
+    """
+    start = len(items) - len(_COMPACTION.process_context(items))
+    while start > 0 and cast(dict[str, Any], items[start - 1]).get("message_origin") == COMPACTION_RETAINED_ORIGIN:
+        start -= 1
+    return items[start:]
 
 
 def create_agency_session(

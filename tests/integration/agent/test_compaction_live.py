@@ -12,14 +12,12 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
-from agents import ModelSettings, SQLiteSession, TResponseInputItem
+from agents import ModelSettings, TResponseInputItem
 from agents.items import ModelResponse, TResponseStreamEvent
-from agents.memory import OpenAIResponsesCompactionSession
 from agents.models.openai_responses import OpenAIResponsesModel
 from openai import AsyncOpenAI
 
 from agency_swarm import Agency, Agent, function_tool
-from agency_swarm.messages import MessageFormatter
 from agency_swarm.ui.demos.launcher import TerminalDemoLauncher
 
 MODEL = "gpt-6-luna"
@@ -114,10 +112,9 @@ async def _ask(agency: Agency, text: str, *, stream: bool = False) -> tuple[str,
     return str(result.final_output), [response.usage.input_tokens for response in result.raw_responses]
 
 
-def _assert_recalls(answer: str, volumes: tuple[int, ...] = (3,), codename: bool = True) -> None:
+def _assert_recalls(answer: str, volumes: tuple[int, ...] = (3,)) -> None:
     lowered = answer.lower()
-    if codename:
-        assert CODENAME.lower() in lowered, answer
+    assert CODENAME.lower() in lowered, answer
     expected = {1: "47", 2: "helix-9", 3: "19"}
     for volume in volumes:
         assert expected[volume] in lowered, answer
@@ -203,46 +200,59 @@ async def test_compaction_in_agent_to_agent_thread_survives_reload() -> None:
 
 
 @pytest.mark.asyncio
-async def test_manual_responses_compact_on_agency_thread() -> None:
-    """The SDK's manual compaction (responses.compact) output replays through the agency thread."""
-    agency = Agency(_archivist())
-    await _ask(agency, INTRO)
-    await _ask(agency, READ_ALL)
-
-    stripped = MessageFormatter.strip_agency_metadata([dict(m) for m in agency.thread_manager.get_all_messages()])
-    underlying = SQLiteSession("manual-compaction")
-    await underlying.add_items(stripped)  # type: ignore[arg-type]
-    session = OpenAIResponsesCompactionSession("manual-compaction", underlying, model=MODEL, compaction_mode="input")
-    await session.run_compaction({"force": True})
-    compacted = await underlying.get_items()
-
-    assert compacted[-1].get("type") == "compaction"
-    assert all(item.get("role") == "user" for item in compacted[:-1])
-    agency.thread_manager.replace_messages([dict(item, agent="Archivist", callerAgent=None) for item in compacted])  # type: ignore[misc]
-
-    answer, input_tokens = await _ask(agency, RECALL)
-
-    assert input_tokens[0] < 2_000
-    # The codename lives in the user messages responses.compact keeps verbatim before the compaction item;
-    # replay starts at the compaction item, so it is recalled only when the encrypted summary also carries it.
-    _assert_recalls(answer, volumes=(1, 2, 3), codename=False)
-
-
-@pytest.mark.asyncio
-async def test_manual_terminal_compact_summary(tmp_path, monkeypatch) -> None:
+@pytest.mark.parametrize("store", [None, False], ids=["store_default", "store_false"])
+async def test_manual_compact_command(tmp_path, monkeypatch, store: bool | None) -> None:
+    """/compact runs responses.compact; its retained user messages replay ahead of the compaction item."""
     monkeypatch.setenv("AGENCY_SWARM_CHATS_DIR", str(tmp_path))
-    agency = Agency(_archivist())
+    model = RecordingResponsesModel()
+    agency = Agency(_archivist(model, ModelSettings(store=store)))
     await _ask(agency, INTRO)
     await _ask(agency, READ_ALL)
 
     await TerminalDemoLauncher.compact_thread(agency, [])
     thread = agency.thread_manager.get_all_messages()
 
-    assert len(thread) == 1
-    assert thread[0]["role"] == "system"
-    assert CODENAME in str(thread[0]["content"])
+    assert [m.get("type") for m in thread][-1] == "compaction"
+    assert all(m.get("role") == "user" and m["message_origin"] == "compaction_retained" for m in thread[:-1])
+    assert CODENAME in json.dumps(thread[0])
 
+    calls_before_recall = len(model.input_types)
     answer, input_tokens = await _ask(agency, RECALL)
 
+    assert model.input_types[calls_before_recall][: len(thread)] == [m.get("type") or "message" for m in thread]
     assert input_tokens[0] < 2_000
+    _assert_recalls(answer, volumes=(1, 2, 3))
+
+
+@pytest.mark.asyncio
+async def test_manual_compact_command_passes_instructions(tmp_path, monkeypatch) -> None:
+    """/compact arguments steer what responses.compact keeps."""
+    monkeypatch.setenv("AGENCY_SWARM_CHATS_DIR", str(tmp_path))
+    agency = Agency(_archivist())
+    await _ask(agency, READ_ALL)
+
+    await TerminalDemoLauncher.compact_thread(
+        agency, ["Keep", "the", "full", "text", "of", "V2-row", "017", "verbatim."]
+    )
+    answer, _ = await _ask(agency, "Without reading any volume again, quote V2-row 017 exactly.")
+
+    assert "AS-20017" in answer and "OWN-29" in answer, answer
+
+
+@pytest.mark.asyncio
+async def test_manual_compact_command_agent_to_agent(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AGENCY_SWARM_CHATS_DIR", str(tmp_path))
+    ceo = Agent(name="CEO", instructions="Delegate ALL archive reading and archive questions to Researcher.")
+    agency = Agency(ceo, communication_flows=[(ceo, _archivist(name="Researcher"))])
+    await _ask(agency, f"{INTRO} Then ask the Researcher to: {READ_ALL}")
+
+    await TerminalDemoLauncher.compact_thread(agency, [])
+
+    compactions = {(c.get("agent"), c.get("callerAgent")) for c in _compactions(agency)}
+    assert compactions == {("CEO", None), ("Researcher", "CEO")}
+    answer, _ = await _ask(
+        agency,
+        "Without anyone re-reading volumes, ask the Researcher for the key findings of volumes 1, 2 and 3. "
+        "Also tell me our project codename.",
+    )
     _assert_recalls(answer, volumes=(1, 2, 3))

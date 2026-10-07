@@ -436,7 +436,7 @@ def start_terminal(
         rows = [
             ("/help", "Show help"),
             ("/new", "Start a new chat"),
-            ("/compact [instructions]", "Summarize and continue"),
+            ("/compact [instructions]", "Compact and continue"),
             ("/resume", "Resume a conversation"),
             ("/status", "Show current setup"),
             ("/cost", "Show current usage and costs"),
@@ -535,10 +535,10 @@ def start_terminal(
         event_converter.console.rule()
 
     async def _compact_chat(args: list[str]) -> None:
-        """Summarize the current conversation and continue with a fresh chat id."""
+        """Compact the current conversation and continue with a fresh chat id."""
         nonlocal chat_id
         chat_id = await TerminalDemoLauncher.compact_thread(agency_instance, args)
-        event_converter.console.print("Conversation compacted. A system summary has been added.")
+        event_converter.console.print("Conversation compacted.")
         event_converter.console.rule()
 
     async def handle_message(message: str) -> bool:  # noqa: C901

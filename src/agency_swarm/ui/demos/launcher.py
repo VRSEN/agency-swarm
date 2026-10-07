@@ -14,7 +14,7 @@ if typing.TYPE_CHECKING:
     from .persistence import ChatMetadata
 
 from .compact import (
-    compact_thread as _build_compact_summary,
+    compact_thread_items as _compact_thread_items,
     get_compact_prompt as _get_compact_prompt,
     set_compact_prompt as _set_compact_prompt,
 )
@@ -195,9 +195,9 @@ class TerminalDemoLauncher:
     async def compact_thread(agency_instance: Agency, args: list[str]) -> str:
         prev = TerminalDemoLauncher.get_current_chat_id()
         try:
-            summary_message = await _build_compact_summary(agency_instance, args)
+            compacted_items = await _compact_thread_items(agency_instance, args)
             chat_id = TerminalDemoLauncher.start_new_chat(agency_instance)
-            agency_instance.thread_manager.replace_messages([summary_message])
+            agency_instance.thread_manager.replace_messages(compacted_items)
             return chat_id
         except Exception as e:
             TerminalDemoLauncher.set_current_chat_id(prev)
