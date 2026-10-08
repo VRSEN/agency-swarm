@@ -1,70 +1,74 @@
-# Agency Swarm Repository Addendum
+# Agency Swarm Repository Rules
 
-Core principle, in the maintainer's words: "Agency Swarm should remain a focused orchestration layer over the OpenAI Agents SDK, not grow into a duplicate agent runtime. Whenever possible, use the OpenAI Agents SDK instead of reimplementing its behavior." Every change is checked against it.
+Core principle, in the maintainer's words: "Agency Swarm should remain a focused orchestration layer over the OpenAI Agents SDK, not grow into a duplicate agent runtime. Whenever possible, use the OpenAI Agents SDK instead of reimplementing its behavior." Check every change against it.
 
-This file contains only repository-specific addenda to the controlling machine-global policy and matching global skills.
+This file adds repository rules to the machine-global policy. It never weakens that policy.
 
-## 1. Repository Baseline
+## 1. The OpenAI Agents SDK comes first
 
-1.1 The canonical remote-tracking default branch is `origin/main`.
-1.2 `CLAUDE.md` must remain a symlink to `AGENTS.md`; verify it before relying on repository policy or shipping a repository-policy change.
-1.3 Shared policy from `VRSEN/agentswarm-cli` may appear here only as a strict subset or a necessary Python/Agency adaptation; omit CLI, TUI, OpenCode, Bun, npm, and package-layout rules without a Python or Agency equivalent.
-1.4 If an active pull request duplicates an open Dependabot dependency update, propose closing the Dependabot pull request under 1.9.
-1.5 Commits and pull requests carry no AI attribution: no AI `Co-Authored-By` trailers and no "Generated with" footers in commit messages, pull request titles, or pull request descriptions.
-1.6 If functionality is now implemented upstream, remove the custom implementation unless there is a concrete reason to keep it. If the custom implementation differs from upstream in a way that looks artificial, incorrect, or non-standard, escalate to the maintainer with a recommendation to delete it and reuse upstream behavior.
-1.7 Third-party or vendor integrations live outside this repository: decline vendor-pitch issues and pull requests with a pointer to the existing extension seam, and ship at most a docs recipe.
-1.8 Keep backward compatibility. A breaking change ships only when it is necessary, only in a new major version, and always with a breaking-changes note.
-1.9 Any public action on GitHub needs the maintainer's approval of the exact text or action first: comments, reviews, issues, pull requests, merges, closes, reopens, labels, pushes to shared branches, tags, releases and package uploads. Agents prepare drafts. The one exception is a short reply correcting an automated comment that is clearly wrong.
+1.1 Before you write or change code, find how the `openai-agents` version pinned in `pyproject.toml` already does it. Read its installed source (`.venv/.../site-packages/agents`), its docs, and `references/openai-agents-python` checked out at that tag. Clone it there first if it is missing.
+1.2 If the SDK has it, use it: call it, configure it, or subclass it. Do not copy its logic. Do not write a parallel version.
+1.3 Write custom code only when the SDK has no equivalent. The pull request MUST name the SDK feature you checked and say why it does not fit.
+1.4 Code that wraps or replaces an SDK abstraction (session, history items, streaming events, model settings, tracing, guardrails, handoffs) MUST name the SDK class it mirrors in its docstring. It MUST support every feature of that class, or list each unsupported feature with the reason.
+1.5 When the SDK adds a feature that our code duplicates, delete our code and use the SDK's in the same change. If the deletion breaks the public API, deprecate our code instead and remove it in the next major version (2.1). Keep our code only for a concrete reason written in the pull request.
+1.6 When custom code behaves differently from the SDK in a way that looks accidental, propose to the maintainer to delete it and use the SDK.
+1.7 Each `openai-agents` upgrade MUST check the SDK changelog against every wrapper from 1.4. List each new SDK feature a wrapper does not support in the upgrade pull request. A GitHub issue for it follows 2.2.
+1.8 Third-party and vendor integrations stay outside this repository. Decline vendor-pitch issues and pull requests, point to the existing extension seam, and ship at most a docs recipe.
 
-## 2. Repository Commands And Review Artifacts
+## 2. Users and public actions
 
-2.1 Use `make prime` when repository-structure discovery adds value.
-2.2 Run `make format` before a commit when its touched files are covered by repository formatting.
-2.3 Run `make check` before staging or committing runtime, interface, or integration changes.
-2.4 Run `make ci` before a release, a broad or risky merge-readiness claim, a repository-wide health claim, or when focused proof cannot bound risk.
-2.5 Use project virtual environments and repository task runners, not global interpreters or absolute paths.
-2.6 Every change gets an independent review against `origin/main` by a different model than the one that wrote it.
-2.7 Repository-policy edits and release commits get the deepest review available; the pre-release review runs against the exact release commit.
-2.8 Save pre-release review output with the release evidence, never in `/tmp`.
+2.1 Keep backward compatibility. Ship a breaking change only when it is necessary, only in a new major version, and always with a breaking-changes note.
+2.2 Get the maintainer's approval of the exact text or action before any public action on GitHub: comments, reviews, issues, pull requests, merges, closes, reopens, labels, pushes to shared branches, tags, releases and package uploads. Prepare drafts. Exception: a short reply that corrects a clearly wrong automated comment.
+2.3 Put no AI attribution in commits or pull requests: no AI `Co-Authored-By` trailers and no "Generated with" footers.
 
-## 3. Documentation
+## 3. Repository basics
 
-3.1 Documentation work follows `.cursor/rules/writing-docs.mdc`.
-3.2 Before review of substantial documentation work, start `cd docs && mintlify dev` and state that the preview is running.
-3.3 Do not mention fork origins in user-facing docs unless the maintainer asks.
+3.1 The default branch is `origin/main`.
+3.2 `CLAUDE.md` MUST stay a symlink to `AGENTS.md`. Check it before you ship a change to this file.
+3.3 Use the project virtual environment and the `make` targets, never a global interpreter.
+3.4 Run `make format` before each commit. Run `make check` before you commit a runtime, interface or integration change.
+3.5 Run `make ci` before a release, before a claim that a broad or risky change is ready to merge, and after each upgrade of `openai-agents`, LiteLLM or a provider SDK.
+3.6 Use `make prime` to map the repository structure when you need it.
 
-## 4. Python, Types, And File Discipline
+## 4. Review
 
-4.1 Supported Python versions start at 3.12; development centers on 3.13 while preserving 3.12 compatibility.
-4.2 Use pipe-union syntax, not legacy union imports, and type every function.
-4.3 Enforce declared types at boundaries; do not add runtime fallbacks or shape-based branching to accept multiple types.
-4.4 Do not use `Any`, duck typing, or runtime field checks where proper types exist, and avoid type ignores in production code.
-4.5 Prefer authoritative typed dependency models and inspect dependency types and adjacent patterns before changing runtime code.
-4.6 Prefer top-level imports; call out any necessary local import and restructure circular dependencies instead of hiding them with local-import workarounds.
-4.7 No file may exceed 500 lines without explicit maintainer approval.
-4.8 Prefer methods between 10 and 40 lines and keep them under 100 lines.
-4.9 Target test coverage of at least 90%.
-4.10 When editing an oversized file, keep the net change minimal and reduce its size in the same change unless the maintainer approves otherwise.
-4.11 When dependency requirements or resolved versions change, update every affected lockfile in the same change.
-4.12 Keep terminology self-consistent: code identifiers, internal symbols, comments, user-facing copy, and documentation use the same product vocabulary (for example, canonical mode names), and each change's polishing pass includes a terminology-consistency check.
+4.1 Every change gets a review against `origin/main` by a different model than the one that wrote it.
+4.2 A change to this file, and each release commit, gets its review from the strongest model available that did not write it. The pre-release review runs on the exact release commit.
+4.3 Save pre-release review output with the release evidence, never in `/tmp`.
 
-## 5. Tests And Runtime-Specific Proof
+## 5. Code
 
-5.1 Canonical unit tests live under `tests/test_*_modules/`; integration tests live under `tests/integration/`; both mirror source layout.
-5.2 Keep each test under 100 lines when practical.
-5.3 High-level OpenClaw runtime behavior requires integration or end-to-end coverage unless the changed code is a tiny pure helper.
-5.4 Do not cover OpenClaw runtime behavior with mock-heavy unit tests.
-5.5 Validate Core Agent Messaging through real framework objects; do not simulate `Agent` or `SendMessage` with generic mocks or monkeypatched responses.
+5.1 Support Python 3.12 and later. Develop on 3.13.
+5.2 Type every function. Use `X | Y` unions.
+5.3 Enforce declared types at boundaries. Where a declared type exists, do not use `Any`, duck typing, runtime shape checks or fallbacks that accept several types. Do not use type ignores in production code.
+5.4 Use the SDK's typed models and the dependency's own types. Read them and the code next to your change before you edit.
+5.5 Put imports at the top of the file. Fix a circular import by restructuring, not by a local import. If a local import is necessary, say why in a comment.
+5.6 A file stays under 500 lines unless the maintainer approves more. When you edit a larger file, keep your change small and make the file smaller in the same change, unless the maintainer approves otherwise.
+5.7 Keep methods between 10 and 40 lines, and always under 100.
+5.8 Use one name for one thing everywhere: code, comments, user-facing text and docs.
+5.9 When a dependency requirement or resolved version changes, update every affected lockfile in the same change.
 
-## 6. Release Specifics
+## 6. Tests
 
-6.1 A release or safety claim requires a clean pre-release review (2.7) against the exact release commit.
-6.2 Before a release or safety claim, send a real first message through the installed interface to the maintained local test agency and observe a non-empty streamed response through that interface.
-6.3 Automated authentication smoke tests do not satisfy the installed-interface proof in 6.2.
-6.4 A launch, credential, dependency, or interface failure in that proof blocks the release claim until it is reproduced and root-caused.
-6.5 Keep user-facing bugfix release cuts minimal and exclude repository-policy edits and tooling churn.
-6.6 Ship repository-policy edits directly to the default branch after exact approval, never inside a public product pull request or user-facing release.
-6.7 A release claim requires per-commit evidence on the release page: every change since the previous release names its test evidence and confidence level.
-6.8 Existing behavior affected by a change must be regression-tested end-to-end, and the previous and new releases compared, before merge or release.
-6.9 No test may be skipped in the final pre-release suite; tests requiring real API keys run with real keys. A single skipped test blocks the release claim.
-6.10 After upgrading `openai-agents`, LiteLLM, or a provider SDK, run the full formal test suite (`make ci`); it must include end-to-end coverage that makes a tool call or delegation and then sends the resulting history back to the model in a following turn.
+6.1 Unit tests live in `tests/test_*_modules/`. Integration tests live in `tests/integration/`. Both mirror the source layout.
+6.2 Keep test coverage at 90% or more. Keep each test under 100 lines when practical.
+6.3 Test agent messaging (`Agent`, `SendMessage`) and OpenClaw runtime behavior through real framework objects and integration or end-to-end tests, not generic mocks. A small pure helper needs only unit tests.
+6.4 Each change to existing behavior gets an end-to-end regression test before merge.
+6.5 After an upgrade of `openai-agents`, LiteLLM or a provider SDK, the suite MUST include an end-to-end test that makes a tool call or delegation and then sends that history back to the model in the next turn.
+
+## 7. Documentation
+
+7.1 Follow `.cursor/rules/writing-docs.mdc`.
+7.2 Before review of a large docs change, run `cd docs && mintlify dev` and say that the preview runs.
+7.3 Do not mention fork origins in user-facing docs unless the maintainer asks.
+
+## 8. Releases
+
+8.1 A release or safety claim needs a clean review (4.2) of the exact release commit.
+8.2 Before the claim, send a real first message through the installed interface to the maintained local test agency and see a non-empty streamed response. An automated authentication smoke test does not count.
+8.3 A launch, credential, dependency or interface failure in that check blocks the claim until it is reproduced and its root cause is known.
+8.4 Run the final pre-release suite with no skipped test. Tests that need real API keys run with real keys. One skipped test blocks the release.
+8.5 The release page lists every change since the previous release with its test evidence and a confidence level (high, medium or low).
+8.6 Compare the previous and new release on the behavior each change affects.
+8.7 Keep bugfix releases minimal: no policy edits and no tooling churn.
+8.8 Ship changes to this file directly to the default branch after the maintainer approves the exact text. Never put them in a product pull request or a release.
