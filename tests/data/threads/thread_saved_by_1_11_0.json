@@ -1,0 +1,89 @@
+[
+  {
+    "content": "Please echo 'hello'",
+    "role": "user",
+    "agent": "Assistant",
+    "callerAgent": null,
+    "agent_run_id": "agent_run_896ab8e39c9e4da4811f522f395ec087",
+    "run_trace_id": "trace_28e1ebbee0104c33b59a154b715bcfd8",
+    "history_protocol": "responses",
+    "timestamp": 1791645010262007,
+    "type": "message"
+  },
+  {
+    "arguments": "{\"message\": \"hello\"}",
+    "call_id": "call_18ce1e7dc88148c4b2b9cff9076abcfe",
+    "name": "echo_tool",
+    "type": "function_call",
+    "id": "fc_40b71897b923456f8d1a273a24232b53",
+    "status": "completed",
+    "agent": "Assistant",
+    "callerAgent": null,
+    "agent_run_id": "agent_run_896ab8e39c9e4da4811f522f395ec087",
+    "run_trace_id": "trace_28e1ebbee0104c33b59a154b715bcfd8",
+    "history_protocol": "responses",
+    "timestamp": 1791645010265807
+  },
+  {
+    "call_id": "call_18ce1e7dc88148c4b2b9cff9076abcfe",
+    "output": "ECHO: hello",
+    "type": "function_call_output",
+    "agent": "Assistant",
+    "callerAgent": null,
+    "agent_run_id": "agent_run_896ab8e39c9e4da4811f522f395ec087",
+    "run_trace_id": "trace_28e1ebbee0104c33b59a154b715bcfd8",
+    "history_protocol": "responses",
+    "timestamp": 1791645010265816
+  },
+  {
+    "id": "msg_19433c795e98456f96217a2120fd6c63",
+    "content": [
+      {
+        "annotations": [],
+        "text": "ECHO: hello",
+        "type": "output_text",
+        "logprobs": []
+      }
+    ],
+    "role": "assistant",
+    "status": "completed",
+    "type": "message",
+    "agent": "Assistant",
+    "callerAgent": null,
+    "agent_run_id": "agent_run_896ab8e39c9e4da4811f522f395ec087",
+    "run_trace_id": "trace_28e1ebbee0104c33b59a154b715bcfd8",
+    "history_protocol": "responses",
+    "timestamp": 1791645010265828
+  },
+  {
+    "content": "Note the secret code: ALPHA-7",
+    "role": "user",
+    "agent": "Assistant",
+    "callerAgent": null,
+    "agent_run_id": "agent_run_ea6ba26c6a4e498885b65cd5b195499e",
+    "run_trace_id": "trace_28e1ebbee0104c33b59a154b715bcfd8",
+    "history_protocol": "responses",
+    "timestamp": 1791645010265913,
+    "type": "message"
+  },
+  {
+    "id": "msg_6d2b2ee125cc4c3cbcad91694593532a",
+    "content": [
+      {
+        "annotations": [],
+        "text": "RECALLED: ALPHA-7",
+        "type": "output_text",
+        "logprobs": []
+      }
+    ],
+    "role": "assistant",
+    "status": "completed",
+    "type": "message",
+    "agent": "Assistant",
+    "callerAgent": null,
+    "agent_run_id": "agent_run_ea6ba26c6a4e498885b65cd5b195499e",
+    "run_trace_id": "trace_28e1ebbee0104c33b59a154b715bcfd8",
+    "history_protocol": "responses",
+    "timestamp": 1791645010266785
+  }
+]

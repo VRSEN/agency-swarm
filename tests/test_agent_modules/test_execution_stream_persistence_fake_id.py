@@ -12,6 +12,7 @@ from agents.models.fake_id import FAKE_RESPONSES_ID
 from openai.types.responses import ResponseFunctionToolCall
 
 from agency_swarm import Agent
+from agency_swarm.agent.agency_session import create_agency_session
 from agency_swarm.agent.core import AgencyContext
 from agency_swarm.agent.execution_stream_persistence import (
     StreamMetadataStore,
@@ -117,14 +118,16 @@ def test_persist_streamed_items_keeps_structured_file_input_for_follow_up_replay
     persisted_user = next(message for message in persisted if message.get("role") == "user")
     assert persisted_user["content"][1] == file_part
 
-    follow_up_history = MessageFormatter.prepare_history_for_runner(
-        [{"role": "user", "content": "What follows phrase one?"}],
-        agent,
-        None,
-        agency_context,
+    follow_up_history = create_agency_session(
+        agent=agent,
+        sender_name=None,
+        agency_context=agency_context,
+        new_input_items=[{"role": "user", "content": "What follows phrase one?"}],
         agent_run_id="agent_run_follow_up",
+        parent_run_id=None,
         run_trace_id="trace_follow_up",
-    )
+        run_config_override=None,
+    ).prepared_input()
 
     replayed_user = next(
         message
@@ -186,14 +189,16 @@ def test_persist_streamed_items_uses_collected_items_when_final_new_items_empty(
     persisted_user = next(message for message in persisted if message.get("role") == "user")
     assert persisted_user["content"][1] == file_part
 
-    follow_up_history = MessageFormatter.prepare_history_for_runner(
-        [{"role": "user", "content": "What follows phrase one?"}],
-        agent,
-        None,
-        agency_context,
+    follow_up_history = create_agency_session(
+        agent=agent,
+        sender_name=None,
+        agency_context=agency_context,
+        new_input_items=[{"role": "user", "content": "What follows phrase one?"}],
         agent_run_id="agent_run_follow_up",
+        parent_run_id=None,
         run_trace_id="trace_follow_up",
-    )
+        run_config_override=None,
+    ).prepared_input()
 
     replayed_user = next(
         message

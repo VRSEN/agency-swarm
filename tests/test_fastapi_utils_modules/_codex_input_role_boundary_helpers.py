@@ -13,8 +13,8 @@ from openai import AsyncOpenAI
 from openai.types.responses.response_prompt_param import ResponsePromptParam
 
 from agency_swarm import Agency, AgencyContext, Agent
+from agency_swarm.agent.agency_session import create_agency_session
 from agency_swarm.agent.codex_model_input import with_codex_model_input_role_rewrite
-from agency_swarm.messages import MessageFormatter
 from agency_swarm.utils.thread import ThreadManager
 from tests.deterministic_model import _build_message_response
 
@@ -155,13 +155,16 @@ def _model_call_roles(agent: Agent, run_config: RunConfig | None) -> list[str]:
 
     history = cast(
         list[dict[str, Any]],
-        MessageFormatter.prepare_history_for_runner(
-            [{"role": "user", "content": "next"}],
-            agent,
-            None,
-            context,
+        create_agency_session(
+            agent=agent,
+            sender_name=None,
+            agency_context=context,
+            new_input_items=[{"role": "user", "content": "next"}],
+            agent_run_id=None,
+            parent_run_id=None,
+            run_trace_id=None,
             run_config_override=run_config,
-        ),
+        ).prepared_input(),
     )
 
     assert _roles(replayed[:3]) == ["system", "system", "system"]

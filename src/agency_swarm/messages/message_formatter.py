@@ -253,40 +253,6 @@ class MessageFormatter:
         return modified_message
 
     @staticmethod
-    def prepare_history_for_runner(
-        processed_current_message_items: list[TResponseInputItem],
-        agent: "Agent",
-        sender_name: str | None,
-        agency_context: "AgencyContext | None" = None,
-        agent_run_id: str | None = None,
-        parent_run_id: str | None = None,
-        run_trace_id: str | None = None,
-        run_config_override: "RunConfig | None" = None,
-    ) -> list[TResponseInputItem]:
-        """Prepare conversation history for the runner.
-
-        Compatibility shim: the SDK ``Session`` adapter now owns history reads and
-        persistence; this delegates to it so existing callers keep working.
-        """
-        # Local import: agency_session lives in the agent package and importing it at
-        # module level would create a messages <-> agent import cycle.
-        from agency_swarm.agent.agency_session import create_agency_session
-
-        session = create_agency_session(
-            agent=agent,
-            sender_name=sender_name,
-            agency_context=agency_context,
-            new_input_items=processed_current_message_items,
-            agent_run_id=agent_run_id,
-            parent_run_id=parent_run_id,
-            run_trace_id=run_trace_id,
-            run_config_override=run_config_override,
-        )
-        # New input was persisted at session creation; while pending it is kept
-        # out of the history view so the model sees it exactly once.
-        return session.prepared_input()
-
-    @staticmethod
     def strip_ephemeral_content(message: TResponseInputItem, *, drop_parts: bool) -> TResponseInputItem | None:
         if not isinstance(message, dict):
             return message

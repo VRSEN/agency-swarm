@@ -1,11 +1,13 @@
 import pytest
 from agents import RunConfig
+from agents.items import TResponseInputItem
 from agents.model_settings import ModelSettings
 from agents.models.openai_chatcompletions import OpenAIChatCompletionsModel
 from agents.models.openai_responses import OpenAIResponsesModel
 from openai import AsyncOpenAI
 
 from agency_swarm import AgencyContext, Agent
+from agency_swarm.agent.agency_session import create_agency_session
 from agency_swarm.messages import IncompatibleChatHistoryError, MessageFormatter
 from agency_swarm.messages.response_input_sanitizer import REASONING_ENCRYPTED_CONTENT_INCLUDE
 from agency_swarm.utils.thread import ThreadManager
@@ -33,6 +35,25 @@ def _make_context(thread_manager: ThreadManager) -> AgencyContext:
     return AgencyContext(agency_instance=None, thread_manager=thread_manager)
 
 
+def _session_input(
+    new_input_items: list[TResponseInputItem],
+    agent: Agent,
+    agency_context: AgencyContext,
+    run_config_override: RunConfig | None = None,
+) -> list[TResponseInputItem]:
+    session = create_agency_session(
+        agent=agent,
+        sender_name=None,
+        agency_context=agency_context,
+        new_input_items=new_input_items,
+        agent_run_id=None,
+        parent_run_id=None,
+        run_trace_id=None,
+        run_config_override=run_config_override,
+    )
+    return session.prepared_input()
+
+
 def _make_litellm_agent(name: str, model_name: str) -> Agent:
     pytest.importorskip("litellm")
     from agents.extensions.models.litellm_model import LitellmModel
@@ -44,7 +65,7 @@ def _make_litellm_agent(name: str, model_name: str) -> Agent:
     )
 
 
-def test_prepare_history_for_runner_allows_compatible_histories() -> None:
+def test_agency_session_allows_compatible_histories() -> None:
     """Compatible history formats should be accepted across supported providers."""
     compatible_cases: list[tuple[dict, callable]] = [
         (
@@ -98,22 +119,17 @@ def test_prepare_history_for_runner_allows_compatible_histories() -> None:
         context = _make_context(thread_manager)
         agent_name = str(history_item.get("agent") or "AgentA")
         agent = agent_factory(agent_name)
-        MessageFormatter.prepare_history_for_runner([], agent, None, agency_context=context)
+        _session_input([], agent, context)
 
 
-def test_prepare_history_for_runner_stores_responses_protocol_and_strips_runner_metadata() -> None:
+def test_agency_session_stores_responses_protocol_and_strips_runner_metadata() -> None:
     thread_manager = ThreadManager()
     context = _make_context(thread_manager)
     chat_agent = _make_chat_agent("AgentA")
     responses_agent = _make_responses_agent("AgentB")
 
-    first_history = MessageFormatter.prepare_history_for_runner(
-        [{"role": "user", "content": "hello"}],
-        chat_agent,
-        None,
-        context,
-    )
-    MessageFormatter.prepare_history_for_runner([{"role": "user", "content": "second"}], responses_agent, None, context)
+    first_history = _session_input([{"role": "user", "content": "hello"}], chat_agent, context)
+    _session_input([{"role": "user", "content": "second"}], responses_agent, context)
 
     all_messages = thread_manager.get_all_messages()
     assert len(all_messages) == 2
@@ -121,12 +137,12 @@ def test_prepare_history_for_runner_stores_responses_protocol_and_strips_runner_
     assert all("history_protocol" not in item for item in first_history)
 
 
-def test_prepare_history_for_runner_keeps_ephemeral_content_out_of_storage() -> None:
+def test_agency_session_keeps_ephemeral_content_out_of_storage() -> None:
     thread_manager = ThreadManager()
     context = _make_context(thread_manager)
     agent = _make_responses_agent("AgentA")
 
-    history = MessageFormatter.prepare_history_for_runner(
+    history = _session_input(
         [
             {
                 "role": "user",
@@ -141,7 +157,6 @@ def test_prepare_history_for_runner_keeps_ephemeral_content_out_of_storage() -> 
             }
         ],
         agent,
-        None,
         context,
     )
 
@@ -153,12 +168,12 @@ def test_prepare_history_for_runner_keeps_ephemeral_content_out_of_storage() -> 
     ]
 
 
-def test_prepare_history_for_runner_does_not_store_ephemeral_only_messages() -> None:
+def test_agency_session_does_not_store_ephemeral_only_messages() -> None:
     thread_manager = ThreadManager()
     context = _make_context(thread_manager)
     agent = _make_responses_agent("AgentA")
 
-    history = MessageFormatter.prepare_history_for_runner(
+    history = _session_input(
         [
             {
                 "role": "user",
@@ -172,7 +187,6 @@ def test_prepare_history_for_runner_does_not_store_ephemeral_only_messages() -> 
             }
         ],
         agent,
-        None,
         context,
     )
 
@@ -180,7 +194,7 @@ def test_prepare_history_for_runner_does_not_store_ephemeral_only_messages() -> 
     assert history[0]["content"] == [{"type": "input_text", "text": "temporary tool hint"}]
 
 
-def test_prepare_history_for_runner_uses_run_config_store_false_settings() -> None:
+def test_agency_session_uses_run_config_store_false_settings() -> None:
     thread_manager = ThreadManager()
     thread_manager._store.messages = [
         {
@@ -209,13 +223,7 @@ def test_prepare_history_for_runner_uses_run_config_store_false_settings() -> No
         model_settings=ModelSettings(store=False, response_include=["web_search_call.results"]),
     )
 
-    history = MessageFormatter.prepare_history_for_runner(
-        [{"role": "user", "content": "again"}],
-        agent,
-        None,
-        context,
-        run_config_override=run_config,
-    )
+    history = _session_input([{"role": "user", "content": "again"}], agent, context, run_config_override=run_config)
 
     assert history == [{"role": "user", "content": "again", "type": "message"}]
     assert run_config.model_settings is not None
@@ -225,7 +233,7 @@ def test_prepare_history_for_runner_uses_run_config_store_false_settings() -> No
     ]
 
 
-def test_prepare_history_for_runner_does_not_copy_agent_settings_into_run_config() -> None:
+def test_agency_session_does_not_copy_agent_settings_into_run_config() -> None:
     thread_manager = ThreadManager()
     thread_manager._store.messages = [
         {
@@ -243,13 +251,7 @@ def test_prepare_history_for_runner_does_not_copy_agent_settings_into_run_config
     agent.model_settings = ModelSettings(store=False, temperature=0.5)
     run_config = RunConfig(model_settings=ModelSettings())
 
-    history = MessageFormatter.prepare_history_for_runner(
-        [{"role": "user", "content": "again"}],
-        agent,
-        None,
-        context,
-        run_config_override=run_config,
-    )
+    history = _session_input([{"role": "user", "content": "again"}], agent, context, run_config_override=run_config)
 
     assert history == [{"role": "user", "content": "again", "type": "message"}]
     assert run_config.model_settings is not None
@@ -258,7 +260,7 @@ def test_prepare_history_for_runner_does_not_copy_agent_settings_into_run_config
     assert run_config.model_settings.response_include == [REASONING_ENCRYPTED_CONTENT_INCLUDE]
 
 
-def test_prepare_history_for_runner_without_store_false_keeps_reasoning_items() -> None:
+def test_agency_session_without_store_false_keeps_reasoning_items() -> None:
     thread_manager = ThreadManager()
     thread_manager._store.messages = [
         {
@@ -275,12 +277,7 @@ def test_prepare_history_for_runner_without_store_false_keeps_reasoning_items() 
     agent = _make_responses_agent("AgentA")
     agent.model_settings = None
 
-    history = MessageFormatter.prepare_history_for_runner(
-        [{"role": "user", "content": "again"}],
-        agent,
-        None,
-        context,
-    )
+    history = _session_input([{"role": "user", "content": "again"}], agent, context)
 
     assert history == [
         {
@@ -293,7 +290,7 @@ def test_prepare_history_for_runner_without_store_false_keeps_reasoning_items() 
     ]
 
 
-def test_prepare_history_for_runner_rejects_inferred_protocol_mismatch() -> None:
+def test_agency_session_rejects_inferred_protocol_mismatch() -> None:
     thread_manager = ThreadManager()
     thread_manager._store.messages = [
         {
@@ -309,10 +306,10 @@ def test_prepare_history_for_runner_rejects_inferred_protocol_mismatch() -> None
     context = _make_context(thread_manager)
 
     with pytest.raises(IncompatibleChatHistoryError):
-        MessageFormatter.prepare_history_for_runner([], agent, None, agency_context=context)
+        _session_input([], agent, context)
 
 
-def test_prepare_history_for_runner_normalizes_legacy_items_for_responses_protocol() -> None:
+def test_agency_session_normalizes_legacy_items_for_responses_protocol() -> None:
     thread_manager = ThreadManager()
     thread_manager._store.messages = [
         {
@@ -356,7 +353,7 @@ def test_prepare_history_for_runner_normalizes_legacy_items_for_responses_protoc
     agent = _make_responses_agent("Coordinator")
     context = _make_context(thread_manager)
 
-    history_for_runner = MessageFormatter.prepare_history_for_runner([], agent, None, agency_context=context)
+    history_for_runner = _session_input([], agent, context)
     assert history_for_runner[0]["type"] == "function_call"
     assert history_for_runner[0]["call_id"] == "call-1"
     assert any(msg.get("type") == "web_search_call" for msg in history_for_runner)
