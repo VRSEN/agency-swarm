@@ -72,3 +72,5 @@ This file adds repository rules to the machine-global policy. It never weakens t
 8.6 Compare the previous and new release on the behavior each change affects.
 8.7 Keep bugfix releases minimal: no policy edits and no tooling churn.
 8.8 Ship changes to this file directly to the default branch after the maintainer approves the exact text. Never put them in a product pull request or a release.
+8.9 A breaking-change or version claim names the user-visible behavior that worked before the change and fails after it, with file or commit evidence. A different model verifies every such claim in a release report before the Owner reads it.
+8.10 Code for a deployed agency ships through the local clone and a push to GitHub; the hosting platform rebuilds from the push. The platform editor and the Owner browser are for watching and consent only, never for editing code.
