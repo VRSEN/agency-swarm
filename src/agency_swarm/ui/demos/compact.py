@@ -4,7 +4,12 @@ from textwrap import dedent
 from typing import Any, cast
 
 from agents import TResponseInputItem
-from agents.memory.openai_responses_compaction_session import is_openai_model_name
+from agents.memory.openai_responses_compaction_session import (
+    _normalize_compaction_output_items,
+    _strip_orphaned_assistant_ids,
+    is_openai_model_name,
+)
+from agents.models.openai_responses import OpenAIResponsesModel
 from openai import omit
 from openai.types.responses import Response
 
@@ -160,6 +165,13 @@ def _conversations(agency_instance: Agency) -> list[tuple[Agent, str | None]]:
 
 
 def _responses_compact_model(agent: Agent) -> str | None:
+    # Provider gate, not just a name gate: only agents running on the OpenAI Responses
+    # provider take the compact-endpoint path. Any other Model object (LiteLLM, chat
+    # completions, custom) falls back to the summary path even when its id looks like
+    # an OpenAI name. The name check stays for the accepted kinds because a bare
+    # string can still name a non-OpenAI target ("litellm/...").
+    if not isinstance(agent.model, str | OpenAIResponsesModel):
+        return None
     model_name = get_default_settings_model_name(agent.model)
     return model_name if model_name and is_openai_model_name(model_name) else None
 
@@ -186,10 +198,14 @@ async def _compact_conversation(
         input=cast(Any, history),
         instructions=instructions if instructions is not None else omit,
     )
+    # Replay-safety normalisation reused from the SDK: _normalize_compaction_output_items
+    # and _strip_orphaned_assistant_ids are underscore-named helpers, and this is exactly
+    # what OpenAIResponsesCompactionSession applies to responses.compact output before
+    # storing it as the new session history. Only the tagging loop below stays local.
+    normalized = _strip_orphaned_assistant_ids(_normalize_compaction_output_items(compacted.output or []))
     items: list[TResponseInputItem] = []
-    for output_item in compacted.output:
-        # responses.compact returns user messages with input_text parts inside output-message models.
-        item = output_item.model_dump(exclude_unset=True, warnings=False)
+    for output_item in normalized:
+        item = cast(dict[str, Any], output_item)
         item.pop("created_by", None)
         item["agent"] = agent.name
         item["callerAgent"] = caller
