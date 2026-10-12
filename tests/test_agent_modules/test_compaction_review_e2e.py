@@ -12,7 +12,7 @@ from agents.models.interface import ModelTracing
 from openai.types.responses.response_prompt_param import ResponsePromptParam
 
 from agency_swarm import Agency, Agent
-from agency_swarm.agent.agency_session import create_agency_session
+from agency_swarm.agent.agency_session import COMPACTION_RETAINED_ORIGIN, create_agency_session
 from agency_swarm.agent.context_types import AgencyContext
 from agency_swarm.utils.thread import ThreadManager
 from tests.deterministic_model import DeterministicModel
@@ -208,3 +208,31 @@ async def test_pair_slice_compaction_does_not_leak_into_user_thread() -> None:
     assert pair_items[0].get("type") == "compaction"
     assert pair_items[1].get("content") == [{"type": "output_text", "text": "pair a"}]
     assert len(pair_items) == 2
+
+
+@pytest.mark.asyncio
+async def test_manual_compaction_retained_items_are_replayed_with_their_compaction() -> None:
+    """responses.compact keeps user messages ahead of its compaction item; they replay with it."""
+    retained = {"message_origin": COMPACTION_RETAINED_ORIGIN}
+    history = [
+        _user("old message"),
+        _compaction("cmp_old"),
+        _user("dropped before manual compaction"),
+        _user("kept a", **retained),
+        _user("kept b", **retained),
+        _compaction("cmp_manual"),
+        _assistant("after"),
+    ]
+    model = CapturingModel()
+    agent = Agent(name="RecallAgent", instructions="test", model=model)
+    agency = Agency(agent, load_threads_callback=lambda: [dict(m) for m in history])
+
+    await agency.get_response("next question", "RecallAgent")
+
+    captured = model.captured_inputs[0]
+    assert isinstance(captured, list)
+    assert [item.get("content") or item.get("id") for item in captured[:3]] == ["kept a", "kept b", "cmp_manual"]
+    assert all("message_origin" not in item for item in captured)
+    body = _texts(captured)
+    assert "old message" not in body
+    assert "dropped before manual compaction" not in body

@@ -19,7 +19,7 @@ dependencies = [
     # RunContextWrapper._copy_for_run_state, agents._debug), so any upstream
     # release must be reviewed before the pin moves.
     "openai-agents==0.22.3",
-    "datamodel-code-generator>=0.56.0,<0.83.0",
+    "datamodel-code-generator>=0.56.0,<0.84.0",
     "docstring-parser>=0.16,<1.0.0",
     "fastmcp>=4.0.5,<5",
     "jsonref>=1.1.0,<2.0.0",
