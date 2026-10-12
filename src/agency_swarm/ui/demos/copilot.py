@@ -12,7 +12,7 @@ class CopilotDemoLauncher:
     @staticmethod
     def start(
         agency_instance: Agency,
-        host: str = "0.0.0.0",
+        host: str = "127.0.0.1",
         port: int = 8000,
         frontend_port: int = 3000,
         cors_origins: list[str] | None = None,
@@ -43,8 +43,9 @@ class CopilotDemoLauncher:
                     f"Failed to install frontend dependencies in {fe_path}. Please check your npm setup and try again."
                 ) from e
 
-        # Bind to 0.0.0.0 but advertise a client-connectable URL for the frontend.
-        # Also avoid a trailing slash: FastAPI will 307-redirect, which can break SSE clients.
+        # When bound to all interfaces via explicit host="0.0.0.0", advertise a
+        # client-connectable URL for the frontend. Also avoid a trailing slash:
+        # FastAPI will 307-redirect, which can break SSE clients.
         client_host = "localhost" if host == "0.0.0.0" else host
         agency_name = getattr(agency_instance, "name", None) or "agency"
         os.environ["NEXT_PUBLIC_AG_UI_BACKEND_URL"] = f"http://{client_host}:{port}/{agency_name}/get_response_stream"

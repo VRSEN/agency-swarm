@@ -137,7 +137,13 @@ def run_fastapi(
 
     app_token = os.getenv(app_token_env)
     if app_token is None or app_token == "":
-        logger.warning("App token is not set. Authentication will be disabled.")
+        if host in ("127.0.0.1", "localhost", "::1"):
+            logger.warning("App token is not set. Authentication will be disabled.")
+        else:
+            logger.warning(
+                f"App token is not set and the server binds {host}:{port}: anyone who can reach this port "
+                f"can call the agency. Set {app_token_env} to require a token."
+            )
     verify_token = get_verify_token(app_token)
 
     if server_url:

@@ -152,7 +152,7 @@ if __name__ == "__main__":
     # Run the MCP server with HTTP transport
     mcp.run(
         transport="http",
-        host="0.0.0.0",
+        host="127.0.0.1",
         port=SERVER_PORT,
         uvicorn_config={"ws": "websockets"},
     )

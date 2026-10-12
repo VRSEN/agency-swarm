@@ -592,7 +592,7 @@ class Agency:
 
     def copilot_demo(
         self,
-        host: str = "0.0.0.0",
+        host: str = "127.0.0.1",
         port: int = 8000,
         frontend_port: int = 3000,
         cors_origins: list[str] | None = None,

@@ -2,6 +2,7 @@
 Tests for UI metadata payloads and demo launcher configuration.
 """
 
+import inspect
 import os
 from pathlib import Path
 from unittest.mock import patch
@@ -147,3 +148,23 @@ def test_copilot_demo_launcher_sets_client_facing_backend_url():
         assert os.environ["NEXT_PUBLIC_AG_UI_BACKEND_URL"] == expected
         _args, kwargs = popen.call_args
         assert "stdout" not in kwargs and "stderr" not in kwargs
+
+
+def test_server_and_local_demo_default_hosts():
+    """Servers bind all interfaces so Docker and sandboxes reach them; local browser demos bind loopback."""
+    from agency_swarm.agency.helpers import run_fastapi as run_fastapi_helper
+    from agency_swarm.agency.visualization import copilot_demo as copilot_demo_helper
+    from agency_swarm.integrations.fastapi import run_fastapi
+    from agency_swarm.integrations.mcp_server import run_mcp
+    from agency_swarm.integrations.realtime import run_realtime
+    from agency_swarm.ui.demos.copilot import CopilotDemoLauncher
+    from agency_swarm.ui.demos.realtime import RealtimeDemoLauncher
+
+    agency = Agency(Agent(name="CEO", instructions="test"))
+
+    servers = [run_fastapi, run_fastapi_helper, run_mcp, run_realtime, agency.run_fastapi]
+    local_demos = [CopilotDemoLauncher.start, RealtimeDemoLauncher.start, agency.copilot_demo, copilot_demo_helper]
+    for fn in servers:
+        assert inspect.signature(fn).parameters["host"].default == "0.0.0.0", f"{fn} must default host to 0.0.0.0"
+    for fn in local_demos:
+        assert inspect.signature(fn).parameters["host"].default == "127.0.0.1", f"{fn} must default host to 127.0.0.1"
