@@ -17,6 +17,7 @@ Multi-step procedures live in `.claude/skills/`: `review`, `release`, `sdk-upgra
 2.1 Backward compatibility is not a goal by itself. Make the better change, bump the version, and document what changed in the release notes and migration guide. Do not add compatibility shims. Escalate to the maintainer only a change that breaks users who cannot upgrade, such as an old deployed template.
 2.2 Get the maintainer's approval of the exact text or action before any public action on GitHub: comments, reviews, issues, pull requests, merges, closes, labels, pushes to shared branches, tags, releases and package uploads. Prepare drafts. Exception: a short reply that corrects a clearly wrong automated comment.
 2.3 No AI attribution in commits or pull requests: no AI `Co-Authored-By` trailers, no "Generated with" footers.
+2.4 Code for a deployed agency ships through the local clone and a push to GitHub; the hosting platform rebuilds from the push. Never edit code in the platform editor.
 
 ## 3. Tooling
 
