@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 def run_fastapi(
     agencies: Mapping[str, Callable[..., Agency]] | None = None,
     tools: list[type[FunctionTool]] | None = None,
-    host: str = "127.0.0.1",
+    host: str = "0.0.0.0",
     port: int = 8000,
     server_url: str | None = None,
     app_token_env: str = "APP_TOKEN",
@@ -55,8 +55,7 @@ def run_fastapi(
     tools : list[type[FunctionTool]] | None
         Optional tools to expose under ``/tool`` routes.
     host, port, app_token_env, return_app, cors_origins :
-        Standard FastAPI configuration options. ``host`` defaults to loopback
-        (``127.0.0.1``); pass ``"0.0.0.0"`` explicitly to bind all interfaces.
+        Standard FastAPI configuration options.
     server_url : str | None
         Optional base URL to be included in the server OpenAPI schema.
         Defaults to ``http://{host}:{port}``
@@ -138,7 +137,13 @@ def run_fastapi(
 
     app_token = os.getenv(app_token_env)
     if app_token is None or app_token == "":
-        logger.warning("App token is not set. Authentication will be disabled.")
+        if host in ("127.0.0.1", "localhost", "::1"):
+            logger.warning("App token is not set. Authentication will be disabled.")
+        else:
+            logger.warning(
+                f"App token is not set and the server binds {host}:{port}: anyone who can reach this port "
+                f"can call the agency. Set {app_token_env} to require a token."
+            )
     verify_token = get_verify_token(app_token)
 
     if server_url:

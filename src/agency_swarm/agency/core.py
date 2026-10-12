@@ -498,7 +498,7 @@ class Agency:
 
     def run_fastapi(
         self,
-        host: str = "127.0.0.1",
+        host: str = "0.0.0.0",
         port: int = 8000,
         app_token_env: str = "APP_TOKEN",
         cors_origins: list[str] | None = None,
