@@ -46,6 +46,7 @@ from agency_swarm.agent.system_reminder_state import (
     serialize_suspended_direct_run,
 )
 from agency_swarm.agent.system_reminders import restore_serialized_direct_run
+from agency_swarm.agent.tracing import with_endpoint_tracing_defaults
 
 
 class _ReminderRunState(Protocol):
@@ -71,6 +72,12 @@ class Runner(SDKRunner):
         conversation_id: str | None = None,
         session: Session | None = None,
     ) -> RunResult:
+        run_config = with_endpoint_tracing_defaults(
+            starting_agent,
+            _coerce_run_config(run_config) if run_config is not None else RunConfig(),
+            run_state=input if isinstance(input, RunState) else None,
+            context=context,
+        )
         if is_active_agency_run(context):
             return await SDKRunner.run(
                 starting_agent=starting_agent,
@@ -146,6 +153,12 @@ class Runner(SDKRunner):
         conversation_id: str | None = None,
         session: Session | None = None,
     ) -> RunResult:
+        run_config = with_endpoint_tracing_defaults(
+            starting_agent,
+            _coerce_run_config(run_config) if run_config is not None else RunConfig(),
+            run_state=input if isinstance(input, RunState) else None,
+            context=context,
+        )
         if is_active_agency_run(context):
             return SDKRunner.run_sync(
                 starting_agent=starting_agent,
@@ -221,6 +234,12 @@ class Runner(SDKRunner):
         *,
         error_handlers: RunErrorHandlers[TContext] | None = None,
     ) -> RunResultStreaming:
+        run_config = with_endpoint_tracing_defaults(
+            starting_agent,
+            _coerce_run_config(run_config) if run_config is not None else RunConfig(),
+            run_state=input if isinstance(input, RunState) else None,
+            context=context,
+        )
         if is_active_agency_run(context):
             return SDKRunner.run_streamed(
                 starting_agent=starting_agent,
