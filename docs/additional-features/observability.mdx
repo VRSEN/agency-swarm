@@ -181,7 +181,7 @@ set_trace_processors([
 ])
 ```
 
-`BackendSpanExporter` sends the OpenAI trace format. For another format, write your own processor; see the Agents SDK [tracing guide](https://openai.github.io/openai-agents-python/tracing/).
+`set_trace_processors` replaces every processor already registered, including any that another tracing library added. `BackendSpanExporter` sends the OpenAI trace format. For another format, write your own processor; see the Agents SDK [tracing guide](https://openai.github.io/openai-agents-python/tracing/).
 
 ## Implementation Example
 

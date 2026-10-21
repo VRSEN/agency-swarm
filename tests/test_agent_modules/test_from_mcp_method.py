@@ -5,6 +5,9 @@ from agents import Agent as SDKAgent, FunctionTool, ToolOutputImage
 from agents.mcp.util import MCPUtil
 from agents.run_context import RunContextWrapper
 from agents.tool_context import ToolContext
+from agents.tracing import get_trace_provider, set_trace_provider, trace
+from agents.tracing.provider import DefaultTraceProvider
+from agents.tracing.traces import NoOpTrace
 from mcp.shared.auth import AuthorizationCodeResult
 from mcp.types import Tool as MCPTool
 
@@ -72,6 +75,28 @@ async def test_from_mcp_connects_once_and_reuses_connection(mock_manager, mock_g
     result = await tools[0].on_invoke_tool(ctx, "{}")
     assert result == "payload"
     original_invoke.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch("agents.mcp.util.MCPUtil.get_function_tools", new_callable=AsyncMock)
+@patch("agency_swarm.tools.mcp_manager.default_mcp_manager")
+async def test_from_mcp_keeps_tracing_disabled_by_env_var(
+    mock_manager, mock_get_function_tools: AsyncMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENAI_AGENTS_DISABLE_TRACING", "1")
+    original_provider = get_trace_provider()
+    set_trace_provider(DefaultTraceProvider())
+    try:
+        server = _DummyServer()
+        mock_get_function_tools.return_value = []
+        mock_manager.register.side_effect = lambda srv, key=None: srv
+        mock_manager.get.return_value = server
+
+        ToolFactory.from_mcp([server])
+
+        assert isinstance(trace("after_from_mcp"), NoOpTrace)
+    finally:
+        set_trace_provider(original_provider)
 
 
 @pytest.mark.asyncio

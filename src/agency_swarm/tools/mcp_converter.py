@@ -7,7 +7,7 @@ import threading
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, Union
 
-from agents import Agent as SDKAgent, FunctionTool, default_tool_error_function, set_tracing_disabled
+from agents import Agent as SDKAgent, FunctionTool, default_tool_error_function
 from agents.mcp.server import MCPServer
 from agents.mcp.util import MCPUtil
 from agents.run_context import RunContextWrapper
@@ -80,32 +80,17 @@ def from_mcp(
     for srv in servers:
         default_mcp_manager._ensure_driver(getattr(srv, "_server", srv))
 
-    # Save the current tracing state before disabling it
-    # The SDK doesn't expose a public getter, so we access the internal provider state
-    # This is necessary to avoid permanently re-enabling tracing if it was already disabled
-    from agents.tracing import get_trace_provider
+    async def _fetch_tools() -> list[FunctionTool]:
+        tools: list[FunctionTool] = []
+        for server in servers:
+            server_tools = await MCPUtil.get_function_tools(
+                server,
+                convert_schemas_to_strict,
+                run_context,
+                agent_for_fetch,
+                failure_error_function=default_tool_error_function,
+            )
+            tools.extend(t for t in server_tools if isinstance(t, FunctionTool))
+        return tools
 
-    trace_provider = get_trace_provider()
-    original_tracing_disabled = getattr(trace_provider, "_disabled", False)
-
-    # Temporarily disable tracing to avoid sdk logging a non-existent error
-    set_tracing_disabled(True)
-    try:
-
-        async def _fetch_tools() -> list[FunctionTool]:
-            tools: list[FunctionTool] = []
-            for server in servers:
-                server_tools = await MCPUtil.get_function_tools(
-                    server,
-                    convert_schemas_to_strict,
-                    run_context,
-                    agent_for_fetch,
-                    failure_error_function=default_tool_error_function,
-                )
-                tools.extend(t for t in server_tools if isinstance(t, FunctionTool))
-            return tools
-
-        return _run_coroutine_from_factory(_fetch_tools)
-    finally:
-        # Restore the original tracing state instead of unconditionally enabling it
-        set_tracing_disabled(original_tracing_disabled)
+    return _run_coroutine_from_factory(_fetch_tools)
