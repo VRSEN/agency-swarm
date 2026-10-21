@@ -24,6 +24,8 @@ If your project pins any of these packages, raise the pins to these ranges:
 
 Agency Swarm pins the OpenAI Agents SDK (`openai-agents`) to one exact version. Do not pin a different one in your project. If your code calls the OpenAI or MCP SDKs directly, read their own migration notes too.
 
+AG-UI requests with legacy `binary` content parts are now rejected. Send image, audio, video or document parts with a `source` instead.
+
 ## 2. Install LiteLLM as an extra
 
 LiteLLM is no longer installed by default. Without it, `from agency_swarm import LitellmModel` raises an `ImportError` that explains the fix.
@@ -45,7 +47,7 @@ pip install "agency-swarm[litellm]"
 pip install --no-deps --upgrade litellm
 ```
 
-`pip check` then reports LiteLLM's `openai<3` pin. You can ignore it until LiteLLM supports `openai` 3.
+`pip check` then lists LiteLLM's version pins, `openai<3` among them, and a missing `boto3`. LiteLLM still imports; run `pip install boto3` if you use Bedrock or SageMaker models.
 </Tab>
 </Tabs>
 
@@ -70,7 +72,7 @@ from agency_swarm import Runner, run_state_from_json, run_state_to_json
 ## 6. Replace removed and deprecated APIs
 
 - **`Agency(user_context=...)` and `agency.user_context` are deprecated.** They still work but emit a `DeprecationWarning`. Pass state per run with `context_override`, as shown in [Agency Context](/additional-features/agency-context).
-- **`MessageFormatter.prepare_history_for_runner()` is removed.** Agency Swarm loads and saves conversation history itself, so delete any call to it.
+- **`MessageFormatter.prepare_history_for_runner()` is removed.** In 1.11.0 it saved the new input to the thread store and returned the history to pass to a runner. Run the agent through `agent.get_response()`, `agency.get_response()` or `agency_swarm.Runner` instead; they load and save history for you.
 
 ## 7. Check agents that use the default model
 
