@@ -8,21 +8,20 @@ from typing import Any
 import pytest
 from ag_ui.core import (
     AssistantMessage,
-    AudioInputContent,
-    BinaryInputContent,
-    DocumentInputContent,
+    AudioPart,
+    DataSource,
+    DocumentPart,
     EventType,
     FileSource,
-    ImageInputContent,
-    InputContentDataSource,
-    InputContentUrlSource,
+    ImagePart,
     MessagesSnapshotEvent,
     RunErrorEvent,
     RunFinishedEvent,
     RunStartedEvent,
-    TextInputContent,
+    TextPart,
+    UrlSource,
     UserMessage,
-    VideoInputContent,
+    VideoPart,
 )
 from ag_ui.encoder import EventEncoder
 
@@ -117,17 +116,11 @@ async def test_build_agui_message_input_wraps_content_parts() -> None:
             UserMessage(
                 id="u1",
                 content=[
-                    TextInputContent(text="hello"),
-                    ImageInputContent(
-                        source=InputContentUrlSource(value="https://example.com/image.png", mime_type="image/png")
-                    ),
-                    DocumentInputContent(
-                        source=InputContentUrlSource(
-                            value="https://example.com/report.pdf", mime_type="application/pdf"
-                        )
-                    ),
-                    AudioInputContent(source=InputContentDataSource(value="AAAA", mime_type="audio/mpeg")),
-                    VideoInputContent(source=InputContentDataSource(value="BBBB", mime_type="video/mp4")),
+                    TextPart(text="hello"),
+                    ImagePart(source=UrlSource(value="https://example.com/image.png", mime_type="image/png")),
+                    DocumentPart(source=UrlSource(value="https://example.com/report.pdf", mime_type="application/pdf")),
+                    AudioPart(source=DataSource(value="AAAA", mime_type="audio/mpeg")),
+                    VideoPart(source=DataSource(value="BBBB", mime_type="video/mp4")),
                 ],
             )
         ]
@@ -148,34 +141,6 @@ async def test_build_agui_message_input_wraps_content_parts() -> None:
 
 
 @pytest.mark.asyncio
-async def test_normalize_agui_history_messages_serializes_deprecated_binary_file_data() -> None:
-    """Deprecated AG-UI binary file data should still be valid Responses file input.
-
-    ag-ui-protocol 1.0 dropped the binary part from ContentPart, so a
-    BinaryInputContent can no longer pass RunAgentInput validation; the
-    converter branch stays reachable through unvalidated history dicts.
-    """
-
-    history = _normalize_agui_history_messages(
-        [
-            {
-                "role": "user",
-                "content": [BinaryInputContent(mime_type="application/pdf", data="CCCC", filename="report.pdf")],
-            }
-        ]
-    )
-
-    assert history == [
-        {
-            "role": "user",
-            "content": [
-                {"type": "input_file", "file_data": "data:application/pdf;base64,CCCC", "filename": "report.pdf"}
-            ],
-        }
-    ]
-
-
-@pytest.mark.asyncio
 async def test_build_agui_message_input_maps_file_source_to_file_id() -> None:
     """AG-UI 1.0 file sources (provider-issued handles) should map to Responses file_id parts."""
 
@@ -184,10 +149,10 @@ async def test_build_agui_message_input_maps_file_source_to_file_id() -> None:
             UserMessage(
                 id="u1",
                 content=[
-                    DocumentInputContent(
+                    DocumentPart(
                         source=FileSource(value="file-abc123", provider="openai", mime_type="application/pdf")
                     ),
-                    ImageInputContent(source=FileSource(value="file-img456", provider="openai")),
+                    ImagePart(source=FileSource(value="file-img456", provider="openai")),
                 ],
             )
         ]
@@ -205,6 +170,19 @@ async def test_build_agui_message_input_maps_file_source_to_file_id() -> None:
 
 
 @pytest.mark.asyncio
+async def test_build_agui_message_input_rejects_file_source_from_another_provider() -> None:
+    """A file handle issued by another provider is not an OpenAI file id, so it must not reach the model."""
+
+    message = UserMessage(
+        id="u1",
+        content=[DocumentPart(source=FileSource(value="gs://bucket/report.pdf", provider="google"))],
+    )
+
+    with pytest.raises(ValueError, match="'google'"):
+        _build_agui_message_input([message])
+
+
+@pytest.mark.asyncio
 async def test_normalize_agui_history_messages_serializes_content_parts() -> None:
     """Replayed AG-UI history should not retain Pydantic content-part objects."""
 
@@ -213,10 +191,8 @@ async def test_normalize_agui_history_messages_serializes_content_parts() -> Non
             {
                 "role": "user",
                 "content": [
-                    TextInputContent(text="hello"),
-                    ImageInputContent(
-                        source=InputContentUrlSource(value="https://example.com/image.png", mime_type="image/png")
-                    ),
+                    TextPart(text="hello"),
+                    ImagePart(source=UrlSource(value="https://example.com/image.png", mime_type="image/png")),
                 ],
             },
             {"role": "assistant", "content": "ok"},
@@ -538,7 +514,7 @@ async def test_agui_chat_endpoint_wraps_content_arrays_before_prepending_sources
         thread_id = "thread-1"
         run_id = "run-1"
         state = None
-        messages = [UserMessage(id="u1", content=[TextInputContent(text="hello")])]
+        messages = [UserMessage(id="u1", content=[TextPart(text="hello")])]
         tools = []
         context = []
         forwarded_props = None

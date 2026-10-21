@@ -8,7 +8,6 @@ from typing import Any, cast
 
 from ag_ui.core import (
     AudioPart,
-    BinaryInputContent,
     DataSource,
     DocumentPart,
     FileSource,
@@ -144,9 +143,6 @@ def _convert_agui_content_part(part: Any) -> dict[str, Any]:
     if isinstance(part, DocumentPart | AudioPart | VideoPart):
         return _convert_agui_file_content_part(part.source)
 
-    if isinstance(part, BinaryInputContent):
-        return _convert_agui_binary_content_part(part)
-
     if isinstance(part, dict):
         return cast(dict[str, Any], copy.deepcopy(part))
 
@@ -164,7 +160,7 @@ def _convert_agui_image_content_part(part: ImagePart) -> dict[str, Any]:
         image_part["image_url"] = _build_data_url(source.mime_type, source.value)
         return image_part
     if isinstance(source, FileSource):
-        image_part["file_id"] = source.value
+        image_part["file_id"] = _openai_file_id(source)
         return image_part
     raise TypeError(f"Unsupported AG-UI image source: {type(source).__name__}")
 
@@ -179,33 +175,18 @@ def _convert_agui_file_content_part(source: PartSource) -> dict[str, Any]:
         file_part["file_data"] = _build_data_url(source.mime_type, source.value)
         return file_part
     if isinstance(source, FileSource):
-        file_part["file_id"] = source.value
+        file_part["file_id"] = _openai_file_id(source)
         return file_part
     raise TypeError(f"Unsupported AG-UI file source: {type(source).__name__}")
 
 
-def _convert_agui_binary_content_part(part: BinaryInputContent) -> dict[str, Any]:
-    """Convert AG-UI binary content into a Responses file or image input part."""
-    if part.mime_type.startswith("image/"):
-        image_part: dict[str, Any] = {"type": "input_image", "detail": "auto"}
-        if part.id is not None:
-            image_part["file_id"] = part.id
-        elif part.url is not None:
-            image_part["image_url"] = part.url
-        elif part.data is not None:
-            image_part["image_url"] = _build_data_url(part.mime_type, part.data)
-        return image_part
-
-    file_part: dict[str, Any] = {"type": "input_file"}
-    if part.id is not None:
-        file_part["file_id"] = part.id
-    elif part.url is not None:
-        file_part["file_url"] = part.url
-    elif part.data is not None:
-        file_part["file_data"] = _build_data_url(part.mime_type, part.data)
-    if part.filename is not None:
-        file_part["filename"] = part.filename
-    return file_part
+def _openai_file_id(source: FileSource) -> str:
+    """Return the handle of an OpenAI-issued file; only OpenAI can resolve it as a Responses file_id."""
+    if source.provider not in (None, "openai"):
+        raise ValueError(
+            f"Unsupported AG-UI file source provider: {source.provider!r}; only OpenAI file ids are supported"
+        )
+    return source.value
 
 
 def _build_data_url(mime_type: str, data: str) -> str:
