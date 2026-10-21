@@ -18,10 +18,13 @@ from agency_swarm.tools import BaseTool
 
 
 class SharedStateTool(BaseTool):
-    """Tool that uses shared state to test context isolation."""
+    """Set or get the shared state entry named test_value. The key is fixed; pass only the value."""
 
-    value: str = Field(..., description="Value to store or retrieve")
     action: Literal["set", "get"] = Field(..., description="Either 'set' or 'get'")
+    value: str = Field(
+        ...,
+        description="The bare value to store under test_value, e.g. 'abc', never 'test_value=abc'. Ignored for 'get'.",
+    )
 
     def run(self):
         """Execute the tool action."""
@@ -199,8 +202,12 @@ class TestMultiAgencySupport:
         # Run concurrent operations - this should be safe with stateless context passing
         import asyncio
 
-        task1 = asyncio.create_task(agency1.get_response("Use SharedStateTool to set test_value to 'concurrent1'"))
-        task2 = asyncio.create_task(agency2.get_response("Use SharedStateTool to set test_value to 'concurrent2'"))
+        task1 = asyncio.create_task(
+            agency1.get_response("Call SharedStateTool with action 'set' and value 'concurrent1'")
+        )
+        task2 = asyncio.create_task(
+            agency2.get_response("Call SharedStateTool with action 'set' and value 'concurrent2'")
+        )
 
         # Wait for both to complete
         response1, response2 = await asyncio.gather(task1, task2)

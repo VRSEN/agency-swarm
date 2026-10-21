@@ -150,8 +150,8 @@ def test_copilot_demo_launcher_sets_client_facing_backend_url():
         assert "stdout" not in kwargs and "stderr" not in kwargs
 
 
-def test_server_helpers_default_to_loopback_host():
-    """Dev/demo servers must bind loopback by default; 0.0.0.0 stays an explicit opt-in."""
+def test_server_and_local_demo_default_hosts():
+    """Servers bind all interfaces so Docker and sandboxes reach them; local browser demos bind loopback."""
     from agency_swarm.agency.helpers import run_fastapi as run_fastapi_helper
     from agency_swarm.agency.visualization import copilot_demo as copilot_demo_helper
     from agency_swarm.integrations.fastapi import run_fastapi
@@ -162,17 +162,9 @@ def test_server_helpers_default_to_loopback_host():
 
     agency = Agency(Agent(name="CEO", instructions="test"))
 
-    callables = [
-        run_fastapi,
-        run_fastapi_helper,
-        run_mcp,
-        run_realtime,
-        CopilotDemoLauncher.start,
-        RealtimeDemoLauncher.start,
-        agency.run_fastapi,
-        agency.copilot_demo,
-        copilot_demo_helper,
-    ]
-    for fn in callables:
-        host_param = inspect.signature(fn).parameters["host"]
-        assert host_param.default == "127.0.0.1", f"{fn} must default host to 127.0.0.1"
+    servers = [run_fastapi, run_fastapi_helper, run_mcp, run_realtime, agency.run_fastapi]
+    local_demos = [CopilotDemoLauncher.start, RealtimeDemoLauncher.start, agency.copilot_demo, copilot_demo_helper]
+    for fn in servers:
+        assert inspect.signature(fn).parameters["host"].default == "0.0.0.0", f"{fn} must default host to 0.0.0.0"
+    for fn in local_demos:
+        assert inspect.signature(fn).parameters["host"].default == "127.0.0.1", f"{fn} must default host to 127.0.0.1"
