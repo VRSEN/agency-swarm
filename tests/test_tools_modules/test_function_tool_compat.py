@@ -254,3 +254,24 @@ async def test_manual_function_tool_receives_original_context_unchanged() -> Non
     assert len(seen_contexts) == 1
     assert seen_contexts[0] is original_context
     assert not isinstance(seen_contexts[0], ToolContext)
+
+
+@pytest.mark.asyncio
+async def test_function_tool_error_reaches_model_with_its_message() -> None:
+    """The model sees the exception text by default; an explicit failure_error_function still wins."""
+
+    @function_tool
+    def failing_tool(value: int) -> str:
+        raise ValueError(f"value {value} is out of range")
+
+    @function_tool(failure_error_function=lambda ctx, error: "custom failure")
+    def custom_failing_tool(value: int) -> str:
+        raise ValueError("hidden")
+
+    default_result = await failing_tool.on_invoke_tool(cast(Any, None), '{"value": 7}')
+    custom_result = await custom_failing_tool.on_invoke_tool(cast(Any, None), '{"value": 7}')
+
+    assert (
+        default_result == "An error occurred while running the tool. Please try again. Error: value 7 is out of range"
+    )
+    assert custom_result == "custom failure"
