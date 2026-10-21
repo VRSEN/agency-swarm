@@ -66,7 +66,7 @@ def _load_tools_from_directory(tools_dir: str) -> list[type[BaseTool] | Function
 
 def run_mcp(
     tools: list[type[BaseTool] | FunctionTool] | str,
-    host: str = "127.0.0.1",
+    host: str = "0.0.0.0",
     port: int = 8000,
     app_token_env: str | None = "APP_TOKEN",
     server_name: str = "mcp-tools-server",
@@ -78,8 +78,7 @@ def run_mcp(
     Launch a FastMCP server exposing BaseTool and FunctionTool instances.
     Args:
         tools: List of BaseTool/FunctionTool classes or path to directory containing tools.
-        host: Host to bind the server to. Defaults to loopback (127.0.0.1);
-            pass "0.0.0.0" explicitly to bind all interfaces.
+        host: Host to bind the server to.
         port: Port to bind the server to.
         app_token_env: Environment variable name for authentication token. Provide None to disable authentication.
         server_name: Name identifier for the MCP server
@@ -108,7 +107,13 @@ def run_mcp(
     # Get authentication token
     app_token = os.getenv(app_token_env)
     if app_token is None or app_token == "":
-        logger.warning(f"{app_token_env} is not set. Authentication will be disabled.")
+        if transport == "stdio" or host in ("127.0.0.1", "localhost", "::1"):
+            logger.warning(f"{app_token_env} is not set. Authentication will be disabled.")
+        else:
+            logger.warning(
+                f"{app_token_env} is not set and the server binds {host}:{port}: anyone who can reach this port "
+                f"can call its tools. Set {app_token_env} to require a token."
+            )
     else:
         if transport == "stdio":
             logger.warning("Stdio servers do not support authentication.")
