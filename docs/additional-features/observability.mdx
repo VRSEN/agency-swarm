@@ -160,6 +160,29 @@ Let's walk through setting up each tracing solution. You can use them individual
   </Tab>
 </Tabs>
 
+## Custom Model Endpoints
+
+**Traces still go to OpenAI when your model runs somewhere else.** Setting `OPENAI_BASE_URL` or a client `base_url` changes where model requests go, but the Agents SDK uploads traces to `https://api.openai.com/v1/traces/ingest` with your `OPENAI_API_KEY`. With a key that is not an OpenAI key, you see a tracing `401` in the logs.
+
+To turn tracing off, set this before you start your app:
+
+```bash
+export OPENAI_AGENTS_DISABLE_TRACING=1
+```
+
+To send traces to your own collector instead, replace the default trace processor before you create any traces:
+
+```python
+from agents import set_trace_processors
+from agents.tracing.processors import BackendSpanExporter, BatchTraceProcessor
+
+set_trace_processors([
+    BatchTraceProcessor(BackendSpanExporter(endpoint="https://collector.example.com/v1/traces/ingest", api_key="...")),
+])
+```
+
+`BackendSpanExporter` sends the OpenAI trace format. For another format, write your own processor; see the Agents SDK [tracing guide](https://openai.github.io/openai-agents-python/tracing/).
+
 ## Implementation Example
 
 For a complete working example that demonstrates all three tracing methods with a multi-agent agency, see [observability.py](https://github.com/VRSEN/agency-swarm/blob/main/examples/observability.py) in the examples directory.
