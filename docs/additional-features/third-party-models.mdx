@@ -31,7 +31,13 @@ override-dependencies = ["openai>=3,<4"]
 uv add "agency-swarm[litellm]"
 ```
 
-On pip, `pip install "agency-swarm[litellm]"` fails on the pin conflict. Running `pip install agency-swarm` and then `pip install litellm --no-deps` works around it but skips LiteLLM's own dependencies, so it is fragile and unsupported.
+On pip, `pip install "agency-swarm[litellm]"` installs LiteLLM 1.83.0, the last release that accepts `openai` 3. To move to the current LiteLLM, run this next:
+
+```bash
+pip install --no-deps --upgrade litellm
+```
+
+`pip check` then reports LiteLLM's `openai<3` pin. You can ignore it until LiteLLM supports `openai` 3.
 </Step>
 
 <Step title="Configure Agency Swarm Agent">

@@ -68,7 +68,10 @@ def test_client_config_drops_litellm_keys_when_litellm_missing(
     with caplog.at_level(logging.WARNING, logger=request_models.__name__):
         config = ClientConfig(litellm_keys={"anthropic": "sk-ant-xxx"})
     assert config.litellm_keys is None
-    assert any("litellm is not installed" in record.message for record in caplog.records)
+    messages = [record.message for record in caplog.records]
+    assert any("litellm is not installed" in message for message in messages)
+    # The pip recipe that installs LiteLLM's dependencies first, not `pip install litellm --no-deps`.
+    assert any("pip install --no-deps --upgrade litellm" in message for message in messages)
 
 
 def test_base_request_client_config_roundtrip() -> None:

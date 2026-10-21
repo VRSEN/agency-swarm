@@ -242,8 +242,7 @@ def __getattr__(name: str):
                 "Install it with uv: `uv add 'agency-swarm[litellm]'` after adding "
                 '`override-dependencies = ["openai>=3,<4"]` under `[tool.uv]` in '
                 "pyproject.toml (litellm still pins `openai<3`). On pip, run "
-                "`pip install agency-swarm` then `pip install litellm --no-deps` — "
-                "a fragile workaround that skips litellm's own dependencies. "
+                "`pip install 'agency-swarm[litellm]'` then `pip install --no-deps --upgrade litellm`. "
                 "See https://agency-swarm.ai/additional-features/third-party-models"
             ) from exc
         from .streaming.litellm_reasoning import patch_litellm_thinking_blocks

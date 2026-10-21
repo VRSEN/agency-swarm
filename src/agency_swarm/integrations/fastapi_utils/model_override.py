@@ -310,8 +310,8 @@ def _apply_request_litellm_model(agent: Agent, model_name: str) -> None:
     if not _LITELLM_AVAILABLE or LitellmModel is None:
         logger.warning(
             "Cannot apply client_config.model to agent '%s': model %r requires litellm "
-            "(install the `litellm` extra: `uv add 'agency-swarm[litellm]'` or "
-            "`pip install litellm --no-deps` after `pip install agency-swarm`)",
+            "(install the `litellm` extra: `uv add 'agency-swarm[litellm]'`, or on pip "
+            "`pip install 'agency-swarm[litellm]'` then `pip install --no-deps --upgrade litellm`)",
             agent.name,
             model_name,
         )

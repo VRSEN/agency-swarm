@@ -312,8 +312,8 @@ def _apply_litellm_config(agent: Agent, model_name: str, config: ClientConfig) -
         logger.warning(
             f"Cannot apply client config to agent '{agent.name}': LiteLLM model "
             f"('{model_name}') requires the `litellm` extra — install with "
-            f"`uv add 'agency-swarm[litellm]'` or `pip install litellm --no-deps` "
-            f"after `pip install agency-swarm`"
+            f"`uv add 'agency-swarm[litellm]'`, or on pip `pip install 'agency-swarm[litellm]'` "
+            f"then `pip install --no-deps --upgrade litellm`"
         )
         return
 

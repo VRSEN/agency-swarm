@@ -95,8 +95,8 @@ class ClientConfig(BaseModel):
                 "Ignoring client_config.litellm_keys: litellm is not installed. "
                 "Install it with `uv add 'agency-swarm[litellm]'` (requires "
                 '`override-dependencies = ["openai>=3,<4"]` under `[tool.uv]` in '
-                "pyproject.toml) or `pip install litellm --no-deps` after "
-                "`pip install agency-swarm` to enable provider-key routing."
+                "pyproject.toml), or on pip `pip install 'agency-swarm[litellm]'` then "
+                "`pip install --no-deps --upgrade litellm`, to enable provider-key routing."
             )
             return None
         return v
