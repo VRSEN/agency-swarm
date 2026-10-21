@@ -111,6 +111,9 @@ from .tools import (  # noqa: E402
     tool_output_image_from_path,
 )
 from .utils.thread import ThreadManager  # noqa: E402
+from .utils.tracing import skip_openai_trace_upload_for_custom_base_url  # noqa: E402
+
+skip_openai_trace_upload_for_custom_base_url()
 
 __all__ = [
     "Agent",
