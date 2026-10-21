@@ -18,6 +18,7 @@ Multi-step procedures live in `.claude/skills/`: `review`, `release`, `sdk-upgra
 2.2 Get the maintainer's approval of the exact text or action before any public action on GitHub: comments, reviews, issues, pull requests, merges, closes, labels, pushes to shared branches, tags, releases and package uploads. Prepare drafts. Exception: a short reply that corrects a clearly wrong automated comment.
 2.3 No AI attribution in commits or pull requests: no AI `Co-Authored-By` trailers, no "Generated with" footers.
 2.4 Code for a deployed agency ships through the local clone and a push to GitHub; the hosting platform rebuilds from the push. Never edit code in the platform editor.
+2.5 Every change to this repository, `AGENTS.md` and the skills included, reaches `main` only as a merged pull request, never as a direct push. Work on your own branch from `origin/main`, get `make check` and the tests green, get a review (`review` skill), get the maintainer's approval of the pull request and the merge (2.2), then squash-merge the pull request on GitHub.
 
 ## 3. Tooling
 
