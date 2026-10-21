@@ -6,6 +6,24 @@ icon: "eyes"
 
 Agency Swarm supports multiple observability approaches to help you track and analyze your agent's behavior and performance.
 
+## Custom model endpoints
+
+To use OpenAI platform tracing with a custom model endpoint, opt in before starting your application:
+
+```bash
+export OPENAI_AGENTS_DISABLE_TRACING=0
+```
+
+When the effective OpenAI model client uses a custom endpoint, Agency Swarm disables tracing for that run by default. This includes `OPENAI_BASE_URL`, an explicit client `base_url`, and OpenAI providers configured through `RunConfig`. A run using only the default OpenAI endpoint keeps its existing tracing behavior. Streamed and non-streamed calls use the same rule.
+
+Model requests and trace uploads use separate endpoints. Opting in sends traces to `https://api.openai.com/v1/traces/ingest`; it does not send traces to your model proxy. Use a valid OpenAI tracing key when opting in.
+
+Explicit SDK tracing choices remain in effect: `set_tracing_disabled(False)`, `RunConfig(tracing={"api_key": "..."})`, an active `trace()` context, or custom trace processors. To send traces to your own compatible collector, replace the default processor with `set_trace_processors()` and a `BatchTraceProcessor` using `BackendSpanExporter(endpoint=..., api_key=...)` before creating traces. Adding a processor alone leaves the default exporter installed.
+
+To disable tracing, use `OPENAI_AGENTS_DISABLE_TRACING=1`, `set_tracing_disabled(True)`, or `RunConfig(tracing_disabled=True)`. A bare `RunConfig(tracing_disabled=False)` is also the SDK default and does not count as an explicit opt-in; use one of the choices above. For `Agency.get_response_stream()`, pass the run config as `run_config_override`.
+
+HTTP and WebSocket model endpoints follow the same policy. The default is applied per run without changing global SDK settings or the caller's `RunConfig`. In a multi-agent Agency, the shared trace defaults off if a configured member or a known handoff target uses a custom endpoint, including calls back into the entry agent. An enabled dynamic handoff without a known target also defaults tracing off. Configure endpoints before starting the run; an existing outer trace is treated as an explicit tracing choice. Custom model/provider implementations without the SDK's typed OpenAI client interface keep their existing tracing behavior. Calls made directly through `agents.Runner` also keep the SDK's behavior; use `agency_swarm.Runner` for these defaults.
+
 ## Usage Payload
 
 When usage tracking is enabled, responses include a `usage` object with token counts and cost.

@@ -6,6 +6,12 @@ icon: "book"
 
 Agency Swarm v1.x is a complete rewrite built on the OpenAI Agents SDK, bringing significant improvements and new capabilities.
 
+## Custom endpoint tracing default
+
+When an OpenAI model client uses a custom endpoint, Agency Swarm now disables tracing for that run unless you explicitly configure tracing. This prevents the default exporter from uploading traces to OpenAI when model traffic goes to a proxy or another provider.
+
+If you intentionally use OpenAI platform tracing with a custom model endpoint, set `OPENAI_AGENTS_DISABLE_TRACING=0` before starting the application. Existing explicit SDK tracing controls and custom processors remain supported. See [custom model endpoints](/additional-features/observability#custom-model-endpoints) for the available controls and destination details.
+
 ## Installation
 
 <Tabs defaultValue="v1.x (New)">
