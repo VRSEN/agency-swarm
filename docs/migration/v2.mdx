@@ -1,0 +1,104 @@
+---
+title: "Migration Guide: v1.x to v2.0"
+description: "What to change when you upgrade Agency Swarm from 1.11 to 2.0"
+icon: "arrow-up"
+---
+
+Agency Swarm 2.0 runs on the newest versions of its core libraries: the OpenAI Python SDK 3, a newer OpenAI Agents SDK, MCP 2 and FastMCP 4. Most agencies only need a new install. Go through the sections below and change the ones that match your code.
+
+```bash
+pip install --pre "agency-swarm==2.0.0b1"
+```
+
+## 1. Raise your dependency pins
+
+If your project pins any of these packages, raise the pins to these ranges:
+
+| Package | Agency Swarm 2.0 needs |
+|---|---|
+| `openai` | `>=3,<4` |
+| `mcp` | `>=2,<3` |
+| `fastmcp` | `>=4.0.5,<5` |
+| `fastapi` | `>=0.141` |
+| `ag-ui-protocol` | `>=1,<2` |
+
+Agency Swarm pins the OpenAI Agents SDK (`openai-agents`) to one exact version. Do not pin a different one in your project. If your code calls the OpenAI or MCP SDKs directly, read their own migration notes too.
+
+## 2. Install LiteLLM as an extra
+
+LiteLLM is no longer installed by default. Without it, `from agency_swarm import LitellmModel` raises an `ImportError` that explains the fix.
+
+LiteLLM still declares `openai<3` in its package metadata, so a plain `pip install "agency-swarm[litellm]"` picks LiteLLM 1.83.0, the last release that accepts `openai` 3. To get the current LiteLLM:
+
+<Tabs>
+<Tab title="uv">
+Add this to your `pyproject.toml`, then run `uv add "agency-swarm[litellm]"`:
+
+```toml
+[tool.uv]
+override-dependencies = ["openai>=3,<4"]
+```
+</Tab>
+<Tab title="pip">
+```bash
+pip install "agency-swarm[litellm]"
+pip install --no-deps --upgrade litellm
+```
+
+`pip check` then reports LiteLLM's `openai<3` pin. You can ignore it until LiteLLM supports `openai` 3.
+</Tab>
+</Tabs>
+
+## 3. Add packages your own code imports
+
+Agency Swarm no longer installs `requests`, `types-requests`, `termcolor`, `griffe` or `httpx` for you. If your code imports one of them, add it to your own dependencies.
+
+## 4. Import `Runner` from `agency_swarm`
+
+Agency Swarm no longer patches the Agents SDK. `agents.Runner` now behaves like the stock SDK, so it does not apply your agents' `system_reminders`. Use `agency_swarm.Runner` instead. To save and restore a run, use `run_state_to_json` and `run_state_from_json` from `agency_swarm`.
+
+```python
+from agency_swarm import Runner, run_state_from_json, run_state_to_json
+```
+
+## 5. Pass a host to reach the browser demos from another machine
+
+`agency.copilot_demo()` and the realtime browser demo now listen on `127.0.0.1`, so only your own machine can open them. Pass `host="0.0.0.0"` when you run them in Docker or on a remote server.
+
+`run_fastapi()`, `agency.run_fastapi()`, `run_mcp()` and `run_realtime()` still listen on `0.0.0.0`. When they do and `APP_TOKEN` is not set, they now log a warning that anyone who can reach the port can call your agency.
+
+## 6. Replace removed and deprecated APIs
+
+- **`Agency(user_context=...)` and `agency.user_context` are deprecated.** They still work but emit a `DeprecationWarning`. Pass state per run with `context_override`, as shown in [Agency Context](/additional-features/agency-context).
+- **`MessageFormatter.prepare_history_for_runner()` is removed.** Agency Swarm loads and saves conversation history itself, so delete any call to it.
+
+## 7. Check agents that use the default model
+
+The default model is now `gpt-6-luna` with reasoning effort `medium` and verbosity `low`. Before, it was `gpt-5.6-luna` with effort `none`. Agents without a `model` may answer differently, cost more and take longer.
+
+`gpt-6-luna` rejects `temperature` and `top_p`. An agent that sets them without a model now gets an error from the API. To keep the old behavior, set the model and settings yourself:
+
+```python
+from agency_swarm import Agent, ModelSettings
+from openai.types.shared import Reasoning
+
+agent = Agent(
+    name="Assistant",
+    model="gpt-5.6-luna",
+    model_settings=ModelSettings(reasoning=Reasoning(effort="none")),
+)
+```
+
+## 8. Know that long conversations are compacted
+
+For model names that start with `gpt-` or `o` plus a digit, Agency Swarm now asks the OpenAI API to compact long conversations. Saved history is replayed from the latest compaction, so later turns send fewer tokens. The `/compact` command in the terminal demo uses the same OpenAI compaction endpoint.
+
+To turn compaction off for an agent, for example on an endpoint that serves a `gpt-*` name but rejects the setting:
+
+```python
+ModelSettings(context_management=[])
+```
+
+## 9. Use `agency_swarm.function_tool` for tool errors the model can read
+
+Since Agents SDK 0.23, tools made with the SDK's own `agents.function_tool` return `An error occurred while running the tool. Please try again.` without the exception text. Tools made with `agency_swarm.function_tool`, `BaseTool` or MCP servers still show the model the error message, so it can fix its input and try again. Import `function_tool` from `agency_swarm`, or pass your own `failure_error_function`.
