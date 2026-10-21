@@ -37,7 +37,7 @@ On pip, `pip install "agency-swarm[litellm]"` installs LiteLLM 1.83.0, the last 
 pip install --no-deps --upgrade litellm
 ```
 
-`pip check` then reports LiteLLM's `openai<3` pin. You can ignore it until LiteLLM supports `openai` 3.
+`pip check` then lists LiteLLM's version pins, `openai<3` among them, and a missing `boto3`. LiteLLM still imports; run `pip install boto3` if you use Bedrock or SageMaker models.
 </Step>
 
 <Step title="Configure Agency Swarm Agent">
