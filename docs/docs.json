@@ -149,7 +149,7 @@
           },
           {
             "group": "Migration",
-            "pages": ["migration/guide"]
+            "pages": ["migration/v1-12", "migration/guide"]
           },
           {
             "group": "FAQ",

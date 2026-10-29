@@ -11,7 +11,7 @@ While OpenAI is generally recommended, there are situations where you might pref
 Since Agents SDK no longer uses assistants, most of the previously available frameworks became incompatible with it. One of the few frameworks that has been ported for the new SDK is [LiteLLM](https://docs.litellm.ai/docs/response_api), which you can use to connect your agent to various providers (Anthropic, Google Vertex AI, AWS Bedrock, Azure) as well as self-hosted open-source models via Ollama, vLLM, and other local serving solutions.
 
 <Warning>
-**LiteLLM cannot be installed with pip.** Every LiteLLM release still declares `openai<3` in its package metadata, while Agency Swarm requires `openai>=3`. The pin is stale — LiteLLM runs fine on openai 3.x — but pip refuses to install both packages together. Install with **uv** and the override shown in the steps below, or run LiteLLM in a separate environment.
+**pip installs an old LiteLLM.** Current LiteLLM releases declare `openai<3` in their package metadata, while Agency Swarm requires `openai>=3`. The pin is stale — LiteLLM runs fine on openai 3.x — but pip will not install a current LiteLLM next to Agency Swarm. Install with **uv** and the override shown in the steps below, or run LiteLLM in a separate environment.
 </Warning>
 
 <Tabs>
@@ -31,7 +31,7 @@ override-dependencies = ["openai>=3,<4"]
 uv add "agency-swarm[litellm]"
 ```
 
-On pip, `pip install "agency-swarm[litellm]"` fails on the pin conflict. Running `pip install agency-swarm` and then `pip install litellm --no-deps` works around it but skips LiteLLM's own dependencies, so it is fragile and unsupported.
+On pip, `pip install "agency-swarm[litellm]"` installs LiteLLM 1.83.0, the newest release whose metadata allows openai 3. Running `pip install --no-deps --upgrade litellm` afterwards gets a current LiteLLM but skips its own dependencies, so it is fragile and unsupported.
 </Step>
 
 <Step title="Configure Agency Swarm Agent">
