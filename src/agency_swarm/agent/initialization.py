@@ -200,9 +200,21 @@ def apply_framework_defaults(kwargs: dict[str, Any]) -> None:
     if not isinstance(existing_settings, ModelSettings):
         raise TypeError("model_settings must be a ModelSettings instance or dict")
 
-    # User-specified values override defaults; unset fields inherit framework+SDK defaults
-    kwargs["model_settings"] = base_defaults.resolve(existing_settings)
+    kwargs["model_settings"] = _resolve_user_model_settings(base_defaults, existing_settings)
     ensure_store_false_reasoning_encrypted_content(kwargs["model_settings"])
+
+
+def _resolve_user_model_settings(defaults: ModelSettings, user: ModelSettings) -> ModelSettings:
+    """User-specified values override defaults; unset fields inherit framework+SDK defaults.
+
+    A ``context_management`` the user passes through ``extra_args`` replaces the compaction
+    default: the SDK refuses a request that carries both (``responses.create() got multiple
+    values for keyword argument 'context_management'``).
+    """
+    resolved = defaults.resolve(user)
+    if user.context_management is None and "context_management" in (user.extra_args or {}):
+        resolved.context_management = None
+    return resolved
 
 
 def separate_kwargs(kwargs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
