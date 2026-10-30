@@ -11,7 +11,7 @@ Agency context lives in the `MasterContext` for a run. Keep session state outsid
 </Note>
 
 <Warning>
-`Agency(user_context=...)` and `agency.user_context` are deprecated and will be removed in the next major release. They still work, but emit a `DeprecationWarning`. To migrate, keep your state in a dictionary you own, pass it with `context_override`, and carry the updated state forward from `response.context_wrapper.context.user_context` as shown in [Session Management](#session-management) below.
+`Agency(user_context=...)` and `agency.user_context` are deprecated and will be removed in a future release. They still work, but emit a `DeprecationWarning`. To migrate, keep your state in a dictionary you own, pass it with `context_override`, and carry the updated state forward from `response.context_wrapper.context.user_context` as shown in [Session Management](#session-management) below.
 </Warning>
 
 ## Understanding Agency Context

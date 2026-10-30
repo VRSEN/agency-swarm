@@ -1,20 +1,22 @@
 ---
-title: "Upgrading from 1.11 to 1.12"
-description: "What to change when you upgrade Agency Swarm from 1.11 to 1.12"
+title: "Migration Guide: v1.x to v2.0"
+description: "What to change when you upgrade Agency Swarm from 1.11 to 2.0"
 icon: "arrow-up"
 ---
 
-Agency Swarm 1.12 runs on new major versions of its core libraries: the OpenAI Python SDK 3, MCP 2 and FastMCP 4, with the OpenAI Agents SDK at 0.22.3. It also changes the default model and compacts long conversations. Most agencies only need a new install. Go through the sections below and change the ones that match your code.
+Agency Swarm 2.0 runs on new major versions of its core libraries: the OpenAI Python SDK 3, MCP 2 and FastMCP 4, with the OpenAI Agents SDK at 0.22.3. It also changes the default model and compacts long conversations. Most agencies only need a new install. Go through the sections below and change the ones that match your code.
 
 ```bash
-pip install --upgrade agency-swarm
+pip install --pre "agency-swarm==2.0.0b1"
 ```
+
+2.0.0b1 is a pre-release, so `pip install --upgrade agency-swarm` still installs 1.11. Pass `--pre` and the version, as shown above.
 
 ## 1. Raise your dependency pins
 
 If your project pins any of these packages, raise the pins to these ranges:
 
-| Package | Agency Swarm 1.12 needs |
+| Package | Agency Swarm 2.0 needs |
 |---|---|
 | `openai` | `>=3,<4` |
 | `mcp` | `>=2,<3` |
@@ -45,17 +47,17 @@ pip install "agency-swarm[litellm]"
 pip install --no-deps --upgrade litellm
 ```
 
-This skips LiteLLM's own dependency checks, so it is fragile. See [Third-Party Models](/additional-features/third-party-models).
+This skips LiteLLM's own dependency checks, so it is fragile. `pip check` then lists LiteLLM's version pins, `openai<3` among them, and a missing `boto3`. LiteLLM still imports; run `pip install boto3` if you use Bedrock or SageMaker models. See [Third-Party Models](/additional-features/third-party-models).
 </Tab>
 </Tabs>
 
 ## 3. Add packages your own code imports
 
-Agency Swarm no longer depends on `requests`, `types-requests`, `termcolor`, `griffe` or `httpx`. If your code imports one of them, add it to your own dependencies.
+Agency Swarm no longer installs `requests`, `types-requests`, `termcolor`, `griffe` or `httpx` for you. If your code imports one of them, add it to your own dependencies.
 
 ## 4. Check agents that use the default model
 
-The default model is now `gpt-6-luna` with reasoning effort `medium` and verbosity `low`. Before, it was `gpt-5.6-luna` with effort `none`. Agents without a `model` may answer differently and take longer.
+The default model is now `gpt-6-luna` with reasoning effort `medium` and verbosity `low`. Before, it was `gpt-5.6-luna` with effort `none`. Agents without a `model` may answer differently, cost more and take longer.
 
 `gpt-6-luna` rejects `temperature` and `top_p`. An agent that sets them without a model now gets an error from the API. To keep the old behavior, set the model and settings yourself:
 
