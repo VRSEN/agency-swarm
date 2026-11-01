@@ -300,6 +300,10 @@ print("Response:", agency_response.json())
 | `user_context` | object | No | Structured data passed to [Agency Context](/additional-features/agency-context) without exposing it to the LLM. |
 | `client_config` | object | No | Override `base_url` / `api_key` for this request (and optional `litellm_keys` for `litellm/` models). |
 
+### How chat_history is replayed
+- Each conversation (the user thread, and each pair of agents that talk to each other) is sent to the model from its latest `compaction` item onward. OpenAI adds these items to the response when a conversation grows long.
+- Items of that conversation stored before its latest `compaction` item are never sent to the model again, so your app can drop them from `chat_history`. Keep items marked `"message_origin": "compaction_retained"` right before it: they belong to that compaction.
+
 ### How user_context is applied
 - Passed as run-scoped `context_override`.
 - Useful for structured data (ids, preferences, feature flags) you do not want in the prompt.
