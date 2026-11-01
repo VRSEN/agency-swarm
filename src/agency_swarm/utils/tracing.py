@@ -20,12 +20,17 @@ from agents.tracing import setup as tracing_setup
 
 logger = logging.getLogger(__name__)
 
+# OPENAI_AGENTS_DISABLE_TRACING values that keep SDK tracing on. The SDK lowercases the
+# value and turns tracing off only for "1" or "true", so any other value, an empty one
+# included, is not an opt-in to the OpenAI upload.
+_OPT_IN_VALUES = ("0", "false")
+
 
 def skip_openai_trace_upload_for_custom_base_url() -> bool:
     """Remove the SDK's OpenAI trace upload when ``OPENAI_BASE_URL`` is not OpenAI.
 
-    Leaves tracing as the SDK configures it when ``OPENAI_AGENTS_DISABLE_TRACING``
-    is set to any value, or when tracing was set up before Agency Swarm was imported.
+    Leaves tracing as the SDK configures it when ``OPENAI_AGENTS_DISABLE_TRACING`` is
+    ``0`` or ``false``, or when tracing was set up before Agency Swarm was imported.
 
     Returns:
         True when the default OpenAI trace upload was removed.
@@ -33,8 +38,9 @@ def skip_openai_trace_upload_for_custom_base_url() -> bool:
     base_url = os.environ.get("OPENAI_BASE_URL")
     if not base_url or is_official_openai_base_url(base_url):
         return False
-    if os.environ.get("OPENAI_AGENTS_DISABLE_TRACING") is not None:
+    if os.environ.get("OPENAI_AGENTS_DISABLE_TRACING", "").lower() in _OPT_IN_VALUES:
         return False
+    # The SDK has no public check; get_trace_provider() would create the provider.
     if tracing_setup.GLOBAL_TRACE_PROVIDER is not None:
         return False
     set_trace_processors([])

@@ -162,9 +162,11 @@ Let's walk through setting up each tracing solution. You can use them individual
 
 ## Custom Model Endpoints
 
-**When `OPENAI_BASE_URL` points anywhere other than `api.openai.com`, Agency Swarm does not upload traces to OpenAI.** The Agents SDK uploads traces to `https://api.openai.com/v1/traces/ingest` with `OPENAI_API_KEY`, wherever your model calls go. With a custom endpoint that key belongs to the endpoint, so Agency Swarm removes the SDK's OpenAI trace upload when it is imported. Langfuse, AgentOps and any processor you add still receive every trace.
+**When `OPENAI_BASE_URL` points anywhere other than `api.openai.com`, Agency Swarm stops the Agents SDK from uploading traces to OpenAI.** The SDK sends traces to OpenAI with `OPENAI_API_KEY`, wherever your model calls go, and with a custom endpoint that key belongs to the endpoint. Langfuse, AgentOps and any processor you add still receive every trace.
 
-To send traces to your own collector, add a processor after you import Agency Swarm:
+- **Keep uploading traces to OpenAI:** set `OPENAI_AGENTS_DISABLE_TRACING=0` before you start your app, and give the exporter an OpenAI key with `agents.set_tracing_export_api_key("sk-...")`.
+- **Turn tracing off everywhere:** set `OPENAI_AGENTS_DISABLE_TRACING=1`.
+- **Send traces to your own collector:** add a processor after you import Agency Swarm.
 
 ```python
 from agents import add_trace_processor
@@ -177,9 +179,15 @@ add_trace_processor(
 
 `BackendSpanExporter` sends the OpenAI trace format. For another format, write your own processor; see the Agents SDK [tracing guide](https://openai.github.io/openai-agents-python/tracing/).
 
-To keep uploading traces to OpenAI, set `OPENAI_AGENTS_DISABLE_TRACING=0` before you start your app, and give the exporter an OpenAI key with `agents.set_tracing_export_api_key("sk-...")`. To turn tracing off everywhere, set `OPENAI_AGENTS_DISABLE_TRACING=1`.
+<Note>
+Agency Swarm checks `OPENAI_BASE_URL` once, when you import it, after it loads your `.env` file. These setups still upload traces to OpenAI with `OPENAI_API_KEY`:
 
-An agent model built with its own `AsyncOpenAI(base_url=...)` client still uploads traces to OpenAI with `OPENAI_API_KEY`. Set `OPENAI_AGENTS_DISABLE_TRACING=1` or replace the processors with `agents.set_trace_processors()` if you do not want that.
+- `OPENAI_BASE_URL` set in your code after the import.
+- Tracing set up before the import, such as a processor added with `agents.add_trace_processor()`. Agency Swarm leaves that setup as it is.
+- An agent model built with its own `AsyncOpenAI(base_url=...)` client.
+
+To stop those uploads, set `OPENAI_AGENTS_DISABLE_TRACING=1` or replace the processors with `agents.set_trace_processors()`.
+</Note>
 
 ## Implementation Example
 
