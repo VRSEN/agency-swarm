@@ -40,7 +40,7 @@ def skip_openai_trace_upload_for_custom_base_url() -> bool:
         return False
     if os.environ.get("OPENAI_AGENTS_DISABLE_TRACING", "").lower() in _OPT_IN_VALUES:
         return False
-    # The SDK has no public check; get_trace_provider() would create the provider.
+    # No public SDK call tells whether tracing is set up; get_trace_provider() would set it up.
     if tracing_setup.GLOBAL_TRACE_PROVIDER is not None:
         return False
     set_trace_processors([])
