@@ -14,6 +14,18 @@ _WRAPPED_ATTR = "_agency_swarm_manual_tool_context_compat"
 _ORIGINAL_INVOKER_ATTR = "_agency_swarm_original_on_invoke_tool"
 
 
+def tool_error_with_details(ctx: RunContextWrapper[Any] | None, error: Exception) -> str:
+    """Tool failure message for the model that keeps the exception text.
+
+    A ``failure_error_function`` for the Agents SDK. Since openai-agents 0.23 the SDK's
+    ``default_tool_error_function`` returns a fixed message without the exception. Agency Swarm
+    tools rely on the model reading validator and ``raise ValueError(...)`` messages so it can
+    retry with better input, so ``BaseTool``, ``function_tool`` and MCP tools keep the message
+    they returned before.
+    """
+    return f"An error occurred while running the tool. Please try again. Error: {error}"
+
+
 @dataclass
 class _ManualContextFunctionTool(FunctionTool):
     """FunctionTool variant whose copied instances bind manual context to themselves."""
@@ -201,7 +213,12 @@ def function_tool(
     func: Callable[..., Any] | None = None,
     **kwargs: Any,
 ) -> FunctionTool | Callable[[Callable[..., Any]], FunctionTool]:
-    """Wrap the SDK decorator so manual invocation still works outside Runner."""
+    """Wrap the SDK decorator so manual invocation still works outside Runner.
+
+    Without an explicit ``failure_error_function``, errors reach the model with their message,
+    the same text ``BaseTool`` returns (see ``tool_error_with_details``).
+    """
+    kwargs.setdefault("failure_error_function", tool_error_with_details)
     if func is not None:
         return normalize_function_tool(sdk_function_tool(func, **kwargs))
 
