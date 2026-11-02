@@ -131,6 +131,20 @@ async def wait_for_code() -> AuthorizationCodeResult:
 
 `run_fastapi()`, `agency.run_fastapi()`, `run_mcp()` and `run_realtime()` still listen on `0.0.0.0`. When they do and `APP_TOKEN` is not set, they now log a warning that anyone who can reach the port can call your agency.
 
-## 9. Replace deprecated APIs
+## 9. Turn OpenAI traces back on if you use a custom endpoint
+
+When `OPENAI_BASE_URL` points anywhere other than `api.openai.com`, Agency Swarm no longer lets the Agents SDK upload traces to OpenAI. The SDK sent them with `OPENAI_API_KEY`, which is your endpoint's key. Langfuse, AgentOps and your own trace processors still get every trace.
+
+If you read these traces in the OpenAI dashboard, set `OPENAI_AGENTS_DISABLE_TRACING=0` and give the exporter an OpenAI key:
+
+```python
+from agents import set_tracing_export_api_key
+
+set_tracing_export_api_key("sk-...")
+```
+
+See [Observability](/additional-features/observability#custom-model-endpoints) for the setups this does not cover.
+
+## 10. Replace deprecated APIs
 
 `Agency(user_context=...)` and `agency.user_context` are deprecated. They still work but emit a `DeprecationWarning`. Pass state per run with `context_override`, as shown in [Agency Context](/additional-features/agency-context).
