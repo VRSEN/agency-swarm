@@ -1,8 +1,10 @@
 """Request override session lifecycle and agency state snapshots."""
 
+import asyncio
 import contextlib
 import copy
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -12,6 +14,7 @@ from openai import AsyncOpenAI, OpenAI
 from agency_swarm import Agency
 from agency_swarm.integrations.fastapi_utils import endpoint_handlers
 from agency_swarm.integrations.fastapi_utils.override_policy import RequestOverridePolicy
+from agency_swarm.integrations.fastapi_utils.request_lifecycle import _wait_for_cleanup
 from agency_swarm.integrations.fastapi_utils.request_models import ClientConfig
 from agency_swarm.integrations.fastapi_utils.request_state import _AgencyRequestLease
 from agency_swarm.utils import hosted_tool_compat
@@ -59,6 +62,7 @@ class _RequestOverrideSession:
     restore_snapshot: _AgencyStateSnapshot | None = None
     oauth_snapshot: _OAuthAgentStateSnapshot | None = None
     _is_cleaned: bool = False
+    _cleanup_task: asyncio.Task[None] | None = None
 
     async def acquire(self) -> None:
         self.lease = await endpoint_handlers._acquire_agency_request_lease(
@@ -74,6 +78,18 @@ class _RequestOverrideSession:
                 hosted_tool_compat.enable_attachment_compatibility(agent)
 
     async def cleanup(self) -> None:
+        if self._cleanup_task is not None and self._cleanup_task.done() and self._is_cleaned:
+            return
+        if self._cleanup_task is None:
+            self._cleanup_task = asyncio.create_task(self._cleanup())
+        task = self._cleanup_task
+        try:
+            await _wait_for_cleanup(task)
+        finally:
+            if self._cleanup_task is task and task.done() and not self._is_cleaned:
+                self._cleanup_task = None
+
+    async def _cleanup(self) -> None:
         if self._is_cleaned:
             return
         self._is_cleaned = True
@@ -84,20 +100,7 @@ class _RequestOverrideSession:
             if primary_error is None:
                 primary_error = error
 
-        if self.restore_oauth_state:
-            try:
-                await endpoint_handlers.cleanup_oauth_runtime_mcp_servers()
-            except BaseException as exc:
-                preserve_primary_error(exc)
-            try:
-                endpoint_handlers.restore_hosted_mcp_oauth_tools(self.agency)
-            except BaseException as exc:
-                preserve_primary_error(exc)
-        if self.oauth_snapshot is not None:
-            try:
-                endpoint_handlers._restore_oauth_agent_state(self.agency, self.oauth_snapshot)
-            except BaseException as exc:
-                preserve_primary_error(exc)
+        await self._restore_oauth(preserve_primary_error)
         if self.restore_snapshot is not None:
             try:
                 endpoint_handlers._restore_agency_state(self.agency, self.restore_snapshot)
@@ -113,6 +116,22 @@ class _RequestOverrideSession:
                 self.lease = None
         if primary_error is not None:
             raise primary_error
+
+    async def _restore_oauth(self, preserve_primary_error: Callable[[BaseException], None]) -> None:
+        if self.restore_oauth_state:
+            try:
+                await endpoint_handlers.cleanup_oauth_runtime_mcp_servers()
+            except BaseException as exc:
+                preserve_primary_error(exc)
+            try:
+                endpoint_handlers.restore_hosted_mcp_oauth_tools(self.agency)
+            except BaseException as exc:
+                preserve_primary_error(exc)
+        if self.oauth_snapshot is not None:
+            try:
+                endpoint_handlers._restore_oauth_agent_state(self.agency, self.oauth_snapshot)
+            except BaseException as exc:
+                preserve_primary_error(exc)
 
 
 def _has_request_client_overrides(config: ClientConfig | None) -> bool:

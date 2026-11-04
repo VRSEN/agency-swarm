@@ -1260,7 +1260,11 @@ async def test_stream_cancel_stops_pending_oauth_attachment(monkeypatch: pytest.
             await asyncio.Future()
 
         def cancel(self, mode: str = "immediate") -> None:
-            self.cancel_calls.append(mode)
+            if mode not in self.cancel_calls:
+                self.cancel_calls.append(mode)
+
+        async def aclose(self) -> None:
+            return None
 
     class DummyAgent:
         def __init__(self) -> None:

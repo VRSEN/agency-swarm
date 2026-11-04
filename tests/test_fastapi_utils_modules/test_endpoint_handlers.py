@@ -388,12 +388,9 @@ async def test_agui_chat_endpoint_prepends_file_url_sources(monkeypatch: pytest.
         _fake_upload_from_urls,
     )
 
-    class _StreamStub:
-        def __aiter__(self):
-            return self
-
-        async def __anext__(self):
-            raise StopAsyncIteration
+    async def _empty_events():
+        if False:
+            yield {}
 
     class _AgentStub:
         name = "A"
@@ -406,7 +403,7 @@ async def test_agui_chat_endpoint_prepends_file_url_sources(monkeypatch: pytest.
 
         def get_response_stream(self, **kwargs):
             self.last_kwargs = kwargs
-            return _StreamStub()
+            return StreamingRunResponse(_empty_events())
 
     agency = _AgencyStub()
     handler = make_agui_chat_endpoint(
@@ -467,12 +464,9 @@ async def test_agui_chat_endpoint_wraps_content_arrays_before_prepending_sources
         lambda _messages: [],
     )
 
-    class _StreamStub:
-        def __aiter__(self):
-            return self
-
-        async def __anext__(self):
-            raise StopAsyncIteration
+    async def _empty_events():
+        if False:
+            yield {}
 
     class _AgentStub:
         name = "A"
@@ -485,7 +479,7 @@ async def test_agui_chat_endpoint_wraps_content_arrays_before_prepending_sources
 
         def get_response_stream(self, **kwargs):
             self.last_kwargs = kwargs
-            return _StreamStub()
+            return StreamingRunResponse(_empty_events())
 
     agency = _AgencyStub()
     handler = make_agui_chat_endpoint(
@@ -556,16 +550,8 @@ async def test_agui_chat_endpoint_snapshot_includes_file_url_sources(monkeypatch
 
     monkeypatch.setattr("agency_swarm.integrations.fastapi_utils.endpoint_handlers.AguiAdapter", _AdapterStub)
 
-    class _StreamStub:
-        def __aiter__(self):
-            self._done = False
-            return self
-
-        async def __anext__(self):
-            if self._done:
-                raise StopAsyncIteration
-            self._done = True
-            return {"type": "dummy"}
+    async def _empty_events():
+        yield {"type": "dummy"}
 
     class _AgentStub:
         name = "A"
@@ -577,7 +563,7 @@ async def test_agui_chat_endpoint_snapshot_includes_file_url_sources(monkeypatch
 
         def get_response_stream(self, **kwargs):
             del kwargs
-            return _StreamStub()
+            return StreamingRunResponse(_empty_events())
 
     handler = make_agui_chat_endpoint(
         RunAgentInputCustom,
@@ -641,16 +627,8 @@ async def test_agui_chat_endpoint_snapshot_includes_file_url_sources_when_messag
 
     monkeypatch.setattr("agency_swarm.integrations.fastapi_utils.endpoint_handlers.AguiAdapter", _AdapterStub)
 
-    class _StreamStub:
-        def __aiter__(self):
-            self._done = False
-            return self
-
-        async def __anext__(self):
-            if self._done:
-                raise StopAsyncIteration
-            self._done = True
-            return {"type": "dummy"}
+    async def _empty_events():
+        yield {"type": "dummy"}
 
     class _AgentStub:
         name = "A"
@@ -662,7 +640,7 @@ async def test_agui_chat_endpoint_snapshot_includes_file_url_sources_when_messag
 
         def get_response_stream(self, **kwargs):
             del kwargs
-            return _StreamStub()
+            return StreamingRunResponse(_empty_events())
 
     handler = make_agui_chat_endpoint(
         RunAgentInputCustom,
