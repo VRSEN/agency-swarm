@@ -189,8 +189,10 @@ def make_response_endpoint(
                     logger.error(f"Error generating chat name: {e}")
             return result
         finally:
-            await override_session.cleanup()
-            _clear_oauth_request_context()
+            try:
+                await override_session.cleanup()
+            finally:
+                _clear_oauth_request_context()
 
     return handler
 
