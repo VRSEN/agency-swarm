@@ -4,8 +4,8 @@ Agency Swarm is a focused orchestration layer over the OpenAI Agents SDK. It doe
 a second agent runtime: where the SDK already does something, this repository uses the SDK.
 Check every change against that principle.
 
-Multi-step procedures live in `.claude/skills/`: `review`, `release`, `sdk-upgrade`. Load the
-matching skill before you start one of those.
+`CONTRIBUTING.md` holds the setup, the checks and two procedures: an SDK upgrade and a release.
+Follow the procedure before you start one of those.
 
 ## 1. The OpenAI Agents SDK comes first
 

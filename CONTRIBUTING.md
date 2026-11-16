@@ -1,154 +1,83 @@
 # Contributing to Agency Swarm
-Each agent or tool you add to Agency Swarm will automatically be available for import by the Genesis Swarm, which will help us create an exponentially larger and smarter system.
 
-This document provides guidelines for contributing new agents and tools to the framework.
+Thank you for helping improve Agency Swarm. This guide covers the local setup, the checks a
+change must pass, and the two maintainer procedures: an SDK upgrade and a release.
 
-## Setting Up Your Development Environment
+The rules every change follows are in [AGENTS.md](AGENTS.md). The most important one: Agency
+Swarm is an orchestration layer over the
+[OpenAI Agents SDK](https://github.com/openai/openai-agents-python). Where the SDK already does
+something, use the SDK.
 
-To contribute to Agency Swarm, you'll need to set up your local development environment:
+## Set up
 
-1. **Clone the Repository**
-
-   ```bash
-   git clone https://github.com/VRSEN/agency-swarm.git
-   cd agency-swarm
-   ```
-
-2. **Create a Virtual Environment**
-
-   Create and activate a virtual environment:
-
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate  # On Windows use `venv\Scripts\activate`
-   ```
-
-3. **Install Dependencies**
-
-   Install the required packages using the Makefile:
-
-   ```bash
-   make sync
-   ```
-
-4. **Install Pre-Commit Hooks**
-
-   Install pre-commit hooks for code quality checks:
-
-   ```bash
-   pip install pre-commit
-   pre-commit install
-   ```
-
-## Running Tests
-
-Ensure all tests pass before submitting your changes:
-
-1. **Install Test Dependencies**
-
-   Ensure all test dependencies are installed:
-
-   ```bash
-   make sync
-   ```
-
-2. **Run Tests**
-
-   Run the test suite with coverage using the Makefile:
-
-   ```bash
-   make coverage
-   ```
-
-
-3. **Check Test Coverage**
-
-   The `make coverage` command should output coverage information. Review it to ensure adequate test coverage.
-
-## Folder Structure for Tools
-
-Tools should be added in the `agency_swarm/tools/{category}/` directory as shown below. Each tool should be placed in its specific category folder like `coding`, `browsing`, `investing`, etc.
-
-Your tool file should be named `YourNewTool.py`. Tests should be added in `agency_swarm/tests/test_tools.py`.
+You need Python 3.12 or later and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-agency_swarm/tools/your-tool-category/
-│
-├── YourNewTool.py          # The main tool class file
-└── __init__.py             # Make sure to import your tool here
+git clone https://github.com/VRSEN/agency-swarm.git
+cd agency-swarm
+make sync                    # creates .venv and installs the dependencies
+uv run pre-commit install    # runs the formatters on each commit
 ```
 
-### Adding Tests For Your Tools
+## Where things live
 
-For each tool, please add the following test case in `agency_swarm/tests/test_tools.py`:
+| Path | What it holds |
+| --- | --- |
+| `src/agency_swarm/` | The framework |
+| `tests/test_*_modules/` | Unit tests, mirroring the source layout |
+| `tests/integration/` | Integration tests |
+| `examples/` | Runnable examples |
+| `docs/` | The documentation site at [agency-swarm.ai](https://agency-swarm.ai) |
 
-```python
-def test_my_tool_example():
-    tool = MyCustomTool(example_field="test value")
-    result = tool.run()
-    assert "expected output" in result
-```
+## Make a change
 
----
-
-Thank you for contributing to Agency Swarm! Your efforts help us build a more robust and versatile framework.
-
-1. **Install Test Dependencies**
-
-   If there are any additional test dependencies, ensure they are installed:
+1. Create a branch from `main`.
+2. Write the change. A change to existing behavior comes with a test that fails without it.
+3. Run the checks:
 
    ```bash
-   make sync
+   make format     # ruff format and autofix
+   make check      # ruff and mypy
+   make tests      # the test suite
+   make coverage   # the test suite with coverage; fails below 90%
    ```
 
-2. **Run Tests with Pytest**
+   `make ci` runs all of them in one go. Use it before a broad or risky change.
+4. Update the docs when behavior that users see changes. `make serve-docs` previews the site
+   locally with the Mintlify CLI.
+5. Open a pull request and fill in the template: what changed, why, and how you tested it.
 
-   Run tests with coverage using the Makefile:
+The integration tests call OpenAI and need `OPENAI_API_KEY` in your environment. The unit
+tests run without a key: `uv run pytest tests/test_*_modules`.
 
-   ```bash
-   make coverage
-   ```
+## Upgrade the OpenAI Agents SDK
 
-3. **Check Test Coverage**
+Use this procedure when the pin for `openai-agents`, LiteLLM or a provider SDK changes.
 
-   The `make coverage` command should output coverage information.
+1. Change the pin in `pyproject.toml` and update `uv.lock` in the same change.
+2. Read the SDK changelog between the old and the new version.
+3. List every wrapper in `src/` that mirrors an SDK abstraction: session, history items,
+   streaming events, model settings, tracing, guardrails, handoffs. For each new SDK feature,
+   choose one: the wrapper supports it, the wrapper is deleted in favor of the SDK, or the gap
+   is named in the pull request.
+4. Run `make ci`.
+5. Add or update an end-to-end test that makes a tool call or a delegation and then sends that
+   history back to the model on the next turn. This catches history-format changes that unit
+   tests miss.
+6. In the pull request, name the old and the new version and each SDK feature a wrapper does
+   not support yet.
 
-## Folder Structure for Agents
+## Release
 
-Agents should be placed in `agency_swarm/agents/` directory. Each agent should have its dedicated folder named `AgentName` like below. Make sure to use **CamelCase** for the agent name and the folder.
+Maintainers cut releases.
 
-```
-agency_swarm/agents/AgentName/
-│
-└── AgentName/                  # Directory for the specific agent
-    ├── files/                  # Directory for files that will be uploaded to OpenAI (if any)
-    ├── tools/                  # Directory for tools to be used by the agent
-    ├── schemas/                # Directory for OpenAPI schemas to be converted into tools (if any)
-    ├── AgentName.py            # The main agent class file
-    ├── __init__.py             # Initializes the agent folder as a Python package
-    └── instructions.md         # Instruction document for the agent
-```
-
-### Creating an Agent
-
-1. Use the following structure in your `AgentName.py` as a guideline.
-2. Import all tools (except schemas) from the `agency_swarm/tools/...` folder.
-
-```python
-from agency_swarm import Agent
-from agency_swarm.tools.example import ExampleTool
-
-
-class AgentName(Agent):
-    def __init__(self):
-        super().__init__(
-            name="AgentName",
-            description="Description of the agent",
-            instructions="instructions.md",
-            tools=[ExampleTool],
-        )
-```
-
----
-
-Thank you for contributing to Agency Swarm! Your efforts help us build a more robust and versatile framework.
+1. Bump `version` in `pyproject.toml`. A breaking change gets an entry in the release notes and
+   in `docs/migration/guide.mdx`.
+2. Run `make ci`.
+3. Run the **Live OpenAI Tests** workflow on the release commit. It also runs the tests that the
+   regular CI skips. A failing test blocks the release.
+4. Run one example from `examples/` end to end against the release commit: send a first message
+   and watch a streamed response arrive.
+5. Write the release notes: every change a user can see since the previous release, in plain
+   language. For each breaking change, say what worked before and what changes now.
+6. Publish the GitHub release. The **Publish to PyPI** workflow uploads the package.

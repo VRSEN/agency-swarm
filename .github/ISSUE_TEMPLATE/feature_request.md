@@ -9,7 +9,7 @@ assignees: ''
 
 ### Please read this first
 
-- **Have you read the docs?**[Agency Swarm docs](https://agency-swarm.ai/)
+- **Have you read the docs?** [Agency Swarm docs](https://agency-swarm.ai/)
 - **Have you searched for related issues?** Others may have had similar requests
 
 ### Describe the feature

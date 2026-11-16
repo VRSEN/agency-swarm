@@ -1,6 +1,6 @@
 # 🐝 Agency Swarm
 
-![Framework](https://firebasestorage.googleapis.com/v0/b/vrsen-ai/o/public%2Fgithub%2FLOGO_BG_large_bold_shadow%20(1).jpg?alt=media&token=8c681331-2a7a-4a69-b21b-3ab1f9bf1a23)
+![Agency Swarm](https://raw.githubusercontent.com/VRSEN/agency-swarm/main/docs/images/logo-full.jpeg)
 
 ## Overview
 
@@ -33,13 +33,15 @@ This framework continues the original vision of Arsenii Shatokhin (aka VRSEN) to
 pip install -U agency-swarm
 ```
 
-> **v1.x note:** The framework targets the OpenAI Agents SDK + Responses API.
+> The framework targets the OpenAI Agents SDK and the Responses API.
 > Migrating from v0.x? See the [Migration Guide](https://agency-swarm.ai/migration/guide).
+> Trying the 2.0 beta (`pip install -U --pre agency-swarm`)? See the
+> [v2 migration notes](https://agency-swarm.ai/migration/v2).
 
 ### Compatibility
 - **Python**: 3.12+
 - **Model backends:**
-  - **OpenAI (native):** GPT-5 family, GPT-4o, etc.
+  - **OpenAI (native):** models served by the Responses API. The default is `gpt-6-luna`.
   - **Via LiteLLM (router):** Anthropic (Claude), Google (Gemini), Grok (xAI), Azure OpenAI, **OpenRouter (gateway)**, etc.
 - **OS**: macOS, Linux, Windows
 
@@ -139,7 +141,6 @@ Define tools using the modern `@function_tool` decorator (recommended), or exten
     Working from examples:
 
     - Browse `./examples` for runnable demos and patterns you can adapt.
-    - Use the `.cursorrules` file at the repo root with your AI coding agent (Cursor, Claude Code, etc.).
     - Follow the Cursor IDE guide: https://agency-swarm.ai/welcome/getting-started/cursor-ide
 
 
@@ -207,19 +208,18 @@ Recommended agent folder structure:
 ```
 /your-specified-path/
 │
-├── agency_manifesto.md or .txt # Agency's guiding principles (created if not present)
+├── agency_manifesto.md or .txt # Shared instructions for all agents (optional)
 └── AgentName/                  # Directory for the specific agent
-    ├── files/                  # Directory for files that will be uploaded to OpenAI
-    ├── schemas/                # Directory for OpenAPI schemas to be converted into tools
-    ├── tools/                  # Directory for tools to be imported by default.
-    ├── AgentName.py            # The main agent class file
-    ├── __init__.py             # Initializes the agent folder as a Python package
-    ├── instructions.md or .txt # Instruction document for the agent
-    └── tools.py                # Custom tools specific to the agent's role.
+    ├── files/                  # Files that will be uploaded to OpenAI
+    ├── schemas/                # OpenAPI schemas to be converted into tools (optional)
+    ├── tools/                  # The agent's tools, one file per tool
+    ├── AgentName.py            # The agent definition
+    ├── __init__.py             # Makes the folder a Python package
+    └── instructions.md or .txt # The agent's instructions
 
 ```
 
-This structure ensures that each agent has its dedicated space with all necessary files to start working on its specific tasks. The `tools.py` can be customized to include tools and functionalities specific to the agent's role.
+`agency-swarm create-agent-template` creates this folder for you.
 
 ## Learn More
 
@@ -246,4 +246,4 @@ Agency Swarm is open-source and licensed under [MIT](https://opensource.org/lice
 
 ## Need Help?
 
-If you need help creating custom agent swarms for your business, check out our [Agents-as-a-Service](https://agents.vrsen.ai/) subscription, or schedule a consultation with me at https://calendly.com/vrsen/ai-readiness-call
+If you need help creating custom agent swarms for your business, check out our [Agents-as-a-Service](https://agents.vrsen.ai/) subscription.
