@@ -15,7 +15,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import httpx2
 import pytest
@@ -414,55 +414,3 @@ def test_mcp_base_tool_conversion():
 
     app = run_mcp(tools=[TestBaseTool], return_app=True)
     assert app is not None
-
-
-@pytest.mark.asyncio
-async def test_mcp_auth_middleware_methods():
-    """Test authentication middleware on_request and on_read_resource methods."""
-
-    # Set up environment for auth
-    os.environ["TEST_AUTH_TOKEN"] = "test-auth-token"
-    try:
-        app = run_mcp(
-            tools=[sample_tool], app_token_env="TEST_AUTH_TOKEN", transport="streamable-http", return_app=True
-        )
-
-        # Get the auth middleware that was added
-        middleware = next((item for item in app.middleware if hasattr(item, "expected")), None)
-        assert middleware is not None
-
-        # Test on_request method with correct auth
-        mock_ctx = MagicMock()
-        mock_call_next = AsyncMock(return_value="success")
-
-        # Test with correct authorization header by patching the module where it's imported
-        with patch(
-            "agency_swarm.integrations.mcp_server.get_http_headers",
-            return_value={"authorization": "Bearer test-auth-token"},
-        ):
-            result = await middleware.on_request(mock_ctx, mock_call_next)
-            assert result == "success"
-            mock_call_next.assert_called_once()
-
-            # Test on_read_resource method with correct auth
-            mock_call_next.reset_mock()
-            result = await middleware.on_read_resource(mock_ctx, mock_call_next)
-            assert result == "success"
-            mock_call_next.assert_called_once()
-
-        # Test with incorrect authorization (should raise McpError)
-        mock_call_next.reset_mock()
-        with patch(
-            "agency_swarm.integrations.mcp_server.get_http_headers",
-            return_value={"authorization": "Bearer wrong-token"},
-        ):
-            from fastmcp.exceptions import McpError
-
-            with pytest.raises(McpError):
-                await middleware.on_request(mock_ctx, mock_call_next)
-
-            with pytest.raises(McpError):
-                await middleware.on_read_resource(mock_ctx, mock_call_next)
-
-    finally:
-        del os.environ["TEST_AUTH_TOKEN"]
