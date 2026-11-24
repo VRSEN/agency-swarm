@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import typing
+import uuid
 from collections.abc import AsyncGenerator, Callable
 from contextlib import AsyncExitStack, suppress
 from dataclasses import replace
@@ -508,6 +509,7 @@ def run_stream_with_guardrails(
                                 parent_run_id=parent_run_id,
                                 run_trace_id=run_trace_id,
                                 fallback_agent_run_id=current_agent_run_id,
+                                session_agent_run_id=session.agent_run_id,
                                 agency_context=agency_context,
                                 initial_saved_count=initial_saved_count,
                             )
@@ -537,8 +539,9 @@ def run_stream_with_guardrails(
                     exception=guardrail_exception,
                     include_assistant=False,
                 )
-                # Retry with no new input: the session replays the store slice,
-                # which now includes the persisted guardrail feedback.
+                # Rotate run id so retry placeholder ids cannot collide with the
+                # failed attempt's preserved messages during deduplication.
+                current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
                 input_items = []
                 continue
             except asyncio.CancelledError:
@@ -549,10 +552,7 @@ def run_stream_with_guardrails(
                 raise
             finally:
                 try:
-                    # Signal cooperative cancellation (OpenAI pattern)
                     cancel_requested.set()
-
-                    # Wait for worker to finish gracefully (with timeout fallback)
                     if not worker_task.done():
                         try:
                             await asyncio.wait_for(worker_task, timeout=5.0)
@@ -561,13 +561,11 @@ def run_stream_with_guardrails(
                             worker_task.cancel()
                             with suppress(asyncio.CancelledError):
                                 await worker_task
-
                     if not forward_task.done():
                         forward_task.cancel()
                         with suppress(asyncio.CancelledError):
                             await forward_task
 
-                    # Clean up duplicates and orphans (idempotent - safe to run always)
                     if agency_context and agency_context.thread_manager:
                         all_messages = agency_context.thread_manager.get_all_messages()
                         cleaned = MessageFilter.remove_duplicates(all_messages)
@@ -576,21 +574,16 @@ def run_stream_with_guardrails(
                         agency_context.thread_manager.replace_messages(cleaned)
                         agency_context.thread_manager.persist()
 
-                    # Store sub-agent raw_responses with model info for per-response cost calculation
-                    # These are tuples of (model_name, response) to enable accurate per-model pricing
                     if streaming_result and master_context_for_run:
                         try:
                             sub_raw_responses = master_context_for_run._sub_agent_raw_responses
                             if sub_raw_responses:
-                                # Store on streaming_result for access during cost calculation
                                 typed_streaming_result = cast(_UsageTrackingRunResult, streaming_result)
                                 typed_streaming_result._sub_agent_responses_with_model = list(sub_raw_responses)
-                                # Clear after copying to avoid duplicates
                                 master_context_for_run._sub_agent_raw_responses.clear()
                         except Exception as e:
                             logger.debug(f"Could not store sub-agent raw_responses on streaming result: {e}")
 
-                    # Store main agent's model on streaming_result for automatic cost calculation
                     if streaming_result:
                         try:
                             main_model_name = get_usage_tracking_model_name(agent.model)
