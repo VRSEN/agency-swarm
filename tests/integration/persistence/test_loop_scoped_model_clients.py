@@ -18,6 +18,8 @@ from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
+from agents import RunConfig
+from agents.models import _openai_shared
 
 from agency_swarm import Agency, Agent, set_tracing_disabled
 from agency_swarm.integrations.openclaw_model import build_openclaw_responses_model
@@ -117,3 +119,40 @@ def test_openrouter_model_two_sequential_get_response_sync(stub_openai_base_url:
 
     assert first.final_output == "openrouter-ok"
     assert second.final_output == "openrouter-ok"
+
+
+def test_reused_run_config_five_sequential_get_response_sync(
+    stub_openai_base_url: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reusing one RunConfig across repeated get_response_sync calls must not reuse a closed loop."""
+    set_tracing_disabled(True)
+    monkeypatch.setenv("OPENAI_BASE_URL", f"{stub_openai_base_url}/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_AGENTS_DISABLE_TRACING", "1")
+    monkeypatch.setattr(_openai_shared, "_default_openai_client", None)
+
+    agency = Agency(Agent(name="Stub", instructions="Reply briefly."))
+    run_config = RunConfig(workflow_name="reused-sync-workflow", tracing_disabled=True)
+
+    for idx in range(1, 6):
+        result = agency.get_response_sync(f"hello {idx}", run_config=run_config)
+        assert result.final_output == "openclaw-ok"
+
+
+def test_no_run_config_sequential_get_response_sync(
+    stub_openai_base_url: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Sequential get_response_sync calls without a RunConfig continue to succeed."""
+    set_tracing_disabled(True)
+    monkeypatch.setenv("OPENAI_BASE_URL", f"{stub_openai_base_url}/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_AGENTS_DISABLE_TRACING", "1")
+    monkeypatch.setattr(_openai_shared, "_default_openai_client", None)
+
+    agency = Agency(Agent(name="Stub", instructions="Reply briefly."))
+
+    for idx in range(1, 4):
+        result = agency.get_response_sync(f"hello {idx}")
+        assert result.final_output == "openclaw-ok"
