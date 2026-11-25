@@ -8,120 +8,34 @@ We welcome contributions to Agency Swarm! By contributing, you help improve the 
 
 ## Setting Up Your Development Environment
 
-### Prerequisites
-
-- Python 3.12 or higher
-- Pip
-- Git
-
-### Setup
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/VRSEN/agency-swarm.git
-   cd agency-swarm
-   ```
-2. Create and activate a virtual environment (recommended):
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # On Windows use `.venv\Scripts\activate`
-   ```
-3. Install dependencies including development tools:
-   ```bash
-   pip install -e ".[dev]"
-   ```
-
-4. Install Pre-Commit Hooks:
-   ```bash
-   pip install pre-commit
-   pre-commit install
-   ```
-
-## Running Tests
-
-<Tip>
-  Testing ensures that your contributions work as intended and do not break existing functionality.
-</Tip>
-
-<Steps titleSize="h3">
-
-<Step title="Install Test Dependencies" icon="download" iconType="solid">
-Ensure all test dependencies are installed.
+You need Python 3.12 or later, Git and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-pip install -e ".[dev]"
+git clone https://github.com/VRSEN/agency-swarm.git
+cd agency-swarm
+make sync                    # creates .venv and installs the dependencies
+uv run pre-commit install    # runs the formatters on each commit
 ```
 
-</Step>
-
-<Step title="Run Tests" icon="play" iconType="solid">
-Run the test suite using Pytest.
+## Running the Checks
 
 ```bash
-pytest
+make format     # ruff format and autofix
+make check      # ruff and mypy
+make tests      # the test suite
+make coverage   # the test suite with coverage; fails below 90%
 ```
 
-</Step>
-
-<Step title="Check Test Coverage" icon="chart-bar" iconType="solid">
-Check the test coverage to ensure comprehensive testing.
-
-```bash
-pytest --cov=agency_swarm tests/
-```
-
-</Step>
-
-</Steps>
+<Note>
+  The integration tests call OpenAI and need `OPENAI_API_KEY` in your environment. The unit tests run without a key: `uv run pytest tests/test_*_modules`.
+</Note>
 
 ## Submitting Changes
 
-<AccordionGroup>
+1. Create a branch from `main`.
+2. Write the change. A change to existing behavior comes with a test that fails without it.
+3. Run the checks above.
+4. Update the docs when behavior that users see changes.
+5. Open a pull request and fill in the template: what changed, why, and how you tested it.
 
-  <Accordion title="Create Branch" icon="code-branch" iconType="solid">
-    Create a branch for your work:
-    ```bash
-    git checkout -b feature/your-feature-name
-    ```
-  </Accordion>
-
-  <Accordion title="Commit Changes" icon="git" iconType="solid">
-    Commit your updates:
-    ```bash
-    git add .
-    git commit -m "Add [feature]: Description"
-    ```
-  </Accordion>
-
-  <Accordion title="Push Branch" icon="code-fork" iconType="solid">
-    Push your branch:
-    ```bash
-    git push origin feature/your-feature-name
-    ```
-  </Accordion>
-
-  <Accordion title="Open PR" icon="paper-plane" iconType="solid">
-    Open a pull request on GitHub:
-    ```markdown
-    - Provide a concise title and description.
-    - Reference related issues.
-    ```
-  </Accordion>
-
-</AccordionGroup>
-
-### Code Style and Linting
-
-This project uses `ruff` for linting and code formatting. Configuration for this tool can be found in `pyproject.toml`.
-
-Before committing your changes, please check and fix linting errors:
-
-```bash
-ruff check . --fix
-```
-
-It's recommended to install these tools in your development environment. If you followed the setup instructions, they should already be installed via:
-
-```bash
-pip install -e ".[dev]"
-```
+The full guide, including the SDK upgrade and release procedures, is in [CONTRIBUTING.md](https://github.com/VRSEN/agency-swarm/blob/main/CONTRIBUTING.md).
