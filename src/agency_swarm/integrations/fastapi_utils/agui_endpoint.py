@@ -72,8 +72,20 @@ def make_agui_chat_endpoint(
 
         combined_file_ids = list(request.file_ids or []) if getattr(request, "file_ids", None) else []
         message_input: str | list[TResponseInputItem] | None
+        # Determine the message source and extract input message.
+        # `chat_history` replays prior context; `messages` carries the current input.
+        # When only `chat_history` has content, its last entry is the current input.
+        has_chat_history = request.chat_history is not None and len(request.chat_history) > 0
+        has_messages = request.messages is not None and len(request.messages) > 0
+        agui_history: list[dict[str, Any]] = []
         try:
             message_input = _build_agui_message_input(request.messages)
+            if has_messages and not has_chat_history:
+                # Convert every turn before the agency loads it: the thread loader logs and drops
+                # a failing history, so a bad part in an earlier turn must fail the run here.
+                agui_history = _normalize_agui_history_messages(
+                    endpoint_handlers.AguiAdapter.agui_messages_to_chat_history(request.messages)
+                )
         except Exception as exc:
             run_started = RunStartedEvent(
                 type=EventType.RUN_STARTED,
@@ -90,12 +102,6 @@ def make_agui_chat_endpoint(
                 (encoder.encode(event) for event in (run_started, run_error, run_finished)),
                 media_type=encoder.get_content_type(),
             )
-
-        # Determine the message source and extract input message.
-        # `chat_history` replays prior context; `messages` carries the current input.
-        # When only `chat_history` has content, its last entry is the current input.
-        has_chat_history = request.chat_history is not None and len(request.chat_history) > 0
-        has_messages = request.messages is not None and len(request.messages) > 0
 
         if has_chat_history and not has_messages:
             # Chat history is a flat list; the last entry is the current input.
@@ -115,20 +121,12 @@ def make_agui_chat_endpoint(
             _ensure_request_oauth_config(agency, oauth_config)
             default_agent = agency.entry_points[0]
 
-            # Convert AG-UI messages to flat chat history with metadata
+            # Add agency metadata to each converted AG-UI message
             def load_callback() -> list:
-                agui_messages = _normalize_agui_history_messages(
-                    endpoint_handlers.AguiAdapter.agui_messages_to_chat_history(request.messages)
-                )
-                # Add agency metadata to each message
-                for msg in agui_messages:
-                    if "agent" not in msg:
-                        msg["agent"] = default_agent.name
-                    if "callerAgent" not in msg:
-                        msg["callerAgent"] = None
-                    if "timestamp" not in msg:
-                        msg["timestamp"] = int(time.time() * 1000)
-                return agui_messages
+                return [
+                    {"agent": default_agent.name, "callerAgent": None, "timestamp": int(time.time() * 1000), **msg}
+                    for msg in agui_history
+                ]
 
         else:
 

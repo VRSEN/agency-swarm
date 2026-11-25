@@ -19,11 +19,14 @@ from ag_ui.core import (
     RunFinishedEvent,
     RunStartedEvent,
     TextPart,
+    ToolMessage,
     UrlSource,
     UserMessage,
     VideoPart,
 )
 from ag_ui.encoder import EventEncoder
+from openai.types.responses.response_input_item_param import FunctionCallOutput
+from pydantic import TypeAdapter
 
 import agency_swarm.integrations.fastapi_utils.endpoint_handlers as endpoint_handlers_module
 from agency_swarm.agent.execution_stream_response import StreamingRunResponse
@@ -37,6 +40,7 @@ from agency_swarm.integrations.fastapi_utils.endpoint_handlers import (
 )
 from agency_swarm.integrations.fastapi_utils.oauth_support import FastAPIOAuthConfig, OAuthStateRegistry
 from agency_swarm.integrations.fastapi_utils.request_models import BaseRequest, RunAgentInputCustom
+from agency_swarm.ui.core.agui_adapter import AguiAdapter
 
 
 class _ThreadManagerStub:
@@ -209,6 +213,35 @@ async def test_normalize_agui_history_messages_serializes_content_parts() -> Non
         },
         {"role": "assistant", "content": "ok"},
     ]
+
+
+@pytest.mark.asyncio
+async def test_normalize_agui_history_messages_serializes_multimodal_tool_output() -> None:
+    """An AG-UI 1.0 tool message with content parts should replay as a JSON-safe function_call_output."""
+
+    tool_message = ToolMessage(
+        id="t1",
+        tool_call_id="call_1",
+        content=[
+            TextPart(text="result text"),
+            ImagePart(source=UrlSource(value="https://example.com/chart.png", mime_type="image/png")),
+        ],
+    )
+
+    history = _normalize_agui_history_messages(AguiAdapter.agui_messages_to_chat_history([tool_message]))
+
+    assert history == [
+        {
+            "call_id": "call_1",
+            "output": [
+                {"type": "input_text", "text": "result text"},
+                {"type": "input_image", "detail": "auto", "image_url": "https://example.com/chart.png"},
+            ],
+            "type": "function_call_output",
+        }
+    ]
+    json.dumps(history)
+    TypeAdapter(FunctionCallOutput).validate_python(history[0])
 
 
 @pytest.mark.asyncio
@@ -562,6 +595,8 @@ async def test_agui_chat_endpoint_snapshot_includes_file_url_sources(monkeypatch
     )
 
     class _AdapterStub:
+        agui_messages_to_chat_history = staticmethod(AguiAdapter.agui_messages_to_chat_history)
+
         def openai_to_agui_events(self, _event, run_id=None):
             del run_id
             return MessagesSnapshotEvent(

@@ -34,21 +34,14 @@ from typing import Any, Literal, cast
 from weakref import ReferenceType, ref
 
 from ag_ui.core import (
-    AudioInputContent,
     BaseEvent,
-    DocumentInputContent,
     EventType,
-    ImageInputContent,
-    InputContentDataSource,
-    InputContentUrlSource,
     Message,
     MessagesSnapshotEvent,
     RunErrorEvent,
     RunFinishedEvent,
     RunStartedEvent,
     SystemMessage,
-    TextInputContent,
-    VideoInputContent,
 )
 from ag_ui.encoder import EventEncoder
 from agents import (

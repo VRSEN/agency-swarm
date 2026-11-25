@@ -128,6 +128,9 @@ def _normalize_agui_history_messages(messages: list[dict[str, Any]]) -> list[dic
         content = normalized_message.get("content")
         if isinstance(content, list):
             normalized_message["content"] = [_convert_agui_content_part(part) for part in content]
+        output = normalized_message.get("output")
+        if normalized_message.get("type") == "function_call_output" and isinstance(output, list):
+            normalized_message["output"] = [_convert_agui_content_part(part) for part in output]
         normalized_messages.append(normalized_message)
     return normalized_messages
 
