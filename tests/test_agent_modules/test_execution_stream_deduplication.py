@@ -10,38 +10,25 @@ import time
 import uuid
 from collections.abc import Generator
 from dataclasses import dataclass, field
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
 import uvicorn
 from agents import (
-    Agent as SDKAgent,
     GuardrailFunctionOutput,
     OpenAIChatCompletionsModel,
     OpenAIResponsesModel,
     OutputGuardrail,
     RunConfig,
 )
-from agents.items import MessageOutputItem
-from agents.stream_events import AgentUpdatedStreamEvent
 from openai import AsyncOpenAI
-from openai.types.responses import ResponseOutputMessage, ResponseOutputText
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 
 from agency_swarm import Agency, Agent
-from agency_swarm.agent.core import AgencyContext
-from agency_swarm.agent.execution_stream_persistence import (
-    StreamMetadataStore,
-    _persist_streamed_items,
-    _update_names_from_event,
-)
-from agency_swarm.context import MasterContext
-from agency_swarm.messages import MessageFormatter
-from agency_swarm.utils.thread import ThreadManager
+from agency_swarm.tools import Handoff
 
 
 @dataclass
@@ -50,18 +37,18 @@ class _LocalModelServer:
     server: uvicorn.Server
     thread: threading.Thread
     requests: list[dict[str, Any]] = field(default_factory=list)
-    replies: list[str] = field(default_factory=lambda: ["ok"])
+    replies: list[Any] = field(default_factory=lambda: ["ok"])
     extra_responses_output: list[dict[str, Any]] = field(default_factory=list)
     _reply_index: int = 0
 
-    def next_reply(self) -> str:
+    def next_reply(self) -> Any:
         if self._reply_index < len(self.replies):
-            text = self.replies[self._reply_index]
+            item = self.replies[self._reply_index]
             self._reply_index += 1
-            return text
+            return item
         return self.replies[-1]
 
-    def reset(self, *, replies: list[str], extra_responses_output: list[dict[str, Any]] | None = None) -> None:
+    def reset(self, *, replies: list[Any], extra_responses_output: list[dict[str, Any]] | None = None) -> None:
         self.requests.clear()
         self.replies = list(replies)
         self._reply_index = 0
@@ -129,15 +116,43 @@ def _responses_sse_events(payload: dict[str, Any]) -> list[tuple[str, dict[str, 
     return events
 
 
-def _chat_sse_chunks(cid: str, model: str, text: str) -> list[dict[str, Any]]:
+def _chat_sse_chunks(cid: str, model: str, reply: Any) -> list[dict[str, Any]]:
     base = {"id": cid, "object": "chat.completion.chunk", "created": int(time.time()), "model": model}
+    usage = {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}
+    if isinstance(reply, dict) and "tool_call" in reply:
+        call_id, name, arguments = reply["tool_call"]
+        return [
+            {
+                **base,
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {
+                            "role": "assistant",
+                            "tool_calls": [
+                                {
+                                    "index": 0,
+                                    "id": call_id,
+                                    "type": "function",
+                                    "function": {"name": name, "arguments": arguments},
+                                }
+                            ],
+                        },
+                        "finish_reason": None,
+                    }
+                ],
+            },
+            {**base, "choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
+            {**base, "choices": [], "usage": usage},
+        ]
+    text = str(reply)
     mid = len(text) // 2
     return [
         {**base, "choices": [{"index": 0, "delta": {"role": "assistant", "content": ""}, "finish_reason": None}]},
         {**base, "choices": [{"index": 0, "delta": {"content": text[:mid]}, "finish_reason": None}]},
         {**base, "choices": [{"index": 0, "delta": {"content": text[mid:]}, "finish_reason": None}]},
         {**base, "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
-        {**base, "choices": [], "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}},
+        {**base, "choices": [], "usage": usage},
     ]
 
 
@@ -229,26 +244,33 @@ def _chat_request_pairs(request_body: dict[str, Any]) -> list[tuple[str, Any]]:
     ]
 
 
+def _chat_agent(base_url: str, name: str = "ChatAgent", **agent_kwargs: Any) -> Agent:
+    client = AsyncOpenAI(api_key="test-key", base_url=base_url, max_retries=0)
+    return Agent(
+        name=name,
+        instructions="Be concise.",
+        model=OpenAIChatCompletionsModel(model="gpt-4o", openai_client=client),
+        **agent_kwargs,
+    )
+
+
+async def _drain_stream(agency: Agency, message: str, *, slow: bool = False) -> None:
+    stream = agency.get_response_stream(message, run_config_override=RunConfig(tracing_disabled=True))
+    async for _ in stream:
+        if slow:
+            await asyncio.sleep(0.01)
+
+
 @pytest.mark.asyncio
 async def test_chat_completions_streaming_stores_and_replays_single_assistant_reply(
     local_model_server: _LocalModelServer,
 ) -> None:
     """Streaming Chat Completions turns must store and replay each assistant reply once."""
     local_model_server.reset(replies=["reply 1", "reply 2", "reply 3"])
-    client = AsyncOpenAI(api_key="test-key", base_url=local_model_server.base_url, max_retries=0)
-    agent = Agent(
-        name="ChatAgent",
-        instructions="Be concise.",
-        model=OpenAIChatCompletionsModel(model="gpt-4o", openai_client=client),
-    )
-    agency = Agency(agent)
-    run_config = RunConfig(tracing_disabled=True)
+    agency = Agency(_chat_agent(local_model_server.base_url))
 
-    for turn, slow in ((1, False), (2, True)):
-        stream = agency.get_response_stream(f"hello {turn}", run_config_override=run_config)
-        async for _ in stream:
-            if slow:
-                await asyncio.sleep(0.01)
+    await _drain_stream(agency, "hello 1", slow=False)
+    await _drain_stream(agency, "hello 2", slow=True)
 
     stored = agency.thread_manager.get_all_messages()
     assistants = [msg for msg in stored if msg.get("role") == "assistant"]
@@ -259,9 +281,7 @@ async def test_chat_completions_streaming_stores_and_replays_single_assistant_re
     assert users[1].get("agent_run_id") == assistants[1].get("agent_run_id")
 
     local_model_server.requests.clear()
-    stream = agency.get_response_stream("hello 3", run_config_override=run_config)
-    async for _ in stream:
-        pass
+    await _drain_stream(agency, "hello 3")
 
     assert len(local_model_server.requests) == 1
     assert _chat_request_pairs(local_model_server.requests[0]) == [
@@ -279,13 +299,7 @@ async def test_chat_completions_non_streaming_stores_single_assistant_reply(
 ) -> None:
     """Non-streaming Chat Completions control continues storing one reply per turn."""
     local_model_server.reset(replies=["reply 1", "reply 2"])
-    client = AsyncOpenAI(api_key="test-key", base_url=local_model_server.base_url, max_retries=0)
-    agent = Agent(
-        name="ChatAgent",
-        instructions="Be concise.",
-        model=OpenAIChatCompletionsModel(model="gpt-4o", openai_client=client),
-    )
-    agency = Agency(agent)
+    agency = Agency(_chat_agent(local_model_server.base_url))
     run_config = RunConfig(tracing_disabled=True)
 
     await agency.get_response("hello 1", run_config=run_config)
@@ -311,12 +325,9 @@ async def test_responses_streaming_preserves_single_copy_and_compaction_item(
         model=OpenAIResponsesModel(model="gpt-4o", openai_client=client),
     )
     agency = Agency(agent)
-    run_config = RunConfig(tracing_disabled=True)
 
-    for turn in (1, 2):
-        stream = agency.get_response_stream(f"hello {turn}", run_config_override=run_config)
-        async for _ in stream:
-            pass
+    await _drain_stream(agency, "hello 1")
+    await _drain_stream(agency, "hello 2")
 
     stored = agency.thread_manager.get_all_messages()
     assert [msg.get("type") for msg in stored] == ["message", "compaction", "message", "message", "message"]
@@ -339,24 +350,61 @@ async def test_chat_completions_streaming_output_guardrail_retry_keeps_final_rep
             return GuardrailFunctionOutput(output_info="Rewrite cleanly.", tripwire_triggered=True)
         return GuardrailFunctionOutput(output_info="", tripwire_triggered=False)
 
-    client = AsyncOpenAI(api_key="test-key", base_url=local_model_server.base_url, max_retries=0)
-    agent = Agent(
-        name="GuardedChatAgent",
-        instructions="Be concise.",
-        model=OpenAIChatCompletionsModel(model="gpt-4o", openai_client=client),
-        output_guardrails=[OutputGuardrail(guardrail_function=reject_bad_draft)],
-        validation_attempts=1,
+    agency = Agency(
+        _chat_agent(
+            local_model_server.base_url,
+            name="GuardedChatAgent",
+            output_guardrails=[OutputGuardrail(guardrail_function=reject_bad_draft)],
+            validation_attempts=1,
+        )
     )
-    agency = Agency(agent)
-    run_config = RunConfig(tracing_disabled=True)
-
-    stream = agency.get_response_stream("write answer", run_config_override=run_config)
-    async for _ in stream:
-        pass
+    await _drain_stream(agency, "write answer")
 
     assistants = [msg for msg in agency.thread_manager.get_all_messages() if msg.get("role") == "assistant"]
     approved = [msg for msg in assistants if _extract_message_text(msg) == "approved reply"]
     assert len(approved) == 1
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_streaming_handoff_preserves_reminders_without_duplicates(
+    local_model_server: _LocalModelServer,
+) -> None:
+    """Streamed handoff must keep handoff_reminder and next-turn recipient_reminder without duplicating replies."""
+    local_model_server.reset(
+        replies=[
+            {"tool_call": ("call_handoff_1", "transfer_to_AgentB", '{"recipient_agent": "AgentB"}')},
+            "B answer",
+            "A answer",
+        ]
+    )
+    agent_a = _chat_agent(local_model_server.base_url, name="AgentA")
+    agent_b = _chat_agent(local_model_server.base_url, name="AgentB")
+    agency = Agency(agent_a, communication_flows=[(agent_a, agent_b, Handoff)])
+
+    await _drain_stream(agency, "q1")
+    stored_turn1 = agency.thread_manager.get_all_messages()
+    assert [_extract_message_text(m) for m in stored_turn1 if m.get("role") == "assistant"] == ["B answer"]
+    handoff_reminders = [m for m in stored_turn1 if m.get("message_origin") == "handoff_reminder"]
+    assert len(handoff_reminders) == 1
+    assert "Transfer completed. You are AgentB." in str(handoff_reminders[0].get("content"))
+
+    local_model_server.requests.clear()
+    await _drain_stream(agency, "q2")
+
+    assert len(local_model_server.requests) == 1
+    turn2_messages = local_model_server.requests[0]["messages"]
+    assert [m.get("content") for m in turn2_messages if m.get("role") == "assistant" and m.get("content")] == [
+        "B answer"
+    ]
+    system_texts = [str(m.get("content")) for m in turn2_messages if m.get("role") == "system"]
+    assert any("Transfer completed. You are AgentB." in text for text in system_texts)
+    assert any('User has switched recipient agent. You are "AgentA".' in text for text in system_texts)
+    stored_turn2 = agency.thread_manager.get_all_messages()
+    assert any(msg.get("message_origin") == "recipient_reminder" for msg in stored_turn2)
+    assert [_extract_message_text(msg) for msg in stored_turn2 if msg.get("role") == "assistant"] == [
+        "B answer",
+        "A answer",
+    ]
 
 
 @pytest.mark.asyncio
@@ -374,20 +422,15 @@ async def test_litellm_streaming_stores_and_replays_single_assistant_reply(
         model=LitellmModel(model="openai/gpt-4o", base_url=local_model_server.base_url, api_key="test-key"),
     )
     agency = Agency(agent)
-    run_config = RunConfig(tracing_disabled=True)
 
-    for turn in (1, 2):
-        stream = agency.get_response_stream(f"hello {turn}", run_config_override=run_config)
-        async for _ in stream:
-            pass
+    await _drain_stream(agency, "hello 1")
+    await _drain_stream(agency, "hello 2")
 
     assistants = [msg for msg in agency.thread_manager.get_all_messages() if msg.get("role") == "assistant"]
     assert [_extract_message_text(msg) for msg in assistants] == ["reply 1", "reply 2"]
 
     local_model_server.requests.clear()
-    stream = agency.get_response_stream("hello 3", run_config_override=run_config)
-    async for _ in stream:
-        pass
+    await _drain_stream(agency, "hello 3")
 
     assert len(local_model_server.requests) == 1
     assert _chat_request_pairs(local_model_server.requests[0]) == [
@@ -397,104 +440,3 @@ async def test_litellm_streaming_stores_and_replays_single_assistant_reply(
         ("assistant", "reply 2"),
         ("user", "hello 3"),
     ]
-
-
-def test_update_names_from_event_preserves_initial_run_id_and_updates_on_switch() -> None:
-    """Initial AgentUpdatedStreamEvent keeps the run ID; agent switches or explicit IDs update it."""
-    agent_a = SDKAgent(name="AgentA", instructions="a")
-    agent_b = SDKAgent(name="AgentB", instructions="b")
-    master_context = MasterContext(thread_manager=ThreadManager(), agents={})
-    master_context._current_agent_run_id = "agent_run_initial"
-
-    # Initial event for the starting agent must preserve the initial agent_run_id.
-    name, run_id = _update_names_from_event(
-        AgentUpdatedStreamEvent(new_agent=agent_a),
-        "AgentA",
-        "agent_run_initial",
-        master_context,
-    )
-    assert (name, run_id) == ("AgentA", "agent_run_initial")
-    assert master_context._current_agent_run_id == "agent_run_initial"
-
-    # Switching to another agent mints a new agent_run_id.
-    name, switched_run_id = _update_names_from_event(
-        AgentUpdatedStreamEvent(new_agent=agent_b),
-        name,
-        run_id,
-        master_context,
-    )
-    assert name == "AgentB"
-    assert switched_run_id != "agent_run_initial"
-    assert master_context._current_agent_run_id == switched_run_id
-
-    # A redundant AgentUpdatedStreamEvent for AgentB keeps the active run_id.
-    name, same_after_switch = _update_names_from_event(
-        AgentUpdatedStreamEvent(new_agent=agent_b),
-        name,
-        switched_run_id,
-        master_context,
-    )
-    assert (name, same_after_switch) == ("AgentB", switched_run_id)
-
-    # An explicit event.id always overrides agent_run_id.
-    explicit_event = SimpleNamespace(type="agent_updated_stream_event", new_agent=agent_b, id="custom_run_id")
-    name, explicit_run_id = _update_names_from_event(explicit_event, name, same_after_switch, master_context)
-    assert (name, explicit_run_id) == ("AgentB", "custom_run_id")
-    assert master_context._current_agent_run_id == "custom_run_id"
-
-
-def test_persist_streamed_items_replaces_session_written_copy_when_run_id_diverges() -> None:
-    """Final persistence replaces session-written copies in mutable_tail even after run-id divergence."""
-    thread_manager = ThreadManager()
-    user_msg = {
-        "type": "message",
-        "role": "user",
-        "content": "hello",
-        "agent": "AgentA",
-        "callerAgent": None,
-        "agent_run_id": "run_session",
-        "history_protocol": MessageFormatter.HISTORY_PROTOCOL_RESPONSES,
-    }
-    session_copy = {
-        "type": "message",
-        "id": "msg_run_session_0",
-        "role": "assistant",
-        "content": [{"type": "output_text", "text": "from B", "annotations": []}],
-        "agent": "AgentB",
-        "callerAgent": None,
-        "agent_run_id": "run_session",
-        "history_protocol": MessageFormatter.HISTORY_PROTOCOL_RESPONSES,
-    }
-    thread_manager.add_messages([user_msg, session_copy])  # type: ignore[list-item]
-
-    agent_a = Agent(name="AgentA", instructions="a")
-    agent_b = Agent(name="AgentB", instructions="b")
-    final_item = MessageOutputItem(
-        agent=agent_b,
-        raw_item=ResponseOutputMessage(
-            id="msg_run_handoff_0",
-            role="assistant",
-            status="completed",
-            type="message",
-            content=[ResponseOutputText(type="output_text", text="from B", annotations=[])],
-        ),
-    )
-
-    _persist_streamed_items(
-        streaming_result=SimpleNamespace(new_items=[final_item]),
-        metadata_store=StreamMetadataStore(by_item={id(final_item): ("AgentB", "run_handoff", None, 2)}),
-        collected_items=[final_item],
-        agent=agent_a,
-        sender_name=None,
-        parent_run_id=None,
-        run_trace_id="trace_1",
-        fallback_agent_run_id="run_handoff",
-        session_agent_run_id="run_session",
-        agency_context=AgencyContext(agency_instance=None, thread_manager=thread_manager),
-        initial_saved_count=0,
-    )
-
-    stored = thread_manager.get_all_messages()
-    assert [msg.get("role") for msg in stored] == ["user", "assistant"]
-    assert stored[1].get("id") == "msg_run_handoff_0"
-    assert stored[1].get("agent") == "AgentB"

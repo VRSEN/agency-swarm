@@ -466,4 +466,6 @@ def _is_initiating_input_message(message: TResponseInputItem) -> bool:
         return False
     if message.get("message_origin") in _GUARDRAIL_CONTROL_MESSAGE_ORIGINS:
         return False
-    return message.get("type") == "message" and message.get("role") in {"user", "system", "developer"}
+    # Preserve user/system/developer inputs and mid-stream reminders (e.g. handoff_reminder,
+    # which is written directly without a "type" field and is not present in SDK new_items).
+    return message.get("type") in {None, "message"} and message.get("role") in {"user", "system", "developer"}
