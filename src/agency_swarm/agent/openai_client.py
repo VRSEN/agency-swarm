@@ -26,6 +26,7 @@ from openai import AsyncOpenAI, DefaultAsyncHttpx2Client
 
 _http_clients_by_loop: dict[asyncio.AbstractEventLoop, httpx2.AsyncClient] = {}
 _openai_clients_by_loop: dict[asyncio.AbstractEventLoop, AsyncOpenAI] = {}
+_NOOP_TRANSPORT = httpx2.AsyncBaseTransport()
 _registry_lock = threading.RLock()
 _patch_installed = False
 
@@ -75,6 +76,10 @@ def install_loop_scoped_http_client() -> None:
 
     The SDK only calls ``shared_http_client()`` when a provider has no explicit
     ``openai_client``, so caller-supplied clients keep their own lifecycle.
+    Providers cache the ``AsyncOpenAI`` they build on first use, so installing
+    ``loop_scoped_http_client`` ensures a reused ``RunConfig`` or provider
+    routes every request through the active loop's pool instead of retaining a
+    transport bound to the first loop.
 
     Remaining SDK-level gaps are intentionally left alone: ``Model._get_client``
     builds a bare ``AsyncOpenAI()`` when a model is constructed with
@@ -86,8 +91,8 @@ def install_loop_scoped_http_client() -> None:
     with _registry_lock:
         if _patch_installed:
             return
-        # Both SDK providers share the same process-wide client pattern.
-        _agents_openai_provider.shared_http_client = shared_http_client
+        # Both SDK providers cache the AsyncOpenAI built with shared_http_client().
+        _agents_openai_provider.shared_http_client = loop_scoped_http_client
         try:
             # Local import: ``agents.voice`` transitively requires numpy and
             # websockets, which only ship with the ``voice`` extra. Skip the
@@ -97,7 +102,7 @@ def install_loop_scoped_http_client() -> None:
         except ImportError:
             pass
         else:
-            agents_voice_provider.shared_http_client = shared_http_client
+            agents_voice_provider.shared_http_client = loop_scoped_http_client
         _patch_installed = True
 
 
@@ -105,12 +110,18 @@ class _LoopScopedHttpClient(httpx2.AsyncClient):
     """HTTP client that routes each request through the running loop's pool.
 
     ``AsyncOpenAI`` instances stored on long-lived objects — a model built at
-    agent construction time — outlive the event loop that issues their first
-    request. A fixed ``AsyncClient`` pools connections bound to that first loop
-    and crashes on the next ``asyncio.run``. This client holds no pool of its
-    own: every ``send`` resolves ``shared_http_client()`` for the loop running
-    it, so requests always run on the caller's loop.
+    agent construction time or cached on an SDK ``OpenAIProvider`` — outlive
+    the event loop that issues their first request. A fixed ``AsyncClient``
+    pools connections bound to that first loop and crashes on the next
+    ``asyncio.run``. This client holds no pool of its own: every ``send``
+    resolves ``shared_http_client()`` for the loop running it, so requests
+    always run on the caller's loop.
     """
+
+    def __init__(self) -> None:
+        # Skip allocating an unused SSLContext and connection pool on each
+        # wrapper instance; real transports live in ``shared_http_client()``.
+        super().__init__(transport=_NOOP_TRANSPORT)
 
     async def send(
         self,
