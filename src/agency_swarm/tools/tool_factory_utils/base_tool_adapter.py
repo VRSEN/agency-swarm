@@ -9,11 +9,11 @@ from typing import cast
 from agents import FunctionTool, _debug
 from agents.exceptions import ModelBehaviorError
 from agents.strict_schema import ensure_strict_json_schema
-from agents.tool import default_tool_error_function
 from pydantic import ValidationError
 from pydantic_core import InitErrorDetails
 
 from agency_swarm.tools.base_tool import BaseTool
+from agency_swarm.tools.function_tool_compat import tool_error_with_details
 
 logger = logging.getLogger(__name__)
 
@@ -50,18 +50,18 @@ def adapt_base_tool(base_tool: type[BaseTool]) -> FunctionTool:
         except ValidationError as e:
             formatted_msg = _format_value_error(e)
             if formatted_msg is not None:
-                return default_tool_error_function(ctx, ValueError(formatted_msg))
+                return tool_error_with_details(ctx, ValueError(formatted_msg))
             base_message = f"Invalid JSON input for tool {name}"
             if _debug.DONT_LOG_TOOL_DATA:
-                return default_tool_error_function(ctx, ModelBehaviorError(base_message))
+                return tool_error_with_details(ctx, ModelBehaviorError(base_message))
             errors = e.errors()
             non_value_errors = [err for err in errors if err.get("type") != "value_error"]
             line_errors = cast(list[InitErrorDetails], non_value_errors or errors)
             rewritten_error = ValidationError.from_exception_data(f"{name}_args", line_errors)
             model_error = ModelBehaviorError(f"{base_message}: {rewritten_error}")
-            return default_tool_error_function(ctx, model_error)
+            return tool_error_with_details(ctx, model_error)
         except Exception as e:
-            return default_tool_error_function(ctx, e)
+            return tool_error_with_details(ctx, e)
 
     func_tool = FunctionTool(
         name=name,
