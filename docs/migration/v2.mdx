@@ -106,9 +106,11 @@ Agency Swarm no longer patches the Agents SDK. `agents.Runner` now behaves like 
 from agency_swarm import Runner, run_state_from_json, run_state_to_json
 ```
 
-## 7. Return `AuthorizationCodeResult` from an OAuth `callback_handler`
+## 7. Return `AuthorizationCodeResult` from custom OAuth callbacks and registries
 
-If you pass your own `callback_handler` to `MCPServerOAuth`, it must now return an `AuthorizationCodeResult` instead of a `(code, state)` tuple. MCP 2 rejects a callback without `iss` when the authorization server says it supports one, so pass it through. `run_fastapi` and the default local handler already do this for you.
+MCP 2 rejects an OAuth callback without `iss` when the authorization server says it supports one, so callbacks must now pass `iss` through in an `AuthorizationCodeResult` instead of returning a `(code, state)` tuple. The default local handler and the built-in in-memory registry in `run_fastapi()` already do this for you.
+
+**If you pass a custom `callback_handler` to `MCPServerOAuth`**, return an `AuthorizationCodeResult`:
 
 <CodeGroup>
 ```python Before
@@ -125,11 +127,62 @@ async def wait_for_code() -> AuthorizationCodeResult:
 ```
 </CodeGroup>
 
+**If you pass a custom `oauth_registry` to `run_fastapi()`** (for example in a multi-worker deployment), update both `set_code()` and `wait_for_code()`. `run_fastapi()` now calls `set_code()` with `iss=iss`, and expects `wait_for_code()` to return an `AuthorizationCodeResult`:
+
+<CodeGroup>
+```python Before
+async def set_code(
+    self,
+    *,
+    state: str,
+    code: str,
+    user_id: str | None,
+) -> OAuthFlowState:
+    ...
+
+async def wait_for_code(
+    self,
+    *,
+    state: str,
+    timeout: float | None = 300.0,
+) -> tuple[str, str | None]:
+    return flow.code, flow.state
+```
+
+```python After
+from mcp.shared.auth import AuthorizationCodeResult
+
+async def set_code(
+    self,
+    *,
+    state: str,
+    code: str,
+    user_id: str | None,
+    iss: str | None = None,
+) -> OAuthFlowState:
+    ...  # store iss alongside code
+
+async def wait_for_code(
+    self,
+    *,
+    state: str,
+    timeout: float | None = 300.0,
+) -> AuthorizationCodeResult:
+    return AuthorizationCodeResult(
+        code=flow.code,
+        state=flow.state,
+        iss=flow.iss,
+    )
+```
+</CodeGroup>
+
 ## 8. Pass a host to reach the browser demos from another machine
 
 `agency.copilot_demo()` and `RealtimeDemoLauncher.start()` now listen on `127.0.0.1`, so only your own machine can open them. Pass `host="0.0.0.0"` when you run them in Docker or on a remote server.
 
-`run_fastapi()`, `agency.run_fastapi()`, `run_mcp()` and `run_realtime()` still listen on `0.0.0.0`. When they do and `APP_TOKEN` is not set, they now log a warning that anyone who can reach the port can call your agency.
+`run_fastapi()`, `agency.run_fastapi()`, and `run_mcp()` still listen on `0.0.0.0` (over HTTP and SSE for `run_mcp()`). When they do and `APP_TOKEN` is not set, they now log a warning that anyone who can reach the port can call them.
+
+`run_realtime()` also still listens on `0.0.0.0`, but it has no token check and logs no token warning. Anyone who can reach the port can connect unless you put authentication in front of it or pass `host="127.0.0.1"`.
 
 ## 9. Turn OpenAI traces back on if you use a custom endpoint
 
