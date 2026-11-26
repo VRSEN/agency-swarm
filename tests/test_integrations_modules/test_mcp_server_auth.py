@@ -73,11 +73,16 @@ async def _post_mcp_jsonrpc(
     client: httpx2.AsyncClient,
     method: str,
     params: dict[str, Any],
-    headers: dict[str, str] | None = None,
+    headers: dict[str, str] | list[tuple[bytes, bytes]] | None = None,
 ) -> dict[str, Any]:
-    request_headers = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
-    if headers:
-        request_headers.update(headers)
+    request_headers: list[tuple[bytes, bytes]] = [
+        (b"accept", b"application/json, text/event-stream"),
+        (b"content-type", b"application/json"),
+    ]
+    if isinstance(headers, dict):
+        request_headers.extend((k.encode("latin-1"), v.encode("latin-1")) for k, v in headers.items())
+    elif headers:
+        request_headers.extend(headers)
     response = await client.post(
         "/mcp",
         headers=request_headers,
@@ -140,6 +145,34 @@ async def test_run_mcp_http_bearer_auth_accepts_valid_token_and_rejects_others(
                 for method, params in _PROBE_REQUESTS:
                     rejected = await _post_mcp_jsonrpc(client, method, params, headers=bad_headers)
                     assert rejected.get("error") == {"code": 401, "message": "Unauthorized"}, (method, rejected)
+
+
+@pytest.mark.asyncio
+async def test_run_mcp_http_bearer_auth_handles_non_ascii_headers_and_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Non-ASCII Authorization headers and configured tokens return 401/200 without raising TypeError."""
+    ascii_app = _build_protected_app(monkeypatch, "TEST_AUTH_TOKEN", "test-auth-token", "streamable-http")
+    async with ascii_app.router.lifespan_context(ascii_app):
+        async with httpx2.AsyncClient(
+            transport=httpx2.ASGITransport(app=ascii_app), base_url="http://testserver"
+        ) as client:
+            rejected = await _post_mcp_jsonrpc(client, "tools/list", {}, headers=[(b"authorization", b"Bearer t\xe9k")])
+            assert rejected.get("error") == {"code": 401, "message": "Unauthorized"}, rejected
+
+    non_ascii_app = _build_protected_app(monkeypatch, "TEST_AUTH_TOKEN", "caf\xe9-token", "streamable-http")
+    async with non_ascii_app.router.lifespan_context(non_ascii_app):
+        async with httpx2.AsyncClient(
+            transport=httpx2.ASGITransport(app=non_ascii_app), base_url="http://testserver"
+        ) as client:
+            ok = await _post_mcp_jsonrpc(
+                client, "tools/list", {}, headers=[(b"authorization", b"Bearer caf\xe9-token")]
+            )
+            assert any(tool["name"] == "sample_tool" for tool in ok["result"]["tools"])
+
+            for bad in ({"Authorization": "Bearer wrong-token"}, [(b"authorization", b"Bearer caf\xe8-token")]):
+                rejected = await _post_mcp_jsonrpc(client, "tools/list", {}, headers=bad)
+                assert rejected.get("error") == {"code": 401, "message": "Unauthorized"}, rejected
 
 
 @pytest.mark.asyncio

@@ -55,7 +55,10 @@ class StaticBearer(Middleware):
     def _require_authorization(self) -> None:
         headers = get_http_headers(include={"authorization"})
         authorization = headers.get("authorization")
-        if authorization is None or not secrets.compare_digest(authorization, self.expected):
+        if authorization is None or not secrets.compare_digest(
+            authorization.encode("utf-8", "surrogatepass"),
+            self.expected.encode("utf-8", "surrogatepass"),
+        ):
             raise McpError(401, "Unauthorized")
 
     async def on_request(self, context: MiddlewareContext[Any], call_next: CallNext[Any, Any]) -> Any:
