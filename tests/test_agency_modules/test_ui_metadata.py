@@ -11,6 +11,7 @@ import pytest
 from openai import AsyncOpenAI
 
 from agency_swarm import Agency, Agent
+from agency_swarm.ui.demos.copilot import CopilotDemoLauncher
 
 
 class TestMetadataDetails:
@@ -168,3 +169,73 @@ def test_server_and_local_demo_default_hosts():
         assert inspect.signature(fn).parameters["host"].default == "0.0.0.0", f"{fn} must default host to 0.0.0.0"
     for fn in local_demos:
         assert inspect.signature(fn).parameters["host"].default == "127.0.0.1", f"{fn} must default host to 127.0.0.1"
+
+
+def _patch_copilot_launcher_deps(monkeypatch: pytest.MonkeyPatch):
+    """Patch external npm, node_modules, Popen, and run_fastapi calls for unit tests."""
+    original_path_exists = Path.exists
+
+    def fake_exists(self: Path) -> bool:
+        if self.name == "node_modules":
+            return True
+        return original_path_exists(self)
+
+    class _DummyProc:
+        def terminate(self) -> None:
+            return None
+
+    monkeypatch.delenv("NEXT_PUBLIC_AG_UI_BACKEND_URL", raising=False)
+    return (
+        patch("shutil.which", return_value="/usr/bin/npm"),
+        patch.object(Path, "exists", fake_exists),
+        patch("subprocess.Popen", return_value=_DummyProc()),
+        patch("agency_swarm.ui.demos.copilot.run_fastapi", return_value=None),
+    )
+
+
+def test_copilot_demo_launcher_binds_frontend_to_loopback_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    """Default copilot_demo() must bind both frontend and backend to 127.0.0.1."""
+    agency = Agency(Agent(name="CEO", instructions="test"), name="CopilotDemoAgency")
+    p_which, p_exists, p_popen, p_fastapi = _patch_copilot_launcher_deps(monkeypatch)
+
+    with p_which, p_exists, p_popen as popen, p_fastapi as run_fastapi:
+        agency.copilot_demo()
+
+    assert popen.call_args.args[0] == ["/usr/bin/npm", "run", "dev", "--", "-H", "127.0.0.1", "-p", "3000"]
+    assert run_fastapi.call_args.kwargs["host"] == "127.0.0.1"
+    assert os.environ["NEXT_PUBLIC_AG_UI_BACKEND_URL"] == "http://127.0.0.1:8000/CopilotDemoAgency/get_response_stream"
+    assert "http://127.0.0.1:3000" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("host", "expected_url_host"),
+    [
+        ("0.0.0.0", "localhost"),
+        ("192.168.1.50", "192.168.1.50"),
+        ("::1", "[::1]"),
+        ("::", "localhost"),
+    ],
+)
+def test_copilot_demo_launcher_binds_frontend_to_explicit_host(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    host: str,
+    expected_url_host: str,
+):
+    """Passing an explicit host must bind both the Next.js frontend and FastAPI backend to that host."""
+    agency = Agency(Agent(name="CEO", instructions="test"), name="CopilotDemoAgency")
+    p_which, p_exists, p_popen, p_fastapi = _patch_copilot_launcher_deps(monkeypatch)
+
+    with p_which, p_exists, p_popen as popen, p_fastapi as run_fastapi:
+        CopilotDemoLauncher.start(agency, host=host, port=8123, frontend_port=3123)
+
+    assert popen.call_args.args[0] == ["/usr/bin/npm", "run", "dev", "--", "-H", host, "-p", "3123"]
+    assert run_fastapi.call_args.kwargs["host"] == host
+    assert (
+        os.environ["NEXT_PUBLIC_AG_UI_BACKEND_URL"]
+        == f"http://{expected_url_host}:8123/CopilotDemoAgency/get_response_stream"
+    )
+    assert f"http://{expected_url_host}:3123" in capsys.readouterr().out
