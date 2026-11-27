@@ -33,21 +33,31 @@ class OAuthHandlerMap(TypedDict, total=False):
 
 
 class MCPServerOAuthClient(MCPServerStreamableHttp):
-    """Agents SDK streamable HTTP MCP server that runs OAuth when it connects.
+    """Agents SDK ``MCPServerStreamableHttp`` subclass that runs OAuth when it connects.
 
     Agency Swarm connects OAuth servers on demand, so each MCP call connects first when needed.
+    Mirrors ``agents.mcp.server.MCPServerStreamableHttp`` with ``max_list_pages`` forwarded from
+    ``oauth_config`` or constructor kwargs. Other ``MCPServerStreamableHttp.__init__`` knobs
+    (``cache_tools_list``, ``tool_filter``, ``use_structured_content``, ``max_retry_attempts``,
+    ``message_handler``, ``require_approval``, ``failure_error_function``, ``tool_meta_resolver``,
+    ``custom_data_extractor``, ``tool_input_guardrails``, ``tool_output_guardrails``) stay on SDK
+    defaults because OAuth server construction is driven by :class:`MCPServerOAuth`.
     """
 
     def __init__(
         self,
         oauth_config: MCPServerOAuth,
         custom_handlers: OAuthHandlerMap | None = None,
+        *,
+        max_list_pages: int | None = None,
     ) -> None:
+        resolved_max_list_pages = max_list_pages if max_list_pages is not None else oauth_config.max_list_pages
         # OAuth consent runs while the MCP session initializes, so the session read timeout stays off.
         super().__init__(
             params={"url": oauth_config.url, "timeout": 30.0, "sse_read_timeout": 300.0},
             name=oauth_config.name,
             client_session_timeout_seconds=None,
+            max_list_pages=resolved_max_list_pages,
         )
         self.oauth_config = oauth_config
         handlers = custom_handlers or {}

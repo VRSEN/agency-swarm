@@ -1,7 +1,7 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from agents import Agent as SDKAgent, FunctionTool, ToolOutputImage
+from agents import Agent as SDKAgent, FunctionTool, RunConfig, ToolOutputImage
 from agents.mcp.util import MCPUtil
 from agents.run_context import RunContextWrapper
 from agents.tool_context import ToolContext
@@ -198,12 +198,39 @@ async def test_from_mcp_tools_catch_exceptions_and_return_error_strings() -> Non
         )
         result = await tools[0].on_invoke_tool(ctx, "{}")
 
-        # SDK's default_tool_error_function formats failures as strings for the agent
+        # Agency Swarm keeps the server error text visible to the model by default
         assert isinstance(result, str)
         assert "error" in result.lower()
         assert "Connection timed out after 5 seconds" in result
+
+        # RunConfig.tool_error_formatter overrides the default text when set
+        formatted_ctx = ToolContext(
+            context=None,
+            tool_name="failing_tool",
+            tool_call_id="call-2",
+            tool_arguments="{}",
+            run_config=RunConfig(tool_error_formatter=lambda args: f"MCP_FORMATTED[{args.kind}]: {args.tool_name}"),
+        )
+        formatted_result = await tools[0].on_invoke_tool(formatted_ctx, "{}")
+        assert formatted_result == "MCP_FORMATTED[tool_exception]: failing_tool"
     finally:
         await manager.shutdown()
+
+
+def test_oauth_client_forwards_and_preserves_max_list_pages() -> None:
+    """MCPServerOAuth.max_list_pages must forward to MCPServerStreamableHttp and survive cloning."""
+    from agency_swarm.tools.mcp_oauth_bridge import _clone_oauth_candidate
+
+    config = MCPServerOAuth(url="https://example.com/mcp", name="github", max_list_pages=3)
+    client = MCPServerOAuthClient(config)
+    assert client.max_list_pages == 3
+
+    override_client = MCPServerOAuthClient(config, max_list_pages=5)
+    assert override_client.max_list_pages == 5
+
+    cloned = _clone_oauth_candidate(override_client)
+    assert isinstance(cloned, MCPServerOAuthClient)
+    assert cloned.max_list_pages == 5
 
 
 async def test_oauth_client_converts_with_real_agents_mcp_util(monkeypatch: pytest.MonkeyPatch) -> None:

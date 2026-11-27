@@ -6,13 +6,17 @@ import pytest
 from agents import (
     Agent as SDKAgent,
     FunctionTool,
+    RunConfig,
     RunContextWrapper,
+    _debug,
     function_tool as sdk_function_tool,
     tool_namespace,
 )
+from agents.run_config import ToolErrorFormatterArgs
 from agents.tool_context import ToolContext
 
-from agency_swarm import Agent, function_tool
+from agency_swarm import Agent, BaseTool, function_tool
+from agency_swarm.tools.tool_factory import ToolFactory
 
 
 @pytest.mark.asyncio
@@ -254,3 +258,100 @@ async def test_manual_function_tool_receives_original_context_unchanged() -> Non
     assert len(seen_contexts) == 1
     assert seen_contexts[0] is original_context
     assert not isinstance(seen_contexts[0], ToolContext)
+
+
+@pytest.mark.asyncio
+async def test_function_tool_error_reaches_model_with_details_and_honors_override() -> None:
+    """Exception text reaches the model by default; explicit failure_error_function still wins."""
+
+    @function_tool
+    def failing_tool(value: int) -> str:
+        raise ValueError(f"value {value} is out of range")
+
+    @function_tool(failure_error_function=lambda ctx, error: "custom failure")
+    def custom_failing_tool(value: int) -> str:
+        raise ValueError("hidden")
+
+    default_result = await failing_tool.on_invoke_tool(cast(Any, None), '{"value": 7}')
+    custom_result = await custom_failing_tool.on_invoke_tool(cast(Any, None), '{"value": 7}')
+
+    assert (
+        default_result == "An error occurred while running the tool. Please try again. Error: value 7 is out of range"
+    )
+    assert custom_result == "custom failure"
+
+
+@pytest.mark.asyncio
+async def test_function_tool_and_base_tool_honor_run_config_tool_error_formatter() -> None:
+    """RunConfig.tool_error_formatter formats failures for both function_tool and BaseTool."""
+    seen_args: list[ToolErrorFormatterArgs[Any]] = []
+
+    async def async_formatter(args: ToolErrorFormatterArgs[Any]) -> str:
+        seen_args.append(args)
+        return f"FORMATTED[{args.kind}:{args.tool_name}]: {args.error}"
+
+    @function_tool
+    def failing_func(value: int) -> str:
+        raise ValueError(f"bad value {value}")
+
+    class FailingBaseTool(BaseTool):
+        """Tool that fails with a known validation error."""
+
+        value: int
+
+        def run(self) -> str:
+            raise ValueError(f"base bad value {self.value}")
+
+    adapted_base_tool = ToolFactory.adapt_base_tool(FailingBaseTool)
+
+    func_ctx = ToolContext(
+        context=None,
+        tool_name="failing_func",
+        tool_call_id="call_func",
+        tool_arguments='{"value": 3}',
+        run_config=RunConfig(tool_error_formatter=async_formatter),
+    )
+    base_ctx = ToolContext(
+        context=None,
+        tool_name="FailingBaseTool",
+        tool_call_id="call_base",
+        tool_arguments='{"value": 4}',
+        run_config=RunConfig(tool_error_formatter=async_formatter),
+    )
+
+    func_result = await failing_func.on_invoke_tool(func_ctx, '{"value": 3}')
+    base_result = await adapted_base_tool.on_invoke_tool(base_ctx, '{"value": 4}')
+
+    assert func_result == "FORMATTED[tool_exception:failing_func]: bad value 3"
+    assert base_result == "FORMATTED[tool_exception:FailingBaseTool]: base bad value 4"
+    assert [arg.call_id for arg in seen_args] == ["call_func", "call_base"]
+
+    # Returning None from the formatter falls back to Agency Swarm's detailed default message.
+    fallback_ctx = ToolContext(
+        context=None,
+        tool_name="failing_func",
+        tool_call_id="call_fallback",
+        tool_arguments='{"value": 9}',
+        run_config=RunConfig(tool_error_formatter=lambda _args: None),
+    )
+    fallback_result = await failing_func.on_invoke_tool(fallback_ctx, '{"value": 9}')
+    assert fallback_result == "An error occurred while running the tool. Please try again. Error: bad value 9"
+
+
+@pytest.mark.asyncio
+async def test_function_tool_invalid_json_returns_parse_error_message(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Malformed JSON arguments tell the model to retry with valid JSON."""
+
+    @function_tool
+    def add(x: int) -> int:
+        return x + 1
+
+    monkeypatch.setattr(_debug, "DONT_LOG_TOOL_DATA", False)
+    result = await add.on_invoke_tool(cast(Any, None), "{not json")
+    assert "An error occurred while parsing tool arguments. Please try again with valid JSON." in result
+    assert "Invalid JSON input for tool add" in result
+
+    monkeypatch.setattr(_debug, "DONT_LOG_TOOL_DATA", True)
+    redacted_result = await add.on_invoke_tool(cast(Any, None), "{secret_payload")
+    assert "An error occurred while parsing tool arguments. Please try again with valid JSON." in redacted_result
+    assert "secret_payload" not in redacted_result

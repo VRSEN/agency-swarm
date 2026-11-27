@@ -93,10 +93,8 @@ class ClientConfig(BaseModel):
         if v is not None and not _LITELLM_INSTALLED:
             logger.warning(
                 "Ignoring client_config.litellm_keys: litellm is not installed. "
-                "Install it with `uv add 'agency-swarm[litellm]'` (requires "
-                '`override-dependencies = ["openai>=3,<4"]` under `[tool.uv]` in '
-                "pyproject.toml) or `pip install litellm --no-deps` after "
-                "`pip install agency-swarm` to enable provider-key routing."
+                "Install it with `pip install 'agency-swarm[litellm]'` or "
+                "`uv add 'agency-swarm[litellm]'` to enable provider-key routing."
             )
             return None
         return v

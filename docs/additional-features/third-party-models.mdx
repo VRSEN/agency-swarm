@@ -10,28 +10,18 @@ While OpenAI is generally recommended, there are situations where you might pref
 
 Since Agents SDK no longer uses assistants, most of the previously available frameworks became incompatible with it. One of the few frameworks that has been ported for the new SDK is [LiteLLM](https://docs.litellm.ai/docs/response_api), which you can use to connect your agent to various providers (Anthropic, Google Vertex AI, AWS Bedrock, Azure) as well as self-hosted open-source models via Ollama, vLLM, and other local serving solutions.
 
-<Warning>
-**pip installs an old LiteLLM.** Current LiteLLM releases declare `openai<3` in their package metadata, while Agency Swarm requires `openai>=3`. The pin is stale — LiteLLM runs fine on openai 3.x — but pip will not install a current LiteLLM next to Agency Swarm. Install with **uv** and the override shown in the steps below, or run LiteLLM in a separate environment.
-</Warning>
-
 <Tabs>
 <Tab title="Using OpenAI's LiteLLM model">
 <Steps>
 
 <Step title="Install LiteLLM">
-Install Agency Swarm with the `litellm` extra. With uv, add the override to your `pyproject.toml` first so the stale `openai<3` pin is ignored during resolution:
-
-```toml
-# pyproject.toml
-[tool.uv]
-override-dependencies = ["openai>=3,<4"]
-```
+Install Agency Swarm with the `litellm` extra (LiteLLM 1.108.0 and newer support `openai` 3 directly):
 
 ```bash
+pip install "agency-swarm[litellm]"
+# or with uv:
 uv add "agency-swarm[litellm]"
 ```
-
-On pip, `pip install "agency-swarm[litellm]"` installs LiteLLM 1.83.0, the newest release whose metadata allows openai 3. Running `pip install --no-deps --upgrade litellm` afterwards gets a current LiteLLM but skips its own dependencies, so it is fragile and unsupported.
 </Step>
 
 <Step title="Configure Agency Swarm Agent">
@@ -72,7 +62,7 @@ The first terminal run downloads the matching terminal app automatically.
 <Steps>
 
 <Step title="Install LiteLLM">
-The LiteLLM proxy is a standalone server — install it in its own environment so its `openai<3` pin never touches your Agency Swarm install:
+Install the standalone LiteLLM proxy server in its own tool environment:
 
 ```bash
 uv tool install "litellm[proxy]"

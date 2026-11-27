@@ -7,11 +7,13 @@ import threading
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, Union
 
-from agents import Agent as SDKAgent, FunctionTool, default_tool_error_function, set_tracing_disabled
+from agents import Agent as SDKAgent, FunctionTool, set_tracing_disabled
 from agents.mcp.server import MCPServer
 from agents.mcp.util import MCPUtil
 from agents.run_context import RunContextWrapper
+from agents.tracing import get_trace_provider
 
+from agency_swarm.tools.function_tool_compat import tool_error_with_details
 from agency_swarm.tools.mcp_manager import _bind_persistent_servers, default_mcp_manager
 
 if TYPE_CHECKING:
@@ -53,8 +55,9 @@ def from_mcp(
     Convert MCP servers into FunctionTool instances.
 
     Tool discovery and error formatting are delegated to the Agents SDK
-    (``MCPUtil.get_function_tools`` with ``failure_error_function``); what stays custom is
-    persistence-key registration, loop-affine proxies, and the sync facade.
+    (``MCPUtil.get_function_tools`` with ``failure_error_function=tool_error_with_details`` so the
+    model still sees server error text while honoring ``RunConfig.tool_error_formatter``); what
+    stays custom is persistence-key registration, loop-affine proxies, and the sync facade.
 
     Args:
         mcp_servers: List of MCP servers to convert
@@ -80,13 +83,8 @@ def from_mcp(
     for srv in servers:
         default_mcp_manager._ensure_driver(getattr(srv, "_server", srv))
 
-    # Save the current tracing state before disabling it
-    # The SDK doesn't expose a public getter, so we access the internal provider state
-    # This is necessary to avoid permanently re-enabling tracing if it was already disabled
-    from agents.tracing import get_trace_provider
-
-    trace_provider = get_trace_provider()
-    original_tracing_disabled = getattr(trace_provider, "_disabled", False)
+    # Save the current tracing state before disabling it so we never re-enable disabled tracing.
+    original_tracing_disabled = get_trace_provider().is_disabled()
 
     # Temporarily disable tracing to avoid sdk logging a non-existent error
     set_tracing_disabled(True)
@@ -100,7 +98,7 @@ def from_mcp(
                     convert_schemas_to_strict,
                     run_context,
                     agent_for_fetch,
-                    failure_error_function=default_tool_error_function,
+                    failure_error_function=tool_error_with_details,
                 )
                 tools.extend(t for t in server_tools if isinstance(t, FunctionTool))
             return tools
