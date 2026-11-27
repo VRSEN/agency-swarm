@@ -22,6 +22,7 @@ If your project pins any of these packages, raise the pins to these ranges:
 | `mcp` | `>=2,<3` |
 | `fastmcp` | `>=4.0.5,<5` |
 | `fastapi` | `>=0.141` |
+| `ag-ui-protocol` | `>=1.0.0,<2` (see section 10) |
 | `httpx2` | `>=2.13,<3` (replaces `httpx`) |
 
 Agency Swarm pins the OpenAI Agents SDK (`openai-agents`) to one exact version. Do not pin a different one in your project. If your code calls the OpenAI or MCP SDKs directly, read their own migration notes too.
@@ -198,6 +199,28 @@ set_tracing_export_api_key("sk-...")
 
 See [Observability](/additional-features/observability#custom-model-endpoints) for the setups this does not cover.
 
-## 10. Replace deprecated APIs
+## 10. Send AG-UI 1.0 content parts
+
+The AG-UI chat endpoint now uses AG-UI 1.0. AG-UI 1.0 removed the `binary` content part, so a request that still sends one gets an HTTP 422 error. Send an `image`, `audio`, `video` or `document` part with a `source` instead:
+
+<CodeGroup>
+```json Before
+{"type": "binary", "mimeType": "application/pdf", "data": "<base64>"}
+```
+
+```json After
+{"type": "document", "source": {"type": "data", "mimeType": "application/pdf", "value": "<base64>"}}
+```
+</CodeGroup>
+
+A `source` is one of three types:
+
+- `data` holds base64 content.
+- `url` holds a link.
+- `file` holds an OpenAI file id. A file id from another provider ends the run with an error.
+
+If you import AG-UI types from `agency_swarm.integrations.fastapi_utils.endpoint_handlers`, import them from `ag_ui.core` instead. That module no longer re-exports `BinaryInputContent` or the 0.x names, such as `TextInputContent` and `InputContentDataSource`. Use the 1.0 names: `TextPart`, `ImagePart`, `AudioPart`, `VideoPart`, `DocumentPart`, `DataSource`, `UrlSource` and `FileSource`.
+
+## 11. Replace deprecated APIs
 
 `Agency(user_context=...)` and `agency.user_context` are deprecated. They still work but emit a `DeprecationWarning`. Pass state per run with `context_override`, as shown in [Agency Context](/additional-features/agency-context).

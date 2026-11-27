@@ -34,22 +34,14 @@ from typing import Any, Literal, cast
 from weakref import ReferenceType, ref
 
 from ag_ui.core import (
-    AudioInputContent,
     BaseEvent,
-    BinaryInputContent,
-    DocumentInputContent,
     EventType,
-    ImageInputContent,
-    InputContentDataSource,
-    InputContentUrlSource,
     Message,
     MessagesSnapshotEvent,
     RunErrorEvent,
     RunFinishedEvent,
     RunStartedEvent,
     SystemMessage,
-    TextInputContent,
-    VideoInputContent,
 )
 from ag_ui.encoder import EventEncoder
 from agents import (
@@ -138,7 +130,6 @@ from agency_swarm.integrations.fastapi_utils.message_builders import (
     _build_chat_name_messages as _build_chat_name_messages,
     _build_data_url as _build_data_url,
     _build_message_with_file_urls_context as _build_message_with_file_urls_context,
-    _convert_agui_binary_content_part as _convert_agui_binary_content_part,
     _convert_agui_content_part as _convert_agui_content_part,
     _convert_agui_file_content_part as _convert_agui_file_content_part,
     _convert_agui_image_content_part as _convert_agui_image_content_part,
