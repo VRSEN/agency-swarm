@@ -180,6 +180,11 @@ class AgencySession(SessionABC):
     # --- Agency-facing helpers ---------------------------------------------
 
     @property
+    def agent_run_id(self) -> str | None:
+        """Run identifier stamped onto items persisted by this session."""
+        return self._agent_run_id
+
+    @property
     def model_new_items(self) -> list[TResponseInputItem]:
         """Sanitized view of this run's new input items (what the model should see)."""
         if self._model_new_items is None:

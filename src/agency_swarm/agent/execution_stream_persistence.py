@@ -109,34 +109,51 @@ if TYPE_CHECKING:
     from agency_swarm.context import MasterContext
 
 
+def _extract_item_ids(run_item: Any) -> tuple[str | None, str | None, str | None]:
+    """Return (item_id, call_id, item_type) from a RunItem and its raw_item."""
+    raw_item = getattr(run_item, "raw_item", None)
+    item_id = getattr(run_item, "id", None)
+    if not item_id:
+        item_id = raw_item.get("id") if isinstance(raw_item, dict) else getattr(raw_item, "id", None)
+    call_id = getattr(run_item, "call_id", None)
+    if not call_id:
+        call_id = raw_item.get("call_id") if isinstance(raw_item, dict) else getattr(raw_item, "call_id", None)
+    item_type = getattr(run_item, "type", None)
+    return (
+        item_id if isinstance(item_id, str) and item_id else None,
+        call_id if isinstance(call_id, str) and call_id else None,
+        item_type if isinstance(item_type, str) else None,
+    )
+
+
 def _update_names_from_event(
     event: Any,
     current_stream_agent_name: str,
     current_agent_run_id: str,
     master_context_for_run: "MasterContext",
 ) -> tuple[str, str]:
-    """Derive agent name and run id updates from a streaming event (legacy behavior)."""
+    """Derive agent name and run id updates from a streaming event."""
     if getattr(event, "_forwarded", False):
         return current_stream_agent_name, current_agent_run_id
 
     try:
         if getattr(event, "type", None) == "run_item_stream_event":
-            evt_name = getattr(event, "name", None)
-            if evt_name == "handoff_occured":
+            if getattr(event, "name", None) == "handoff_occured":
                 item = getattr(event, "item", None)
                 target = MessageFormatter.extract_handoff_target_name(item) if item is not None else None
                 if target:
                     current_stream_agent_name = target
                     current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
+                    master_context_for_run._current_agent_run_id = current_agent_run_id
         elif getattr(event, "type", None) == "agent_updated_stream_event":
             new_agent = getattr(event, "new_agent", None)
             if new_agent is not None and hasattr(new_agent, "name") and new_agent.name:
-                current_stream_agent_name = new_agent.name
                 event_id = getattr(event, "id", None)
                 if isinstance(event_id, str) and event_id:
                     current_agent_run_id = event_id
-                else:
+                elif new_agent.name != current_stream_agent_name:
                     current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
+                current_stream_agent_name = new_agent.name
                 master_context_for_run._current_agent_run_id = current_agent_run_id
     except Exception:
         pass
@@ -223,41 +240,20 @@ def _persist_run_item_if_needed(
     if not isinstance(item_agent_name, str) or not item_agent_name:
         item_agent_name = current_stream_agent_name
 
-    # Track metadata using multiple keys for matching in _persist_streamed_items:
-    # 1. Python object id() - works for items that maintain identity (e.g., tool_call_output_item)
-    # 2. Message ID - works for OpenAI Responses API (items may be recreated but keep same ID)
+    # Track metadata by object id, real message id, call_id, and content-hash queue.
     obj_id = id(run_item_obj)
-    raw_item = getattr(run_item_obj, "raw_item", None)
-    item_id = getattr(run_item_obj, "id", None)
-    if not item_id:
-        # Handle both dict-backed and object-backed raw_items
-        item_id = raw_item.get("id") if isinstance(raw_item, dict) else getattr(raw_item, "id", None)
-    item_type = getattr(run_item_obj, "type", None)
-    # Store (agent_name, agent_run_id, caller_name, timestamp)
+    item_id, call_id, item_type = _extract_item_ids(run_item_obj)
     metadata = (item_agent_name, current_agent_run_id, caller_for_event, emission_timestamp)
 
-    # Store by Python object ID (primary)
     metadata_store.by_item[obj_id] = metadata
-    # Also store by message ID if available and not fake (for matching recreated objects)
-    if isinstance(item_id, str) and item_id and item_id != FAKE_RESPONSES_ID:
+    if item_id and item_id != FAKE_RESPONSES_ID:
         metadata_store.by_item[(item_id, item_type)] = metadata
-    # Also store by call_id for tool_call_item (works for LiteLLM where message ID is fake)
-    call_id = getattr(run_item_obj, "call_id", None)
-    if not call_id:
-        call_id = raw_item.get("call_id") if isinstance(raw_item, dict) else getattr(raw_item, "call_id", None)
-    has_call_id = isinstance(call_id, str) and call_id
-    if has_call_id:
-        call_key = cast(tuple[str, str, str | None], ("call", call_id, item_type))
-        metadata_store.by_item[call_key] = metadata
-    # Store by content hash for items without reliable IDs (e.g., reasoning_item with LiteLLM)
-    needs_hash_fallback = (
-        not isinstance(item_id, str) or not item_id or item_id == FAKE_RESPONSES_ID
-    ) and not has_call_id
-    if needs_hash_fallback:
+    if call_id:
+        metadata_store.by_item[("call", call_id, item_type)] = metadata
+    if (not item_id or item_id == FAKE_RESPONSES_ID) and not call_id:
         content_hash = _compute_content_hash(run_item_obj)
         if content_hash:
-            hash_key: HashKey = (content_hash, item_type)
-            metadata_store.hash_queues.setdefault(hash_key, deque()).append(metadata)
+            metadata_store.hash_queues.setdefault((content_hash, item_type), deque()).append(metadata)
 
 
 def _persist_streamed_items(
@@ -272,14 +268,12 @@ def _persist_streamed_items(
     fallback_agent_run_id: str,
     agency_context: "AgencyContext",
     initial_saved_count: int,
+    session_agent_run_id: str | None = None,
 ) -> None:
     """Persist sanitized items after streaming completes."""
     if agency_context.thread_manager is None:
         return
 
-    # Prefer final SDK items. If a streaming wrapper completed successfully but the
-    # final result omitted new_items, fall back to the run items already observed
-    # in the stream so the turn is still committed for replay.
     new_items: list[RunItem] = getattr(streaming_result, "new_items", None) or []
     if not new_items:
         if collected_items:
@@ -307,73 +301,32 @@ def _persist_streamed_items(
     current_agent_run_id = fallback_agent_run_id
 
     for run_item in new_items:
-        # Convert RunItem to dict representation
         item_dict = run_item.to_input_item()
         if not isinstance(item_dict, dict):
             continue
         item_copy: dict[str, Any] = dict(item_dict)
 
-        # Look up metadata using hybrid matching:
-        # 1. Try Python object id() first (works for items that maintain identity)
-        # 2. Try message ID + type (works for OpenAI where items may be recreated)
         obj_id = id(run_item)
-        raw_item = run_item.raw_item
-        item_id = getattr(run_item, "id", None)
-        if not item_id:
-            item_id = raw_item.get("id") if isinstance(raw_item, dict) else getattr(raw_item, "id", None)
-        item_type = getattr(run_item, "type", None)
-
-        # Try matching by call_id for tool calls (works for LiteLLM)
-        call_id = getattr(run_item, "call_id", None)
-        if not call_id:
-            call_id = raw_item.get("call_id") if isinstance(raw_item, dict) else getattr(raw_item, "call_id", None)
-
-        matched = False
-        emission_timestamp: int | None = None
-
-        # Try matching strategies in order of preference:
-        # 1. Python object id() - most reliable, works when objects maintain identity
-        if obj_id in metadata_store.by_item:
-            current_agent_name, current_agent_run_id, caller_name, emission_timestamp = metadata_store.by_item[obj_id]
-            matched = True
-
-        # 2. Message ID + type - works for OpenAI where items may be recreated
-        if not matched and isinstance(item_id, str) and item_id and item_id != FAKE_RESPONSES_ID:
-            id_key = (item_id, item_type)
-            if id_key in metadata_store.by_item:
-                current_agent_name, current_agent_run_id, caller_name, emission_timestamp = metadata_store.by_item[
-                    id_key
-                ]
-                matched = True
-
-        # 3. Call ID + type - works for tool calls with LiteLLM (FAKE_RESPONSES_ID)
-        if not matched and isinstance(call_id, str) and call_id:
-            call_key = ("call", call_id, item_type)
-            if call_key in metadata_store.by_item:
-                current_agent_name, current_agent_run_id, caller_name, emission_timestamp = metadata_store.by_item[
-                    call_key
-                ]
-                matched = True
-
-        # 4. Content hash matching as last resort (for reasoning_item with LiteLLM)
-        # Use queues preserve metadata for identical items - pop from front (FIFO)
-        if not matched:
+        item_id, call_id, item_type = _extract_item_ids(run_item)
+        matched_meta = metadata_store.by_item.get(obj_id)
+        if matched_meta is None and item_id and item_id != FAKE_RESPONSES_ID:
+            matched_meta = metadata_store.by_item.get((item_id, item_type))
+        if matched_meta is None and call_id:
+            matched_meta = metadata_store.by_item.get(("call", call_id, item_type))
+        if matched_meta is None:
             content_hash = _compute_content_hash(run_item)
             if content_hash:
-                hash_key: HashKey = (content_hash, item_type)
-                if hash_key in metadata_store.hash_queues and metadata_store.hash_queues[hash_key]:
-                    current_agent_name, current_agent_run_id, caller_name, emission_timestamp = (
-                        metadata_store.hash_queues[hash_key].popleft()
-                    )
-                    matched = True
+                queue = metadata_store.hash_queues.get((content_hash, item_type))
+                if queue:
+                    matched_meta = queue.popleft()
 
-        if not matched:
-            # Fallback for items not seen during streaming (shouldn't happen normally)
+        if matched_meta is not None:
+            current_agent_name, current_agent_run_id, caller_name, emission_timestamp = matched_meta
+        else:
             logger.debug(f"Metadata fallback for unmatched item type={item_type} - using persist-time timestamp")
             caller_name = _resolve_caller_agent(item_copy, sender_name)
             current_agent_name = agent.name
             current_agent_run_id = fallback_agent_run_id
-            # Re-generate timestamp to ensure it's fresh
             emission_timestamp = int(time.time() * 1_000_000)
 
         item_payload = cast(TResponseInputItem, item_copy)
@@ -397,7 +350,6 @@ def _persist_streamed_items(
         )
         items_to_save.append(formatted_item)
 
-        # Update state for handoffs
         if getattr(run_item, "type", None) == "handoff_output_item":
             target = MessageFormatter.extract_handoff_target_name(run_item)
             if target:
@@ -419,21 +371,19 @@ def _persist_streamed_items(
         if isinstance(origin := item.get("message_origin"), str)
     }
 
-    # Build timestamp mapping for hosted tool calls (file_search, web_search)
-    timestamps_by_tool_id: dict[str, int] = {}
-    for item in filtered_items:
-        if isinstance(item, dict):
-            call_id = item.get("call_id")
-            ts = item.get("timestamp")
-            if isinstance(call_id, str) and isinstance(ts, int):
-                timestamps_by_tool_id[call_id] = ts
+    timestamps_by_tool_id: dict[str, int] = {
+        tool_call_id: ts
+        for item in filtered_items
+        if isinstance(item, dict)
+        and isinstance(tool_call_id := item.get("call_id"), str)
+        and isinstance(ts := item.get("timestamp"), int)
+    }
 
     hosted_tool_outputs = MessageFormatter.extract_hosted_tool_results(
         agent, collected_items, sender_name, timestamps_by_tool_id
     )
     if hosted_tool_outputs:
-        filtered_hosted_outputs = MessageFilter.filter_messages(hosted_tool_outputs)  # type: ignore[arg-type]
-        for hosted_item in filtered_hosted_outputs:
+        for hosted_item in MessageFilter.filter_messages(hosted_tool_outputs):  # type: ignore[arg-type]
             origin = hosted_item.get("message_origin")
             key = (origin, str(hosted_item.get("content"))) if isinstance(origin, str) else None
             if key and key in synthetic_keys_to_replace:
@@ -449,24 +399,26 @@ def _persist_streamed_items(
 
     initial_index = min(max(initial_saved_count, 0), len(existing_messages))
     preserved_prefix = existing_messages[:initial_index]
-
     mutable_tail = existing_messages[initial_index:]
 
-    # Only collect run_ids from items that are actually being saved (filtered_items).
+    # Replace items persisted mid-stream under any run_id emitted in this attempt,
+    # including the session's initial agent_run_id (which stays constant across handoffs/retries).
     run_ids_to_replace: set[str] = {
         run_id for item in filtered_items if isinstance(run_id := item.get("agent_run_id"), str)
     }
+    if isinstance(session_agent_run_id, str) and session_agent_run_id:
+        run_ids_to_replace.add(session_agent_run_id)
 
     keys_to_replace: set[tuple[str, str | None, str | None]] = set()
     for item in filtered_items:
-        item_id = item.get("id")
-        call_id = item.get("call_id")
-        item_type = item.get("type")
-        # Add both id and call_id keys if present (skip placeholder IDs)
-        if isinstance(item_id, str) and item_id and item_id != FAKE_RESPONSES_ID:
-            keys_to_replace.add(("id", item_id, item_type))
-        if isinstance(call_id, str) and call_id:
-            keys_to_replace.add(("call", call_id, item_type))
+        saved_id = item.get("id")
+        saved_call_id = item.get("call_id")
+        raw_type = item.get("type")
+        saved_type = raw_type if isinstance(raw_type, str) else None
+        if isinstance(saved_id, str) and saved_id and saved_id != FAKE_RESPONSES_ID:
+            keys_to_replace.add(("id", saved_id, saved_type))
+        if isinstance(saved_call_id, str) and saved_call_id:
+            keys_to_replace.add(("call", saved_call_id, saved_type))
 
     rebuilt_tail: list[TResponseInputItem] = []
     for existing_item in mutable_tail:
@@ -514,4 +466,6 @@ def _is_initiating_input_message(message: TResponseInputItem) -> bool:
         return False
     if message.get("message_origin") in _GUARDRAIL_CONTROL_MESSAGE_ORIGINS:
         return False
-    return message.get("type") == "message" and message.get("role") in {"user", "system", "developer"}
+    # Preserve user/system/developer inputs and mid-stream reminders (e.g. handoff_reminder,
+    # which is written directly without a "type" field and is not present in SDK new_items).
+    return message.get("type") in {None, "message"} and message.get("role") in {"user", "system", "developer"}
