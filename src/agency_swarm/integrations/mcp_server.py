@@ -2,6 +2,7 @@ import inspect
 import json
 import logging
 import os
+import secrets
 import sys
 from typing import Any
 
@@ -11,7 +12,7 @@ from agents.tool_context import ToolContext
 from fastmcp import FastMCP
 from fastmcp.exceptions import McpError
 from fastmcp.server.dependencies import get_http_headers
-from fastmcp.server.middleware import Middleware, MiddlewareContext
+from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
 from fastmcp.server.server import Transport
 from fastmcp.tools import Tool, ToolResult
 
@@ -43,6 +44,30 @@ class _AgencySwarmFastMCP(FastMCP):
         if len(args) <= 3 and kwargs.get("stateless_http") is None:
             kwargs["stateless_http"] = _agency_swarm_stateless_http_default(transport)
         return super().http_app(*args, **kwargs)
+
+
+class StaticBearer(Middleware):
+    """Require a static Bearer token in the HTTP Authorization header."""
+
+    def __init__(self, token: str) -> None:
+        self.expected = f"Bearer {token}"
+
+    def _require_authorization(self) -> None:
+        headers = get_http_headers(include={"authorization"})
+        authorization = headers.get("authorization")
+        if authorization is None or not secrets.compare_digest(
+            authorization.encode("utf-8", "surrogatepass"),
+            self.expected.encode("utf-8", "surrogatepass"),
+        ):
+            raise McpError(401, "Unauthorized")
+
+    async def on_request(self, context: MiddlewareContext[Any], call_next: CallNext[Any, Any]) -> Any:
+        self._require_authorization()
+        return await call_next(context)
+
+    async def on_read_resource(self, context: MiddlewareContext[Any], call_next: CallNext[Any, Any]) -> Any:
+        self._require_authorization()
+        return await call_next(context)
 
 
 def _load_tools_from_directory(tools_dir: str) -> list[type[BaseTool] | FunctionTool]:
@@ -118,23 +143,6 @@ def run_mcp(
         if transport == "stdio":
             logger.warning("Stdio servers do not support authentication.")
         else:
-
-            class StaticBearer(Middleware):
-                def __init__(self, token: str) -> None:
-                    self.expected = f"Bearer {token}"
-
-                async def on_request(self, ctx: MiddlewareContext, call_next):
-                    hdrs = get_http_headers()
-                    if hdrs.get("authorization") != self.expected:
-                        raise McpError(401, "Unauthorized")
-                    return await call_next(ctx)
-
-                async def on_read_resource(self, ctx: MiddlewareContext, call_next):
-                    hdrs = get_http_headers()
-                    if hdrs.get("authorization") != self.expected:
-                        raise McpError(401, "Unauthorized")
-                    return await call_next(ctx)
-
             mcp.add_middleware(StaticBearer(app_token))
 
     tool_registry = {}
