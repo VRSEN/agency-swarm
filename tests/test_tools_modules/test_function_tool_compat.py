@@ -1,3 +1,4 @@
+import json
 from dataclasses import replace
 from types import SimpleNamespace
 from typing import Any, cast
@@ -12,10 +13,13 @@ from agents import (
     function_tool as sdk_function_tool,
     tool_namespace,
 )
+from agents.exceptions import MCPToolCancellationError
 from agents.run_config import ToolErrorFormatterArgs
 from agents.tool_context import ToolContext
+from pydantic import BaseModel
 
 from agency_swarm import Agent, BaseTool, function_tool
+from agency_swarm.tools.function_tool_compat import tool_error_with_details
 from agency_swarm.tools.tool_factory import ToolFactory
 
 
@@ -355,3 +359,93 @@ async def test_function_tool_invalid_json_returns_parse_error_message(monkeypatc
     redacted_result = await add.on_invoke_tool(cast(Any, None), "{secret_payload")
     assert "An error occurred while parsing tool arguments. Please try again with valid JSON." in redacted_result
     assert "secret_payload" not in redacted_result
+
+
+@pytest.mark.asyncio
+async def test_tool_body_json_decode_error_is_reported_as_tool_run_error() -> None:
+    """A JSONDecodeError raised inside a tool body must not be mislabeled as bad tool arguments."""
+
+    @function_tool
+    def parse_file(path: str) -> str:
+        json.loads("{broken file content")
+        return path
+
+    result = await parse_file.on_invoke_tool(cast(Any, None), '{"path": "config.json"}')
+    assert result.startswith("An error occurred while running the tool. Please try again. Error:")
+    assert "parsing tool arguments" not in result
+
+
+@pytest.mark.asyncio
+async def test_output_type_function_tool_keeps_sdk_default_failure_policy() -> None:
+    """Tools with output_type keep SDK default failure handling so output-schema bypass stays intact."""
+
+    class TypedOut(BaseModel):
+        value: int
+
+    @function_tool(output_type=TypedOut)
+    def typed_tool(x: int) -> TypedOut:
+        raise ValueError(f"boom {x}")
+
+    assert typed_tool._use_default_failure_error_function is True
+    ctx = ToolContext(
+        context=None,
+        tool_name="typed_tool",
+        tool_call_id="call_typed",
+        tool_arguments='{"x": 1}',
+    )
+    result = await typed_tool.on_invoke_tool(ctx, '{"x": 1}')
+    assert result == "An error occurred while running the tool."
+    assert getattr(ctx, "_function_tool_default_failure_handled", False) is True
+
+
+@pytest.mark.asyncio
+async def test_base_tool_invalid_json_formatter_and_tool_error_fallback_paths() -> None:
+    """BaseTool invalid JSON honors RunConfig.tool_error_formatter and fallbacks handle edge cases."""
+
+    class JsonTool(BaseTool):
+        """Simple tool for invalid JSON formatter coverage."""
+
+        value: int
+
+        def run(self) -> str:
+            return str(self.value)
+
+    adapted = ToolFactory.adapt_base_tool(JsonTool)
+    ctx = ToolContext(
+        context=None,
+        tool_name="JsonTool",
+        tool_call_id="call_json",
+        tool_arguments="{bad",
+        run_config=RunConfig(tool_error_formatter=lambda args: f"FMT[{args.kind}:{args.tool_name}]"),
+    )
+    assert await adapted.on_invoke_tool(ctx, "{bad") == "FMT[tool_exception:JsonTool]"
+
+    # Formatter raising an error or returning a non-string falls back to detailed default text.
+    def raising_formatter(_args: ToolErrorFormatterArgs[Any]) -> str:
+        raise RuntimeError("formatter exploded")
+
+    raising_ctx = ToolContext(
+        context=None,
+        tool_name="JsonTool",
+        tool_call_id="call_raise",
+        tool_arguments="{}",
+        run_config=RunConfig(tool_error_formatter=raising_formatter),
+    )
+    assert await tool_error_with_details(raising_ctx, ValueError("inner")) == (
+        "An error occurred while running the tool. Please try again. Error: inner"
+    )
+
+    non_str_ctx = ToolContext(
+        context=None,
+        tool_name="JsonTool",
+        tool_call_id="call_nonstr",
+        tool_arguments="{}",
+        run_config=RunConfig(tool_error_formatter=cast(Any, lambda _args: 123)),
+    )
+    assert await tool_error_with_details(non_str_ctx, ValueError("inner")) == (
+        "An error occurred while running the tool. Please try again. Error: inner"
+    )
+
+    # MCPToolCancellationError bypasses tool_error_formatter, matching SDK behavior.
+    cancel_result = await tool_error_with_details(ctx, MCPToolCancellationError("cancelled"))
+    assert cancel_result == "An error occurred while running the tool. Please try again. Error: cancelled"

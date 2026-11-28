@@ -39,7 +39,8 @@ class MCPServerOAuthClient(MCPServerStreamableHttp):
     Mirrors ``agents.mcp.server.MCPServerStreamableHttp`` with ``max_list_pages`` forwarded from
     ``oauth_config`` or constructor kwargs. Other ``MCPServerStreamableHttp.__init__`` knobs
     (``cache_tools_list``, ``tool_filter``, ``use_structured_content``, ``max_retry_attempts``,
-    ``message_handler``, ``require_approval``, ``failure_error_function``, ``tool_meta_resolver``,
+    ``retry_backoff_seconds_base``, ``retry_backoff_seconds_max``, ``message_handler``,
+    ``require_approval``, ``failure_error_function``, ``tool_meta_resolver``,
     ``custom_data_extractor``, ``tool_input_guardrails``, ``tool_output_guardrails``) stay on SDK
     defaults because OAuth server construction is driven by :class:`MCPServerOAuth`.
     """

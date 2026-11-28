@@ -22,8 +22,6 @@ _ORIGINAL_INVOKER_ATTR = "_agency_swarm_original_on_invoke_tool"
 
 
 def _is_invalid_json_error(error: Exception) -> bool:
-    if isinstance(error, json.JSONDecodeError):
-        return True
     if not isinstance(error, ModelBehaviorError):
         return False
     if isinstance(error.__cause__, json.JSONDecodeError):
@@ -278,9 +276,19 @@ def function_tool(
 
     Mirrors ``agents.function_tool``. Without an explicit ``failure_error_function``, errors reach
     the model with their exception text and still honor ``RunConfig.tool_error_formatter``
-    (see ``tool_error_with_details``).
+    (see ``tool_error_with_details``). Tools that declare structured/programmatic outputs
+    (``output_type``, ``output_json_schema``, or ``"programmatic"`` in ``allowed_callers``) keep
+    the SDK's default failure handling so output-schema bypass and programmatic exception
+    propagation stay intact.
     """
-    kwargs.setdefault("failure_error_function", tool_error_with_details)
+    allowed_callers = kwargs.get("allowed_callers")
+    uses_output_schema = (
+        kwargs.get("output_type") is not None
+        or kwargs.get("output_json_schema") is not None
+        or (isinstance(allowed_callers, list) and "programmatic" in allowed_callers)
+    )
+    if not uses_output_schema:
+        kwargs.setdefault("failure_error_function", tool_error_with_details)
     if func is not None:
         return normalize_function_tool(sdk_function_tool(func, **kwargs))
 

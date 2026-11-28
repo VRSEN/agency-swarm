@@ -19,6 +19,31 @@ from agency_swarm.tools.function_tool_compat import tool_error_with_details
 logger = logging.getLogger(__name__)
 
 
+def _build_json_parse_error(name: str, input_json: str, error: Exception) -> ModelBehaviorError:
+    base_message = f"Invalid JSON input for tool {name}"
+    if _debug.DONT_LOG_TOOL_DATA:
+        return ModelBehaviorError(base_message)
+    parse_error = ModelBehaviorError(f"{base_message}: {input_json}")
+    parse_error.__cause__ = error
+    return parse_error
+
+
+def _build_validation_error(name: str, error: ValidationError) -> Exception:
+    formatted_msg = _format_value_error(error)
+    if formatted_msg is not None:
+        return ValueError(formatted_msg)
+    base_message = f"Invalid JSON input for tool {name}"
+    if _debug.DONT_LOG_TOOL_DATA:
+        return ModelBehaviorError(base_message)
+    errors = error.errors()
+    non_value_errors = [err for err in errors if err.get("type") != "value_error"]
+    line_errors = cast(list[InitErrorDetails], non_value_errors or errors)
+    rewritten_error = ValidationError.from_exception_data(f"{name}_args", line_errors)
+    model_error = ModelBehaviorError(f"{base_message}: {rewritten_error}")
+    model_error.__cause__ = rewritten_error
+    return model_error
+
+
 def adapt_base_tool(base_tool: type[BaseTool]) -> FunctionTool:
     """
     Adapts a BaseTool (class-based) to a FunctionTool (function-based).
@@ -39,21 +64,13 @@ def adapt_base_tool(base_tool: type[BaseTool]) -> FunctionTool:
     async def on_invoke_tool(ctx, input_json: str):
         try:
             args = json.loads(input_json) if input_json else {}
-        except Exception as e:  # pragma: no cover - defensive guard
+        except Exception as e:
             if (
                 isinstance(ctx, ToolContext)
                 and ctx.run_config is not None
                 and ctx.run_config.tool_error_formatter is not None
             ):
-                base_message = f"Invalid JSON input for tool {name}"
-                parse_error = (
-                    ModelBehaviorError(base_message)
-                    if _debug.DONT_LOG_TOOL_DATA
-                    else ModelBehaviorError(f"{base_message}: {input_json}")
-                )
-                if not _debug.DONT_LOG_TOOL_DATA:
-                    parse_error.__cause__ = e
-                return await tool_error_with_details(ctx, parse_error)
+                return await tool_error_with_details(ctx, _build_json_parse_error(name, input_json, e))
             return f"Error: Invalid JSON input: {e}"
         try:
             tool_instance = base_tool(**args)
@@ -63,19 +80,7 @@ def adapt_base_tool(base_tool: type[BaseTool]) -> FunctionTool:
                 return await tool_instance.run()
             return await asyncio.to_thread(tool_instance.run)
         except ValidationError as e:
-            formatted_msg = _format_value_error(e)
-            if formatted_msg is not None:
-                return await tool_error_with_details(ctx, ValueError(formatted_msg))
-            base_message = f"Invalid JSON input for tool {name}"
-            if _debug.DONT_LOG_TOOL_DATA:
-                return await tool_error_with_details(ctx, ModelBehaviorError(base_message))
-            errors = e.errors()
-            non_value_errors = [err for err in errors if err.get("type") != "value_error"]
-            line_errors = cast(list[InitErrorDetails], non_value_errors or errors)
-            rewritten_error = ValidationError.from_exception_data(f"{name}_args", line_errors)
-            model_error = ModelBehaviorError(f"{base_message}: {rewritten_error}")
-            model_error.__cause__ = rewritten_error
-            return await tool_error_with_details(ctx, model_error)
+            return await tool_error_with_details(ctx, _build_validation_error(name, e))
         except Exception as e:
             return await tool_error_with_details(ctx, e)
 
