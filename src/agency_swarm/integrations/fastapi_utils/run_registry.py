@@ -49,7 +49,8 @@ class ActiveRunRegistry:
             run = self._runs.get(run_id)
             if run is not None:
                 run.cancelled = True
-                run.cancel_mode = cancel_mode
+                if run.cancel_mode != "immediate":
+                    run.cancel_mode = cancel_mode
                 run.cancel_event.set()
             return run
 
@@ -94,6 +95,7 @@ def make_cancel_endpoint(request_model, verify_token, run_registry: ActiveRunReg
             )
 
         # Mark as cancelled and call cancel on the stream
+        cancel_mode = active_run.cancel_mode or cancel_mode
         active_run.stream.cancel(mode=cancel_mode)
         logger.info(f"Cancelled run {run_id} via cancel endpoint (mode={cancel_mode})")
 
@@ -112,6 +114,7 @@ def make_cancel_endpoint(request_model, verify_token, run_registry: ActiveRunReg
         filtered_messages = MessageFilter.filter_messages(filtered_messages)
         filtered_messages = MessageFilter.remove_orphaned_messages(filtered_messages)
         filtered_messages = _normalize_new_messages_for_client(filtered_messages)
+        cancel_mode = active_run.cancel_mode or cancel_mode
 
         return {
             "ok": not timed_out,

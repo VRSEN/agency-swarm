@@ -1,5 +1,6 @@
 """OAuth request context helpers shared by the endpoint handlers."""
 
+import json
 import logging
 import time
 from typing import Any
@@ -172,3 +173,15 @@ def _requires_oauth_agent_state_restore(agency_instance: Agency, oauth_runtime: 
         or _has_enabled_hosted_mcp_oauth(agency_instance)
         or (oauth_runtime.enable_hosted_mcp_oauth and has_hosted_mcp_oauth_tools(agency_instance))
     )
+
+
+def _encode_oauth(payload: dict[str, Any]) -> str | None:
+    event_type = payload.get("type")
+    data = {"state": payload.get("state"), "server": payload.get("server")}
+    if event_type == "oauth_redirect":
+        data["auth_url"] = payload.get("auth_url")
+    elif event_type == "oauth_status":
+        data["status"] = payload.get("status")
+    else:
+        return None
+    return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
