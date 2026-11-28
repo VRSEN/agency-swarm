@@ -21,9 +21,10 @@ pip install --pre "agency-swarm==2.0.0b1"
 | If your code... | Go to |
 |---|---|
 | Creates an agent without a `model` | [Default model](#default-model) |
-| Runs long conversations on OpenAI models, or stores chat history | [Conversation compaction](#conversation-compaction) |
+| Uses an OpenAI model name such as `gpt-6-luna` or `o3`, stores chat history, or sets `context_management` | [Conversation compaction](#conversation-compaction) |
 | Pins `openai`, `mcp`, `fastmcp`, `fastapi` or `httpx` | [Dependencies](#dependencies) |
-| Imports `requests`, `termcolor`, `griffe` or `httpx` | [Dependencies](#dependencies) |
+| Imports `requests`, `types-requests`, `termcolor`, `griffe` or `httpx` | [Dependencies](#dependencies) |
+| Calls the OpenAI or MCP SDKs directly | [Dependencies](#dependencies) |
 | Uses LiteLLM models | [LiteLLM](#litellm) |
 | Imports `Runner` from `agents` | [Runner](#runner) |
 | Passes a custom `callback_handler` or `oauth_registry` for MCP OAuth | [OAuth callbacks](#oauth-callbacks) |
@@ -60,22 +61,27 @@ agent = Agent(
 
 Agency Swarm now asks the OpenAI API to compact long conversations. The API adds a `compaction` item that stands for everything before it. Saved history is replayed from the latest `compaction` item, so later turns send fewer tokens.
 
-Compaction is on for model names that start with `gpt-`, or with `o` and a digit, such as `o3`. Most agencies need no change. Open the case that matches yours:
+Compaction is on for every model name that starts with `gpt-`, or with `o` and a digit, such as `o3`. A custom endpoint that serves such a name gets the setting too.
+
+Most agencies need no change. Open the case that matches yours:
 
 <AccordionGroup>
 <Accordion title="You want to turn compaction off">
-Do this when your endpoint serves a `gpt-*` model name but rejects the setting. Turn compaction off on the agent:
+Do this when your endpoint serves a `gpt-*` model name but does not support compaction. Set an empty list on the agent:
 
 ```python
 from agency_swarm import Agent, ModelSettings
 
 agent = Agent(
     name="Assistant",
+    model="gpt-6-luna",
     model_settings=ModelSettings(
         context_management=[],
     ),
 )
 ```
+
+Requests for this agent then carry an empty `context_management` list, and no compaction runs.
 </Accordion>
 
 <Accordion title="You set context_management in extra_args">
