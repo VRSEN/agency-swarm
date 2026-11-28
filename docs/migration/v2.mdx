@@ -4,7 +4,7 @@ description: "What to change when you upgrade Agency Swarm from 1.11 to 2.0"
 icon: "arrow-up"
 ---
 
-Agency Swarm 2.0 runs on new major versions of its core libraries: the OpenAI Python SDK 3, MCP 2 and FastMCP 4, with the OpenAI Agents SDK at 0.22.3. It also changes the default model and compacts long conversations. Most agencies only need a new install. Go through the sections below and change the ones that match your code.
+Agency Swarm 2.0 runs on new major versions of its core libraries: the OpenAI Python SDK 3, MCP 2 and FastMCP 4, with the OpenAI Agents SDK at 0.26.0. It also changes the default model and compacts long conversations. Most agencies only need a new install. Go through the sections below and change the ones that match your code.
 
 ```bash
 pip install --pre "agency-swarm==2.0.0b1"
@@ -30,26 +30,22 @@ Agency Swarm pins the OpenAI Agents SDK (`openai-agents`) to one exact version. 
 
 LiteLLM is no longer installed by default. Without it, `from agency_swarm import LitellmModel` raises an `ImportError` that explains the fix.
 
-Current LiteLLM releases still declare `openai<3`, so a plain `pip install "agency-swarm[litellm]"` installs LiteLLM 1.83.0, the newest release that allows `openai` 3. To get the current LiteLLM:
+LiteLLM 1.108.0 and newer support `openai` 3 directly, so install the extra with either tool:
 
 <Tabs>
 <Tab title="uv">
-Add this to your `pyproject.toml`, then run `uv add "agency-swarm[litellm]"`:
-
-```toml
-[tool.uv]
-override-dependencies = ["openai>=3,<4"]
+```bash
+uv add "agency-swarm[litellm]"
 ```
 </Tab>
 <Tab title="pip">
 ```bash
 pip install "agency-swarm[litellm]"
-pip install --no-deps --upgrade litellm
 ```
-
-This skips LiteLLM's own dependency checks, so it is fragile. `pip check` then lists LiteLLM's version pins, `openai<3` among them, and a missing `boto3`. LiteLLM still imports; run `pip install boto3` if you use Bedrock or SageMaker models. See [Third-Party Models](/additional-features/third-party-models).
 </Tab>
 </Tabs>
+
+See [Third-Party Models](/additional-features/third-party-models) for provider setup.
 
 ## 3. Add packages your own code imports
 
@@ -201,3 +197,20 @@ See [Observability](/additional-features/observability#custom-model-endpoints) f
 ## 10. Replace deprecated APIs
 
 `Agency(user_context=...)` and `agency.user_context` are deprecated. They still work but emit a `DeprecationWarning`. Pass state per run with `context_override`, as shown in [Agency Context](/additional-features/agency-context).
+
+## 11. Check OpenAI Agents SDK 0.26.0 changes
+
+Agency Swarm 2.0 moves the pinned OpenAI Agents SDK from `0.22.3` to `0.26.0`. Check the points below if your code calls these SDK APIs directly.
+
+**Import `function_tool` from `agency_swarm` to keep detailed tool errors.** Starting in SDK 0.23, `agents.function_tool` hides Python exception text from the model and returns `"An error occurred while running the tool."`. Agency Swarm's `@agency_swarm.function_tool`, `BaseTool`, and `ToolFactory.from_mcp()` still return the exception message so models can fix bad inputs and retry. If you imported `from agents import function_tool`, switch the import to `from agency_swarm import function_tool`, pass a custom `failure_error_function`, or set `RunConfig(tool_error_formatter=...)`.
+
+**Handle `"tool_exception"` in custom `tool_error_formatter` callbacks.** SDK 0.24 added `kind="tool_exception"` (with an optional `error` field) to `ToolErrorFormatterArgs`, and Agency Swarm tools now honor `RunConfig.tool_error_formatter`. If your formatter assumes every non-rejection is a missing tool, handle `"tool_exception"` explicitly or return `None` to keep the default error message.
+
+**Finish old `RunState` checkpoints and use unique agent names.** SDK 0.24 moved `RunState` serialization to schema `1.21` and SDK 0.25 moved it to schema `1.22`. Saved graphs where two non-root agents share a name and differ only by hook instance attributes are now rejected instead of risking wrong agent assignment, and Pydantic run contexts keep defaults and in-place edits. Finish in-flight tasks saved on older SDKs before upgrading, give every agent a unique name in new durable runs, and upgrade checkpoint readers before writers because older SDKs cannot read schema `1.21` or `1.22`.
+
+**Replace removed or changed SDK sandbox, Realtime tracing, and Codex options.** If you use these Agents SDK features directly:
+
+- **Docker sandbox mounts:** SDK 0.26 rejects `InContainerMountStrategy` (including read-only mounts), privileged containers, and containers with added capabilities. Switch to `DockerVolumeMountStrategy` (or mount on the Docker host with a trusted `SandboxPathGrant`) and start a fresh sandbox session. SDK 0.25 also removed the beta Runloop sandbox provider; migrate those workloads to another supported sandbox provider such as Modal.
+- **Custom `TraceProvider` with Realtime:** SDK 0.26 makes Realtime check `TraceProvider.is_disabled()`, which defaults to `True` on custom subclasses. Override `is_disabled()` to return the same state tracked by `set_disabled()` so server traces stay on (the built-in provider already does this).
+- **Local images in the experimental Codex tool:** SDK 0.26 no longer allows a model-supplied file path to open a local image. Pass named grants with `image_attachments={"diagram": "/abs/path/to/diagram.png"}` and reference `"diagram"` as the `local_image` path.
+- **Direct `OpenAIResponsesCompactionSession` usage:** SDK 0.25 changed the default compaction model from `gpt-4.1` to `gpt-6-luna`. Pass `model="gpt-4.1"` if you construct `OpenAIResponsesCompactionSession` directly and want the earlier default.

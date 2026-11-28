@@ -200,7 +200,11 @@ def _clone_oauth_candidate(server: Any) -> Any:
         handlers["redirect"] = client._redirect_handler
     if preserve_client_handlers and client._callback_handler is not None:
         handlers["callback"] = client._callback_handler
-    return _MCPServerOAuthClient(client.oauth_config, handlers or None)
+    return _MCPServerOAuthClient(
+        client.oauth_config,
+        handlers or None,
+        max_list_pages=getattr(client, "max_list_pages", None),
+    )
 
 
 def _current_oauth_handlers(client: Any) -> OAuthHandlerMap:

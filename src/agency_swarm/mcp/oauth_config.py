@@ -44,6 +44,7 @@ class MCPServerOAuth:
             Set to False for self-hosted servers using Dynamic Client Registration (DCR).
         redirect_handler: Custom handler for OAuth redirect (opens browser by default)
         callback_handler: Custom handler to receive OAuth callback code
+        max_list_pages: Maximum paginated pages fetched by ``list_tools()`` / ``list_prompts()``
     """
 
     DEFAULT_REDIRECT_URI: ClassVar[str] = "http://localhost:8000/auth/callback"
@@ -62,6 +63,7 @@ class MCPServerOAuth:
     use_env_credentials: bool = True
     redirect_handler: OAuthRedirectHandler | None = None
     callback_handler: OAuthCallbackHandler | None = None
+    max_list_pages: int | None = None
 
     def _resolve_client_id(self) -> str | None:
         """Return the client_id if provided explicitly or via environment."""

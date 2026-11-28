@@ -1,17 +1,80 @@
 from __future__ import annotations
 
 import inspect
+import json
+import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, fields
 from functools import wraps
 from typing import Any, cast, get_origin, overload
 
-from agents import FunctionTool, RunContextWrapper, function_tool as sdk_function_tool
+from agents import FunctionTool, RunContextWrapper, _debug, function_tool as sdk_function_tool
+from agents.exceptions import MCPToolCancellationError, ModelBehaviorError
+from agents.run_config import ToolErrorFormatterArgs
 from agents.tool_context import ToolContext
+from pydantic import ValidationError
+
+logger = logging.getLogger(__name__)
 
 _MANUAL_TOOL_CALL_ID_TEMPLATE = "agency_swarm_manual_{tool_name}"
 _WRAPPED_ATTR = "_agency_swarm_manual_tool_context_compat"
 _ORIGINAL_INVOKER_ATTR = "_agency_swarm_original_on_invoke_tool"
+
+
+def _is_invalid_json_error(error: Exception) -> bool:
+    if not isinstance(error, ModelBehaviorError):
+        return False
+    if isinstance(error.__cause__, json.JSONDecodeError):
+        return True
+    return not isinstance(error.__cause__, ValidationError) and str(error).startswith("Invalid JSON input for tool ")
+
+
+def _default_tool_error_message(error: Exception) -> str:
+    if _is_invalid_json_error(error):
+        if isinstance(error.__cause__, json.JSONDecodeError) and not _debug.DONT_LOG_TOOL_DATA:
+            return (
+                f"An error occurred while parsing tool arguments. Please try again with valid JSON. "
+                f"Error: {error} ({error.__cause__})"
+            )
+        return f"An error occurred while parsing tool arguments. Please try again with valid JSON. Error: {error}"
+    return f"An error occurred while running the tool. Please try again. Error: {error}"
+
+
+async def tool_error_with_details(ctx: RunContextWrapper[Any] | None, error: Exception) -> str:
+    """Tool failure message for the model that keeps exception text and honors RunConfig formatters.
+
+    A ``failure_error_function`` for the Agents SDK. Since openai-agents 0.23 the SDK's
+    ``default_tool_error_function`` hides exception text from the model. Agency Swarm tools keep
+    showing validator and runtime error text by default so models can correct their next call,
+    while forwarding to ``RunConfig.tool_error_formatter`` whenever a run configures one.
+    """
+    default_message = _default_tool_error_message(error)
+    if (
+        isinstance(ctx, ToolContext)
+        and not isinstance(error, MCPToolCancellationError)
+        and ctx.run_config is not None
+        and ctx.run_config.tool_error_formatter is not None
+    ):
+        args = ToolErrorFormatterArgs(
+            kind="tool_exception",
+            tool_type="function",
+            tool_name=ctx.qualified_tool_name,
+            call_id=ctx.tool_call_id,
+            default_message=default_message,
+            run_context=ctx,
+            error=error,
+        )
+        try:
+            message = ctx.run_config.tool_error_formatter(args)
+            message = await message if inspect.isawaitable(message) else message
+        except Exception as exc:
+            logger.warning("Tool error formatter failed: %s", exc.__class__.__name__)
+        else:
+            if isinstance(message, str):
+                return message
+            if message is not None:
+                logger.warning("Tool error formatter returned a non-string value")
+    return default_message
 
 
 @dataclass
@@ -174,6 +237,10 @@ def function_tool(
     timeout_behavior: str = "error_as_result",
     timeout_error_function: Callable[..., Any] | None = None,
     defer_loading: bool = False,
+    custom_data_extractor: Callable[..., Any] | None = None,
+    allowed_callers: list[Any] | None = None,
+    output_type: Any | None = None,
+    output_json_schema: dict[str, Any] | None = None,
 ) -> FunctionTool: ...
 
 
@@ -194,6 +261,10 @@ def function_tool(
     timeout_behavior: str = "error_as_result",
     timeout_error_function: Callable[..., Any] | None = None,
     defer_loading: bool = False,
+    custom_data_extractor: Callable[..., Any] | None = None,
+    allowed_callers: list[Any] | None = None,
+    output_type: Any | None = None,
+    output_json_schema: dict[str, Any] | None = None,
 ) -> Callable[[Callable[..., Any]], FunctionTool]: ...
 
 
@@ -201,7 +272,23 @@ def function_tool(
     func: Callable[..., Any] | None = None,
     **kwargs: Any,
 ) -> FunctionTool | Callable[[Callable[..., Any]], FunctionTool]:
-    """Wrap the SDK decorator so manual invocation still works outside Runner."""
+    """Wrap the SDK decorator so manual invocation still works outside Runner.
+
+    Mirrors ``agents.function_tool``. Without an explicit ``failure_error_function``, errors reach
+    the model with their exception text and still honor ``RunConfig.tool_error_formatter``
+    (see ``tool_error_with_details``). Tools that declare structured/programmatic outputs
+    (``output_type``, ``output_json_schema``, or ``"programmatic"`` in ``allowed_callers``) keep
+    the SDK's default failure handling so output-schema bypass and programmatic exception
+    propagation stay intact.
+    """
+    allowed_callers = kwargs.get("allowed_callers")
+    uses_output_schema = (
+        kwargs.get("output_type") is not None
+        or kwargs.get("output_json_schema") is not None
+        or (isinstance(allowed_callers, list) and "programmatic" in allowed_callers)
+    )
+    if not uses_output_schema:
+        kwargs.setdefault("failure_error_function", tool_error_with_details)
     if func is not None:
         return normalize_function_tool(sdk_function_tool(func, **kwargs))
 

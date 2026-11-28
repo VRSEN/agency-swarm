@@ -15,10 +15,32 @@ license = "MIT"
 authors = [{ name = "Vrsen AI Solutions", email = "me@vrsen.ai" }]
 dependencies = [
     "openai>=3,<4",
-    # Exact pin: we patch private SDK seams (shared_http_client,
-    # RunContextWrapper._copy_for_run_state, agents._debug), so any upstream
-    # release must be reviewed before the pin moves.
-    "openai-agents==0.22.3",
+    # Exact pin: Agency Swarm relies on private/internal SDK seams that must be
+    # re-verified before bumping this pin:
+    # - agents.models.openai_provider.shared_http_client
+    # - agents.voice.models.openai_model_provider.shared_http_client
+    # - RunContextWrapper._copy_for_run_state
+    # - agents._debug.DONT_LOG_TOOL_DATA
+    # - agents.run_config._coerce_run_config
+    # - Session._ignore_ids_for_matching (agents.run_internal.session_persistence)
+    # - agents.memory.openai_responses_compaction_session._normalize_compaction_output_items
+    # - agents.memory.openai_responses_compaction_session._strip_orphaned_assistant_ids
+    # - agents.tracing.setup.GLOBAL_TRACE_PROVIDER
+    # - agents.models._openai_shared.get_default_openai_client
+    # - MCPServerManager._run_connect
+    # - OpenAIResponsesModel._fetch_response / _client
+    # - OpenAIChatCompletionsModel._fetch_response / _get_client / _client
+    # - OpenAIProvider._client / _stored_base_url
+    # - MultiProvider._openai_prefix_mode / _unknown_prefix_mode
+    # - RunState._context / _starting_agent / _current_agent / _conversation_id /
+    #   _previous_response_id / _auto_previous_response_id
+    # - Handoff._agent_ref
+    # - FunctionTool._tool_namespace / _is_agent_tool / _is_codex_tool / _agent_instance /
+    #   on_invoke_tool (_function_tool, _invoke_tool_impl, __agents_bind_function_tool__)
+    # - OpenAIRealtimeWebSocketModel._handle_ws_event / _send_raw_message / _websocket /
+    #   _audio_state_tracker / _playback_tracker
+    # - ChatCmplStreamHandler.handle_stream
+    "openai-agents==0.26.0",
     "datamodel-code-generator>=0.56.0,<0.84.0",
     "docstring-parser>=0.16,<1.0.0",
     "fastmcp>=4.0.5,<5",
@@ -60,7 +82,7 @@ agency-swarm = "agency_swarm.cli.main:main"
 [project.optional-dependencies]
 voice = ["numpy>=2.2.0, <3; python_version>='3.10'", "websockets>=15.0,<17"]
 viz = ["graphviz>=0.17"]
-litellm = ["litellm>=1.83.0,!=1.92.*,!=1.93.*,!=1.94.*,!=1.95.*"]
+litellm = ["litellm>=1.108.0"]
 jupyter = ["ipykernel>=6.29.0,<8.0.0", "jupyter_client>=8.0.0,<9.0.0", "nest_asyncio>=1.6.0,<2.0.0"]
 
 fastapi = [
@@ -93,12 +115,6 @@ dev = [
     "ipykernel>=6.29.0,<8.0.0",
     "jupyter_client>=8.0.0,<9.0.0",
 ]
-
-[tool.uv]
-# Every litellm release still pins `openai<3` (and `httpx<1`) even though the code
-# runs fine against openai 3.x. Force openai>=3 through the stale pin so the
-# optional `litellm` extra stays installable next to the httpx2-generation core.
-override-dependencies = ["openai>=3,<4"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agency_swarm"]

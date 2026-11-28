@@ -20,6 +20,7 @@ from agents.handoffs import Handoff
 from agents.items import ModelResponse, TResponseInputItem, TResponseStreamEvent
 from agents.model_settings import ModelSettings
 from agents.models.interface import ModelTracing
+from agents.usage import Usage
 from openai.types.responses import ResponseFunctionToolCall
 from openai.types.responses.response_prompt_param import ResponsePromptParam
 
@@ -145,6 +146,62 @@ async def echo_tool(message: str) -> str:
     return f"Echo: {message}"
 
 
+@function_tool
+async def validate_age(age: int) -> str:
+    """Validate that an age falls within the accepted range."""
+    if age < 0 or age > 120:
+        raise ValueError("Age must be between 0 and 120")
+    return f"Accepted age: {age}"
+
+
+class _FailingToolCallModel(_HistoryRecordingModel):
+    """Calls validate_age with an out-of-range age once, then finishes with plain text."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.emitted_tool_call = False
+
+    async def get_response(
+        self,
+        system_instructions: str | None,
+        input: str | list[TResponseInputItem],
+        model_settings: ModelSettings,
+        tools: list[Tool],
+        output_schema: AgentOutputSchemaBase | None,
+        handoffs: list[Handoff],
+        tracing: ModelTracing,
+        *,
+        previous_response_id: str | None,
+        conversation_id: str | None,
+        prompt: ResponsePromptParam | None,
+    ) -> ModelResponse:
+        self.inputs.append(copy.deepcopy(input) if isinstance(input, list) else [])
+        if not self.emitted_tool_call and any(tool.name == "validate_age" for tool in tools):
+            self.emitted_tool_call = True
+            tool_call = ResponseFunctionToolCall(
+                arguments=json.dumps({"age": -5}),
+                call_id="call_validate_age_fail",
+                name="validate_age",
+                type="function_call",
+                id="fc_validate_age_fail",
+                status="completed",
+            )
+            return ModelResponse(output=[tool_call], usage=Usage(), response_id="resp_fail_call")
+        return await DeterministicModel.get_response(
+            self,
+            system_instructions,
+            input,
+            model_settings,
+            tools,
+            output_schema,
+            handoffs,
+            tracing,
+            previous_response_id=previous_response_id,
+            conversation_id=conversation_id,
+            prompt=prompt,
+        )
+
+
 def _function_calls(input_items: list[TResponseInputItem]) -> list[dict[str, Any]]:
     return [item for item in input_items if isinstance(item, dict) and item.get("type") == "function_call"]
 
@@ -255,4 +312,36 @@ async def test_delegation_result_is_resent_to_model_on_next_turn() -> None:
         coordinator_model.inputs[-1],
         tool_name="send_message",
         expected_output_fragment="TASK_COMPLETED",
+    )
+
+
+@pytest.mark.asyncio
+async def test_failed_tool_error_is_resent_to_model_on_next_turn() -> None:
+    """A failing tool keeps its error text in output and replays cleanly on the next turn."""
+    model = _FailingToolCallModel()
+    agent = Agent(
+        name="ValidatorAgent",
+        instructions="Validate ages using the validate_age tool.",
+        model=model,
+        tools=[validate_age],
+    )
+    agency = Agency(agent)
+
+    first_turn = await agency.get_response("check age -5", recipient_agent=agent)
+    second_turn = await agency.get_response("why did the last check fail?", recipient_agent=agent)
+
+    assert first_turn.final_output
+    assert second_turn.final_output
+    assert len(model.inputs) >= 3, f"expected failed tool call turn + next turn, got {len(model.inputs)} calls"
+    # Turn 1 follow-up call receives the exception text from validate_age
+    _assert_tool_history_resent(
+        model.inputs[1],
+        tool_name="validate_age",
+        expected_output_fragment="Age must be between 0 and 120",
+    )
+    # Turn 2 replays the failed tool call and its error output cleanly
+    _assert_tool_history_resent(
+        model.inputs[-1],
+        tool_name="validate_age",
+        expected_output_fragment="Age must be between 0 and 120",
     )
