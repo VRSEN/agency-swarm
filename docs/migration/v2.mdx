@@ -4,15 +4,134 @@ description: "What to change when you upgrade Agency Swarm from 1.11 to 2.0"
 icon: "arrow-up"
 ---
 
-Agency Swarm 2.0 runs on new major versions of its core libraries: the OpenAI Python SDK 3, MCP 2 and FastMCP 4, with the OpenAI Agents SDK at 0.22.3. It also changes the default model and compacts long conversations. Most agencies only need a new install. Go through the sections below and change the ones that match your code.
+Most agencies need only a new install to move from 1.11 to 2.0. Install it first. Then use the table to find the steps that match your code.
+
+## Install
 
 ```bash
 pip install --pre "agency-swarm==2.0.0b1"
 ```
 
+<Note>
 2.0.0b1 is a pre-release, so `pip install --upgrade agency-swarm` still installs 1.11. Pass `--pre` and the version, as shown above.
+</Note>
 
-## 1. Raise your dependency pins
+## Find your steps
+
+| If your code... | Go to |
+|---|---|
+| Creates an agent without a `model` | [Default model](#default-model) |
+| Uses an OpenAI model name such as `gpt-6-luna` or `o3`, stores chat history, or sets `context_management` | [Conversation compaction](#conversation-compaction) |
+| Pins `openai`, `mcp`, `fastmcp`, `fastapi` or `httpx` | [Dependencies](#dependencies) |
+| Imports `requests`, `types-requests`, `termcolor`, `griffe` or `httpx` | [Dependencies](#dependencies) |
+| Calls the OpenAI or MCP SDKs directly | [Dependencies](#dependencies) |
+| Uses LiteLLM models | [LiteLLM](#litellm) |
+| Imports `Runner` from `agents` | [Runner](#runner) |
+| Passes a custom `callback_handler` or `oauth_registry` for MCP OAuth | [OAuth callbacks](#oauth-callbacks) |
+| Starts a server or a browser demo | [Server and demo hosts](#server-and-demo-hosts) |
+| Sets `OPENAI_BASE_URL` to an endpoint that is not OpenAI | [OpenAI traces](#openai-traces) |
+| Uses `Agency(user_context=...)` or `agency.user_context` | [Deprecated APIs](#deprecated-apis) |
+
+If no row matches your code, the new install is all you need.
+
+## Default model
+
+The default model is now `gpt-6-luna` with reasoning effort `medium` and verbosity `low`. Before, it was `gpt-5.6-luna` with reasoning effort `none`. An agent without a `model` may now answer differently, cost more and take longer.
+
+To keep the old behavior, set the model and the reasoning effort yourself:
+
+```python
+from agency_swarm import Agent, ModelSettings
+from openai.types.shared import Reasoning
+
+agent = Agent(
+    name="Assistant",
+    model="gpt-5.6-luna",
+    model_settings=ModelSettings(
+        reasoning=Reasoning(effort="none"),
+    ),
+)
+```
+
+<Warning>
+`gpt-6-luna` rejects `temperature` and `top_p`. An agent that sets either one and has no `model` now gets an error from the API. Set a `model` on that agent, as in the example above, or remove the two settings.
+</Warning>
+
+## Conversation compaction
+
+Agency Swarm now asks the OpenAI API to compact long conversations. The API adds a `compaction` item that stands for everything before it. Saved history is replayed from the latest `compaction` item, so later turns send fewer tokens.
+
+Compaction is on for every model name that starts with `gpt-`, or with `o` and a digit, such as `o3`. A custom endpoint that serves such a name gets the setting too.
+
+Most agencies need no change. Open the case that matches yours:
+
+<AccordionGroup>
+<Accordion title="You want to turn compaction off">
+Do this when your endpoint serves a `gpt-*` model name but does not support compaction. Set an empty list on the agent:
+
+```python
+from agency_swarm import Agent, ModelSettings
+
+agent = Agent(
+    name="Assistant",
+    model="gpt-6-luna",
+    model_settings=ModelSettings(
+        context_management=[],
+    ),
+)
+```
+
+Requests for this agent then carry an empty `context_management` list, and no compaction runs.
+</Accordion>
+
+<Accordion title="You set context_management in extra_args">
+Set `context_management` on `ModelSettings` instead:
+
+<CodeGroup>
+```python Before
+ModelSettings(
+    extra_args={
+        "context_management": [
+            {"type": "compaction", "compact_threshold": 200_000},
+        ],
+    },
+)
+```
+
+```python After
+ModelSettings(
+    context_management=[
+        {"type": "compaction", "compact_threshold": 200_000},
+    ],
+)
+```
+</CodeGroup>
+
+On an `Agent`, the old form still works: Agency Swarm then skips its own default.
+
+On a `RunConfig(model_settings=...)` passed to `get_response()`, the old form fails. The request would carry the setting twice, so every run stops with `responses.create() got multiple values for keyword argument 'context_management'`.
+</Accordion>
+
+<Accordion title="You store conversation history yourself">
+This covers the `chat_history` you send to `run_fastapi` and the messages your `load_threads_callback` returns.
+
+Each conversation is replayed from its own latest `compaction` item. A conversation is the user thread, or one pair of agents that talk to each other. Items of that conversation stored before the `compaction` item are never sent to the model again, so your stored history can leave them out.
+
+Keep the items marked `"message_origin": "compaction_retained"` right before the `compaction` item. They belong to it.
+</Accordion>
+
+<Accordion title="When compaction starts, and the /compact command">
+Compaction starts at 90% of the model's context window when the Agents SDK knows the window. Otherwise it starts at 240,000 tokens.
+
+The `/compact` command in the terminal demo now uses OpenAI's compaction endpoint too, when every agent in the agency runs on an OpenAI model.
+</Accordion>
+</AccordionGroup>
+
+## Dependencies
+
+Agency Swarm 2.0 runs on new major versions of its core libraries: the OpenAI Python SDK 3, MCP 2 and FastMCP 4.
+
+### Raise your pins
 
 If your project pins any of these packages, raise the pins to these ranges:
 
@@ -24,93 +143,70 @@ If your project pins any of these packages, raise the pins to these ranges:
 | `fastapi` | `>=0.141` |
 | `httpx2` | `>=2.13,<3` (replaces `httpx`) |
 
-Agency Swarm pins the OpenAI Agents SDK (`openai-agents`) to one exact version. Do not pin a different one in your project. If your code calls the OpenAI or MCP SDKs directly, read their own migration notes too.
+Agency Swarm pins the OpenAI Agents SDK (`openai-agents`) to one exact version, now 0.22.3. Do not pin a different one in your project.
 
-## 2. Install LiteLLM as an extra
+If your code calls the OpenAI or MCP SDKs directly, read their own migration notes too.
 
-LiteLLM is no longer installed by default. Without it, `from agency_swarm import LitellmModel` raises an `ImportError` that explains the fix.
-
-Current LiteLLM releases still declare `openai<3`, so a plain `pip install "agency-swarm[litellm]"` installs LiteLLM 1.83.0, the newest release that allows `openai` 3. To get the current LiteLLM:
-
-<Tabs>
-<Tab title="uv">
-Add this to your `pyproject.toml`, then run `uv add "agency-swarm[litellm]"`:
-
-```toml
-[tool.uv]
-override-dependencies = ["openai>=3,<4"]
-```
-</Tab>
-<Tab title="pip">
-```bash
-pip install "agency-swarm[litellm]"
-pip install --no-deps --upgrade litellm
-```
-
-This skips LiteLLM's own dependency checks, so it is fragile. `pip check` then lists LiteLLM's version pins, `openai<3` among them, and a missing `boto3`. LiteLLM still imports; run `pip install boto3` if you use Bedrock or SageMaker models. See [Third-Party Models](/additional-features/third-party-models).
-</Tab>
-</Tabs>
-
-## 3. Add packages your own code imports
+### Add packages your own code imports
 
 Agency Swarm no longer installs `requests`, `types-requests`, `termcolor`, `griffe` or `httpx` for you. If your code imports one of them, add it to your own dependencies.
 
-## 4. Check agents that use the default model
+## LiteLLM
 
-The default model is now `gpt-6-luna` with reasoning effort `medium` and verbosity `low`. Before, it was `gpt-5.6-luna` with effort `none`. Agents without a `model` may answer differently, cost more and take longer.
+LiteLLM is no longer installed by default. Without it, `from agency_swarm import LitellmModel` raises an `ImportError`. Install the `litellm` extra:
 
-`gpt-6-luna` rejects `temperature` and `top_p`. An agent that sets them without a model now gets an error from the API. To keep the old behavior, set the model and settings yourself:
-
-```python
-from agency_swarm import Agent, ModelSettings
-from openai.types.shared import Reasoning
-
-agent = Agent(
-    name="Assistant",
-    model="gpt-5.6-luna",
-    model_settings=ModelSettings(reasoning=Reasoning(effort="none")),
-)
+<Tabs>
+<Tab title="pip">
+```bash
+pip install "agency-swarm[litellm]"
 ```
-
-## 5. Know that long conversations are compacted
-
-For model names that start with `gpt-`, or with `o` and a digit, Agency Swarm now asks the OpenAI API to compact long conversations. Compaction starts at 90% of the model's context window when the Agents SDK knows it, otherwise at 240,000 tokens. Saved history is replayed from the latest compaction, so later turns send fewer tokens. When every agent in the agency runs on an OpenAI model, the `/compact` command in the terminal demo now uses OpenAI's compaction endpoint too.
-
-**To turn compaction off** for an agent, for example on an endpoint that serves a `gpt-*` name but rejects the setting:
-
-```python
-ModelSettings(context_management=[])
+</Tab>
+<Tab title="uv">
+```bash
+uv add "agency-swarm[litellm]"
 ```
+</Tab>
+</Tabs>
 
-**Set `context_management` on `ModelSettings`, not in `extra_args`:**
+If you pin LiteLLM yourself, use 1.108.0 or later. LiteLLM 1.108.0 and later accept `openai` 3.
+
+See [Third-Party Models](/additional-features/third-party-models) for provider setup.
+
+## Runner
+
+Import `Runner` from `agency_swarm`:
 
 <CodeGroup>
 ```python Before
-ModelSettings(extra_args={"context_management": [{"type": "compaction", "compact_threshold": 200_000}]})
+from agents import Runner
 ```
 
 ```python After
-ModelSettings(context_management=[{"type": "compaction", "compact_threshold": 200_000}])
+from agency_swarm import Runner
 ```
 </CodeGroup>
 
-On an `Agent`, the old `extra_args` form still works: Agency Swarm then skips its own default. On a `RunConfig(model_settings=...)` passed to `get_response()` it does not. The request would carry the setting twice, so every run fails with `responses.create() got multiple values for keyword argument 'context_management'`.
+Agency Swarm no longer patches the Agents SDK. `agents.Runner` now behaves like the stock SDK, so it does not apply your agents' `system_reminders`. `agency_swarm.Runner` does.
 
-**Your stored history can start at the latest compaction.** Each conversation (the user thread, and each pair of agents that talk to each other) is replayed from its own latest `compaction` item. Items of that conversation stored before it are never sent to the model again. So the `chat_history` you send to `run_fastapi`, and the messages your `load_threads_callback` returns, can drop them. Keep items marked `"message_origin": "compaction_retained"` right before the compaction item: they belong to it.
-
-## 6. Import `Runner` from `agency_swarm`
-
-Agency Swarm no longer patches the Agents SDK. `agents.Runner` now behaves like the stock SDK, so it does not apply your agents' `system_reminders`. Use `agency_swarm.Runner` instead. To save and restore a run, use `run_state_to_json` and `run_state_from_json` from `agency_swarm`.
+To save and restore a run, use `run_state_to_json` and `run_state_from_json` from `agency_swarm`:
 
 ```python
-from agency_swarm import Runner, run_state_from_json, run_state_to_json
+from agency_swarm import (
+    Runner,
+    run_state_from_json,
+    run_state_to_json,
+)
 ```
 
-## 7. Return `AuthorizationCodeResult` from custom OAuth callbacks and registries
+## OAuth callbacks
 
-MCP 2 rejects an OAuth callback without `iss` when the authorization server says it supports one, so callbacks must now pass `iss` through in an `AuthorizationCodeResult` instead of returning a `(code, state)` tuple. The default local handler and the built-in in-memory registry in `run_fastapi()` already do this for you.
+An OAuth callback now returns an `AuthorizationCodeResult` instead of a `(code, state)` tuple. The new object also carries `iss`, the issuer value that the authorization server sends back. MCP 2 rejects a callback without `iss` when the authorization server says it supports one.
 
-**If you pass a custom `callback_handler` to `MCPServerOAuth`**, return an `AuthorizationCodeResult`:
+The default local handler and the built-in in-memory registry of `run_fastapi()` already do this for you. Open the case that matches yours:
+
+<AccordionGroup>
+<Accordion title="You pass a custom callback_handler to MCPServerOAuth">
+Return an `AuthorizationCodeResult`:
 
 <CodeGroup>
 ```python Before
@@ -126,8 +222,10 @@ async def wait_for_code() -> AuthorizationCodeResult:
     return AuthorizationCodeResult(code=code, state=state, iss=iss)
 ```
 </CodeGroup>
+</Accordion>
 
-**If you pass a custom `oauth_registry` to `run_fastapi()`** (for example in a multi-worker deployment), update both `set_code()` and `wait_for_code()`. `run_fastapi()` now calls `set_code()` with `iss=iss`, and expects `wait_for_code()` to return an `AuthorizationCodeResult`:
+<Accordion title="You pass a custom oauth_registry to run_fastapi()">
+You may have one in a deployment with several workers. Update both `set_code()` and `wait_for_code()`. `run_fastapi()` now calls `set_code()` with `iss=iss`, and expects `wait_for_code()` to return an `AuthorizationCodeResult`:
 
 <CodeGroup>
 ```python Before
@@ -175,20 +273,22 @@ async def wait_for_code(
     )
 ```
 </CodeGroup>
+</Accordion>
+</AccordionGroup>
 
-## 8. Pass a host to reach the browser demos from another machine
+## Server and demo hosts
 
-`agency.copilot_demo()` and `RealtimeDemoLauncher.start()` now listen on `127.0.0.1`, so only your own machine can open them. Pass `host="0.0.0.0"` when you run them in Docker or on a remote server.
+The browser demos now listen only on your own machine. The servers still listen on every network interface.
 
-`run_fastapi()`, `agency.run_fastapi()`, and `run_mcp()` still listen on `0.0.0.0` (over HTTP and SSE for `run_mcp()`). When they do and `APP_TOKEN` is not set, they now log a warning that anyone who can reach the port can call them.
+- `agency.copilot_demo()` and `RealtimeDemoLauncher.start()` now listen on `127.0.0.1`, so only your own machine can open them. Pass `host="0.0.0.0"` when you run them in Docker or on a remote server.
+- `run_fastapi()`, `agency.run_fastapi()` and `run_mcp()` still listen on `0.0.0.0`. For `run_mcp()`, that means the HTTP and SSE transports. When `APP_TOKEN` is not set, they now log a warning that anyone who can reach the port can call them.
+- `run_realtime()` also still listens on `0.0.0.0`, but it has no token check and logs no token warning. Anyone who can reach the port can connect, unless you put authentication in front of it or pass `host="127.0.0.1"`.
 
-`run_realtime()` also still listens on `0.0.0.0`, but it has no token check and logs no token warning. Anyone who can reach the port can connect unless you put authentication in front of it or pass `host="127.0.0.1"`.
-
-## 9. Turn OpenAI traces back on if you use a custom endpoint
+## OpenAI traces
 
 When `OPENAI_BASE_URL` points anywhere other than `api.openai.com`, Agency Swarm no longer lets the Agents SDK upload traces to OpenAI. The SDK sent them with `OPENAI_API_KEY`, which is your endpoint's key. Langfuse, AgentOps and your own trace processors still get every trace.
 
-If you read these traces in the OpenAI dashboard, set `OPENAI_AGENTS_DISABLE_TRACING=0` and give the exporter an OpenAI key:
+If you read these traces in the OpenAI dashboard, turn the upload back on. Set `OPENAI_AGENTS_DISABLE_TRACING=0` and give the exporter an OpenAI key:
 
 ```python
 from agents import set_tracing_export_api_key
@@ -198,6 +298,23 @@ set_tracing_export_api_key("sk-...")
 
 See [Observability](/additional-features/observability#custom-model-endpoints) for the setups this does not cover.
 
-## 10. Replace deprecated APIs
+## Deprecated APIs
 
-`Agency(user_context=...)` and `agency.user_context` are deprecated. They still work but emit a `DeprecationWarning`. Pass state per run with `context_override`, as shown in [Agency Context](/additional-features/agency-context).
+`Agency(user_context=...)` and `agency.user_context` still work, but they emit a `DeprecationWarning`. Pass state on each run with `context_override`:
+
+<CodeGroup>
+```python Before
+agency = Agency(agent, user_context={"plan": "pro"})
+response = await agency.get_response("Hello")
+```
+
+```python After
+agency = Agency(agent)
+response = await agency.get_response(
+    "Hello",
+    context_override={"plan": "pro"},
+)
+```
+</CodeGroup>
+
+See [Agency Context](/additional-features/agency-context) to carry state from one run to the next.
